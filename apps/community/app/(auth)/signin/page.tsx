@@ -37,6 +37,33 @@ const buildSignInUrl = ({
   return `/signin?${params.toString()}`;
 };
 
+const appendSignupProfileId = (callbackUrl: string, signupProfileId: string) => {
+  const [path, query = ""] = callbackUrl.split("?");
+  const params = new URLSearchParams(query);
+  params.set("signupProfileId", signupProfileId);
+  const nextQuery = params.toString();
+  return nextQuery ? `${path || "/"}?${nextQuery}` : path || "/";
+};
+
+const savePendingSignupProfile = async (profile: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  xHandle: string;
+  linkedinUrl: string;
+}) => {
+  const res = await fetch("/api/signup/pending", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body?.signupProfileId) {
+    throw new Error(body?.error || "Could not save signup profile.");
+  }
+  return String(body.signupProfileId);
+};
+
 const requestEmailLink = async (email: string, callbackUrl: string) => {
   const csrfRes = await fetch("/api/auth/csrf", {
     cache: "no-store",
@@ -119,6 +146,7 @@ function EmailSignIn({
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
+      let emailCallbackUrl = callbackUrl;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         throw new Error("Enter a valid email address.");
       }
@@ -136,11 +164,14 @@ function EmailSignIn({
         }
 
         const pendingProfile = {
+          email: normalizedEmail,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           xHandle: xHandle.trim(),
           linkedinUrl: linkedinUrl.trim(),
         };
+        const signupProfileId = await savePendingSignupProfile(pendingProfile);
+        emailCallbackUrl = appendSignupProfileId(callbackUrl, signupProfileId);
         try {
           localStorage.setItem("pendingProfile", JSON.stringify(pendingProfile));
         } catch {
@@ -148,11 +179,11 @@ function EmailSignIn({
         }
       }
 
-      await requestEmailLink(normalizedEmail, callbackUrl);
+      await requestEmailLink(normalizedEmail, emailCallbackUrl);
 
       setSentVisible(true);
       setMessage("Check your email for a secure sign-in link.");
-      window.history.replaceState(null, "", buildSignInUrl({ callbackUrl, reason, sent: true }));
+      window.history.replaceState(null, "", buildSignInUrl({ callbackUrl: emailCallbackUrl, reason, sent: true }));
     } catch (err: any) {
       setError(err?.message || "Failed to send sign-in email.");
     } finally {

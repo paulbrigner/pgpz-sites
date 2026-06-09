@@ -49,6 +49,7 @@ export default function HomeClient() {
   const loading = status === "loading";
   const sessionUser = session?.user as any | undefined;
   const isSocialProofOnboarding = searchParams?.get("next") === "social-proof";
+  const signupProfileId = searchParams?.get("signupProfileId") || "";
 
   const [proofStatus, setProofStatus] = useState<ProofStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -104,6 +105,25 @@ export default function HomeClient() {
     pendingProfileApplied.current = true;
 
     const applyPendingProfile = async () => {
+      let applied = false;
+      if (signupProfileId) {
+        try {
+          const res = await fetch("/api/signup/pending", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ signupProfileId }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (res.ok && body?.applied) {
+            applied = true;
+            await update({});
+          }
+        } catch {
+          pendingProfileApplied.current = false;
+          return;
+        }
+      }
+
       let pending: any = null;
       try {
         const raw = localStorage.getItem("pendingProfile");
@@ -111,7 +131,14 @@ export default function HomeClient() {
       } catch {
         pending = null;
       }
-      if (!pending?.firstName || !pending?.lastName) return;
+      if (!pending?.firstName || !pending?.lastName) {
+        if (applied && signupProfileId) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("signupProfileId");
+          window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+        return;
+      }
 
       try {
         const res = await fetch("/api/profile/update", {
@@ -122,14 +149,22 @@ export default function HomeClient() {
         if (res.ok) {
           localStorage.removeItem("pendingProfile");
           await update({});
+          applied = true;
         }
       } catch {
         pendingProfileApplied.current = false;
+        return;
+      }
+
+      if (applied && signupProfileId) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("signupProfileId");
+        window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
       }
     };
 
     void applyPendingProfile();
-  }, [authenticated, update]);
+  }, [authenticated, signupProfileId, update]);
 
   const generateChallenge = async () => {
     setChallengeLoading(true);

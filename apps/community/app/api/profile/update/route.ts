@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
-import { AWS_REGION, NEXTAUTH_SECRET, NEXTAUTH_TABLE } from "@/lib/config";
-
-const dynamoClient = new DynamoDBClient({ region: AWS_REGION });
-const documentClient = DynamoDBDocument.from(dynamoClient);
+import { NEXTAUTH_SECRET } from "@/lib/config";
+import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const adapter: any = DynamoDBAdapter(documentClient as any, {
-      tableName: NEXTAUTH_TABLE || "NextAuth",
+      tableName: TABLE_NAME,
     });
 
     const name = `${firstName.trim()} ${lastName.trim()}`.trim();
