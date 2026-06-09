@@ -1,5 +1,8 @@
 import EmailProvider from "next-auth/providers/email";
 import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - nodemailer types are not installed in this app.
+import nodemailer from "nodemailer";
 import {
   NEXTAUTH_SECRET,
   NEXTAUTH_URL,
@@ -12,6 +15,7 @@ import {
   EMAIL_SERVER_SECURE,
 } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { recordEmailEvent } from "@/lib/admin/email-log";
 
 if (!process.env.NEXTAUTH_URL && NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = NEXTAUTH_URL;
@@ -47,6 +51,129 @@ const emailServerConfig = (() => {
   return undefined as any;
 })();
 
+const magicLinkText = ({ url, host }: { url: string; host: string }) =>
+  `Sign in to ${host}\n${url}\n\n`;
+
+const magicLinkHtml = ({
+  url,
+  host,
+  theme,
+}: {
+  url: string;
+  host: string;
+  theme: Record<string, string | undefined>;
+}) => {
+  const escapedHost = host.replace(/\./g, "&#8203;.");
+  const brandColor = theme.brandColor || "#F5A800";
+  const buttonText = theme.buttonText || "#1f1f22";
+
+  return `
+<body style="background: #fff8e7;">
+  <table width="100%" border="0" cellspacing="20" cellpadding="0"
+    style="background: #fffdf7; max-width: 600px; margin: auto; border-radius: 8px; border: 1px solid #ffd88a;">
+    <tr>
+      <td align="center"
+        style="padding: 20px 0 10px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #1f1f22;">
+        Sign in to <strong>${escapedHost}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td align="center" style="border-radius: 5px;" bgcolor="${brandColor}"><a href="${url}"
+                target="_blank"
+                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: ${buttonText}; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid ${brandColor}; display: inline-block; font-weight: bold;">Sign in</a></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center"
+        style="padding: 0 20px 20px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #3d4658;">
+        If you did not request this email, you can safely ignore it.
+      </td>
+    </tr>
+  </table>
+</body>
+`;
+};
+
+const sendMagicLink = async ({ identifier, url, provider, theme }: any) => {
+  const { host } = new URL(url);
+  const subject = `Sign in to ${host}`;
+  const transporter = nodemailer.createTransport(provider.server);
+  let failureLogged = false;
+
+  try {
+    const result = await transporter.sendMail({
+      to: identifier,
+      from: provider.from,
+      subject,
+      text: magicLinkText({ url, host }),
+      html: magicLinkHtml({ url, host, theme: theme || {} }),
+    });
+
+    const rejected = (result.rejected || []).filter(Boolean).map(String);
+    const pending = (result.pending || []).filter(Boolean).map(String);
+    const failed = rejected.concat(pending);
+
+    if (failed.length) {
+      const error = `Email (${failed.join(", ")}) could not be sent`;
+      try {
+        await recordEmailEvent({
+          email: identifier,
+          type: "magic-link",
+          subject,
+          status: "failed",
+          providerMessageId: result?.messageId ? String(result.messageId) : null,
+          error,
+          metadata: { host, rejected, pending },
+        });
+        failureLogged = true;
+      } catch (logErr) {
+        console.error("Magic-link email failure logging failed:", logErr);
+      }
+      throw new Error(error);
+    }
+
+    try {
+      await recordEmailEvent({
+        email: identifier,
+        type: "magic-link",
+        subject,
+        status: "sent",
+        providerMessageId: result?.messageId ? String(result.messageId) : null,
+        metadata: { host },
+      });
+    } catch (logErr) {
+      console.error("Magic-link email sent logging failed:", logErr);
+    }
+
+    console.info("Magic-link email accepted by SMTP provider", {
+      email: identifier,
+      providerMessageId: result?.messageId ? String(result.messageId) : null,
+      host,
+    });
+  } catch (err: any) {
+    if (!failureLogged) {
+      try {
+        await recordEmailEvent({
+          email: identifier,
+          type: "magic-link",
+          subject,
+          status: "failed",
+          error: typeof err?.message === "string" ? err.message : "Failed to send magic-link email",
+          metadata: { host },
+        });
+      } catch (logErr) {
+        console.error("Magic-link email exception logging failed:", logErr);
+      }
+    }
+    throw err;
+  }
+};
+
 export const authOptions = {
   adapter: DynamoDBAdapter(documentClient as any, {
     tableName: TABLE_NAME,
@@ -56,6 +183,7 @@ export const authOptions = {
     EmailProvider({
       server: emailServerConfig,
       from: EMAIL_FROM,
+      sendVerificationRequest: sendMagicLink,
     }),
   ],
   callbacks: {
