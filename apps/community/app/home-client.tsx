@@ -17,6 +17,9 @@ type ProofStatus = {
   membershipProofPostId: string | null;
   xHandle: string | null;
   proofRetentionPolicy: string | null;
+  manualApprovalStatus: "none" | "pending" | "approved" | string | null;
+  manualApprovalRequestedAt: string | null;
+  manualApprovalApprovedAt: string | null;
 };
 
 type XChallenge = {
@@ -56,6 +59,7 @@ export default function HomeClient() {
   const [challenge, setChallenge] = useState<XChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [manualApprovalLoading, setManualApprovalLoading] = useState(false);
   const [postUrl, setPostUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +79,26 @@ export default function HomeClient() {
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
+  const membershipProvider =
+    proofStatus?.membershipProvider || sessionUser?.membershipProvider || null;
   const proofUrl =
     proofStatus?.membershipProofPostUrl || sessionUser?.membershipProofPostUrl || null;
   const xHandle = proofStatus?.xHandle || sessionUser?.xHandle || null;
+  const manualApprovalStatus =
+    proofStatus?.manualApprovalStatus || sessionUser?.manualApprovalStatus || "none";
+  const manualApprovalRequestedAt =
+    proofStatus?.manualApprovalRequestedAt || sessionUser?.manualApprovalRequestedAt || null;
+  const manualApprovalPending = manualApprovalStatus === "pending" && !isMember;
+  const manuallyApproved =
+    isMember && (membershipProvider === "manual" || manualApprovalStatus === "approved");
+  const onboardingTitle = manualApprovalPending
+    ? "Manual approval requested"
+    : isSocialProofOnboarding
+      ? "Email confirmed"
+      : "Finish membership setup";
+  const onboardingDescription = manualApprovalPending
+    ? "An admin will review your membership request. You can also complete member verification with X at any time."
+    : "Complete member verification with X or request manual approval to activate your PGPZ community membership.";
 
   const refreshStatus = useCallback(async () => {
     if (!authenticated) return;
@@ -211,6 +232,24 @@ export default function HomeClient() {
     setMessage("Verification text copied.");
   };
 
+  const requestManualApproval = async () => {
+    setManualApprovalLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/manual-approval/request", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to request manual approval");
+      setMessage("Manual approval requested. An admin will review your membership request.");
+      await update({});
+      await refreshStatus();
+    } catch (err: any) {
+      setError(err?.message || "Unable to request manual approval");
+    } finally {
+      setManualApprovalLoading(false);
+    }
+  };
+
   if (loading) {
     return <HomeShellSkeleton />;
   }
@@ -264,10 +303,8 @@ export default function HomeClient() {
       {showOnboardingFirst ? (
         <Alert>
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>{isSocialProofOnboarding ? "Email confirmed" : "Finish membership setup"}</AlertTitle>
-          <AlertDescription>
-            Complete member verification with your X account to activate your PGPZ community membership.
-          </AlertDescription>
+          <AlertTitle>{onboardingTitle}</AlertTitle>
+          <AlertDescription>{onboardingDescription}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -322,7 +359,7 @@ export default function HomeClient() {
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
                       ? "Your free PGPZ community membership is active. Thanks for helping build a credible, constructive policy home for Zcash."
-                      : "Complete member verification with the X account you want associated with your PGPZ profile."}
+                      : "Complete member verification with X or request manual approval if you prefer not to link an X account."}
                   </p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
@@ -337,7 +374,9 @@ export default function HomeClient() {
                 <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border bg-white/75 p-4">
                     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">VERIFIED ACCOUNT</div>
-                    <div className="mt-2 text-lg font-semibold text-[var(--brand-ink)]">{xHandle || "X account"}</div>
+                    <div className="mt-2 text-lg font-semibold text-[var(--brand-ink)]">
+                      {manuallyApproved ? "Manual approval" : xHandle || "X account"}
+                    </div>
                   </div>
                   <div className="rounded-lg border bg-white/75 p-4">
                     <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">VERIFIED AT</div>
@@ -350,6 +389,8 @@ export default function HomeClient() {
                         <Link className="font-medium text-[var(--brand-denim)] underline" href={proofUrl} target="_blank" rel="noopener noreferrer">
                           View verified X post
                         </Link>
+                      ) : manuallyApproved ? (
+                        <span className="text-slate-600">Manual approval by PGPZ admin</span>
                       ) : (
                         <span className="text-slate-600">Proof URL unavailable</span>
                       )}
@@ -401,6 +442,37 @@ export default function HomeClient() {
                       </Button>
                     </div>
                   ) : null}
+                  <div className="rounded-lg border bg-white/80 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          MANUAL APPROVAL
+                        </div>
+                        <h3 className="text-base font-semibold text-[var(--brand-ink)]">
+                          Prefer not to link X?
+                        </h3>
+                        <p className="text-sm leading-6 text-slate-600">
+                          Request manual review and a PGPZ admin will evaluate your membership request.
+                        </p>
+                        {manualApprovalPending && manualApprovalRequestedAt ? (
+                          <p className="text-xs font-medium text-[var(--brand-denim)]">
+                            Requested {formatDate(manualApprovalRequestedAt)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={manualApprovalLoading || manualApprovalPending}
+                        onClick={requestManualApproval}
+                      >
+                        {manualApprovalLoading
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <ShieldCheck className="h-4 w-4" />}
+                        {manualApprovalPending ? "Request pending" : "Request manual approval"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

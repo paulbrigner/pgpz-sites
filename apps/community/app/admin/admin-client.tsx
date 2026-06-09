@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, MailCheck, RefreshCcw, Search, ShieldCheck } from "lucide-react";
+import { BadgeCheck, MailCheck, RefreshCcw, Search, ShieldCheck, UserCheck } from "lucide-react";
 import {
   SensitiveDataText,
   useAdminSensitiveData,
@@ -34,10 +34,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const { sensitiveDataVisible } = useAdminSensitiveData();
   const [roster, setRoster] = useState<AdminRoster | null>(initialRoster);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "none">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "none" | "manual">("all");
   const [loading, setLoading] = useState(!initialRoster);
   const [error, setError] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState<Record<string, boolean>>({});
+  const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadRoster = async () => {
@@ -75,6 +76,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         member.xHandle,
         member.linkedinUrl,
         member.membershipProofPostUrl,
+        member.membershipProvider,
+        member.manualApprovalStatus,
       ]
         .filter(Boolean)
         .join(" ")
@@ -103,13 +106,34 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     }
   };
 
+  const approveManual = async (member: AdminMember) => {
+    setApprovalLoading((current) => ({ ...current, [member.id]: true }));
+    setNotice(null);
+    try {
+      const res = await fetch("/api/admin/members/manual-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to approve manual request");
+      setNotice(`Manual approval granted for ${member.email || displayName(member)}.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to approve manual request");
+    } finally {
+      setApprovalLoading((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         {[
           ["Total", roster?.meta.total ?? 0],
           ["Active", roster?.meta.active ?? 0],
           ["Unverified", roster?.meta.none ?? 0],
+          ["Manual pending", roster?.meta.manualPending ?? 0],
           ["Admins", roster?.meta.admins ?? 0],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border bg-white/80 p-4">
@@ -131,11 +155,16 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {(["all", "active", "none"] as const).map((value) => (
+            {[
+              ["all", "All"],
+              ["active", "Active"],
+              ["none", "Unverified"],
+              ["manual", "Manual requests"],
+            ].map(([value, label]) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => setStatusFilter(value)}
+                onClick={() => setStatusFilter(value as typeof statusFilter)}
                 className={cn(
                   "rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]",
                   statusFilter === value
@@ -143,7 +172,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-400",
                 )}
               >
-                {value === "none" ? "Unverified" : value}
+                {label}
               </button>
             ))}
             <Button type="button" variant="outline" onClick={loadRoster} disabled={loading}>
@@ -166,10 +195,10 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       ) : null}
 
       <div className="overflow-hidden rounded-lg border bg-white/90">
-        <div className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.9fr_0.9fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="grid grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           <div>Member</div>
           <div>Status</div>
-          <div>X proof</div>
+          <div>Verification</div>
           <div>Email</div>
           <div>Actions</div>
         </div>
@@ -181,10 +210,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               const active = member.membershipStatus === "active";
               const emailHidden = !sensitiveDataVisible && member.email;
               const welcomeSent = !!member.welcomeEmailSentAt;
+              const manualPending = member.manualApprovalStatus === "pending" && !active;
+              const manualApproved = member.membershipProvider === "manual" || member.manualApprovalStatus === "approved";
               return (
                 <div
                   key={member.id}
-                  className="grid grid-cols-1 gap-3 px-4 py-4 text-sm md:grid-cols-[1.1fr_0.8fr_0.8fr_0.9fr_0.9fr]"
+                  className="grid grid-cols-1 gap-3 px-4 py-4 text-sm md:grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr]"
                 >
                   <div className="space-y-1">
                     <div className="font-semibold text-[var(--brand-ink)]">
@@ -208,13 +239,26 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       {active ? "Active" : "Unverified"}
                     </span>
                     <div className="mt-2 text-xs text-slate-500">{formatDate(member.membershipVerifiedAt)}</div>
+                    {manualPending ? (
+                      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
+                        <UserCheck className="h-3.5 w-3.5" />
+                        Manual requested
+                      </div>
+                    ) : null}
                   </div>
                   <div className="space-y-1">
-                    <div className="font-medium">{member.xHandle || "—"}</div>
+                    <div className="font-medium">
+                      {manualApproved ? "Manual approval" : member.xHandle || "—"}
+                    </div>
                     {member.membershipProofPostUrl ? (
                       <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofPostUrl} target="_blank" rel="noopener noreferrer">
                         Proof post
                       </Link>
+                    ) : null}
+                    {manualPending && member.manualApprovalRequestedAt ? (
+                      <div className="text-xs text-slate-500">
+                        Requested {formatDate(member.manualApprovalRequestedAt)}
+                      </div>
                     ) : null}
                   </div>
                   <div className="space-y-2">
@@ -244,6 +288,16 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {manualPending ? (
+                      <Button
+                        size="sm"
+                        disabled={approvalLoading[member.id]}
+                        onClick={() => approveManual(member)}
+                      >
+                        <UserCheck className="h-4 w-4" />
+                        {approvalLoading[member.id] ? "Approving..." : "Approve"}
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="outline"

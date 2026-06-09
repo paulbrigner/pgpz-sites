@@ -8,7 +8,10 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdminSession();
     const statusParam = (request.nextUrl.searchParams.get("status") || "all").toLowerCase();
-    const statusFilter = statusParam === "active" || statusParam === "none" ? statusParam : "all";
+    const statusFilter =
+      statusParam === "active" || statusParam === "none" || statusParam === "manual"
+        ? statusParam
+        : "all";
     const roster = await buildAdminRoster({ statusFilter });
     return NextResponse.json(roster);
   } catch (err) {

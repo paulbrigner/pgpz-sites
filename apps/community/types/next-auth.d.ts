@@ -17,6 +17,9 @@ declare module "next-auth" {
       membershipProofPostUrl?: string | null;
       membershipProofPostId?: string | null;
       proofRetentionPolicy?: string | null;
+      manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
+      manualApprovalRequestedAt?: string | null;
+      manualApprovalApprovedAt?: string | null;
       isAdmin?: boolean | null;
       welcomeEmailSentAt?: string | null;
       lastEmailSentAt?: string | null;
@@ -39,6 +42,9 @@ declare module "next-auth" {
     membershipProofPostUrl?: string | null;
     membershipProofPostId?: string | null;
     proofRetentionPolicy?: string | null;
+    manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
+    manualApprovalRequestedAt?: string | null;
+    manualApprovalApprovedAt?: string | null;
     isAdmin?: boolean | null;
     welcomeEmailSentAt?: string | null;
     lastEmailSentAt?: string | null;
@@ -57,6 +63,9 @@ declare module "next-auth/jwt" {
     membershipProofPostUrl?: string | null;
     membershipProofPostId?: string | null;
     proofRetentionPolicy?: string | null;
+    manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
+    manualApprovalRequestedAt?: string | null;
+    manualApprovalApprovedAt?: string | null;
     isAdmin?: boolean | null;
   }
 }

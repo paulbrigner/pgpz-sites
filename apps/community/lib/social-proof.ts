@@ -441,7 +441,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
             TableName: TABLE_NAME,
             Key: userKey(userId),
             UpdateExpression:
-              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :verifiedAt, membershipProofPostUrl = :postUrl, membershipProofPostId = :postId, membershipProofHandle = :handle, xHandle = :handle, xProfileUrl = :profileUrl, proofRetentionPolicy = :policy",
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :verifiedAt, membershipProofPostUrl = :postUrl, membershipProofPostId = :postId, membershipProofHandle = :handle, xHandle = :handle, xProfileUrl = :profileUrl, proofRetentionPolicy = :policy, manualApprovalStatus = :manualNone, manualApprovalUpdatedAt = :verifiedAt",
             ExpressionAttributeValues: {
               ":active": "active",
               ":provider": "x",
@@ -451,6 +451,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
               ":handle": handle,
               ":profileUrl": profileUrl,
               ":policy": proofRetentionPolicy,
+              ":manualNone": "none",
             },
           },
         },
@@ -505,6 +506,9 @@ export async function getUserProofStatus(userId: string) {
     membershipProofPostId: (user.Item?.membershipProofPostId as string | undefined) || null,
     xHandle: (user.Item?.xHandle as string | undefined) || null,
     proofRetentionPolicy: (user.Item?.proofRetentionPolicy as string | undefined) || null,
+    manualApprovalStatus: (user.Item?.manualApprovalStatus as string | undefined) || "none",
+    manualApprovalRequestedAt: (user.Item?.manualApprovalRequestedAt as string | undefined) || null,
+    manualApprovalApprovedAt: (user.Item?.manualApprovalApprovedAt as string | undefined) || null,
     proofs: (proofs.Items || []).map((item) => ({
       provider: item.provider || null,
       status: item.status || null,

@@ -20,6 +20,10 @@ type RawUser = {
   membershipProofPostUrl?: string | null;
   membershipProofPostId?: string | null;
   proofRetentionPolicy?: string | null;
+  manualApprovalStatus?: "none" | "pending" | "approved" | null;
+  manualApprovalRequestedAt?: string | null;
+  manualApprovalApprovedAt?: string | null;
+  manualApprovalApprovedBy?: string | null;
 };
 
 export type AdminMember = {
@@ -36,6 +40,10 @@ export type AdminMember = {
   membershipProofPostUrl: string | null;
   membershipProofPostId: string | null;
   proofRetentionPolicy: string | null;
+  manualApprovalStatus: "none" | "pending" | "approved";
+  manualApprovalRequestedAt: string | null;
+  manualApprovalApprovedAt: string | null;
+  manualApprovalApprovedBy: string | null;
   isAdmin: boolean;
   welcomeEmailSentAt: string | null;
   lastEmailSentAt: string | null;
@@ -50,12 +58,13 @@ export type AdminRoster = {
     total: number;
     active: number;
     none: number;
+    manualPending: number;
     admins: number;
   };
 };
 
 export type BuildAdminRosterOptions = {
-  statusFilter?: "all" | "active" | "none";
+  statusFilter?: "all" | "active" | "none" | "manual";
 };
 
 async function scanUsers(): Promise<RawUser[]> {
@@ -67,7 +76,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy",
+        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -95,6 +104,10 @@ const memberName = (user: RawUser) => {
 function toAdminMember(user: RawUser): AdminMember | null {
   if (!user.id) return null;
   const membershipStatus = user.membershipStatus === "active" ? "active" : "none";
+  const manualApprovalStatus =
+    user.manualApprovalStatus === "pending" || user.manualApprovalStatus === "approved"
+      ? user.manualApprovalStatus
+      : "none";
 
   return {
     id: user.id,
@@ -110,6 +123,10 @@ function toAdminMember(user: RawUser): AdminMember | null {
     membershipProofPostUrl: textOrNull(user.membershipProofPostUrl),
     membershipProofPostId: textOrNull(user.membershipProofPostId),
     proofRetentionPolicy: textOrNull(user.proofRetentionPolicy),
+    manualApprovalStatus,
+    manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),
+    manualApprovalApprovedAt: textOrNull(user.manualApprovalApprovedAt),
+    manualApprovalApprovedBy: textOrNull(user.manualApprovalApprovedBy),
     isAdmin: !!user.isAdmin,
     welcomeEmailSentAt: textOrNull(user.welcomeEmailSentAt),
     lastEmailSentAt: textOrNull(user.lastEmailSentAt),
@@ -122,11 +139,21 @@ function toAdminMember(user: RawUser): AdminMember | null {
 export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): Promise<AdminRoster> {
   const statusFilter = options.statusFilter || "all";
   const rawUsers = await scanUsers();
-  const members = rawUsers
+  const allMembers = rawUsers
     .map(toAdminMember)
-    .filter((member): member is AdminMember => !!member)
-    .filter((member) => statusFilter === "all" || member.membershipStatus === statusFilter)
+    .filter((member): member is AdminMember => !!member);
+  const members = allMembers
+    .filter((member) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "manual") {
+        return member.manualApprovalStatus === "pending" && member.membershipStatus !== "active";
+      }
+      return member.membershipStatus === statusFilter;
+    })
     .sort((a, b) => {
+      if (statusFilter === "manual") {
+        return (b.manualApprovalRequestedAt || "").localeCompare(a.manualApprovalRequestedAt || "");
+      }
       const aName = a.lastName || a.name || a.email || "";
       const bName = b.lastName || b.name || b.email || "";
       return aName.localeCompare(bName, undefined, { sensitivity: "base" });
@@ -136,9 +163,12 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
     members,
     meta: {
       total: members.length,
-      active: members.filter((member) => member.membershipStatus === "active").length,
-      none: members.filter((member) => member.membershipStatus === "none").length,
-      admins: members.filter((member) => member.isAdmin).length,
+      active: allMembers.filter((member) => member.membershipStatus === "active").length,
+      none: allMembers.filter((member) => member.membershipStatus === "none").length,
+      manualPending: allMembers.filter(
+        (member) => member.manualApprovalStatus === "pending" && member.membershipStatus !== "active"
+      ).length,
+      admins: allMembers.filter((member) => member.isAdmin).length,
     },
   };
 }

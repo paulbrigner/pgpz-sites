@@ -291,6 +291,9 @@ export const authOptions = {
             (token as any).membershipProofPostUrl = (userRecord as any).membershipProofPostUrl ?? null;
             (token as any).membershipProofPostId = (userRecord as any).membershipProofPostId ?? null;
             (token as any).proofRetentionPolicy = (userRecord as any).proofRetentionPolicy ?? null;
+            (token as any).manualApprovalStatus = (userRecord as any).manualApprovalStatus ?? "none";
+            (token as any).manualApprovalRequestedAt = (userRecord as any).manualApprovalRequestedAt ?? null;
+            (token as any).manualApprovalApprovedAt = (userRecord as any).manualApprovalApprovedAt ?? null;
           }
         }
       } catch (err) {
@@ -339,6 +342,9 @@ export const authOptions = {
           (session.user as any).membershipProofPostUrl = (userRecord as any)?.membershipProofPostUrl ?? null;
           (session.user as any).membershipProofPostId = (userRecord as any)?.membershipProofPostId ?? null;
           (session.user as any).proofRetentionPolicy = (userRecord as any)?.proofRetentionPolicy ?? null;
+          (session.user as any).manualApprovalStatus = (userRecord as any)?.manualApprovalStatus ?? "none";
+          (session.user as any).manualApprovalRequestedAt = (userRecord as any)?.manualApprovalRequestedAt ?? null;
+          (session.user as any).manualApprovalApprovedAt = (userRecord as any)?.manualApprovalApprovedAt ?? null;
 
           if (!(session.user as any).name && (userRecord as any)?.firstName) {
             const first = (userRecord as any).firstName as string;
@@ -353,6 +359,9 @@ export const authOptions = {
           (session.user as any).membershipProofPostUrl = (token as any)?.membershipProofPostUrl ?? null;
           (session.user as any).membershipProofPostId = (token as any)?.membershipProofPostId ?? null;
           (session.user as any).proofRetentionPolicy = (token as any)?.proofRetentionPolicy ?? null;
+          (session.user as any).manualApprovalStatus = (token as any)?.manualApprovalStatus ?? "none";
+          (session.user as any).manualApprovalRequestedAt = (token as any)?.manualApprovalRequestedAt ?? null;
+          (session.user as any).manualApprovalApprovedAt = (token as any)?.manualApprovalApprovedAt ?? null;
         }
       } catch (err) {
         console.error("session callback: failed to load user profile", err);
@@ -363,6 +372,9 @@ export const authOptions = {
         (session.user as any).membershipProofPostUrl = (token as any)?.membershipProofPostUrl ?? null;
         (session.user as any).membershipProofPostId = (token as any)?.membershipProofPostId ?? null;
         (session.user as any).proofRetentionPolicy = (token as any)?.proofRetentionPolicy ?? null;
+        (session.user as any).manualApprovalStatus = (token as any)?.manualApprovalStatus ?? "none";
+        (session.user as any).manualApprovalRequestedAt = (token as any)?.manualApprovalRequestedAt ?? null;
+        (session.user as any).manualApprovalApprovedAt = (token as any)?.manualApprovalApprovedAt ?? null;
       }
 
       return session;
