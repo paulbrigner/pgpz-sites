@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import type { LegalDocument } from "@/lib/legal";
-import { LEGAL_PDF_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
+import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -23,7 +23,7 @@ export function LegalDocumentPage({ document }: Props) {
             </p>
           </div>
           <Button variant="outline" asChild>
-            <Link href={LEGAL_PDF_PATH} target="_blank" rel="noopener noreferrer">
+            <Link href={document.pdfPath} target="_blank" rel="noopener noreferrer">
               View PDF
               <ExternalLink className="h-4 w-4" />
             </Link>
@@ -39,6 +39,10 @@ export function LegalDocumentPage({ document }: Props) {
           <span className="text-slate-400">/</span>
           <Link className="font-medium text-[var(--brand-denim)] underline" href={PRIVACY_PATH}>
             Privacy Policy
+          </Link>
+          <span className="text-slate-400">/</span>
+          <Link className="font-medium text-[var(--brand-denim)] underline" href={COMMUNITY_GUIDELINES_PATH}>
+            Community Guidelines
           </Link>
         </div>
 

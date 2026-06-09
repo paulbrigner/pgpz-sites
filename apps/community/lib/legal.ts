@@ -1,4 +1,9 @@
-import { LEGAL_CONTACT_EMAIL, LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
+import {
+  COMMUNITY_GUIDELINES_PDF_PATH,
+  LEGAL_CONTACT_EMAIL,
+  LEGAL_DOCUMENT_VERSION,
+  LEGAL_PDF_PATH,
+} from "@/lib/legal-config";
 
 export type LegalSection = {
   title: string;
@@ -10,6 +15,7 @@ export type LegalDocument = {
   eyebrow: string;
   description: string;
   version: string;
+  pdfPath: string;
   sections: LegalSection[];
 };
 
@@ -19,6 +25,7 @@ export const termsDocument: LegalDocument = {
   description:
     "These Terms of Service apply to your use of community.pgpz.org.",
   version: LEGAL_DOCUMENT_VERSION,
+  pdfPath: LEGAL_PDF_PATH,
   sections: [
     {
       title: "Terms of Service",
@@ -95,6 +102,7 @@ export const privacyDocument: LegalDocument = {
   description:
     "This Privacy Policy explains how community.pgpz.org collects, uses, shares, and protects information.",
   version: LEGAL_DOCUMENT_VERSION,
+  pdfPath: LEGAL_PDF_PATH,
   sections: [
     {
       title: "Privacy Policy",
@@ -190,6 +198,114 @@ export const privacyDocument: LegalDocument = {
       paragraphs: [
         "We may update this Privacy Policy from time to time. If we make a material change, we will post the updated policy on the Service and update the effective date.",
         `If you have questions about this Privacy Policy, contact us at ${LEGAL_CONTACT_EMAIL}.`,
+      ],
+    },
+  ],
+};
+
+export const communityGuidelinesDocument: LegalDocument = {
+  title: "Community Guidelines",
+  eyebrow: "PGPZ COMMUNITY",
+  description:
+    "These Community Guidelines explain how we expect members to behave in community.pgpz.org forums and related community spaces.",
+  version: LEGAL_DOCUMENT_VERSION,
+  pdfPath: COMMUNITY_GUIDELINES_PDF_PATH,
+  sections: [
+    {
+      title: "Community Guidelines",
+      paragraphs: [
+        "Effective Date: June 9, 2026",
+        "These Community Guidelines explain how we expect members to behave in community.pgpz.org forums and related community spaces.",
+      ],
+    },
+    {
+      title: "1. Purpose",
+      paragraphs: [
+        'These Community Guidelines explain the standards that apply when you use community.pgpz.org (the "Service"), including forums, comments, profiles, and other community features.',
+        "Our goal is to keep the Service useful, respectful, and safe for all members.",
+      ],
+    },
+    {
+      title: "2. Be respectful",
+      paragraphs: [
+        "Treat other members with respect. Do not harass, threaten, shame, bully, or target people because of who they are or what they believe.",
+        "Reasonable disagreement is welcome. Personal attacks are not.",
+      ],
+    },
+    {
+      title: "3. No spam or self-promotion abuse",
+      paragraphs: [
+        "Do not post spam, deceptive promotions, repetitive messages, affiliate links, or low-quality content designed mainly to drive traffic or attention.",
+        "If we allow promotion in specific places, follow the rules for those places and keep promotional posts relevant and limited.",
+      ],
+    },
+    {
+      title: "4. No unlawful or harmful content",
+      paragraphs: [
+        "Do not post content that is unlawful, defamatory, fraudulent, obscene, exploitative, or otherwise harmful.",
+        "Do not upload malware, attempt unauthorized access, or encourage illegal activity.",
+      ],
+    },
+    {
+      title: "5. Protect privacy",
+      paragraphs: [
+        "Do not share other people's private or sensitive information without permission. This includes home addresses, personal phone numbers, private emails, credentials, financial details, or other information that could expose someone to harm.",
+        "Do not use the Service to dox, stalk, impersonate, or intimidate others.",
+      ],
+    },
+    {
+      title: "6. Keep discussions on topic",
+      paragraphs: [
+        "Stay on topic in the forum or thread where you are posting. If a conversation needs to move, do so in a way that makes it easy for others to follow.",
+        "Repeated off-topic posting, derailment, or thread hijacking may be removed.",
+      ],
+    },
+    {
+      title: "7. Use your own account properly",
+      paragraphs: [
+        "Do not impersonate another person, organization, moderator, or administrator.",
+        "Keep your account credentials secure and do not share accounts unless we explicitly allow it.",
+      ],
+    },
+    {
+      title: "8. Respect intellectual property",
+      paragraphs: [
+        "Only post content that you have the right to share. If you quote, repost, or reference someone else's work, follow applicable copyright and attribution rules.",
+        "If we receive a valid complaint about infringing content, we may remove it.",
+      ],
+    },
+    {
+      title: "9. Moderation and enforcement",
+      paragraphs: [
+        "We may review, hide, remove, or limit content and may warn, suspend, or terminate accounts when we believe a rule has been violated or when necessary to protect the Service or its users.",
+        "We may consider context, severity, intent, and prior conduct when deciding how to respond.",
+      ],
+    },
+    {
+      title: "10. Reporting concerns",
+      paragraphs: [
+        `If you see content or behavior that violates these Guidelines, report it to us at ${LEGAL_CONTACT_EMAIL} or through any reporting feature we provide.`,
+        "Please include enough detail for us to investigate, such as links, usernames, screenshots, or timestamps when available.",
+      ],
+    },
+    {
+      title: "11. Appeals and corrections",
+      paragraphs: [
+        "If your content is removed or your account is restricted and you believe we made a mistake, you may contact us and ask for review.",
+        "We are not required to reverse every moderation decision, but we will review appeals in good faith.",
+      ],
+    },
+    {
+      title: "12. Changes to these Guidelines",
+      paragraphs: [
+        "We may update these Guidelines from time to time. If we make a material change, we will post the updated version on the Service and update the effective date.",
+        "Your continued use of the Service after an update becomes effective means you accept the updated Guidelines.",
+      ],
+    },
+    {
+      title: "13. Contact",
+      paragraphs: [
+        `If you have questions about these Guidelines, contact us at ${LEGAL_CONTACT_EMAIL}.`,
       ],
     },
   ],

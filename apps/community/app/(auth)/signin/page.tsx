@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail } from "lucide-react";
 import {
+  COMMUNITY_GUIDELINES_PATH,
   LEGAL_DOCUMENT_VERSION,
   PRIVACY_PATH,
   TERMS_PATH,
@@ -163,7 +164,9 @@ function EmailSignIn({
         if (!firstName.trim()) throw new Error("First name is required.");
         if (!lastName.trim()) throw new Error("Last name is required.");
         if (!legalAccepted) {
-          throw new Error("Please accept the Terms of Service and Privacy Policy before creating an account.");
+          throw new Error(
+            "Please accept the Terms of Service, Privacy Policy, and Community Guidelines before creating an account."
+          );
         }
         if (linkedinUrl.trim()) {
           try {
@@ -342,8 +345,8 @@ function EmailSignIn({
                       rel="noopener noreferrer"
                     >
                       Terms of Service
-                    </Link>{" "}
-                    and{" "}
+                    </Link>
+                    ,{" "}
                     <Link
                       className="font-medium text-[var(--brand-denim)] underline"
                       href={PRIVACY_PATH}
@@ -351,6 +354,15 @@ function EmailSignIn({
                       rel="noopener noreferrer"
                     >
                       Privacy Policy
+                    </Link>
+                    , and{" "}
+                    <Link
+                      className="font-medium text-[var(--brand-denim)] underline"
+                      href={COMMUNITY_GUIDELINES_PATH}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Community Guidelines
                     </Link>
                     .
                   </label>

@@ -145,7 +145,7 @@ async function assertLegalAcceptanceForAccountEmail(identifier: string, url: str
   const signupProfileId = signupProfileIdFromMagicLink(url);
   if (!signupProfileId) {
     throw new Error(
-      "Create an account from the sign-up page and accept the Terms of Service and Privacy Policy before requesting an email link."
+      "Create an account from the sign-up page and accept the Terms of Service, Privacy Policy, and Community Guidelines before requesting an email link."
     );
   }
 
@@ -163,7 +163,7 @@ async function assertLegalAcceptanceForAccountEmail(identifier: string, url: str
 
   if (!item || item.type !== "SIGNUP_PROFILE") {
     throw new Error(
-      "Create an account from the sign-up page and accept the Terms of Service and Privacy Policy before requesting an email link."
+      "Create an account from the sign-up page and accept the Terms of Service, Privacy Policy, and Community Guidelines before requesting an email link."
     );
   }
 
@@ -180,7 +180,7 @@ async function assertLegalAcceptanceForAccountEmail(identifier: string, url: str
     item.legalDocumentVersion !== LEGAL_DOCUMENT_VERSION
   ) {
     throw new Error(
-      "Please accept the current Terms of Service and Privacy Policy before creating an account."
+      "Please accept the current Terms of Service, Privacy Policy, and Community Guidelines before creating an account."
     );
   }
 }

@@ -36,7 +36,7 @@ const validateProfile = (body: any) => {
   if (!firstName) throw new Error("First name is required.");
   if (!lastName) throw new Error("Last name is required.");
   if (!legalAccepted || legalDocumentVersion !== LEGAL_DOCUMENT_VERSION) {
-    throw new Error("Please accept the current Terms of Service and Privacy Policy.");
+    throw new Error("Please accept the current Terms of Service, Privacy Policy, and Community Guidelines.");
   }
   if (xHandle.length > 50) throw new Error("X handle too long.");
 

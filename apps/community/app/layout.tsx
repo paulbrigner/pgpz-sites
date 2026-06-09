@@ -3,7 +3,7 @@ import { Providers } from "./providers";
 import { MainNav } from "@/components/site/main-nav";
 import { Inter } from "next/font/google";
 import Link from "next/link";
-import { PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
+import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
 
 export const metadata = {
   title: "PGPZ Community",
@@ -38,6 +38,9 @@ export default function RootLayout({
                 </Link>
                 <Link className="font-medium text-[var(--brand-denim)] underline" href={PRIVACY_PATH}>
                   Privacy Policy
+                </Link>
+                <Link className="font-medium text-[var(--brand-denim)] underline" href={COMMUNITY_GUIDELINES_PATH}>
+                  Community Guidelines
                 </Link>
               </div>
             </div>
