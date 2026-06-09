@@ -71,7 +71,7 @@ export default function HomeClient() {
   const activeFromSession = sessionUser?.membershipStatus === "active";
   const activeFromStatus = proofStatus?.membershipStatus === "active";
   const isMember = activeFromSession || activeFromStatus;
-  const showOnboardingFirst = authenticated && !isMember && isSocialProofOnboarding;
+  const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
   const proofUrl =
@@ -224,7 +224,7 @@ export default function HomeClient() {
       {showOnboardingFirst ? (
         <Alert>
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Email confirmed</AlertTitle>
+          <AlertTitle>{isSocialProofOnboarding ? "Email confirmed" : "Finish membership setup"}</AlertTitle>
           <AlertDescription>
             Link your X account to activate your PGPZ community membership.
           </AlertDescription>
