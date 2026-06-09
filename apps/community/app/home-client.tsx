@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -43,9 +44,11 @@ const buildIntentUrl = (text: string) =>
 
 export default function HomeClient() {
   const { data: session, status, update } = useSession();
+  const searchParams = useSearchParams();
   const authenticated = status === "authenticated";
   const loading = status === "loading";
   const sessionUser = session?.user as any | undefined;
+  const isSocialProofOnboarding = searchParams?.get("next") === "social-proof";
 
   const [proofStatus, setProofStatus] = useState<ProofStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -68,6 +71,7 @@ export default function HomeClient() {
   const activeFromSession = sessionUser?.membershipStatus === "active";
   const activeFromStatus = proofStatus?.membershipStatus === "active";
   const isMember = activeFromSession || activeFromStatus;
+  const showOnboardingFirst = authenticated && !isMember && isSocialProofOnboarding;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
   const proofUrl =
@@ -180,40 +184,52 @@ export default function HomeClient() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5">
-      <section className="community-hero">
-        <div className="community-hero__frame">
-          <div className="community-hero__content max-w-3xl space-y-5">
-            <p className="section-eyebrow text-white/70">PGPZ Community</p>
-            <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
-              A community home for PGPZ.
-            </h1>
-            <p className="max-w-2xl text-base leading-7 text-white/78">
-              A place for early members to connect, follow project updates, and
-              coordinate around privacy-focused Zcash work as PGPZ takes shape.
-            </p>
-            {!authenticated ? (
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  size="lg"
-                  className="bg-[var(--zcash-gold)] text-[var(--brand-ink)] hover:bg-[var(--zcash-gold-soft)]"
-                  asChild
-                >
-                  <Link href="/signin?reason=signup">
-                    <Mail className="h-4 w-4" aria-hidden="true" />
-                    Join with email
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
-                  <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                    Visit PGPZ
-                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-              </div>
-            ) : null}
+      {!showOnboardingFirst ? (
+        <section className="community-hero">
+          <div className="community-hero__frame">
+            <div className="community-hero__content max-w-3xl space-y-5">
+              <p className="section-eyebrow text-white/70">PGPZ Community</p>
+              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+                A community home for PGPZ.
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-white/78">
+                A place for early members to connect, follow project updates, and
+                coordinate around privacy-focused Zcash work as PGPZ takes shape.
+              </p>
+              {!authenticated ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    size="lg"
+                    className="bg-[var(--zcash-gold)] text-[var(--brand-ink)] hover:bg-[var(--zcash-gold-soft)]"
+                    asChild
+                  >
+                    <Link href="/signin?reason=signup">
+                      <Mail className="h-4 w-4" aria-hidden="true" />
+                      Join with email
+                    </Link>
+                  </Button>
+                  <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
+                    <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
+                      Visit PGPZ
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
+
+      {showOnboardingFirst ? (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          <AlertTitle>Email confirmed</AlertTitle>
+          <AlertDescription>
+            Link your X account to activate your PGPZ community membership.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {statusError ? (
         <Alert variant="destructive">

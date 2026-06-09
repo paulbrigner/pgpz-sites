@@ -10,11 +10,14 @@ import { CheckCircle2, Mail } from "lucide-react";
 
 export default function SignInPage() {
   const searchParams = useSearchParams();
+  const reason = searchParams?.get("reason") || null;
   const callbackUrl = useMemo(() => {
     const url = searchParams?.get("callbackUrl");
+    if (reason === "signup" && (!url || url === "/")) {
+      return "/?next=social-proof";
+    }
     return url && url.trim().length > 0 ? url : "/";
-  }, [searchParams]);
-  const reason = searchParams?.get("reason") || null;
+  }, [reason, searchParams]);
 
   return <EmailSignIn callbackUrl={callbackUrl} mode={reason === "signup" ? "signup" : "signin"} reason={reason} />;
 }
