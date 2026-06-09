@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import type { ReactNode } from "react";
 import type { Session } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { isAdminSession } from "@/lib/admin/auth";
 
 export const metadata = {
-  title: "Admin | PGP Community",
+  title: "Admin | PGPZ Community",
 };
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

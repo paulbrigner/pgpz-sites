@@ -1,105 +1,19 @@
-const DEFAULT_BASE_NETWORK_ID = 8453;
-
 const parseNumber = (value: string | undefined): number | null => {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export type MembershipTierConfig = {
-  id: string;
-  address: string; // lowercase for comparisons
-  checksumAddress: string;
-  label?: string;
-  order: number;
-  renewable?: boolean;
-  gasSponsored?: boolean;
-  neverExpires?: boolean;
+const trimBaseUrl = (value: string | undefined, fallback: string) => {
+  const trimmed = (value || "").trim();
+  return (trimmed || fallback).replace(/\/+$/, "");
 };
 
-const DEFAULT_MEMBERSHIP_REFERRER = '0x76ff49cc68710a0df27724d46698835d7c7af2f2';
-
-const parseMembershipTiers = (): MembershipTierConfig[] => {
-  const raw = process.env.NEXT_PUBLIC_LOCK_TIERS;
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((entry: any, index: number) => {
-            const address = typeof entry?.address === 'string' ? entry.address.trim() : '';
-            if (!address) return null;
-            const id = (typeof entry?.id === 'string' && entry.id.trim().length
-              ? entry.id.trim()
-              : address).toLowerCase();
-            const label = typeof entry?.label === 'string' ? entry.label.trim() : undefined;
-            const orderRaw = Number(entry?.order);
-            const order = Number.isFinite(orderRaw) ? orderRaw : index;
-            const renewable = typeof entry?.renewable === 'boolean' ? entry.renewable : true;
-            const gasSponsored = typeof entry?.gasSponsored === 'boolean' ? entry.gasSponsored : false;
-            const neverExpires = typeof entry?.neverExpires === 'boolean' ? entry.neverExpires : false;
-            return {
-              id,
-              address: address.toLowerCase(),
-              checksumAddress: address,
-              label,
-              order,
-              renewable,
-              gasSponsored,
-              neverExpires,
-            } as MembershipTierConfig;
-          })
-          .filter(Boolean) as MembershipTierConfig[];
-      }
-    } catch (err) {
-      console.error('Failed to parse NEXT_PUBLIC_LOCK_TIERS:', err);
-    }
-  }
-
-  const fallbackAddress = process.env.NEXT_PUBLIC_LOCK_ADDRESS;
-  if (!fallbackAddress) {
-    return [];
-  }
-  return [
-    {
-      id: fallbackAddress.toLowerCase(),
-      address: fallbackAddress.toLowerCase(),
-      checksumAddress: fallbackAddress,
-      label: undefined,
-      order: 0,
-      renewable: true,
-      gasSponsored: false,
-      neverExpires: false,
-    },
-  ];
-};
-
-export const MEMBERSHIP_TIERS: MembershipTierConfig[] = parseMembershipTiers().sort((a, b) => a.order - b.order);
-
-export const UNLOCK_ADDRESS = process.env.NEXT_PUBLIC_UNLOCK_ADDRESS as string;
-const primaryChecksumAddress = MEMBERSHIP_TIERS[0]?.checksumAddress || process.env.NEXT_PUBLIC_LOCK_ADDRESS || '';
-export const PRIMARY_LOCK_ADDRESS = primaryChecksumAddress;
-export const LOCK_ADDRESS = primaryChecksumAddress.toLowerCase();
-export const MEMBERSHIP_TIER_ADDRESSES = new Set(MEMBERSHIP_TIERS.map((tier) => tier.address));
-const resolvedBaseNetworkId = parseNumber(process.env.NEXT_PUBLIC_BASE_NETWORK_ID);
-export const BASE_NETWORK_ID = resolvedBaseNetworkId && resolvedBaseNetworkId > 0 ? resolvedBaseNetworkId : DEFAULT_BASE_NETWORK_ID;
-export const BASE_CHAIN_ID_HEX = `0x${BASE_NETWORK_ID.toString(16)}`;
-export const BASE_RPC_URL = process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
-export const BASE_BLOCK_EXPLORER_URL = process.env.NEXT_PUBLIC_BASE_BLOCK_EXPLORER_URL || "https://basescan.org";
-export const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as string;
-export const UNLOCK_SUBGRAPH_URL = process.env.NEXT_PUBLIC_UNLOCK_SUBGRAPH_URL as string | undefined;
-export const UNLOCK_SUBGRAPH_ID = process.env.UNLOCK_SUBGRAPH_ID as string | undefined;
-export const UNLOCK_SUBGRAPH_API_KEY = process.env.UNLOCK_SUBGRAPH_API_KEY as string | undefined;
-export const LOCKSMITH_BASE_URL = process.env.NEXT_PUBLIC_LOCKSMITH_BASE || "https://locksmith.unlock-protocol.com";
-export const PRIVATE_KEY_SECRET = (process.env.PRIVATE_KEY_SECRET || "").replace(/\\n/g, "\n") as string;
-export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;
-export const KEY_PAIR_ID = process.env.KEY_PAIR_ID as string;
-export const AWS_REGION = process.env.REGION_AWS as string;
+export const AWS_REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
 export const NEXTAUTH_URL = process.env.NEXTAUTH_URL as string;
 export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET as string;
 export const NEXTAUTH_TABLE = process.env.NEXTAUTH_TABLE as string;
-export const EVENT_METADATA_TABLE = process.env.EVENT_METADATA_TABLE as string | undefined;
-export const EVENT_CHECKIN_TABLE = process.env.EVENT_CHECKIN_TABLE as string | undefined;
+
 export const EMAIL_SERVER = process.env.EMAIL_SERVER as string;
 export const EMAIL_FROM = process.env.EMAIL_FROM as string;
 export const EMAIL_SERVER_HOST = process.env.EMAIL_SERVER_HOST as string | undefined;
@@ -108,6 +22,21 @@ export const EMAIL_SERVER_USER = process.env.EMAIL_SERVER_USER as string | undef
 export const EMAIL_SERVER_PASSWORD = process.env.EMAIL_SERVER_PASSWORD as string | undefined;
 export const EMAIL_SERVER_SECURE = process.env.EMAIL_SERVER_SECURE as string | undefined;
 
-const resolvedRecurringPayments = parseNumber(process.env.NEXT_PUBLIC_MEMBERSHIP_RECURRING_PAYMENTS);
-export const MEMBERSHIP_RECURRING_PAYMENTS = resolvedRecurringPayments && resolvedRecurringPayments > 0 ? resolvedRecurringPayments : 12;
-export const MEMBERSHIP_REFERRER_ADDRESS = (process.env.NEXT_PUBLIC_MEMBERSHIP_REFERRER || DEFAULT_MEMBERSHIP_REFERRER).trim();
+export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;
+export const KEY_PAIR_ID = process.env.KEY_PAIR_ID as string;
+export const PRIVATE_KEY_SECRET = (process.env.PRIVATE_KEY_SECRET || "").replace(/\\n/g, "\n") as string;
+
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  process.env.NEXTAUTH_URL ||
+  "https://community.pgpz.org";
+
+export const X_BEARER_TOKEN =
+  (process.env.X_BEARER_TOKEN || process.env.XMON_X_API_BEARER_TOKEN) as string | undefined;
+export const X_API_BASE_URL = trimBaseUrl(process.env.X_API_BASE_URL || process.env.XMON_X_API_BASE_URL, "https://api.x.com/2");
+export const X_API_TIMEOUT_MS = parseNumber(process.env.X_API_TIMEOUT_MS) || 15000;
+export const X_PROOF_CHALLENGE_TTL_MINUTES =
+  parseNumber(process.env.X_PROOF_CHALLENGE_TTL_MINUTES) || 30;
+
+export const MEMBERSHIP_PROOF_RETENTION_POLICY =
+  process.env.MEMBERSHIP_PROOF_RETENTION_POLICY || "valid_if_deleted";

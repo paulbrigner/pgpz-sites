@@ -1,9 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --hero-sheen: radial-gradient(circle at 18% 16%, rgba(67, 119, 243, 0.38), rgba(67, 119, 243, 0.12) 38%, transparent 62%),
-    radial-gradient(circle at 82% -6%, rgba(193, 197, 226, 0.32), rgba(193, 197, 226, 0.08) 42%, transparent 68%),
-    linear-gradient(125deg, rgba(11, 11, 67, 0.98) 0%, rgba(17, 18, 78, 0.96) 52%, rgba(33, 44, 132, 0.9) 100%);
+  --zcash-gold: #F5A800;
+  --zcash-gold-soft: #FFE6A3;
+  --zcash-gold-deep: #8A5A00;
+  --brand-ink: #1E1E1E;
+  --brand-coal: #17130A;
+  --brand-denim: #7A5200;
+  --brand-navy: #1E1E1E;
+  --brand-teal: #1F6F68;
+  --brand-cloud: #FFF3CA;
+  --brand-ice: #FFF9EA;
+  --hero-sheen: linear-gradient(125deg, #17130A 0%, #2A2111 48%, #7A5200 100%);
 }
 
 @layer base {
@@ -26,30 +34,19 @@
     border-radius: 1.75rem;
     background: var(--hero-sheen);
     color: #ffffff;
-    box-shadow: 0 30px 60px -32px rgba(11, 11, 67, 0.65);
-    border: 1px solid rgba(193, 197, 226, 0.18);
-  }
-
-  .community-hero::before {
-    content: "";
-    position: absolute;
-    inset: -18% -14% -22%;
-    border-radius: 50%;
-    background: radial-gradient(circle at 32% 28%, rgba(88, 110, 229, 0.4), transparent 72%),
-      radial-gradient(circle at 80% -12%, rgba(193, 197, 226, 0.2), transparent 64%);
-    opacity: 0.5;
-    pointer-events: none;
+    box-shadow: 0 30px 60px -32px rgba(30, 30, 30, 0.58);
+    border: 1px solid rgba(245, 168, 0, 0.26);
   }
 
   .community-hero__frame {
     position: relative;
     width: 100%;
     border-radius: 1.65rem;
-    border: 1px solid rgba(193, 197, 226, 0.32);
+    border: 1px solid rgba(245, 168, 0, 0.34);
     padding: clamp(2.4rem, 6.5vw, 3.8rem) clamp(1.8rem, 6vw, 3.6rem);
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 52%, rgba(67, 119, 243, 0.16));
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.03) 52%, rgba(245, 168, 0, 0.18));
     backdrop-filter: blur(10px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 22px 40px -26px rgba(11, 11, 67, 0.6);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 22px 40px -26px rgba(30, 30, 30, 0.56);
   }
 
   .community-hero__content {
@@ -60,24 +57,24 @@
 
   .glass-surface {
     border-radius: 1.5rem;
-    border: 1px solid rgba(193, 197, 226, 0.45);
-    background: linear-gradient(135deg, rgba(193, 197, 226, 0.22), rgba(250, 250, 252, 0.85));
-    box-shadow: 0 26px 46px -30px rgba(11, 11, 67, 0.55);
+    border: 1px solid rgba(245, 168, 0, 0.28);
+    background: linear-gradient(135deg, rgba(255, 230, 163, 0.32), rgba(255, 255, 255, 0.88));
+    box-shadow: 0 26px 46px -30px rgba(30, 30, 30, 0.38);
     backdrop-filter: blur(18px);
   }
 
   .glass-item {
     border-radius: 1.1rem;
-    border: 1px solid rgba(193, 197, 226, 0.45);
-    background: linear-gradient(140deg, rgba(250, 250, 252, 0.92), rgba(193, 197, 226, 0.25));
-    box-shadow: 0 20px 32px -24px rgba(11, 11, 67, 0.4);
+    border: 1px solid rgba(245, 168, 0, 0.28);
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.94), rgba(255, 230, 163, 0.28));
+    box-shadow: 0 20px 32px -24px rgba(30, 30, 30, 0.32);
     backdrop-filter: blur(16px);
   }
 
   .muted-card {
     border-radius: 1.1rem;
-    border: 1px solid rgba(193, 197, 226, 0.45);
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 20px 36px -26px rgba(11, 11, 67, 0.25);
+    border: 1px solid rgba(245, 168, 0, 0.22);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 20px 36px -26px rgba(30, 30, 30, 0.2);
   }
 }

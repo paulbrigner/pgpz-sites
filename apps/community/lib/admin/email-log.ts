@@ -6,7 +6,6 @@ export type EmailLogStatus = "queued" | "sent" | "failed";
 export interface EmailLogParams {
   userId?: string | null;
   email?: string | null;
-  wallet?: string | null;
   type: string;
   subject?: string | null;
   status: EmailLogStatus;
@@ -36,7 +35,6 @@ export async function recordEmailEvent(params: EmailLogParams) {
     emailType: params.type,
     subject: params.subject || null,
     userId,
-    wallet: params.wallet || null,
     email: params.email || null,
     providerMessageId: params.providerMessageId || null,
     error: params.error || null,

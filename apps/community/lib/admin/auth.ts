@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 export class AdminAccessError extends Error {
   constructor(message = "Admin access required") {

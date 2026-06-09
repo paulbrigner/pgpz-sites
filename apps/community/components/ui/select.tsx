@@ -45,7 +45,7 @@ export function Select({
       <select
         id={selectId}
         className={cn(
-          "rounded-lg border border-[rgba(67,119,243,0.35)] bg-white px-3 py-2 text-sm text-[var(--brand-navy)] focus-visible:border-[var(--brand-denim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(67,119,243,0.2)]",
+          "rounded-lg border border-[rgba(245,168,0,0.4)] bg-white px-3 py-2 text-sm text-[var(--brand-navy)] focus-visible:border-[var(--brand-denim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(245,168,0,0.22)]",
           className,
         )}
         onChange={(event) => onChange?.(event.target.value)}

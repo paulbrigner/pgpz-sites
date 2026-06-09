@@ -13,7 +13,6 @@ import {
   NavigationMenuList,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
-import { signInWithSiwe } from "@/lib/siwe/client";
 import { cn } from "@/lib/utils";
 
 export function MainNav() {
@@ -32,21 +31,17 @@ export function MainNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navLoading, setNavLoading] = useState(false);
 
+  const signInHref = `/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+  const joinHref = `/signin?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=signup`;
+
   const linkClasses = cn(
     navigationMenuTriggerStyle(),
-    "rounded-full border border-white/10 bg-transparent px-4 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-[var(--brand-cloud)] transition hover:border-white/20 hover:bg-white/10 hover:text-white"
+    "rounded-full border border-[rgba(245,168,0,0.22)] bg-transparent px-4 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-[var(--brand-cloud)] transition hover:border-[rgba(245,168,0,0.45)] hover:bg-[rgba(245,168,0,0.1)] hover:text-white"
   );
   const externalLinkClasses = cn(
     navigationMenuTriggerStyle(),
-    "rounded-full border border-amber-300/60 bg-white/5 px-4 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-amber-100 shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition hover:border-amber-200 hover:bg-amber-50/10 hover:text-white"
+    "rounded-full border border-[rgba(245,168,0,0.7)] bg-[rgba(245,168,0,0.12)] px-4 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-[var(--zcash-gold-soft)] shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition hover:border-[var(--zcash-gold)] hover:bg-[rgba(245,168,0,0.2)] hover:text-white"
   );
-
-  const handleSignIn = async () => {
-    const res = await signInWithSiwe();
-    if (!res.ok) {
-      router.push(`/signin?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=wallet-unlinked`);
-    }
-  };
 
   useEffect(() => {
     setMobileOpen(false);
@@ -56,18 +51,14 @@ export function MainNav() {
   const closeMobileMenu = () => setMobileOpen(false);
   const mobileMenuId = "main-nav-mobile-menu";
   const mobileToggleClasses =
-    "inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:border-white/35 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70";
+    "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(245,168,0,0.34)] bg-[rgba(245,168,0,0.12)] text-white transition hover:border-[rgba(245,168,0,0.55)] hover:bg-[rgba(245,168,0,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)]";
   const mobileMenuItemClasses =
-    "block w-full rounded-full border border-white/25 px-5 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-white/90 transition hover:border-white/45 hover:bg-white/10";
+    "block w-full rounded-full border border-[rgba(245,168,0,0.28)] px-5 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-white/90 transition hover:border-[rgba(245,168,0,0.55)] hover:bg-[rgba(245,168,0,0.12)]";
 
   const mobileMenuItems = authenticated
     ? [
         { key: "home", label: "Home", href: "/" },
-        {
-          key: "profile",
-          label: "Edit Profile",
-          href: "/settings/profile",
-        },
+        { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
           ? [{
               key: "admin",
@@ -79,7 +70,7 @@ export function MainNav() {
                 router.push("/admin");
               },
             }] : []),
-        { key: "pgp", label: "PGP* for Crypto", href: "https://pgpforcrypto.org", external: true },
+        { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
         {
           key: "logout",
           label: "Log Out",
@@ -95,40 +86,29 @@ export function MainNav() {
       ]
     : [
         { key: "home", label: "Home", href: "/" },
-        {
-          key: "join",
-          label: "Join",
-          href: `/signin?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=signup`,
-        },
-        {
-          key: "signin",
-          label: "Sign In",
-          action: async () => {
-            closeMobileMenu();
-            await handleSignIn();
-          },
-        },
-        { key: "pgp", label: "PGP* for Crypto", href: "https://pgpforcrypto.org", external: true },
+        { key: "join", label: "Join", href: joinHref },
+        { key: "signin", label: "Sign In", href: signInHref },
+        { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
       ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-gradient-to-br from-[#0b0b43] via-[#12124f] to-[#1d1c72] text-white shadow-[0_22px_48px_-32px_rgba(11,11,67,0.65)] backdrop-blur-md">
+    <header className="sticky top-0 z-50 w-full border-b border-[rgba(245,168,0,0.22)] bg-[linear-gradient(135deg,var(--brand-ink),#2A2111)] text-white shadow-[0_22px_48px_-32px_rgba(30,30,30,0.65)] backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5">
         <Link
           href="/"
           className="flex items-center gap-3 text-sm font-bold uppercase tracking-[0.4em] text-white"
         >
-          <span className="relative inline-flex h-9 w-9 overflow-hidden rounded-full border border-white/20 bg-white/10">
+          <span className="relative inline-flex h-9 w-9 overflow-hidden rounded-full border border-[rgba(245,168,0,0.5)] bg-[rgba(245,168,0,0.12)]">
             <Image
               src="/pgp_profile_image.png"
-              alt="PGP profile"
+              alt="PGPZ"
               fill
               sizes="36px"
               className="object-cover"
               priority
             />
           </span>
-          PGP Community
+          PGPZ Community
         </Link>
         <NavigationMenu className="hidden items-center gap-2 lg:flex">
           <NavigationMenuList className="space-x-2">
@@ -138,15 +118,15 @@ export function MainNav() {
               </NavigationMenuLink>
             </NavigationMenuItem>
 
-            {authenticated && (
+            {authenticated ? (
               <NavigationMenuItem>
                 <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href="/settings/profile">Edit Profile</Link>
+                  <Link href="/settings/profile">Profile</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
-            )}
+            ) : null}
 
-            {authenticated && isAdmin && (
+            {authenticated && isAdmin ? (
               <NavigationMenuItem>
                 <button
                   type="button"
@@ -159,27 +139,24 @@ export function MainNav() {
                   Admin
                 </button>
               </NavigationMenuItem>
-            )}
+            ) : null}
 
-            {!authenticated && (
-              <NavigationMenuItem>
-                <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href={`/signin?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=signup`}>
-                    Sign Up
-                  </Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-            )}
+            {!authenticated ? (
+              <>
+                <NavigationMenuItem>
+                  <NavigationMenuLink className={linkClasses} asChild>
+                    <Link href={joinHref}>Join</Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <NavigationMenuLink className={linkClasses} asChild>
+                    <Link href={signInHref}>Sign In</Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+              </>
+            ) : null}
 
-            {!authenticated && (
-              <NavigationMenuItem>
-                <button type="button" className={linkClasses} onClick={handleSignIn}>
-                  Sign In
-                </button>
-              </NavigationMenuItem>
-            )}
-
-            {authenticated && (
+            {authenticated ? (
               <NavigationMenuItem>
                 <button
                   type="button"
@@ -195,21 +172,21 @@ export function MainNav() {
                   Log Out
                 </button>
               </NavigationMenuItem>
-            )}
+            ) : null}
 
             <NavigationMenuItem className="pl-3">
               <NavigationMenuLink className={externalLinkClasses} asChild>
-                <Link href="https://pgpforcrypto.org" target="_blank" rel="noopener noreferrer">
-                  PGP* for Crypto
+                <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
+                  PGPZ
                 </Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
-            {navLoading && (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs text-white">
+            {navLoading ? (
+              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[rgba(245,168,0,0.12)] px-3 py-1 text-xs text-white">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Loading…
+                Loading...
               </span>
-            )}
+            ) : null}
           </NavigationMenuList>
         </NavigationMenu>
         <div className="relative flex items-center lg:hidden">
@@ -218,31 +195,29 @@ export function MainNav() {
             className={mobileToggleClasses}
             aria-expanded={mobileOpen}
             aria-controls={mobileMenuId}
-            onClick={() => setMobileOpen((prev) => !prev)}
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            onClick={() => setMobileOpen((open) => !open)}
           >
-            <span className="sr-only">Toggle navigation</span>
             {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
           </button>
-          {mobileOpen && (
+          {mobileOpen ? (
             <div
               id={mobileMenuId}
-              className="absolute right-0 top-[calc(100%+0.75rem)] w-[min(20rem,calc(100vw-2.5rem))] rounded-3xl border border-white/15 bg-[rgba(11,11,67,0.94)] p-4 shadow-[0_18px_36px_-20px_rgba(11,11,67,0.65)] backdrop-blur-xl"
+              className="absolute right-0 top-12 w-[min(82vw,22rem)] rounded-2xl border border-[rgba(245,168,0,0.26)] bg-[rgba(30,30,30,0.96)] p-3 shadow-2xl backdrop-blur-md"
             >
-              <div className="space-y-3">
-                {mobileMenuItems.map((item) =>
-                  item.action ? (
-                    <button
-                      key={item.key}
-                      type="button"
-                      className={mobileMenuItemClasses}
-                      onClick={item.action}
-                    >
-                      {item.label}
-                    </button>
-                  ) : (
+              <div className="flex flex-col gap-2">
+                {mobileMenuItems.map((item) => {
+                  if ("action" in item && item.action) {
+                    return (
+                      <button key={item.key} type="button" className={mobileMenuItemClasses} onClick={item.action}>
+                        {item.label}
+                      </button>
+                    );
+                  }
+                  return (
                     <Link
                       key={item.key}
-                      href={item.href!}
+                      href={item.href}
                       target={item.external ? "_blank" : undefined}
                       rel={item.external ? "noopener noreferrer" : undefined}
                       className={mobileMenuItemClasses}
@@ -250,11 +225,17 @@ export function MainNav() {
                     >
                       {item.label}
                     </Link>
-                  )
-                )}
+                  );
+                })}
+                {navLoading ? (
+                  <span className="inline-flex items-center justify-center gap-1 rounded-full bg-[rgba(245,168,0,0.12)] px-3 py-2 text-xs text-white">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Loading...
+                  </span>
+                ) : null}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </header>

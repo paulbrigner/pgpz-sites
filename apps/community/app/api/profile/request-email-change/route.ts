@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
     const transporter = nodemailer.createTransport(transportConfig);
     const html = `
-      <p>You requested to change your email on PGP Community.</p>
+      <p>You requested to change your email on PGPZ Community.</p>
       <p>Click the button below to confirm your new email. This link expires in 30 minutes.</p>
       <p><a href="${confirmUrl.toString()}" style="display:inline-block;padding:10px 16px;background:#000;color:#fff;text-decoration:none;border-radius:6px;">Confirm email change</a></p>
       <p>If you didn't request this, you can ignore this email.</p>

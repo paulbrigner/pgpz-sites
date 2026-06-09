@@ -20,8 +20,6 @@ export const dynamic = "force-dynamic";
 type UserRecord = {
   id: string;
   email: string | null;
-  walletAddress: string | null;
-  wallets: string[];
   firstName: string | null;
   lastName: string | null;
 };
@@ -38,9 +36,7 @@ const buildEmailServerConfig = () => {
           : undefined,
     } as any;
   }
-  if (EMAIL_SERVER && EMAIL_SERVER.includes("://")) {
-    return EMAIL_SERVER as any;
-  }
+  if (EMAIL_SERVER && EMAIL_SERVER.includes("://")) return EMAIL_SERVER as any;
   if (EMAIL_SERVER) {
     return {
       host: EMAIL_SERVER,
@@ -57,14 +53,9 @@ const buildEmailServerConfig = () => {
 
 const coerceUser = (data: any): UserRecord | null => {
   if (!data?.id) return null;
-  const wallets = Array.isArray(data.wallets)
-    ? (data.wallets as any[]).map((w) => (typeof w === "string" ? w.toLowerCase() : "")).filter((w) => w.startsWith("0x"))
-    : [];
   return {
     id: String(data.id),
     email: typeof data.email === "string" ? data.email : null,
-    walletAddress: typeof data.walletAddress === "string" ? data.walletAddress.toLowerCase() : wallets[0] || null,
-    wallets,
     firstName: typeof data.firstName === "string" ? data.firstName : null,
     lastName: typeof data.lastName === "string" ? data.lastName : null,
   };
@@ -79,27 +70,7 @@ async function findUserByEmail(email: string): Promise<UserRecord | null> {
     ExpressionAttributeValues: { ":pk": `USER#${email}`, ":sk": `USER#${email}` },
     Limit: 1,
   });
-  const item = res.Items?.[0];
-  return coerceUser(item);
-}
-
-async function findUserByWallet(wallet: string): Promise<UserRecord | null> {
-  const res = await documentClient.query({
-    TableName: TABLE_NAME,
-    IndexName: "GSI1",
-    KeyConditionExpression: "#gsi1pk = :pk AND #gsi1sk = :sk",
-    ExpressionAttributeNames: { "#gsi1pk": "GSI1PK", "#gsi1sk": "GSI1SK" },
-    ExpressionAttributeValues: { ":pk": "ACCOUNT#ethereum", ":sk": `ACCOUNT#${wallet}` },
-    Limit: 1,
-  });
-  const account = res.Items?.[0];
-  const userId = account?.userId as string | undefined;
-  if (!userId) return null;
-  const user = await documentClient.get({
-    TableName: TABLE_NAME,
-    Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
-  });
-  return coerceUser(user.Item);
+  return coerceUser(res.Items?.[0]);
 }
 
 async function findUserById(id: string): Promise<UserRecord | null> {
@@ -114,12 +85,12 @@ const stripHtml = (value: string) => value.replace(/<[^>]+>/g, " ");
 
 function buildWelcomeEmail(user: UserRecord, to: string) {
   const name = user.firstName || user.lastName ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : to;
-  const subject = "Welcome to PGP Community";
+  const subject = "Welcome to PGPZ Community";
   const html = `
     <p>Hi ${name || "there"},</p>
-    <p>Welcome to the PGP Community. Your membership is active and you can sign in any time to access community resources.</p>
+    <p>Welcome to the PGPZ Community. Your membership is active and you can sign in any time to access community resources.</p>
     <p>If you have questions, reply to this email and we will help.</p>
-    <p>Thanks,<br/>PGP Community Team</p>
+    <p>Thanks,<br/>PGPZ Community Team</p>
   `;
   const text = stripHtml(html);
   return { subject, html, text };
@@ -144,19 +115,11 @@ export async function POST(request: NextRequest) {
     body = await request.json();
     const type: EmailType = body?.type === "custom" ? "custom" : "welcome";
     const normalizedEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-    const normalizedWallet = typeof body?.wallet === "string" ? body.wallet.trim().toLowerCase() : "";
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
 
     let user: UserRecord | null = null;
-    if (userId) {
-      user = await findUserById(userId);
-    }
-    if (!user && normalizedEmail) {
-      user = await findUserByEmail(normalizedEmail);
-    }
-    if (!user && normalizedWallet) {
-      user = await findUserByWallet(normalizedWallet);
-    }
+    if (userId) user = await findUserById(userId);
+    if (!user && normalizedEmail) user = await findUserByEmail(normalizedEmail);
 
     const to = normalizedEmail || user?.email || "";
     if (!to) {
@@ -173,11 +136,11 @@ export async function POST(request: NextRequest) {
       const customHtml = typeof body?.html === "string" ? body.html.trim() : "";
       const customText = typeof body?.text === "string" ? body.text.trim() : "";
       if (customSubject || customHtml || customText) {
-        subject = customSubject || "Welcome to PGP Community";
+        subject = customSubject || "Welcome to PGPZ Community";
         html = customHtml || undefined;
         text = customText || (html ? stripHtml(html) : undefined);
       } else {
-        const built = buildWelcomeEmail(user || { id: "", email: to, walletAddress: null, wallets: [], firstName: null, lastName: null }, to);
+        const built = buildWelcomeEmail(user || { id: "", email: to, firstName: null, lastName: null }, to);
         subject = built.subject;
         html = built.html;
         text = built.text;
@@ -205,7 +168,6 @@ export async function POST(request: NextRequest) {
     await recordEmailEvent({
       userId: user?.id || null,
       email: to,
-      wallet: user?.walletAddress || null,
       type,
       subject,
       status: "sent",
@@ -226,13 +188,11 @@ export async function POST(request: NextRequest) {
     try {
       const userId = typeof body?.userId === "string" ? body.userId : null;
       const email = typeof body?.email === "string" ? body.email : null;
-      const wallet = typeof body?.wallet === "string" ? body.wallet : null;
       const type: EmailType = body?.type === "custom" ? "custom" : "welcome";
       const subject = typeof body?.subject === "string" ? body.subject : null;
       await recordEmailEvent({
         userId,
         email,
-        wallet,
         type,
         subject,
         status: "failed",

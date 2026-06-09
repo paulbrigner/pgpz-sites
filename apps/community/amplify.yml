@@ -7,46 +7,32 @@ frontend:
       commands:
         - nvm install 22
         - nvm use 22
-        - node -v   # optional sanity check
+        - node -v
         - npm ci
     build:
       commands:
-        # Expose client-side config (inlined at build time)
-        - env | grep -e NEXT_PUBLIC_LOCK_ADDRESS >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_UNLOCK_ADDRESS >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_BASE_NETWORK_ID >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_BASE_RPC_URL >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_BASE_BLOCK_EXPLORER_URL >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_LOCKSMITH_BASE >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_UNLOCK_SUBGRAPH_URL >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_USDC_ADDRESS >> .env.production || true
-        - env | grep -e NEXT_PUBLIC_LOCK_TIERS >> .env.production        
+        - env | grep -e NEXT_PUBLIC_SITE_URL >> .env.production || true
         - env | grep -e NEXTAUTH_TABLE >> .env.production
         - env | grep -e NEXTAUTH_URL >> .env.production
         - env | grep -e NEXTAUTH_SECRET >> .env.production
-        - env | grep -e BASE_RPC_URL >> .env.production || true
-        - env | grep -e EMAIL_SERVER >> .env.production
-        - env | grep -e EMAIL_SERVER_PORT >> .env.production
-        - env | grep -e EMAIL_SERVER_USER >> .env.production
-        - env | grep -e EMAIL_SERVER_PASSWORD >> .env.production
-        - env | grep -e EMAIL_FROM >> .env.production
-        - env | grep -e CLOUDFRONT_DOMAIN >> .env.production
-        - env | grep -e KEY_PAIR_ID >> .env.production
         - env | grep -e REGION_AWS >> .env.production
-        - env | grep -e UNLOCK_SUBGRAPH_ID >> .env.production
-        - env | grep -e UNLOCK_SUBGRAPH_API_KEY >> .env.production
-        - env | grep -e PRIVATE_KEY_SECRET >> .env.production
-        - env | grep -e MEMBER_SPONSORSHIP_ENABLED >> .env.production
-        - env | grep -e MEMBER_SPONSOR_PRIVATE_KEY >> .env.production
-        - env | grep -e EVENT_SPONSORSHIP_ENABLED >> .env.production
-        - env | grep -e EVENT_SPONSOR_PRIVATE_KEY >> .env.production
-        - env | grep -e ADMIN_ROSTER_CACHE_TABLE >> .env.production
-        - env | grep -e ADMIN_ROSTER_CACHE_MODE >> .env.production
-        - env | grep -e ADMIN_ROSTER_CACHE_MAX_STALE_SECONDS >> .env.production
-        - env | grep -e ADMIN_ROSTER_CACHE_TTL_SECONDS >> .env.production
-        - env | grep -e ADMIN_ROSTER_REBUILD_URL >> .env.production
-        - env | grep -e ADMIN_ROSTER_REBUILD_SECRET >> .env.production
-        - env | grep -e EVENT_METADATA_TABLE >> .env.production || true
+        - env | grep -e X_BEARER_TOKEN >> .env.production
+        - env | grep -e XMON_X_API_BEARER_TOKEN >> .env.production || true
+        - env | grep -e X_API_BASE_URL >> .env.production || true
+        - env | grep -e XMON_X_API_BASE_URL >> .env.production || true
+        - env | grep -e X_API_TIMEOUT_MS >> .env.production || true
+        - env | grep -e X_PROOF_CHALLENGE_TTL_MINUTES >> .env.production || true
+        - env | grep -e MEMBERSHIP_PROOF_RETENTION_POLICY >> .env.production || true
+        - env | grep -e EMAIL_SERVER >> .env.production || true
+        - env | grep -e EMAIL_SERVER_HOST >> .env.production || true
+        - env | grep -e EMAIL_SERVER_PORT >> .env.production || true
+        - env | grep -e EMAIL_SERVER_USER >> .env.production || true
+        - env | grep -e EMAIL_SERVER_PASSWORD >> .env.production || true
+        - env | grep -e EMAIL_SERVER_SECURE >> .env.production || true
+        - env | grep -e EMAIL_FROM >> .env.production
+        - env | grep -e CLOUDFRONT_DOMAIN >> .env.production || true
+        - env | grep -e KEY_PAIR_ID >> .env.production || true
+        - env | grep -e PRIVATE_KEY_SECRET >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next

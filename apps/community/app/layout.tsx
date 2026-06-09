@@ -4,8 +4,8 @@ import { MainNav } from "@/components/site/main-nav";
 import { Inter } from "next/font/google";
 
 export const metadata = {
-  title: "PGP for Crypto Community",
-  description: "A token-gated community application.",
+  title: "PGPZ Community",
+  description: "Community home for PGPZ updates, resources, and early members.",
 };
 
 const inter = Inter({
@@ -24,8 +24,7 @@ export default function RootLayout({
       <body className="font-sans min-h-screen bg-background text-foreground">
         <Providers>
           <MainNav />
-          <main className="relative min-h-[calc(100vh-3.5rem)] bg-[var(--brand-ice)] pb-16 pt-8">
-            <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[360px] bg-[radial-gradient(circle_at_18%_22%,rgba(67,119,243,0.24),transparent_55%),radial-gradient(circle_at_80%_-10%,rgba(193,197,226,0.35),transparent_45%)] blur-3xl" />
+          <main className="relative min-h-[calc(100vh-3.5rem)] bg-[linear-gradient(180deg,var(--brand-ice)_0%,#ffffff_72%)] pb-16 pt-8">
             {children}
           </main>
         </Providers>

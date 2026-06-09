@@ -11,12 +11,12 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      walletAddress?: string | null;
-      wallets?: string[] | null;
-      membershipStatus?: 'active' | 'expired' | 'none' | null;
-      membershipExpiry?: number | null;
-      membershipSummary?: any;
-      membershipHighestTier?: string | null;
+      membershipStatus?: "active" | "none" | null;
+      membershipProvider?: "x" | string | null;
+      membershipVerifiedAt?: string | null;
+      membershipProofPostUrl?: string | null;
+      membershipProofPostId?: string | null;
+      proofRetentionPolicy?: string | null;
       isAdmin?: boolean | null;
       welcomeEmailSentAt?: string | null;
       lastEmailSentAt?: string | null;
@@ -33,8 +33,12 @@ declare module "next-auth" {
     xHandle?: string | null;
     linkedinUrl?: string | null;
     email?: string | null;
-    walletAddress?: string | null;
-    wallets?: string[] | null;
+    membershipStatus?: "active" | "none" | null;
+    membershipProvider?: "x" | string | null;
+    membershipVerifiedAt?: string | null;
+    membershipProofPostUrl?: string | null;
+    membershipProofPostId?: string | null;
+    proofRetentionPolicy?: string | null;
     isAdmin?: boolean | null;
     welcomeEmailSentAt?: string | null;
     lastEmailSentAt?: string | null;
@@ -47,10 +51,12 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     email?: string | null;
-    walletAddress?: string | null;
-    membershipStatus?: 'active' | 'expired' | 'none' | null;
-    membershipExpiry?: number | null;
-    membershipHighestTier?: string | null;
+    membershipStatus?: "active" | "none" | null;
+    membershipProvider?: "x" | string | null;
+    membershipVerifiedAt?: string | null;
+    membershipProofPostUrl?: string | null;
+    membershipProofPostId?: string | null;
+    proofRetentionPolicy?: string | null;
     isAdmin?: boolean | null;
   }
 }

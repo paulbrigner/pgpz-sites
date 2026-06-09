@@ -18,7 +18,7 @@ export function HomeShellSkeleton() {
                 <div className="h-10 w-32 rounded-lg border border-white/30 bg-white/20" />
               </div>
             </div>
-            <div className="mx-auto flex-shrink-0 rounded-[1.9rem] border border-white/20 bg-white/10 p-[6px] shadow-[0_28px_48px_-28px_rgba(11,11,67,0.55)] backdrop-blur-lg md:mx-0 md:self-center">
+            <div className="mx-auto flex-shrink-0 rounded-[1.9rem] border border-[rgba(245,168,0,0.28)] bg-white/10 p-[6px] shadow-[0_28px_48px_-28px_rgba(30,30,30,0.42)] backdrop-blur-lg md:mx-0 md:self-center">
               <div className="relative h-28 w-28 overflow-hidden rounded-[1.6rem] bg-white/20 md:h-40 md:w-40" />
             </div>
           </div>
@@ -28,7 +28,7 @@ export function HomeShellSkeleton() {
         <div className="h-4 w-56 rounded bg-white/50" />
         <div className="h-3 w-full max-w-lg rounded bg-white/30" />
       </div>
-      <NftCollectionSkeleton />
+      <SocialProofSkeleton />
     </div>
   );
 }
@@ -57,7 +57,7 @@ export function UpcomingMeetingsSkeleton() {
   );
 }
 
-export function NftCollectionSkeleton() {
+export function SocialProofSkeleton() {
   return (
     <div className="glass-item space-y-4 p-5 md:col-span-2 animate-pulse">
       <div className="h-5 w-48 rounded bg-slate-200/70" />

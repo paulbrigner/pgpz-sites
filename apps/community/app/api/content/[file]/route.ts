@@ -36,6 +36,9 @@ export async function GET(
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if ((token as any).membershipStatus !== "active") {
+    return NextResponse.json({ error: "Membership required" }, { status: 403 });
+  }
 
   // Generate signed URL
   const privateKey = PRIVATE_KEY_SECRET;

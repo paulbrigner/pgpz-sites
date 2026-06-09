@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import type { MembershipSummary } from "@/lib/membership-server";
-import { fetchMembershipStateSnapshot } from "@/app/actions/membership-state";
 
 export default function ProfileSettingsPage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const ready = status !== "loading";
   const authenticated = status === "authenticated";
 
@@ -34,107 +30,30 @@ export default function ProfileSettingsPage() {
 
   const sessionUser = session?.user as any | undefined;
   const currentEmail = typeof sessionUser?.email === "string" ? sessionUser.email : "";
-  const wallets = useMemo(() => {
-    const list = sessionUser?.wallets;
-    return Array.isArray(list) ? list.map((item) => String(item)) : [];
-  }, [sessionUser]);
-  const walletAddress = sessionUser?.walletAddress as string | undefined;
-  const sessionMembershipSummary = sessionUser?.membershipSummary as MembershipSummary | null | undefined;
-  const membershipAddresses = useMemo(() => {
-    const sources = wallets && wallets.length ? wallets : walletAddress ? [walletAddress] : [];
-    return Array.from(
-      new Set(
-        sources
-          .map((addr) => String(addr).trim().toLowerCase())
-          .filter((addr) => addr.length > 0),
-      ),
-    );
-  }, [walletAddress, wallets]);
-  const membershipAddressesKey = useMemo(() => membershipAddresses.join(","), [membershipAddresses]);
 
   useEffect(() => {
     if (!authenticated || !sessionUser) return;
-    const u: any = sessionUser || {};
-    setFirstName(u.firstName || "");
-    setLastName(u.lastName || "");
-    setXHandle(u.xHandle || "");
-    setLinkedinUrl(u.linkedinUrl || "");
+    const next = {
+      firstName: (sessionUser.firstName as string) || "",
+      lastName: (sessionUser.lastName as string) || "",
+      xHandle: (sessionUser.xHandle as string) || "",
+      linkedinUrl: (sessionUser.linkedinUrl as string) || "",
+    };
+    setFirstName(next.firstName);
+    setLastName(next.lastName);
+    setXHandle(next.xHandle);
+    setLinkedinUrl(next.linkedinUrl);
     setNewEmail(currentEmail || "");
-    setInitial({
-      firstName: (u.firstName as string) || "",
-      lastName: (u.lastName as string) || "",
-      xHandle: (u.xHandle as string) || "",
-      linkedinUrl: (u.linkedinUrl as string) || "",
-    });
+    setInitial(next);
   }, [authenticated, sessionUser, currentEmail]);
 
   useEffect(() => {
-    // Prefetch home route assets to reduce navigation lag back to Home.
     try {
       router.prefetch("/");
     } catch {
       // ignore prefetch errors
     }
   }, [router]);
-
-useEffect(() => {
-  if (!authenticated) return;
-  if (!membershipAddresses.length) return;
-  if (sessionMembershipSummary) return;
-  const fetchMembership = async () => {
-      try {
-        await fetchMembershipStateSnapshot({ addresses: membershipAddresses, forceRefresh: true });
-      } catch (err) {
-        console.error("Profile membership fetch failed", err);
-      }
-    };
-    void fetchMembership();
-}, [authenticated, membershipAddresses, sessionMembershipSummary]);
-
-// Prefetch home data to speed up navigation back to Home.
-useEffect(() => {
-  if (!authenticated) return;
-    if (!membershipAddressesKey) return;
-    const controller = new AbortController();
-    const prefetch = async () => {
-      try {
-        const res = await fetch(`/api/nfts?addresses=${encodeURIComponent(membershipAddressesKey)}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!res.ok) return;
-        const payload = await res.json();
-        queryClient.setQueryData(["nfts", membershipAddressesKey], {
-          creatorNfts: Array.isArray(payload?.nfts) ? payload.nfts : [],
-          missedNfts: Array.isArray(payload?.missed) ? payload.missed : [],
-          upcomingNfts: Array.isArray(payload?.upcoming) ? payload.upcoming : [],
-          error: typeof payload?.error === "string" && payload.error.length ? payload.error : null,
-        });
-      } catch {
-        // ignore prefetch errors
-      }
-    };
-    void prefetch();
-  return () => controller.abort();
-}, [authenticated, membershipAddressesKey, queryClient]);
-
-// Prefetch membership snapshot into React Query so Home can hydrate instantly.
-useEffect(() => {
-  if (!authenticated) return;
-  if (!membershipAddressesKey) return;
-  if (!sessionMembershipSummary) return;
-  queryClient.setQueryData(
-    ["membership", membershipAddressesKey],
-    {
-      summary: sessionMembershipSummary,
-      allowances: {},
-      tokenIds: {},
-      includesAllowances: false,
-      includesTokenIds: false,
-    },
-    { updatedAt: Date.now() },
-  );
-}, [authenticated, membershipAddressesKey, queryClient, sessionMembershipSummary]);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -163,22 +82,20 @@ useEffect(() => {
         }),
       });
       if (!res.ok) {
-        let detail: any = undefined;
-        try {
-          detail = await res.json();
-        } catch {}
+        const detail = await res.json().catch(() => ({}));
         throw new Error(detail?.error || res.statusText || "Update failed");
       }
-      setMessage("Profile updated");
-      await update({});
-      setInitial({
+      const next = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         xHandle: xHandle.trim(),
         linkedinUrl: linkedinUrl.trim(),
-      });
-    } catch (e: any) {
-      setError(e?.message || "Unexpected error");
+      };
+      setMessage("Profile updated");
+      setInitial(next);
+      await update({});
+    } catch (err: any) {
+      setError(err?.message || "Unexpected error");
     } finally {
       setSubmitting(false);
     }
@@ -186,17 +103,11 @@ useEffect(() => {
 
   const isDirty = () => {
     if (!initial) return false;
-    const current = {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      xHandle: xHandle.trim(),
-      linkedinUrl: linkedinUrl.trim(),
-    };
     return (
-      current.firstName !== (initial.firstName || "") ||
-      current.lastName !== (initial.lastName || "") ||
-      current.xHandle !== (initial.xHandle || "") ||
-      current.linkedinUrl !== (initial.linkedinUrl || "")
+      firstName.trim() !== initial.firstName ||
+      lastName.trim() !== initial.lastName ||
+      xHandle.trim() !== initial.xHandle ||
+      linkedinUrl.trim() !== initial.linkedinUrl
     );
   };
 
@@ -207,8 +118,7 @@ useEffect(() => {
     setEmailError(null);
     try {
       const target = newEmail.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!target || !emailRegex.test(target)) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target)) {
         throw new Error("Enter a valid email address.");
       }
       if (currentEmail && target === currentEmail.toLowerCase()) {
@@ -220,10 +130,7 @@ useEffect(() => {
         body: JSON.stringify({ email: target }),
       });
       if (!res.ok) {
-        let detail: any = undefined;
-        try {
-          detail = await res.json();
-        } catch {}
+        const detail = await res.json().catch(() => ({}));
         throw new Error(detail?.error || res.statusText || "Failed to send verification email");
       }
       setEmailMessage("Check your new email for a confirmation link. We will switch your account after you verify.");
@@ -234,7 +141,6 @@ useEffect(() => {
     }
   };
 
-
   const handleBack = () => {
     if (isDirty()) {
       const proceed = confirm("You have unsaved changes. Leave without saving?");
@@ -244,7 +150,7 @@ useEffect(() => {
   };
 
   if (!ready) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>;
   }
 
   if (!authenticated) {
@@ -262,31 +168,33 @@ useEffect(() => {
     <div className="space-y-6">
       <div className="flex justify-end">
         <Button variant="outline" onClick={handleBack}>
-          ← Back to Home
+          Back to Home
         </Button>
       </div>
-      {message && (
+
+      {message ? (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
           <AlertTitle>Success</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
-      )}
-      {error && (
+      ) : null}
+      {error ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
-      <section className="rounded-lg border p-6 shadow-sm space-y-6">
+      ) : null}
+
+      <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Profile information</h2>
           <p className="text-sm text-muted-foreground">
-            Keep your contact information current so we can share community updates.
+            Keep your contact and social details current for PGPZ community membership and updates.
           </p>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="mt-5 space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="firstName" className="text-sm font-medium">
@@ -297,7 +205,7 @@ useEffect(() => {
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
                 required
-                className="w-full rounded-md border px-3 py-2 text-sm dark:border-input dark:bg-input/30"
+                className="w-full rounded-md border px-3 py-2 text-sm"
               />
             </div>
             <div className="space-y-2">
@@ -309,66 +217,63 @@ useEffect(() => {
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
                 required
-                className="w-full rounded-md border px-3 py-2 text-sm dark:border-input dark:bg-input/30"
+                className="w-full rounded-md border px-3 py-2 text-sm"
               />
             </div>
           </div>
           <div className="space-y-2">
             <label htmlFor="xHandle" className="text-sm font-medium">
-              X handle (optional)
+              X handle
             </label>
             <input
               id="xHandle"
               value={xHandle}
               onChange={(event) => setXHandle(event.target.value)}
               placeholder="@handle"
-              className="w-full rounded-md border px-3 py-2 text-sm dark:border-input dark:bg-input/30"
+              className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
           <div className="space-y-2">
             <label htmlFor="linkedin" className="text-sm font-medium">
-              LinkedIn URL (optional)
+              LinkedIn URL
             </label>
             <input
               id="linkedin"
               value={linkedinUrl}
               onChange={(event) => setLinkedinUrl(event.target.value)}
               placeholder="https://www.linkedin.com/in/username"
-              className="w-full rounded-md border px-3 py-2 text-sm dark:border-input dark:bg-input/30"
+              className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
-          <div className="flex gap-2">
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving..." : "Save changes"}
+          </Button>
         </form>
       </section>
 
-
-      <section className="rounded-lg border p-6 shadow-sm space-y-4">
+      <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Email</h2>
           <p className="text-sm text-muted-foreground">
             Current email: {currentEmail ? <span className="font-mono">{currentEmail}</span> : "Not set"}.
-            We’ll send a confirmation link to the new address before switching your account.
+            We will send a confirmation link to the new address before switching your account.
           </p>
         </div>
         {emailMessage ? (
-          <Alert>
+          <Alert className="mt-4">
             <CheckCircle2 className="h-4 w-4" />
             <AlertTitle>Verification sent</AlertTitle>
             <AlertDescription>{emailMessage}</AlertDescription>
           </Alert>
         ) : null}
         {emailError ? (
-          <Alert variant="destructive">
+          <Alert className="mt-4" variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{emailError}</AlertDescription>
           </Alert>
         ) : null}
-        <form onSubmit={onRequestEmailChange} className="space-y-3">
+        <form onSubmit={onRequestEmailChange} className="mt-5 space-y-3">
           <div className="space-y-2">
             <label htmlFor="newEmail" className="text-sm font-medium">
               New email
@@ -379,71 +284,16 @@ useEffect(() => {
               value={newEmail}
               onChange={(event) => setNewEmail(event.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-md border px-3 py-2 text-sm dark:border-input dark:bg-input/30"
+              className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
-          <div className="flex gap-2">
-            <Button type="submit" disabled={emailSubmitting}>
-              {emailSubmitting ? "Sending…" : "Send verification link"}
-            </Button>
-          </div>
+          <Button type="submit" disabled={emailSubmitting}>
+            {emailSubmitting ? "Sending..." : "Send verification link"}
+          </Button>
           <p className="text-xs text-muted-foreground">
-            After you click the link we send, you may need to sign in again with the new email.
+            After you click the link we send, sign in again with the new email.
           </p>
         </form>
-      </section>
-
-      <section className="rounded-lg border p-6 shadow-sm space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">Linked wallets</h2>
-          <p className="text-sm text-muted-foreground">
-            Connected wallets grant access to gated content and enable on-chain renewals.
-          </p>
-        </div>
-        {wallets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No wallets linked.</p>
-        ) : (
-          <ul className="space-y-2">
-            {wallets.map((wallet) => (
-              <li
-                key={wallet}
-                className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
-              >
-                <code className="break-all text-xs">{wallet}</code>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (
-                      !confirm(
-                        "Unlink this wallet? You may lose access to gated content until you link again."
-                      )
-                    )
-                      return;
-                    try {
-                      const res = await fetch("/api/auth/unlink-wallet", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ address: wallet }),
-                      });
-                      if (!res.ok) {
-                        let detail: any = undefined;
-                        try {
-                          detail = await res.json();
-                        } catch {}
-                        throw new Error(detail?.error || res.statusText || "Unlink failed");
-                      }
-                      await update({});
-                    } catch (err: any) {
-                      alert(err?.message || "Unlink failed");
-                    }
-                  }}
-                >
-                  Unlink
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
     </div>
   );

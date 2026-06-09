@@ -4,7 +4,7 @@ export async function POST() {
   return NextResponse.json(
     {
       error:
-        "Pending signup wallet linking is no longer supported. Sign in with email, then link your wallet from your account settings.",
+        "Pending signup records are no longer used. Sign in with email, then verify membership with X social proof.",
     },
     { status: 410 }
   );
