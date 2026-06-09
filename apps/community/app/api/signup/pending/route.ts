@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -25,12 +26,18 @@ const validateProfile = (body: any) => {
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
   const xHandle = normalizeXHandle(body?.xHandle);
   const linkedinUrl = normalizeLinkedinUrl(body?.linkedinUrl);
+  const legalAccepted = body?.legalAccepted === true;
+  const legalDocumentVersion =
+    typeof body?.legalDocumentVersion === "string" ? body.legalDocumentVersion.trim() : "";
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error("Enter a valid email address.");
   }
   if (!firstName) throw new Error("First name is required.");
   if (!lastName) throw new Error("Last name is required.");
+  if (!legalAccepted || legalDocumentVersion !== LEGAL_DOCUMENT_VERSION) {
+    throw new Error("Please accept the current Terms of Service and Privacy Policy.");
+  }
   if (xHandle.length > 50) throw new Error("X handle too long.");
 
   if (linkedinUrl) {
@@ -69,6 +76,8 @@ export async function POST(request: NextRequest) {
         lastName: profile.lastName,
         xHandle: profile.xHandle || null,
         linkedinUrl: profile.linkedinUrl || null,
+        legalAcceptedAt: now,
+        legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         createdAt: now,
         expires,
       },
@@ -129,6 +138,9 @@ export async function PATCH(request: NextRequest) {
     const name = `${firstName} ${lastName}`.trim();
     const linkedinUrl = typeof item.linkedinUrl === "string" ? item.linkedinUrl.trim() : "";
     const xHandle = normalizeXHandle(item.xHandle);
+    const legalAcceptedAt = typeof item.legalAcceptedAt === "string" ? item.legalAcceptedAt : null;
+    const legalDocumentVersion =
+      typeof item.legalDocumentVersion === "string" ? item.legalDocumentVersion : null;
     const canUpdateXHandle = xHandle && !existing.Item?.membershipVerifiedAt;
 
     const updateParts = [
@@ -136,6 +148,8 @@ export async function PATCH(request: NextRequest) {
       "lastName = :lastName",
       "#name = :name",
       "linkedinUrl = :linkedinUrl",
+      "legalAcceptedAt = if_not_exists(legalAcceptedAt, :legalAcceptedAt)",
+      "legalDocumentVersion = if_not_exists(legalDocumentVersion, :legalDocumentVersion)",
     ];
     const names: Record<string, string> = { "#name": "name" };
     const values: Record<string, unknown> = {
@@ -143,6 +157,8 @@ export async function PATCH(request: NextRequest) {
       ":lastName": lastName,
       ":name": name,
       ":linkedinUrl": linkedinUrl || null,
+      ":legalAcceptedAt": legalAcceptedAt || new Date().toISOString(),
+      ":legalDocumentVersion": legalDocumentVersion || LEGAL_DOCUMENT_VERSION,
     };
 
     if (canUpdateXHandle) {

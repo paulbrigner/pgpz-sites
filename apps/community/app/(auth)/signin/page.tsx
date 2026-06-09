@@ -6,6 +6,11 @@ import { useSearchParams } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail } from "lucide-react";
+import {
+  LEGAL_DOCUMENT_VERSION,
+  PRIVACY_PATH,
+  TERMS_PATH,
+} from "@/lib/legal-config";
 
 const socialProofCallback = "/?next=social-proof";
 
@@ -51,6 +56,8 @@ const savePendingSignupProfile = async (profile: {
   lastName: string;
   xHandle: string;
   linkedinUrl: string;
+  legalAccepted: boolean;
+  legalDocumentVersion: string;
 }) => {
   const res = await fetch("/api/signup/pending", {
     method: "POST",
@@ -134,6 +141,7 @@ function EmailSignIn({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sentVisible, setSentVisible] = useState(sent);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   const isSignup = mode === "signup";
   const showSentState = sentVisible || !!message;
@@ -154,6 +162,9 @@ function EmailSignIn({
       if (isSignup) {
         if (!firstName.trim()) throw new Error("First name is required.");
         if (!lastName.trim()) throw new Error("Last name is required.");
+        if (!legalAccepted) {
+          throw new Error("Please accept the Terms of Service and Privacy Policy before creating an account.");
+        }
         if (linkedinUrl.trim()) {
           try {
             const url = new URL(linkedinUrl.trim());
@@ -169,6 +180,8 @@ function EmailSignIn({
           lastName: lastName.trim(),
           xHandle: xHandle.trim(),
           linkedinUrl: linkedinUrl.trim(),
+          legalAccepted: true,
+          legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         };
         const signupProfileId = await savePendingSignupProfile(pendingProfile);
         emailCallbackUrl = appendSignupProfileId(callbackUrl, signupProfileId);
@@ -310,10 +323,43 @@ function EmailSignIn({
                   className="w-full rounded-md border px-3 py-2 text-sm"
                 />
               </div>
+              <div className="rounded-lg border bg-white/70 p-4">
+                <div className="flex gap-3">
+                  <input
+                    id="legalAccepted"
+                    type="checkbox"
+                    checked={legalAccepted}
+                    onChange={(event) => setLegalAccepted(event.target.checked)}
+                    className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
+                    required
+                  />
+                  <label htmlFor="legalAccepted" className="text-sm leading-6 text-slate-600">
+                    I have read and agree to the{" "}
+                    <Link
+                      className="font-medium text-[var(--brand-denim)] underline"
+                      href={TERMS_PATH}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link
+                      className="font-medium text-[var(--brand-denim)] underline"
+                      href={PRIVACY_PATH}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Privacy Policy
+                    </Link>
+                    .
+                  </label>
+                </div>
+              </div>
             </>
           ) : null}
 
-          <Button className="w-full" type="submit" disabled={submitting}>
+          <Button className="w-full" type="submit" disabled={submitting || (isSignup && !legalAccepted)}>
             <Mail className="h-4 w-4" />
             {submitting ? "Sending..." : "Send secure link"}
           </Button>
