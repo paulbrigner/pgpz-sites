@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail } from "lucide-react";
@@ -38,6 +37,38 @@ const buildSignInUrl = ({
   return `/signin?${params.toString()}`;
 };
 
+const requestEmailLink = async (email: string, callbackUrl: string) => {
+  const csrfRes = await fetch("/api/auth/csrf", {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const csrfBody = await csrfRes.json().catch(() => ({}));
+  const csrfToken = csrfBody?.csrfToken;
+  if (!csrfRes.ok || !csrfToken) {
+    throw new Error("Could not prepare the sign-in request.");
+  }
+
+  const body = new URLSearchParams({
+    csrfToken,
+    email,
+    callbackUrl,
+    json: "true",
+  });
+
+  const res = await fetch("/api/auth/signin/email", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const responseBody = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(responseBody?.error || "Failed to send sign-in email.");
+  }
+};
+
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const reason = searchParams?.get("reason") || null;
@@ -67,7 +98,6 @@ function EmailSignIn({
   reason: string | null;
   sent: boolean;
 }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -76,9 +106,10 @@ function EmailSignIn({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sentVisible, setSentVisible] = useState(sent);
 
   const isSignup = mode === "signup";
-  const showSentState = sent || !!message;
+  const showSentState = sentVisible || !!message;
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -117,17 +148,11 @@ function EmailSignIn({
         }
       }
 
-      const res = await signIn("email", {
-        email: normalizedEmail,
-        callbackUrl,
-        redirect: false,
-      });
-      if (!res?.ok) {
-        throw new Error(res?.error || "Failed to send sign-in email.");
-      }
+      await requestEmailLink(normalizedEmail, callbackUrl);
 
+      setSentVisible(true);
       setMessage("Check your email for a secure sign-in link.");
-      router.replace(buildSignInUrl({ callbackUrl, reason, sent: true }));
+      window.history.replaceState(null, "", buildSignInUrl({ callbackUrl, reason, sent: true }));
     } catch (err: any) {
       setError(err?.message || "Failed to send sign-in email.");
     } finally {
@@ -175,7 +200,8 @@ function EmailSignIn({
               variant="outline"
               onClick={() => {
                 setMessage(null);
-                router.replace(buildSignInUrl({ callbackUrl, reason }));
+                setSentVisible(false);
+                window.history.replaceState(null, "", buildSignInUrl({ callbackUrl, reason }));
               }}
             >
               Use another email
