@@ -16,6 +16,8 @@ frontend:
         - env | grep -e NEXTAUTH_URL >> .env.production
         - env | grep -e NEXTAUTH_SECRET >> .env.production
         - env | grep -e REGION_AWS >> .env.production
+        - env | grep -e PGPZ_AWS_ACCESS_KEY_ID >> .env.production || true
+        - env | grep -e PGPZ_AWS_SECRET_ACCESS_KEY >> .env.production || true
         - env | grep -e X_BEARER_TOKEN >> .env.production
         - env | grep -e XMON_X_API_BEARER_TOKEN >> .env.production || true
         - env | grep -e X_API_BASE_URL >> .env.production || true

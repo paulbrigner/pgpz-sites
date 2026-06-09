@@ -10,6 +10,8 @@ const trimBaseUrl = (value: string | undefined, fallback: string) => {
 };
 
 export const AWS_REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
+export const PGPZ_AWS_ACCESS_KEY_ID = process.env.PGPZ_AWS_ACCESS_KEY_ID as string | undefined;
+export const PGPZ_AWS_SECRET_ACCESS_KEY = process.env.PGPZ_AWS_SECRET_ACCESS_KEY as string | undefined;
 export const NEXTAUTH_URL = process.env.NEXTAUTH_URL as string;
 export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET as string;
 export const NEXTAUTH_TABLE = process.env.NEXTAUTH_TABLE as string;
