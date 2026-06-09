@@ -22,16 +22,6 @@ export async function GET(
     return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
   }
 
-  if (!CLOUDFRONT_DOMAIN || !KEY_PAIR_ID ) {
-    console.error(
-      "Missing required env: CLOUDFRONT_DOMAIN/KEY_PAIR_ID"
-    );
-    return NextResponse.json(
-      { error: "Server misconfiguration" },
-      { status: 500 }
-    );
-  }
-
   // Authentication via NextAuth JWT (session token)
   const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
   const userId = typeof token?.sub === "string" ? token.sub : "";
@@ -45,6 +35,16 @@ export async function GET(
   });
   if (user.Item?.membershipStatus !== "active") {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
+  }
+
+  if (!CLOUDFRONT_DOMAIN || !KEY_PAIR_ID || !PRIVATE_KEY_SECRET) {
+    console.error(
+      "Missing required env: CLOUDFRONT_DOMAIN/KEY_PAIR_ID/PRIVATE_KEY_SECRET"
+    );
+    return NextResponse.json(
+      { error: "Server misconfiguration" },
+      { status: 500 }
+    );
   }
 
   // Generate signed URL
