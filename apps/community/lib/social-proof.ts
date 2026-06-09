@@ -130,6 +130,25 @@ const challengeDiscoveryWindowMs = () =>
 const challengeAutoVerifyUntilAt = (createdAt: Date) =>
   new Date(createdAt.getTime() + challengeDiscoveryWindowMs()).toISOString();
 
+const challengeDiscoveryCutoffAt = (now: Date) =>
+  new Date(now.getTime() - challengeDiscoveryWindowMs()).toISOString();
+
+const challengeDiscoveryExpiresAt = (challenge: ChallengeRecord) => {
+  if (challenge.autoVerifyUntilAt) return challenge.autoVerifyUntilAt;
+
+  const createdAt = Date.parse(challenge.createdAt);
+  if (Number.isFinite(createdAt)) {
+    return new Date(createdAt + challengeDiscoveryWindowMs()).toISOString();
+  }
+
+  return challenge.expiresAt;
+};
+
+const isChallengeDiscoverable = (challenge: ChallengeRecord, now = Date.now()) => {
+  const expiresAt = Date.parse(challengeDiscoveryExpiresAt(challenge));
+  return Number.isFinite(expiresAt) && expiresAt >= now;
+};
+
 const parseXPostUrl = (value: string) => {
   let url: URL;
   try {
@@ -170,7 +189,7 @@ export async function createXChallenge(userId: string) {
     return {
       challengeId: existing.challengeId,
       challenge: existing.challenge,
-      expiresAt: existing.expiresAt,
+      expiresAt: challengeDiscoveryExpiresAt(existing),
       suggestedPost: buildSuggestedPost(existing.challenge),
     };
   }
@@ -278,8 +297,7 @@ async function getLatestPendingChallenge(userId: string): Promise<ChallengeRecor
   const now = Date.now();
   for (const item of res.Items || []) {
     if (item.status !== "pending") continue;
-    const expiresAt = typeof item.expiresAt === "string" ? Date.parse(item.expiresAt) : 0;
-    if (!Number.isFinite(expiresAt) || expiresAt < now) continue;
+    if (!isChallengeDiscoverable(item as ChallengeRecord, now)) continue;
     return item as ChallengeRecord;
   }
   return null;
@@ -855,7 +873,9 @@ async function closeChallengeAutoVerify({
 async function scanAutoVerifyChallenges(limit: number): Promise<ChallengeRecord[]> {
   const challenges: ChallengeRecord[] = [];
   let ExclusiveStartKey: Record<string, any> | undefined;
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const legacyCreatedAtCutoff = challengeDiscoveryCutoffAt(nowDate);
   const maxEvaluatedPerPage = Math.max(25, limit * 4);
 
   do {
@@ -865,7 +885,7 @@ async function scanAutoVerifyChallenges(limit: number): Promise<ChallengeRecord[
       ProjectionExpression:
         "pk, sk, #type, challengeId, challenge, userId, provider, #status, createdAt, expiresAt, autoVerifyUntilAt, autoVerifyNextCheckAt, autoVerifyAttemptCount",
       FilterExpression:
-        "#type = :type AND #status = :pending AND ((attribute_exists(autoVerifyUntilAt) AND autoVerifyUntilAt >= :now) OR (attribute_not_exists(autoVerifyUntilAt) AND expiresAt >= :now)) AND (attribute_not_exists(autoVerifyNextCheckAt) OR autoVerifyNextCheckAt <= :now) AND (attribute_not_exists(autoVerifyAttemptCount) OR autoVerifyAttemptCount < :maxAttempts)",
+        "#type = :type AND #status = :pending AND ((attribute_exists(autoVerifyUntilAt) AND autoVerifyUntilAt >= :now) OR (attribute_not_exists(autoVerifyUntilAt) AND createdAt >= :legacyCreatedAtCutoff)) AND (attribute_not_exists(autoVerifyNextCheckAt) OR autoVerifyNextCheckAt <= :now) AND (attribute_not_exists(autoVerifyAttemptCount) OR autoVerifyAttemptCount < :maxAttempts)",
       ExpressionAttributeNames: {
         "#type": "type",
         "#status": "status",
@@ -874,6 +894,7 @@ async function scanAutoVerifyChallenges(limit: number): Promise<ChallengeRecord[
         ":type": "SOCIAL_PROOF_CHALLENGE",
         ":pending": "pending",
         ":now": now,
+        ":legacyCreatedAtCutoff": legacyCreatedAtCutoff,
         ":maxAttempts": X_PROOF_AUTOVERIFY_MAX_ATTEMPTS,
       },
       ExclusiveStartKey,
