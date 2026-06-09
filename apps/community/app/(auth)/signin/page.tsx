@@ -2,35 +2,72 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail } from "lucide-react";
 
+const socialProofCallback = "/?next=social-proof";
+
+const sanitizeCallbackUrl = (value: string | null | undefined, reason: string | null) => {
+  const trimmed = (value || "").trim();
+  const fallback = reason === "signup" ? socialProofCallback : "/";
+
+  if (!trimmed) return fallback;
+  if (reason === "signup" && trimmed === "/") return socialProofCallback;
+  if (/^\/signin(?:\/|\?|$)/.test(trimmed)) return fallback;
+  if (/^\/api\/auth(?:\/|\?|$)/.test(trimmed)) return fallback;
+
+  return trimmed;
+};
+
+const buildSignInUrl = ({
+  callbackUrl,
+  reason,
+  sent,
+}: {
+  callbackUrl: string;
+  reason: string | null;
+  sent?: boolean;
+}) => {
+  const params = new URLSearchParams();
+  params.set("callbackUrl", callbackUrl);
+  if (reason) params.set("reason", reason);
+  if (sent) params.set("sent", "1");
+  return `/signin?${params.toString()}`;
+};
+
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const reason = searchParams?.get("reason") || null;
+  const sent = searchParams?.get("sent") === "1";
   const callbackUrl = useMemo(() => {
-    const url = searchParams?.get("callbackUrl");
-    if (reason === "signup" && (!url || url === "/")) {
-      return "/?next=social-proof";
-    }
-    return url && url.trim().length > 0 ? url : "/";
+    return sanitizeCallbackUrl(searchParams?.get("callbackUrl"), reason);
   }, [reason, searchParams]);
 
-  return <EmailSignIn callbackUrl={callbackUrl} mode={reason === "signup" ? "signup" : "signin"} reason={reason} />;
+  return (
+    <EmailSignIn
+      callbackUrl={callbackUrl}
+      mode={reason === "signup" ? "signup" : "signin"}
+      reason={reason}
+      sent={sent}
+    />
+  );
 }
 
 function EmailSignIn({
   callbackUrl,
   mode,
   reason,
+  sent,
 }: {
   callbackUrl: string;
   mode: "signin" | "signup";
   reason: string | null;
+  sent: boolean;
 }) {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -41,6 +78,7 @@ function EmailSignIn({
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
+  const showSentState = sent || !!message;
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -89,6 +127,7 @@ function EmailSignIn({
       }
 
       setMessage("Check your email for a secure sign-in link.");
+      router.replace(buildSignInUrl({ callbackUrl, reason, sent: true }));
     } catch (err: any) {
       setError(err?.message || "Failed to send sign-in email.");
     } finally {
@@ -109,11 +148,13 @@ function EmailSignIn({
           </p>
         </div>
 
-        {message ? (
+        {showSentState ? (
           <Alert className="mt-5">
             <CheckCircle2 className="h-4 w-4" />
             <AlertTitle>Email sent</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
+            <AlertDescription>
+              Check your email for a secure sign-in link. After you open it, we will bring you back to continue.
+            </AlertDescription>
           </Alert>
         ) : null}
 
@@ -124,6 +165,23 @@ function EmailSignIn({
           </Alert>
         ) : null}
 
+        {showSentState ? (
+          <div className="mt-6 space-y-3 rounded-lg border bg-white/70 p-4 text-sm leading-6 text-slate-600">
+            <p>
+              The link can take a moment to arrive. You can leave this page open while you check your inbox.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setMessage(null);
+                router.replace(buildSignInUrl({ callbackUrl, reason }));
+              }}
+            >
+              Use another email
+            </Button>
+          </div>
+        ) : (
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           {isSignup ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -203,14 +261,15 @@ function EmailSignIn({
             {submitting ? "Sending..." : "Send secure link"}
           </Button>
         </form>
+        )}
 
         <div className="mt-5 text-center text-sm text-slate-600">
           {isSignup ? (
-            <Link className="font-medium text-[var(--brand-denim)] underline" href={`/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
+            <Link className="font-medium text-[var(--brand-denim)] underline" href={buildSignInUrl({ callbackUrl, reason: null })}>
               Already have an account?
             </Link>
           ) : (
-            <Link className="font-medium text-[var(--brand-denim)] underline" href={`/signin?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=signup`}>
+            <Link className="font-medium text-[var(--brand-denim)] underline" href={buildSignInUrl({ callbackUrl, reason: "signup" })}>
               New to the community?
             </Link>
           )}

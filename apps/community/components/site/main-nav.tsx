@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
 
+const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
+  const path = pathname || "/";
+  if (/^\/signin(?:\/|$)/.test(path)) return "/";
+  if (/^\/api\/auth(?:\/|$)/.test(path)) return "/";
+  return query && query.length ? `${path}?${query}` : path;
+};
+
 export function MainNav() {
   const { data: session, status } = useSession();
   const authenticated = status === "authenticated";
@@ -25,7 +32,7 @@ export function MainNav() {
 
   const callbackUrl = useMemo(() => {
     const q = searchParams?.toString();
-    return q && q.length ? `${pathname}?${q}` : pathname || "/";
+    return sanitizeAuthCallback(pathname, q || null);
   }, [pathname, searchParams]);
 
   const [mobileOpen, setMobileOpen] = useState(false);
