@@ -59,6 +59,7 @@ export default function HomeClient() {
   const [challenge, setChallenge] = useState<XChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [findLoading, setFindLoading] = useState(false);
   const [manualApprovalLoading, setManualApprovalLoading] = useState(false);
   const [postUrl, setPostUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export default function HomeClient() {
       : "Finish membership setup";
   const onboardingDescription = manualApprovalPending
     ? "An admin will review your membership request. You can also complete member verification with X at any time."
-    : "Complete member verification with X or request manual approval to activate your PGPZ community membership.";
+    : "Post the verification text on X, then return here so the site can find the post or you can paste its link.";
 
   const refreshStatus = useCallback(async () => {
     if (!authenticated) return;
@@ -194,7 +195,7 @@ export default function HomeClient() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Unable to generate member verification text");
       setChallenge(body);
-      setMessage("Member verification text is ready. Post it on X, then paste the post URL here.");
+      setMessage("Member verification text is ready. Post it publicly on X, then return here to find the post or paste its link.");
     } catch (err: any) {
       setError(err?.message || "Unable to generate member verification text");
     } finally {
@@ -230,6 +231,45 @@ export default function HomeClient() {
     if (!challenge?.suggestedPost) return;
     await navigator.clipboard.writeText(challenge.suggestedPost);
     setMessage("Verification text copied.");
+  };
+
+  const findProofPost = async () => {
+    setFindLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/social-proof/x/find", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to search for your X post");
+
+      if (body?.status === "verified") {
+        setMessage("Member verification complete. Your PGPZ community membership is active.");
+        setChallenge(null);
+        setPostUrl("");
+        await update({});
+        await refreshStatus();
+        return;
+      }
+
+      if (body?.status === "already_active") {
+        setMessage("Your PGPZ community membership is already active.");
+        setChallenge(null);
+        await update({});
+        await refreshStatus();
+        return;
+      }
+
+      if (body?.status === "ambiguous") {
+        setError(body?.message || "Multiple matching X posts were found. Paste the intended post URL to complete verification.");
+        return;
+      }
+
+      setMessage(body?.message || "I could not find the X post yet. X search can lag, so try again shortly or paste the post URL.");
+    } catch (err: any) {
+      setError(err?.message || "Unable to search for your X post");
+    } finally {
+      setFindLoading(false);
+    }
   };
 
   const requestManualApproval = async () => {
@@ -406,6 +446,20 @@ export default function HomeClient() {
 
                   {challenge ? (
                     <div className="space-y-4 rounded-lg border bg-white/80 p-4">
+                      <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
+                        {[
+                          ["1", "Post the text publicly on X."],
+                          ["2", "Return here after posting."],
+                          ["3", "Let the site find the post or paste the link."],
+                        ].map(([step, body]) => (
+                          <div key={step} className="rounded-md border bg-white/80 p-3">
+                            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-ink)] text-xs font-semibold text-[var(--zcash-gold)]">
+                              {step}
+                            </div>
+                            {body}
+                          </div>
+                        ))}
+                      </div>
                       <div>
                         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">POST THIS TEXT ON X</div>
                         <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-sm leading-6 text-white">
@@ -422,6 +476,10 @@ export default function HomeClient() {
                             Open X composer
                             <ExternalLink className="h-4 w-4" />
                           </Link>
+                        </Button>
+                        <Button type="button" variant="outline" onClick={findProofPost} disabled={findLoading}>
+                          {findLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                          Find my X post
                         </Button>
                       </div>
                       <div className="space-y-2">

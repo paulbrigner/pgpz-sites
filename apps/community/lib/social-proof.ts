@@ -8,6 +8,10 @@ import {
   X_API_BASE_URL,
   X_API_TIMEOUT_MS,
   X_BEARER_TOKEN,
+  X_PROOF_AUTOVERIFY_BATCH_SIZE,
+  X_PROOF_AUTOVERIFY_GROUP_SIZE,
+  X_PROOF_AUTOVERIFY_MAX_ATTEMPTS,
+  X_PROOF_AUTOVERIFY_WINDOW_MINUTES,
   X_PROOF_CHALLENGE_RATE_LIMIT,
   X_PROOF_CHALLENGE_TTL_MINUTES,
   X_PROOF_RATE_LIMIT_WINDOW_MINUTES,
@@ -32,6 +36,7 @@ export type SocialProofRecord = {
 type ChallengeRecord = {
   pk: string;
   sk: string;
+  type?: string;
   challengeId: string;
   challenge: string;
   userId: string;
@@ -39,7 +44,41 @@ type ChallengeRecord = {
   status: "pending" | "verified" | "expired";
   createdAt: string;
   expiresAt: string;
+  autoVerifyUntilAt?: string | null;
+  autoVerifyNextCheckAt?: string | null;
+  autoVerifyAttemptCount?: number | null;
+  autoVerifyLastCheckedAt?: string | null;
+  autoVerifyLastStatus?: string | null;
+  autoVerifyLastMessage?: string | null;
 };
+
+type XTweet = {
+  id: string;
+  text: string;
+  author_id: string;
+  created_at: string;
+  edit_history_tweet_ids?: string[];
+};
+
+type XAuthor = {
+  id: string;
+  name?: string | null;
+  username: string;
+  verified?: boolean | null;
+};
+
+type XSearchCandidate = {
+  tweet: XTweet;
+  author: XAuthor;
+  matchedChallenges: string[];
+};
+
+type AutoVerifyStatus =
+  | "verified"
+  | "not_found"
+  | "ambiguous"
+  | "already_active"
+  | "error";
 
 export class SocialProofError extends Error {
   status: number;
@@ -69,6 +108,27 @@ const normalizeXHandle = (value: string | null | undefined) => {
   const cleaned = (value || "").trim().replace(/^@+/, "");
   return cleaned ? `@${cleaned}` : null;
 };
+
+const safeChallengeTerm = (value: string) => value.replace(/["\\]/g, "").trim();
+
+const quoteSearchTerm = (value: string) => `"${safeChallengeTerm(value)}"`;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, Math.floor(value)));
+
+const retryDelayMinutes = (attemptCountAfter: number) => {
+  if (attemptCountAfter <= 1) return 10;
+  if (attemptCountAfter === 2) return 30;
+  if (attemptCountAfter === 3) return 60;
+  if (attemptCountAfter === 4) return 180;
+  return 360;
+};
+
+const challengeDiscoveryWindowMs = () =>
+  X_PROOF_AUTOVERIFY_WINDOW_MINUTES * 60 * 1000;
+
+const challengeAutoVerifyUntilAt = (createdAt: Date) =>
+  new Date(createdAt.getTime() + challengeDiscoveryWindowMs()).toISOString();
 
 const parseXPostUrl = (value: string) => {
   let url: URL;
@@ -118,17 +178,21 @@ export async function createXChallenge(userId: string) {
   const expires = new Date(now.getTime() + X_PROOF_CHALLENGE_TTL_MINUTES * 60 * 1000);
   const challenge = `PGPZ-${randomBytes(5).toString("hex").toUpperCase()}`;
   const challengeId = randomUUID();
+  const nowIso = now.toISOString();
   const record: ChallengeRecord = {
     pk: userProofPk(userId),
-    sk: `CHALLENGE#${now.toISOString()}#${challengeId}`,
+    sk: `CHALLENGE#${nowIso}#${challengeId}`,
     type: "SOCIAL_PROOF_CHALLENGE",
     challengeId,
     challenge,
     userId,
     provider: "x",
     status: "pending",
-    createdAt: now.toISOString(),
+    createdAt: nowIso,
     expiresAt: expires.toISOString(),
+    autoVerifyUntilAt: challengeAutoVerifyUntilAt(now),
+    autoVerifyNextCheckAt: nowIso,
+    autoVerifyAttemptCount: 0,
   } as ChallengeRecord & { type: string };
 
   await documentClient.put({
@@ -257,15 +321,10 @@ async function assertAuthorNotClaimed(authorId: string, userId: string) {
   }
 }
 
-async function fetchXPost(postId: string) {
+async function fetchXJson(url: URL, failurePrefix: string) {
   if (!X_BEARER_TOKEN) {
     throw new SocialProofError("X proof verification is not configured yet.", 503);
   }
-
-  const url = new URL(`${X_API_BASE_URL}/tweets/${postId}`);
-  url.searchParams.set("tweet.fields", "author_id,created_at,text,edit_history_tweet_ids");
-  url.searchParams.set("expansions", "author_id");
-  url.searchParams.set("user.fields", "id,name,username,verified");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), X_API_TIMEOUT_MS);
@@ -301,32 +360,144 @@ async function fetchXPost(postId: string) {
 
   if (!res.ok) {
     const detail = body?.detail || body?.title || text.slice(0, 180) || `X API returned ${res.status}`;
-    throw new SocialProofError(`Could not verify the X post: ${detail}`, res.status >= 500 ? 502 : 400);
+    throw new SocialProofError(`${failurePrefix}: ${detail}`, res.status >= 500 ? 502 : 400);
   }
 
+  return body;
+}
+
+function authorMapFromPayload(body: any) {
+  const map = new Map<string, XAuthor>();
+  if (!Array.isArray(body?.includes?.users)) return map;
+  for (const user of body.includes.users) {
+    if (!user?.id || !user?.username) continue;
+    map.set(String(user.id), {
+      id: String(user.id),
+      name: typeof user.name === "string" ? user.name : null,
+      username: String(user.username),
+      verified: typeof user.verified === "boolean" ? user.verified : null,
+    });
+  }
+  return map;
+}
+
+async function fetchXPost(postId: string): Promise<{ tweet: XTweet; author: XAuthor }> {
+  const url = new URL(`${X_API_BASE_URL}/tweets/${postId}`);
+  url.searchParams.set("tweet.fields", "author_id,created_at,text,edit_history_tweet_ids");
+  url.searchParams.set("expansions", "author_id");
+  url.searchParams.set("user.fields", "id,name,username,verified");
+
+  const body = await fetchXJson(url, "Could not verify the X post");
   const tweet = body?.data;
-  const author = Array.isArray(body?.includes?.users)
-    ? body.includes.users.find((user: any) => user?.id === tweet?.author_id)
-    : null;
+  const author = authorMapFromPayload(body).get(String(tweet?.author_id || ""));
 
   if (!tweet?.id || !tweet?.text || !tweet?.created_at || !author?.username) {
     throw new SocialProofError("X did not return enough post details to verify membership.", 502);
   }
 
-  return { tweet, author };
+  return {
+    tweet: {
+      id: String(tweet.id),
+      text: String(tweet.text),
+      author_id: String(tweet.author_id),
+      created_at: String(tweet.created_at),
+      edit_history_tweet_ids: Array.isArray(tweet.edit_history_tweet_ids)
+        ? tweet.edit_history_tweet_ids.map(String)
+        : undefined,
+    },
+    author,
+  };
 }
 
-export async function verifyXProof(userId: string, postUrl: string): Promise<SocialProofRecord> {
-  if (!userId) throw new SocialProofError("Unauthorized", 401);
-  const challenge = await getLatestPendingChallenge(userId);
-  if (!challenge) {
-    throw new SocialProofError("Generate a fresh proof code before verifying your X post.");
+function buildChallengeSearchQuery(challenges: string[]) {
+  const terms = challenges.map(safeChallengeTerm).filter(Boolean);
+  if (!terms.length) throw new SocialProofError("No proof codes are available to search.", 400);
+  return `(${terms.map(quoteSearchTerm).join(" OR ")}) -is:retweet -is:quote`;
+}
+
+async function searchXPostsForChallenges(challenges: string[]): Promise<XSearchCandidate[]> {
+  const terms = challenges.map(safeChallengeTerm).filter(Boolean);
+  const url = new URL(`${X_API_BASE_URL}/tweets/search/recent`);
+  url.searchParams.set("query", buildChallengeSearchQuery(terms));
+  url.searchParams.set("max_results", String(clamp(terms.length * 2, 10, 100)));
+  url.searchParams.set("tweet.fields", "author_id,created_at,text,edit_history_tweet_ids");
+  url.searchParams.set("expansions", "author_id");
+  url.searchParams.set("user.fields", "id,name,username,verified");
+
+  const body = await fetchXJson(url, "Could not search X posts");
+  const authors = authorMapFromPayload(body);
+  if (!Array.isArray(body?.data)) return [];
+
+  const normalizedTerms = terms.map((term) => ({ raw: term, lower: term.toLowerCase() }));
+  const candidates: XSearchCandidate[] = [];
+  for (const item of body.data) {
+    const author = authors.get(String(item?.author_id || ""));
+    const text = typeof item?.text === "string" ? item.text : "";
+    const matchedChallenges = normalizedTerms
+      .filter((term) => text.toLowerCase().includes(term.lower))
+      .map((term) => term.raw);
+
+    if (!item?.id || !item?.created_at || !item?.author_id || !author || !matchedChallenges.length) {
+      continue;
+    }
+
+    candidates.push({
+      tweet: {
+        id: String(item.id),
+        text,
+        author_id: String(item.author_id),
+        created_at: String(item.created_at),
+        edit_history_tweet_ids: Array.isArray(item.edit_history_tweet_ids)
+          ? item.edit_history_tweet_ids.map(String)
+          : undefined,
+      },
+      author,
+      matchedChallenges,
+    });
   }
 
-  const { postId, urlHandle } = parseXPostUrl(postUrl);
+  return candidates;
+}
+
+async function getUserMembershipStatus(userId: string): Promise<MembershipStatus | null> {
+  const user = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: userKey(userId),
+    ProjectionExpression: "membershipStatus",
+  });
+  if (!user.Item) return null;
+  return user.Item.membershipStatus === "active" ? "active" : "none";
+}
+
+async function assertUserCanActivateMembership(userId: string) {
+  const membershipStatus = await getUserMembershipStatus(userId);
+  if (membershipStatus === null) throw new SocialProofError("User not found.", 404);
+  if (membershipStatus === "active") {
+    throw new SocialProofError("Membership is already active.", 409);
+  }
+}
+
+async function verifyXProofCandidate({
+  userId,
+  challenge,
+  tweet,
+  author,
+  urlHandle,
+  verificationMethod,
+}: {
+  userId: string;
+  challenge: ChallengeRecord;
+  tweet: XTweet;
+  author: XAuthor;
+  urlHandle?: string | null;
+  verificationMethod: "paste" | "search" | "background";
+}): Promise<SocialProofRecord> {
+  const postId = String(tweet.id || "");
+  if (!postId) throw new SocialProofError("X did not return a post ID.", 502);
+
+  await assertUserCanActivateMembership(userId);
   await assertPostNotClaimed(postId, userId);
 
-  const { tweet, author } = await fetchXPost(postId);
   const authorId = String(author.id || "");
   if (!authorId) {
     throw new SocialProofError("X did not return the post author ID.", 502);
@@ -371,6 +542,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     proofText: tweetText,
     postedAt: tweet.created_at,
     verifiedAt,
+    verificationMethod,
     proofRetentionPolicy,
     GSI1PK: `SOCIAL_PROOF#POST#${postId}`,
     GSI1SK: `USER#${userId}`,
@@ -427,7 +599,8 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
           Update: {
             TableName: TABLE_NAME,
             Key: { pk: challenge.pk, sk: challenge.sk },
-            UpdateExpression: "SET #status = :status, verifiedProofPostId = :postId, verifiedAt = :verifiedAt",
+            UpdateExpression:
+              "SET #status = :status, verifiedProofPostId = :postId, verifiedAt = :verifiedAt, autoVerifyLastCheckedAt = :verifiedAt, autoVerifyLastStatus = :status",
             ExpressionAttributeNames: { "#status": "status" },
             ExpressionAttributeValues: {
               ":status": "verified",
@@ -442,6 +615,9 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
             Key: userKey(userId),
             UpdateExpression:
               "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :verifiedAt, membershipProofPostUrl = :postUrl, membershipProofPostId = :postId, membershipProofHandle = :handle, xHandle = :handle, xProfileUrl = :profileUrl, proofRetentionPolicy = :policy, manualApprovalStatus = :manualNone, manualApprovalUpdatedAt = :verifiedAt",
+            ConditionExpression:
+              "attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active",
+            ExpressionAttributeNames: { "#membershipStatus": "membershipStatus" },
             ExpressionAttributeValues: {
               ":active": "active",
               ":provider": "x",
@@ -459,7 +635,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     });
   } catch (err: any) {
     if (err?.name === "TransactionCanceledException") {
-      throw new SocialProofError("That X post or X account has already been used for membership.", 409);
+      throw new SocialProofError("That X post, X account, or member record has already been used for membership.", 409);
     }
     throw err;
   }
@@ -476,6 +652,342 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     verifiedAt,
     proofRetentionPolicy,
   };
+}
+
+export async function verifyXProof(userId: string, postUrl: string): Promise<SocialProofRecord> {
+  if (!userId) throw new SocialProofError("Unauthorized", 401);
+  const challenge = await getLatestPendingChallenge(userId);
+  if (!challenge) {
+    throw new SocialProofError("Generate a fresh proof code before verifying your X post.");
+  }
+
+  const { postId, urlHandle } = parseXPostUrl(postUrl);
+  const { tweet, author } = await fetchXPost(postId);
+  return verifyXProofCandidate({
+    userId,
+    challenge,
+    tweet,
+    author,
+    urlHandle,
+    verificationMethod: "paste",
+  });
+}
+
+async function recordChallengeAutoVerifyAttempt({
+  challenge,
+  status,
+  message,
+  checkedAt,
+  nextCheckAt,
+  incrementAttempt = true,
+}: {
+  challenge: ChallengeRecord;
+  status: AutoVerifyStatus;
+  message?: string | null;
+  checkedAt: string;
+  nextCheckAt?: string | null;
+  incrementAttempt?: boolean;
+}) {
+  const expressionParts = [
+    "autoVerifyLastCheckedAt = :checkedAt",
+    "autoVerifyLastStatus = :autoStatus",
+    "autoVerifyLastMessage = :message",
+  ];
+  const values: Record<string, any> = {
+    ":checkedAt": checkedAt,
+    ":autoStatus": status,
+    ":message": message || null,
+  };
+
+  if (nextCheckAt) {
+    expressionParts.push("autoVerifyNextCheckAt = :nextCheckAt");
+    values[":nextCheckAt"] = nextCheckAt;
+  }
+  if (incrementAttempt) {
+    expressionParts.push("autoVerifyAttemptCount = if_not_exists(autoVerifyAttemptCount, :zero) + :one");
+    values[":zero"] = 0;
+    values[":one"] = 1;
+  }
+
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: { pk: challenge.pk, sk: challenge.sk },
+    UpdateExpression: `SET ${expressionParts.join(", ")}`,
+    ExpressionAttributeValues: values,
+  });
+}
+
+function nextAutoVerifyCheckAt(attemptCountAfter: number) {
+  const delay = retryDelayMinutes(attemptCountAfter);
+  return new Date(Date.now() + delay * 60 * 1000).toISOString();
+}
+
+function candidatesForChallenge(challenge: ChallengeRecord, candidates: XSearchCandidate[]) {
+  const needle = challenge.challenge.toLowerCase();
+  return candidates.filter((candidate) =>
+    candidate.matchedChallenges.some((matched) => matched.toLowerCase() === needle)
+  );
+}
+
+async function verifyChallengeFromSearch({
+  challenge,
+  candidates,
+  verificationMethod,
+  updateOnNoMatch = true,
+}: {
+  challenge: ChallengeRecord;
+  candidates: XSearchCandidate[];
+  verificationMethod: "search" | "background";
+  updateOnNoMatch?: boolean;
+}) {
+  const checkedAt = new Date().toISOString();
+  const matching = candidatesForChallenge(challenge, candidates);
+  const attemptCountAfter = Number(challenge.autoVerifyAttemptCount || 0) + 1;
+
+  if (!matching.length) {
+    if (updateOnNoMatch) {
+      await recordChallengeAutoVerifyAttempt({
+        challenge,
+        status: "not_found",
+        message: "No public X post with this proof code was found yet.",
+        checkedAt,
+        nextCheckAt: nextAutoVerifyCheckAt(attemptCountAfter),
+      });
+    }
+    return {
+      status: "not_found" as const,
+      message: "No public X post with this proof code was found yet.",
+    };
+  }
+
+  const uniquePostIds = new Set(matching.map((candidate) => candidate.tweet.id));
+  if (uniquePostIds.size !== 1) {
+    await recordChallengeAutoVerifyAttempt({
+      challenge,
+      status: "ambiguous",
+      message: "Multiple public X posts matched this proof code.",
+      checkedAt,
+      nextCheckAt: nextAutoVerifyCheckAt(attemptCountAfter),
+    });
+    return {
+      status: "ambiguous" as const,
+      message: "Multiple public X posts matched this proof code. Paste the intended post URL to complete verification.",
+    };
+  }
+
+  try {
+    const candidate = matching[0];
+    const proof = await verifyXProofCandidate({
+      userId: challenge.userId,
+      challenge,
+      tweet: candidate.tweet,
+      author: candidate.author,
+      verificationMethod,
+    });
+    return { status: "verified" as const, proof };
+  } catch (err: any) {
+    if (err instanceof SocialProofError && err.status === 409 && /already active/i.test(err.message)) {
+      await recordChallengeAutoVerifyAttempt({
+        challenge,
+        status: "already_active",
+        message: err.message,
+        checkedAt,
+        nextCheckAt: nextAutoVerifyCheckAt(attemptCountAfter),
+      });
+      return { status: "already_active" as const, message: err.message };
+    }
+
+    await recordChallengeAutoVerifyAttempt({
+      challenge,
+      status: "error",
+      message: err?.message || "Unable to verify the discovered X post.",
+      checkedAt,
+      nextCheckAt: nextAutoVerifyCheckAt(attemptCountAfter),
+    });
+    throw err;
+  }
+}
+
+export async function findAndVerifyXProof(userId: string) {
+  if (!userId) throw new SocialProofError("Unauthorized", 401);
+  if (await getUserMembershipStatus(userId) === "active") {
+    return { status: "already_active" as const, message: "Membership is already active." };
+  }
+
+  const challenge = await getLatestPendingChallenge(userId);
+  if (!challenge) {
+    throw new SocialProofError("Generate verification text before searching for your X post.");
+  }
+
+  const candidates = await searchXPostsForChallenges([challenge.challenge]);
+  return verifyChallengeFromSearch({
+    challenge,
+    candidates,
+    verificationMethod: "search",
+  });
+}
+
+async function closeChallengeAutoVerify({
+  challenge,
+  status,
+  message,
+}: {
+  challenge: ChallengeRecord;
+  status: AutoVerifyStatus;
+  message: string;
+}) {
+  const checkedAt = new Date().toISOString();
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: { pk: challenge.pk, sk: challenge.sk },
+    UpdateExpression:
+      "SET #status = :expired, autoVerifyLastCheckedAt = :checkedAt, autoVerifyLastStatus = :autoStatus, autoVerifyLastMessage = :message",
+    ExpressionAttributeNames: { "#status": "status" },
+    ExpressionAttributeValues: {
+      ":expired": "expired",
+      ":checkedAt": checkedAt,
+      ":autoStatus": status,
+      ":message": message,
+    },
+  });
+}
+
+async function scanAutoVerifyChallenges(limit: number): Promise<ChallengeRecord[]> {
+  const challenges: ChallengeRecord[] = [];
+  let ExclusiveStartKey: Record<string, any> | undefined;
+  const now = new Date().toISOString();
+  const maxEvaluatedPerPage = Math.max(25, limit * 4);
+
+  do {
+    const res = await documentClient.scan({
+      TableName: TABLE_NAME,
+      Limit: maxEvaluatedPerPage,
+      ProjectionExpression:
+        "pk, sk, #type, challengeId, challenge, userId, provider, #status, createdAt, expiresAt, autoVerifyUntilAt, autoVerifyNextCheckAt, autoVerifyAttemptCount",
+      FilterExpression:
+        "#type = :type AND #status = :pending AND ((attribute_exists(autoVerifyUntilAt) AND autoVerifyUntilAt >= :now) OR (attribute_not_exists(autoVerifyUntilAt) AND expiresAt >= :now)) AND (attribute_not_exists(autoVerifyNextCheckAt) OR autoVerifyNextCheckAt <= :now) AND (attribute_not_exists(autoVerifyAttemptCount) OR autoVerifyAttemptCount < :maxAttempts)",
+      ExpressionAttributeNames: {
+        "#type": "type",
+        "#status": "status",
+      },
+      ExpressionAttributeValues: {
+        ":type": "SOCIAL_PROOF_CHALLENGE",
+        ":pending": "pending",
+        ":now": now,
+        ":maxAttempts": X_PROOF_AUTOVERIFY_MAX_ATTEMPTS,
+      },
+      ExclusiveStartKey,
+    });
+
+    for (const item of res.Items || []) {
+      if (!item.challenge || !item.userId) continue;
+      challenges.push(item as ChallengeRecord);
+      if (challenges.length >= limit) break;
+    }
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey && challenges.length < limit);
+
+  return challenges;
+}
+
+export async function autoVerifyPendingXProofs(options: {
+  batchSize?: number;
+  groupSize?: number;
+} = {}) {
+  const batchSize = clamp(options.batchSize || X_PROOF_AUTOVERIFY_BATCH_SIZE, 1, 100);
+  const groupSize = clamp(options.groupSize || X_PROOF_AUTOVERIFY_GROUP_SIZE, 1, 10);
+  const challenges = await scanAutoVerifyChallenges(batchSize);
+  const summary = {
+    scanned: challenges.length,
+    searchRequests: 0,
+    verified: 0,
+    notFound: 0,
+    ambiguous: 0,
+    alreadyActive: 0,
+    errors: 0,
+    results: [] as Array<{
+      userId: string;
+      challengeId: string;
+      status: string;
+      message?: string | null;
+      postUrl?: string | null;
+    }>,
+  };
+
+  const eligibleChallenges: ChallengeRecord[] = [];
+  for (const challenge of challenges) {
+    const membershipStatus = await getUserMembershipStatus(challenge.userId);
+    if (membershipStatus === "active" || membershipStatus === null) {
+      summary.alreadyActive += membershipStatus === "active" ? 1 : 0;
+      const status = membershipStatus === "active" ? "already_active" : "error";
+      const message = membershipStatus === "active" ? "Membership is already active." : "User record was not found.";
+      if (membershipStatus === null) summary.errors += 1;
+      await closeChallengeAutoVerify({ challenge, status, message });
+      summary.results.push({
+        userId: challenge.userId,
+        challengeId: challenge.challengeId,
+        status,
+        message,
+      });
+      continue;
+    }
+    eligibleChallenges.push(challenge);
+  }
+
+  for (let i = 0; i < eligibleChallenges.length; i += groupSize) {
+    const group = eligibleChallenges.slice(i, i + groupSize);
+    let candidates: XSearchCandidate[] = [];
+    try {
+      candidates = await searchXPostsForChallenges(group.map((challenge) => challenge.challenge));
+      summary.searchRequests += 1;
+    } catch (err: any) {
+      summary.errors += group.length;
+      const checkedAt = new Date().toISOString();
+      await Promise.all(
+        group.map((challenge) =>
+          recordChallengeAutoVerifyAttempt({
+            challenge,
+            status: "error",
+            message: err?.message || "Unable to search X posts.",
+            checkedAt,
+            nextCheckAt: nextAutoVerifyCheckAt(Number(challenge.autoVerifyAttemptCount || 0) + 1),
+          })
+        )
+      );
+      continue;
+    }
+
+    for (const challenge of group) {
+      try {
+        const result = await verifyChallengeFromSearch({
+          challenge,
+          candidates,
+          verificationMethod: "background",
+        });
+        if (result.status === "verified") summary.verified += 1;
+        if (result.status === "not_found") summary.notFound += 1;
+        if (result.status === "ambiguous") summary.ambiguous += 1;
+        if (result.status === "already_active") summary.alreadyActive += 1;
+        summary.results.push({
+          userId: challenge.userId,
+          challengeId: challenge.challengeId,
+          status: result.status,
+          message: "message" in result ? result.message || null : null,
+          postUrl: result.status === "verified" ? result.proof.postUrl : null,
+        });
+      } catch (err: any) {
+        summary.errors += 1;
+        summary.results.push({
+          userId: challenge.userId,
+          challengeId: challenge.challengeId,
+          status: "error",
+          message: err?.message || "Unable to verify discovered X post.",
+        });
+      }
+    }
+  }
+
+  return summary;
 }
 
 export async function getUserProofStatus(userId: string) {

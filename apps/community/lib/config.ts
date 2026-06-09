@@ -38,13 +38,23 @@ export const X_BEARER_TOKEN =
 export const X_API_BASE_URL = trimBaseUrl(process.env.X_API_BASE_URL || process.env.XMON_X_API_BASE_URL, "https://api.x.com/2");
 export const X_API_TIMEOUT_MS = parseNumber(process.env.X_API_TIMEOUT_MS) || 15000;
 export const X_PROOF_CHALLENGE_TTL_MINUTES =
-  parseNumber(process.env.X_PROOF_CHALLENGE_TTL_MINUTES) || 30;
+  parseNumber(process.env.X_PROOF_CHALLENGE_TTL_MINUTES) || 1440;
 export const X_PROOF_RATE_LIMIT_WINDOW_MINUTES =
   parseNumber(process.env.X_PROOF_RATE_LIMIT_WINDOW_MINUTES) || 15;
 export const X_PROOF_CHALLENGE_RATE_LIMIT =
   parseNumber(process.env.X_PROOF_CHALLENGE_RATE_LIMIT) || 10;
 export const X_PROOF_VERIFY_RATE_LIMIT =
   parseNumber(process.env.X_PROOF_VERIFY_RATE_LIMIT) || 6;
+export const X_PROOF_AUTOVERIFY_WINDOW_MINUTES =
+  parseNumber(process.env.X_PROOF_AUTOVERIFY_WINDOW_MINUTES) || 1440;
+export const X_PROOF_AUTOVERIFY_BATCH_SIZE =
+  parseNumber(process.env.X_PROOF_AUTOVERIFY_BATCH_SIZE) || 25;
+export const X_PROOF_AUTOVERIFY_GROUP_SIZE =
+  parseNumber(process.env.X_PROOF_AUTOVERIFY_GROUP_SIZE) || 5;
+export const X_PROOF_AUTOVERIFY_MAX_ATTEMPTS =
+  parseNumber(process.env.X_PROOF_AUTOVERIFY_MAX_ATTEMPTS) || 8;
+export const SOCIAL_PROOF_AUTOVERIFY_SECRET =
+  process.env.SOCIAL_PROOF_AUTOVERIFY_SECRET as string | undefined;
 
 export const MEMBERSHIP_PROOF_RETENTION_POLICY =
   process.env.MEMBERSHIP_PROOF_RETENTION_POLICY || "valid_if_deleted";
