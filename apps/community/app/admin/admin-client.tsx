@@ -180,6 +180,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             {filteredMembers.map((member) => {
               const active = member.membershipStatus === "active";
               const emailHidden = !sensitiveDataVisible && member.email;
+              const welcomeSent = !!member.welcomeEmailSentAt;
               return (
                 <div
                   key={member.id}
@@ -216,11 +217,28 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       </Link>
                     ) : null}
                   </div>
-                  <div className="space-y-1">
-                    <div className="inline-flex items-center gap-1 text-xs text-slate-600">
+                  <div className="space-y-2">
+                    <div
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
+                        welcomeSent
+                          ? "bg-emerald-50 text-emerald-800"
+                          : "bg-slate-100 text-slate-600",
+                      )}
+                      title={
+                        welcomeSent
+                          ? `Welcome email sent ${formatDate(member.welcomeEmailSentAt)}`
+                          : "Welcome email has not been sent"
+                      }
+                    >
                       <MailCheck className="h-3.5 w-3.5" />
-                      {member.welcomeEmailSentAt ? `Welcome ${formatDate(member.welcomeEmailSentAt)}` : "Welcome not sent"}
+                      {welcomeSent ? "Welcome sent" : "Welcome not sent"}
                     </div>
+                    {welcomeSent ? (
+                      <div className="text-xs text-slate-500">
+                        Sent {formatDate(member.welcomeEmailSentAt)}
+                      </div>
+                    ) : null}
                     {member.emailSuppressed ? (
                       <div className="text-xs text-rose-700">Suppressed</div>
                     ) : null}
@@ -233,7 +251,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       onClick={() => sendWelcome(member)}
                       title={emailHidden ? "Email hidden; toggle sensitive data to inspect target." : undefined}
                     >
-                      {emailSending[member.id] ? "Sending..." : "Welcome"}
+                      {emailSending[member.id] ? "Sending..." : welcomeSent ? "Resend welcome" : "Send welcome"}
                     </Button>
                   </div>
                 </div>
