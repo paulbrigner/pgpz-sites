@@ -80,7 +80,7 @@ export function MainNav() {
         { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
         {
           key: "logout",
-          label: "Log Out",
+          label: "Log out",
           action: async () => {
             closeMobileMenu();
             try {
@@ -94,7 +94,7 @@ export function MainNav() {
     : [
         { key: "home", label: "Home", href: "/" },
         { key: "join", label: "Join", href: joinHref },
-        { key: "signin", label: "Sign In", href: signInHref },
+        { key: "signin", label: "Sign in", href: signInHref },
         { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
       ];
 
@@ -157,7 +157,7 @@ export function MainNav() {
                 </NavigationMenuItem>
                 <NavigationMenuItem>
                   <NavigationMenuLink className={linkClasses} asChild>
-                    <Link href={signInHref}>Sign In</Link>
+                    <Link href={signInHref}>Sign in</Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
               </>
@@ -176,7 +176,7 @@ export function MainNav() {
                   }}
                   className={linkClasses}
                 >
-                  Log Out
+                  Log out
                 </button>
               </NavigationMenuItem>
             ) : null}

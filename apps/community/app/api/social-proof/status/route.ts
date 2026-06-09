@@ -17,7 +17,7 @@ export async function GET() {
     if (err instanceof SocialProofError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error("Failed to load social proof status", err);
-    return NextResponse.json({ error: "Failed to load social proof status" }, { status: 500 });
+    console.error("Failed to load member verification status", err);
+    return NextResponse.json({ error: "Failed to load member verification status" }, { status: 500 });
   }
 }

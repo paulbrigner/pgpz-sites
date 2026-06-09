@@ -31,7 +31,7 @@ export function AdminShell({ children, name, email }: Props) {
                     <SensitiveDataText value={email} kind="email" />
                   </>
                 ) : null}
-                . Admin tools surface social-proof membership health and messaging.
+                . Admin tools surface member verification health and messaging.
               </p>
             </div>
             <div className="flex flex-col items-start gap-2 sm:items-end">
