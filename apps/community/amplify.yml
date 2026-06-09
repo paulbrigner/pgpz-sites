@@ -24,6 +24,9 @@ frontend:
         - env | grep -e XMON_X_API_BASE_URL >> .env.production || true
         - env | grep -e X_API_TIMEOUT_MS >> .env.production || true
         - env | grep -e X_PROOF_CHALLENGE_TTL_MINUTES >> .env.production || true
+        - env | grep -e X_PROOF_RATE_LIMIT_WINDOW_MINUTES >> .env.production || true
+        - env | grep -e X_PROOF_CHALLENGE_RATE_LIMIT >> .env.production || true
+        - env | grep -e X_PROOF_VERIFY_RATE_LIMIT >> .env.production || true
         - env | grep -e MEMBERSHIP_PROOF_RETENTION_POLICY >> .env.production || true
         - env | grep -e EMAIL_SERVER >> .env.production || true
         - env | grep -e EMAIL_SERVER_HOST >> .env.production || true

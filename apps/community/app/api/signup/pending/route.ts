@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const profile = validateProfile(body);
     const signupProfileId = randomUUID();
     const now = new Date().toISOString();
-    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
+    const expires = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
 
     await documentClient.put({
       TableName: TABLE_NAME,
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         xHandle: profile.xHandle || null,
         linkedinUrl: profile.linkedinUrl || null,
         createdAt: now,
-        expiresAt,
+        expires,
       },
     });
 
@@ -106,8 +106,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: true, applied: false });
     }
 
-    const expiresAt = typeof item.expiresAt === "number" ? item.expiresAt : 0;
-    if (expiresAt && expiresAt < Math.floor(Date.now() / 1000)) {
+    const expires =
+      typeof item.expires === "number"
+        ? item.expires
+        : typeof item.expiresAt === "number"
+          ? item.expiresAt
+          : 0;
+    if (expires && expires < Math.floor(Date.now() / 1000)) {
       await documentClient.delete({ TableName: TABLE_NAME, Key: key });
       return NextResponse.json({ ok: true, applied: false, expired: true });
     }

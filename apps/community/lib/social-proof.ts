@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes, randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   MEMBERSHIP_PROOF_RETENTION_POLICY,
@@ -8,7 +8,10 @@ import {
   X_API_BASE_URL,
   X_API_TIMEOUT_MS,
   X_BEARER_TOKEN,
+  X_PROOF_CHALLENGE_RATE_LIMIT,
   X_PROOF_CHALLENGE_TTL_MINUTES,
+  X_PROOF_RATE_LIMIT_WINDOW_MINUTES,
+  X_PROOF_VERIFY_RATE_LIMIT,
 } from "@/lib/config";
 
 export type MembershipStatus = "active" | "none";
@@ -54,6 +57,13 @@ const postClaimKey = (postId: string) => ({
   pk: `SOCIAL_PROOF#POST#${postId}`,
   sk: "CLAIM",
 });
+const authorClaimKey = (authorId: string) => ({
+  pk: `SOCIAL_PROOF#X_AUTHOR#${authorId}`,
+  sk: "CLAIM",
+});
+
+const hashRateLimitValue = (value: string) =>
+  createHash("sha256").update(value).digest("hex").slice(0, 24);
 
 const normalizeXHandle = (value: string | null | undefined) => {
   const cleaned = (value || "").trim().replace(/^@+/, "");
@@ -95,6 +105,16 @@ export async function createXChallenge(userId: string) {
   if (!userId) throw new SocialProofError("Unauthorized", 401);
 
   const now = new Date();
+  const existing = await getLatestPendingChallenge(userId);
+  if (existing) {
+    return {
+      challengeId: existing.challengeId,
+      challenge: existing.challenge,
+      expiresAt: existing.expiresAt,
+      suggestedPost: buildSuggestedPost(existing.challenge),
+    };
+  }
+
   const expires = new Date(now.getTime() + X_PROOF_CHALLENGE_TTL_MINUTES * 60 * 1000);
   const challenge = `PGPZ-${randomBytes(5).toString("hex").toUpperCase()}`;
   const challengeId = randomUUID();
@@ -122,6 +142,60 @@ export async function createXChallenge(userId: string) {
     expiresAt: record.expiresAt,
     suggestedPost: buildSuggestedPost(challenge),
   };
+}
+
+export async function enforceSocialProofRateLimit({
+  action,
+  userId,
+  ipAddress,
+}: {
+  action: "challenge" | "verify";
+  userId: string;
+  ipAddress?: string | null;
+}) {
+  if (!userId) throw new SocialProofError("Unauthorized", 401);
+
+  const limit = action === "challenge" ? X_PROOF_CHALLENGE_RATE_LIMIT : X_PROOF_VERIFY_RATE_LIMIT;
+  const now = Date.now();
+  const windowMs = X_PROOF_RATE_LIMIT_WINDOW_MINUTES * 60 * 1000;
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  const expires = Math.floor((windowStart + windowMs) / 1000) + 60 * 60;
+  const nowIso = new Date(now).toISOString();
+  const dimensions = [`USER#${userId}`];
+
+  if (ipAddress) {
+    dimensions.push(`IP#${hashRateLimitValue(ipAddress)}`);
+  }
+
+  try {
+    await Promise.all(
+      dimensions.map((dimension) =>
+        documentClient.update({
+          TableName: TABLE_NAME,
+          Key: {
+            pk: `RATE_LIMIT#SOCIAL_PROOF#${action}#${dimension}`,
+            sk: `WINDOW#${windowStart}`,
+          },
+          UpdateExpression:
+            "SET #count = if_not_exists(#count, :zero) + :one, expires = :expires, firstSeenAt = if_not_exists(firstSeenAt, :now), updatedAt = :now",
+          ConditionExpression: "attribute_not_exists(#count) OR #count < :limit",
+          ExpressionAttributeNames: { "#count": "count" },
+          ExpressionAttributeValues: {
+            ":zero": 0,
+            ":one": 1,
+            ":limit": limit,
+            ":expires": expires,
+            ":now": nowIso,
+          },
+        })
+      )
+    );
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException") {
+      throw new SocialProofError("Too many X proof attempts. Please wait and try again.", 429);
+    }
+    throw err;
+  }
 }
 
 async function getLatestPendingChallenge(userId: string): Promise<ChallengeRecord | null> {
@@ -169,6 +243,17 @@ async function assertPostNotClaimed(postId: string, userId: string) {
   const existing = res.Items?.[0];
   if (existing && existing.userId !== userId) {
     throw new SocialProofError("That X post has already been used for another membership.", 409);
+  }
+}
+
+async function assertAuthorNotClaimed(authorId: string, userId: string) {
+  const claim = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: authorClaimKey(authorId),
+  });
+
+  if (claim.Item && claim.Item.userId !== userId) {
+    throw new SocialProofError("That X account has already been used for another membership.", 409);
   }
 }
 
@@ -242,6 +327,12 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
   await assertPostNotClaimed(postId, userId);
 
   const { tweet, author } = await fetchXPost(postId);
+  const authorId = String(author.id || "");
+  if (!authorId) {
+    throw new SocialProofError("X did not return the post author ID.", 502);
+  }
+  await assertAuthorNotClaimed(authorId, userId);
+
   const tweetText = String(tweet.text || "");
   if (!tweetText.toLowerCase().includes(challenge.challenge.toLowerCase())) {
     throw new SocialProofError("The X post does not include your current proof code.");
@@ -274,7 +365,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     profileUrl,
     postUrl: canonicalPostUrl,
     postId,
-    authorId: author.id,
+    authorId,
     authorName: author.name || null,
     challenge: challenge.challenge,
     proofText: tweetText,
@@ -293,6 +384,18 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     postUrl: canonicalPostUrl,
     claimedAt: verifiedAt,
   };
+  const authorClaimRecord = {
+    ...authorClaimKey(authorId),
+    type: "SOCIAL_PROOF_X_AUTHOR_CLAIM",
+    userId,
+    provider: "x",
+    authorId,
+    handle,
+    profileUrl,
+    postId,
+    postUrl: canonicalPostUrl,
+    claimedAt: verifiedAt,
+  };
 
   try {
     await documentClient.transactWrite({
@@ -303,6 +406,15 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
             Item: claimRecord,
             ConditionExpression: "attribute_not_exists(#pk)",
             ExpressionAttributeNames: { "#pk": "pk" },
+          },
+        },
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: authorClaimRecord,
+            ConditionExpression: "attribute_not_exists(#pk) OR userId = :userId",
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ExpressionAttributeValues: { ":userId": userId },
           },
         },
         {
@@ -346,7 +458,7 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     });
   } catch (err: any) {
     if (err?.name === "TransactionCanceledException") {
-      throw new SocialProofError("That X post has already been used for membership.", 409);
+      throw new SocialProofError("That X post or X account has already been used for membership.", 409);
     }
     throw err;
   }

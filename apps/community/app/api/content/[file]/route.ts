@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSignedUrl } from "@/lib/cloudFrontSigner";
 import { getToken } from "next-auth/jwt";
+import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   CLOUDFRONT_DOMAIN,
   KEY_PAIR_ID,
@@ -33,10 +34,16 @@ export async function GET(
 
   // Authentication via NextAuth JWT (session token)
   const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-  if (!token) {
+  const userId = typeof token?.sub === "string" ? token.sub : "";
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if ((token as any).membershipStatus !== "active") {
+  const user = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
+    ProjectionExpression: "membershipStatus",
+  });
+  if (user.Item?.membershipStatus !== "active") {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
   }
 

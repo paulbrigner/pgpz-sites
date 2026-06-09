@@ -39,6 +39,12 @@ export const X_API_BASE_URL = trimBaseUrl(process.env.X_API_BASE_URL || process.
 export const X_API_TIMEOUT_MS = parseNumber(process.env.X_API_TIMEOUT_MS) || 15000;
 export const X_PROOF_CHALLENGE_TTL_MINUTES =
   parseNumber(process.env.X_PROOF_CHALLENGE_TTL_MINUTES) || 30;
+export const X_PROOF_RATE_LIMIT_WINDOW_MINUTES =
+  parseNumber(process.env.X_PROOF_RATE_LIMIT_WINDOW_MINUTES) || 15;
+export const X_PROOF_CHALLENGE_RATE_LIMIT =
+  parseNumber(process.env.X_PROOF_CHALLENGE_RATE_LIMIT) || 10;
+export const X_PROOF_VERIFY_RATE_LIMIT =
+  parseNumber(process.env.X_PROOF_VERIFY_RATE_LIMIT) || 6;
 
 export const MEMBERSHIP_PROOF_RETENTION_POLICY =
   process.env.MEMBERSHIP_PROOF_RETENTION_POLICY || "valid_if_deleted";

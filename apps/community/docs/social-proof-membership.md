@@ -18,6 +18,9 @@ The app uses the existing NextAuth DynamoDB table:
 - `USER#<userId>` records store denormalized membership fields for fast sessions and admin lists.
 - `SOCIAL_PROOF#USER#<userId>` records store challenge and proof audit records.
 - `GSI1PK = SOCIAL_PROOF#POST#<postId>` prevents one post from being claimed by multiple users.
+- `SOCIAL_PROOF#POST#<postId>` claim records prevent direct post reuse.
+- `SOCIAL_PROOF#X_AUTHOR#<authorId>` claim records prevent one X account from activating multiple memberships.
+- `RATE_LIMIT#SOCIAL_PROOF#...` records enforce user/IP rate limits for challenge and verify requests.
 
 Verified user fields include:
 
@@ -49,4 +52,11 @@ Optional:
 - `X_API_BASE_URL`
 - `X_API_TIMEOUT_MS`
 - `X_PROOF_CHALLENGE_TTL_MINUTES`
+- `X_PROOF_RATE_LIMIT_WINDOW_MINUTES`
+- `X_PROOF_CHALLENGE_RATE_LIMIT`
+- `X_PROOF_VERIFY_RATE_LIMIT`
 - `MEMBERSHIP_PROOF_RETENTION_POLICY`
+
+## Access Control
+
+Protected content endpoints should read the current `USER#<userId>` record before issuing a signed URL. Session tokens may contain denormalized membership fields for UI rendering, but signed content access should use the fresh DynamoDB membership state so revocation takes effect immediately.
