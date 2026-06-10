@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --zcash-gold: #F5A800;
+  --zcash-gold-soft: #FFE6A3;
+  --zcash-gold-deep: #8A5A00;
+  --brand-ink: #102827;
+  --brand-coal: #0D1F20;
+  --brand-denim: #2F6F68;
+  --brand-navy: #132D36;
+  --brand-teal: #2F7D70;
+  --brand-cloud: #E8F3EC;
+  --brand-ice: #F6FAF2;
+  --hero-sheen: linear-gradient(125deg, #0D1F20 0%, #143A3D 48%, #2F6F68 100%);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .section-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .coalition-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.75rem;
+    background: var(--hero-sheen);
+    color: #ffffff;
+    box-shadow: 0 30px 60px -32px rgba(30, 30, 30, 0.58);
+    border: 1px solid rgba(245, 168, 0, 0.26);
+  }
+
+  .coalition-hero__frame {
+    position: relative;
+    width: 100%;
+    border-radius: 1.65rem;
+    border: 1px solid rgba(245, 168, 0, 0.34);
+    padding: clamp(2.4rem, 6.5vw, 3.8rem) clamp(1.8rem, 6vw, 3.6rem);
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 50%, rgba(245, 168, 0, 0.16));
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 22px 40px -26px rgba(30, 30, 30, 0.56);
+  }
+
+  .coalition-hero__content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+
+  .glass-surface {
+    border-radius: 1.5rem;
+    border: 1px solid rgba(245, 168, 0, 0.28);
+    background: linear-gradient(135deg, rgba(232, 243, 236, 0.7), rgba(255, 255, 255, 0.9) 54%, rgba(255, 230, 163, 0.28));
+    box-shadow: 0 26px 46px -30px rgba(16, 40, 39, 0.38);
+    backdrop-filter: blur(18px);
+  }
+
+  .glass-item {
+    border-radius: 1.1rem;
+    border: 1px solid rgba(245, 168, 0, 0.28);
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.94), rgba(232, 243, 236, 0.54));
+    box-shadow: 0 20px 32px -24px rgba(16, 40, 39, 0.32);
+    backdrop-filter: blur(16px);
+  }
+
+  .muted-card {
+    border-radius: 1.1rem;
+    border: 1px solid rgba(245, 168, 0, 0.22);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 20px 36px -26px rgba(16, 40, 39, 0.2);
+  }
+}
