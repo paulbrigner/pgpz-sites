@@ -466,7 +466,7 @@ export default function HomeClient() {
                 <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">Five priorities guiding coalition work</h2>
               </div>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                Adapted from PGPZ.org, these priorities connect public education, advocacy, civil liberties, policy response, and developer protection.
+                These priorities connect public education, advocacy, civil liberties, policy response, and developer protection.
               </p>
             </div>
             <div className="overflow-hidden rounded-xl border border-[rgba(245,168,0,0.24)] bg-[linear-gradient(135deg,var(--brand-ink),#163E3C_58%,#2F6F68)] p-5 text-white shadow-[0_26px_48px_-32px_rgba(16,40,39,0.56)] md:p-6">
@@ -494,7 +494,7 @@ export default function HomeClient() {
                   <div className="absolute h-36 w-36 rounded-full border border-[rgba(245,168,0,0.32)]" aria-hidden="true" />
                   <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full border border-[rgba(245,168,0,0.64)] bg-[rgba(255,255,255,0.12)] text-center shadow-[0_20px_34px_-24px_rgba(0,0,0,0.58)]">
                     <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--zcash-gold-soft)]">PGPZ</span>
-                    <span className="mt-1 text-sm font-semibold leading-5 text-white">Policy engine</span>
+                    <span className="mt-1 text-sm font-semibold leading-5 text-white">Policy Engine</span>
                   </div>
                 </div>
 
