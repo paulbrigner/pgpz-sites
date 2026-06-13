@@ -31,7 +31,7 @@ type XChallenge = {
 };
 
 const policyReportHref = "/resources/us-digital-asset-policy-2026-zcash.pdf";
-const weeklyPolicyMemoHref = "/resources/zodl-weekly-policy-memo-2026-06-08.pdf";
+const weeklyPolicyMemoHref = "/resources/weekly-policy-memo-2026-06-08.pdf";
 
 const memberResources = [
   {
@@ -41,7 +41,7 @@ const memberResources = [
   },
   {
     href: weeklyPolicyMemoHref,
-    label: "Weekly Policy Report: June 8, 2026",
+    label: "Weekly Policy Memo: June 8, 2026",
     detail: "June 8, 2026 weekly policy update.",
   },
 ];
@@ -59,12 +59,12 @@ const heroFeatureSlides = [
   },
   {
     eyebrow: "Weekly update",
-    title: "Weekly Policy Report",
+    title: "Weekly Policy Memo",
     body: "June 8 policy notes for the Zcash ecosystem.",
     href: weeklyPolicyMemoHref,
-    caption: "Weekly Policy Report: June 8, 2026",
-    imageSrc: "/resources/zodl-weekly-policy-memo-2026-06-08-cover.png",
-    imageAlt: "Weekly Policy Report cover",
+    caption: "Weekly Policy Memo: June 8, 2026",
+    imageSrc: "/resources/weekly-policy-memo-2026-06-08-cover.png",
+    imageAlt: "Weekly Policy Memo cover",
     imageFit: "contain",
   },
 ];
