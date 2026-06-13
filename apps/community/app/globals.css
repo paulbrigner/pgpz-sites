@@ -55,6 +55,65 @@
     width: 100%;
   }
 
+  .community-hero__frame--with-report {
+    display: grid;
+    gap: 1.5rem;
+    align-items: center;
+  }
+
+  .community-hero__visual {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    width: min(100%, 19rem);
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    justify-self: center;
+  }
+
+  .community-hero__feature-card {
+    position: relative;
+    display: block;
+    height: 11rem;
+    width: min(100%, 19rem);
+    overflow: hidden;
+    border-radius: 1.6rem;
+    border: 1px solid rgba(255, 230, 163, 0.42);
+    background:
+      radial-gradient(circle at 30% 18%, rgba(255, 230, 163, 0.32), transparent 34%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(255, 246, 220, 0.86) 48%, rgba(23, 19, 10, 0.24));
+    color: #ffffff;
+    text-decoration: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 28px 50px -34px rgba(0, 0, 0, 0.8);
+    transition: border-color 180ms ease, transform 180ms ease;
+  }
+
+  .community-hero__feature-card:hover {
+    border-color: rgba(255, 230, 163, 0.7);
+    transform: translateY(-2px);
+  }
+
+  .community-hero__feature-caption {
+    max-width: 100%;
+    color: rgba(255, 230, 163, 0.94);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .community-hero__feature-caption:hover {
+    color: #ffffff;
+  }
+
+  @media (min-width: 1024px) {
+    .community-hero__frame--with-report {
+      grid-template-columns: minmax(0, 1fr) minmax(17rem, 19rem);
+    }
+  }
+
   .glass-surface {
     border-radius: 1.5rem;
     border: 1px solid rgba(245, 168, 0, 0.28);

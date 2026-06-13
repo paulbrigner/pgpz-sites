@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
@@ -29,6 +30,45 @@ type XChallenge = {
   suggestedPost: string;
 };
 
+const policyReportHref = "/resources/us-digital-asset-policy-2026-zcash.pdf";
+const weeklyPolicyMemoHref = "/resources/zodl-weekly-policy-memo-2026-06-08.pdf";
+
+const memberResources = [
+  {
+    href: policyReportHref,
+    label: "U.S. Digital Asset Policy report",
+    detail: "Developments in 2026 and implications for Zcash.",
+  },
+  {
+    href: weeklyPolicyMemoHref,
+    label: "Weekly Policy Report: June 8, 2026",
+    detail: "June 8, 2026 weekly policy update.",
+  },
+];
+
+const heroFeatureSlides = [
+  {
+    eyebrow: "Now available",
+    title: "U.S. Digital Asset Policy",
+    body: "2026 developments and implications for Zcash.",
+    href: policyReportHref,
+    caption: "U.S. Digital Asset Policy: Developments in 2026 and Implications for the Zcash Ecosystem",
+    imageSrc: "/resources/us-digital-asset-policy-2026-zcash-cover.png",
+    imageAlt: "U.S. Digital Asset Policy report cover",
+    imageFit: "contain",
+  },
+  {
+    eyebrow: "Weekly update",
+    title: "Weekly Policy Report",
+    body: "June 8 policy notes for the Zcash ecosystem.",
+    href: weeklyPolicyMemoHref,
+    caption: "Weekly Policy Report: June 8, 2026",
+    imageSrc: "/resources/zodl-weekly-policy-memo-2026-06-08-cover.png",
+    imageAlt: "Weekly Policy Report cover",
+    imageFit: "contain",
+  },
+];
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "Not yet verified";
   const date = new Date(value);
@@ -48,9 +88,22 @@ const buildIntentUrl = (text: string) =>
 export default function HomeClient() {
   const { data: session, status, update } = useSession();
   const searchParams = useSearchParams();
-  const authenticated = status === "authenticated";
-  const loading = status === "loading";
-  const sessionUser = session?.user as any | undefined;
+  const previewMember =
+    process.env.NODE_ENV === "development" && searchParams?.get("preview") === "member";
+  const authenticated = previewMember || status === "authenticated";
+  const loading = !previewMember && status === "loading";
+  const sessionUser = useMemo(
+    () => previewMember
+      ? {
+        firstName: "Preview",
+        membershipStatus: "active",
+        membershipProvider: "manual",
+        membershipVerifiedAt: "2026-06-13T12:00:00.000Z",
+        manualApprovalStatus: "approved",
+      }
+      : session?.user as any | undefined,
+    [previewMember, session?.user],
+  );
   const isSocialProofOnboarding = searchParams?.get("next") === "social-proof";
   const signupProfileId = searchParams?.get("signupProfileId") || "";
 
@@ -64,6 +117,7 @@ export default function HomeClient() {
   const [postUrl, setPostUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [heroFeatureIndex, setHeroFeatureIndex] = useState(0);
   const pendingProfileApplied = useRef(false);
 
   const displayName = useMemo(() => {
@@ -102,7 +156,7 @@ export default function HomeClient() {
     : "Post the verification text on X, then return here so the site can find the post or you can paste its link.";
 
   const refreshStatus = useCallback(async () => {
-    if (!authenticated) return;
+    if (!authenticated || previewMember) return;
     try {
       setStatusError(null);
       const res = await fetch("/api/social-proof/status", { cache: "no-store" });
@@ -114,14 +168,22 @@ export default function HomeClient() {
     } catch (err: any) {
       setStatusError(err?.message || "Unable to load member verification status");
     }
-  }, [authenticated]);
+  }, [authenticated, previewMember]);
 
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
 
   useEffect(() => {
-    if (!authenticated || pendingProfileApplied.current) return;
+    const interval = window.setInterval(() => {
+      setHeroFeatureIndex((current) => (current + 1) % heroFeatureSlides.length);
+    }, 5500);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (previewMember || !authenticated || pendingProfileApplied.current) return;
     pendingProfileApplied.current = true;
 
     const applyPendingProfile = async () => {
@@ -184,7 +246,7 @@ export default function HomeClient() {
     };
 
     void applyPendingProfile();
-  }, [authenticated, signupProfileId, update]);
+  }, [authenticated, previewMember, signupProfileId, update]);
 
   const generateChallenge = async () => {
     setChallengeLoading(true);
@@ -294,11 +356,23 @@ export default function HomeClient() {
     return <HomeShellSkeleton />;
   }
 
+  const heroFeature = heroFeatureSlides[heroFeatureIndex];
+  const heroFeatureImage = (
+    <Image
+      src={heroFeature.imageSrc}
+      alt={heroFeature.imageAlt}
+      width={520}
+      height={360}
+      priority={heroFeatureIndex === 0}
+      className={`h-full w-full ${heroFeature.imageFit === "contain" ? "object-contain" : "object-cover"}`}
+    />
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5">
       {!showOnboardingFirst ? (
         <section className="community-hero">
-          <div className="community-hero__frame">
+          <div className="community-hero__frame community-hero__frame--with-report">
             <div className="community-hero__content max-w-3xl space-y-5">
               <div className="flex flex-wrap items-center gap-3">
                 <p className="section-eyebrow text-white/70">PGPZ COMMUNITY</p>
@@ -335,6 +409,45 @@ export default function HomeClient() {
                   </Button>
                 </div>
               ) : null}
+            </div>
+            <div className="community-hero__visual" aria-label="Featured PGPZ updates">
+              {heroFeature.href ? (
+                <Link
+                  href={heroFeature.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="community-hero__feature-card"
+                  aria-label={`View ${heroFeature.title}`}
+                >
+                  {heroFeatureImage}
+                </Link>
+              ) : (
+                <div className="community-hero__feature-card" aria-label={heroFeature.title}>
+                  {heroFeatureImage}
+                </div>
+              )}
+              {heroFeature.href ? (
+                <Link
+                  href={heroFeature.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="community-hero__feature-caption"
+                >
+                  {heroFeature.caption}
+                </Link>
+              ) : (
+                <p className="community-hero__feature-caption">{heroFeature.caption}</p>
+              )}
+              <div className="flex gap-2" aria-hidden="true">
+                {heroFeatureSlides.map((slide, index) => (
+                  <span
+                    key={slide.title}
+                    className={`h-1.5 rounded-full transition-all ${
+                      index === heroFeatureIndex ? "w-8 bg-[var(--zcash-gold)]" : "w-3 bg-white/35"
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -570,6 +683,7 @@ export default function HomeClient() {
                   eyebrow: "MEMBER RESOURCES",
                   title: "A shared home for Zcash policy work",
                   body: "This community site will grow into a place for updates, resource links, member notes, event materials, and practical tools for people supporting Zcash policy engagement.",
+                  resourceLinks: memberResources,
                 },
                 {
                   eyebrow: "PGPZ COALITION",
@@ -581,6 +695,30 @@ export default function HomeClient() {
                   <p className="section-eyebrow text-[var(--brand-denim)]">{pillar.eyebrow}</p>
                   <h3 className="mt-3 text-lg font-semibold text-[var(--brand-ink)]">{pillar.title}</h3>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{pillar.body}</p>
+                  {pillar.resourceLinks ? (
+                    <div className="mt-5 space-y-3 border-t border-[rgba(245,168,0,0.24)] pt-4">
+                      {pillar.resourceLinks.map((resource) => (
+                        <Link
+                          key={resource.href}
+                          href={resource.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 text-sm font-medium text-[var(--brand-denim)] transition-colors hover:text-[var(--zcash-gold-deep)]"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
+                            <FileText className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block">{resource.label}</span>
+                            <span className="block truncate text-xs font-normal text-slate-600">
+                              {resource.detail}
+                            </span>
+                          </span>
+                          <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                   {pillar.note ? (
                     <p className="mt-5 border-t border-[rgba(245,168,0,0.24)] pt-4 text-xs font-medium leading-5 text-[var(--brand-denim)]">
                       {pillar.note}
