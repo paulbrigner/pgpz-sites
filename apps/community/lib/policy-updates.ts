@@ -252,15 +252,14 @@ const specialPolicyUpdate: PolicyUpdate = {
       body: [
         "The favorable side is straightforward: digital-asset policy is no longer organized around the premise that innovation must yield to enforcement. That is a real improvement for developers, infrastructure providers, wallet providers, and merchant-integration efforts acting in good faith.",
         "The harder side is specific: Zcash's privacy model remains exposed to spillover from AML and sanctions debates. Intermediaries may restrict access if they view privacy features as raising examination or other risks.",
-        "The practical posture is to treat policy as a product constraint. That means planning for documentation, clear risk explanations, user education, and jurisdiction-specific operating models, and resisting the assumption that a favorable digital-asset headline automatically extends to privacy-preserving assets.",
+        "The practical posture is to leverage policy and regulatory developments to anticipate friction areas. That means planning for documentation, clear risk explanations, user education, and jurisdiction-specific operating models, and resisting the assumption that a favorable digital-asset headline automatically extends to privacy-preserving assets.",
       ],
     },
     {
       heading: "Risks, caveats, open questions, and recommendations",
       body: [
         "The principal risks are regulatory overlap, banking de-risking, tax-reporting complexity, and continued suspicion of privacy-enhancing features. A secondary risk is that Congress or the agencies settle on a framework that is technology-neutral on paper but operationally hostile to privacy-preserving networks in practice.",
-        "The central open question is whether policymakers can distinguish legitimate privacy from illicit opacity. If they can, Zcash has a credible path to durable ecosystem growth. If they cannot, the network may remain technically lawful but commercially constrained.",
-        "Near-term high-leverage actions include engaging Congress and the administration on developer protections, market structure, and illicit finance; maintaining partner-ready compliance materials; and providing technical input on how shielded transactions can be supervised at on-and-off ramps without categorically excluding privacy-preserving assets.",
+        "The central open question is whether policymakers can distinguish legitimate privacy from illicit opacity. If they can, Zcash has a credible path to durable ecosystem growth. To achieve this, the focus should be on near-term high-leverage actions include engaging Congress and the administration on developer protections, market structure, and illicit finance and providing technical input on how shielded transactions can be supervised at on-and-off ramps without categorically excluding privacy-preserving assets.",
       ],
     },
   ],
