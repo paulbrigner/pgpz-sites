@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getMemberAccess } from "@/lib/member-access";
-import { getPolicyUpdate, policyUpdates } from "@/lib/policy-updates";
+import { getPolicyUpdate, policyUpdates, type PolicyUpdateSection } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +50,75 @@ function MembershipRequired() {
     </div>
   );
 }
+
+function PolicyUpdateSectionBlock({
+  section,
+  fullWidth = false,
+}: {
+  section: PolicyUpdateSection;
+  fullWidth?: boolean;
+}) {
+  return (
+    <section className="space-y-4">
+      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
+      <div className={`space-y-4 text-sm leading-7 text-slate-700 ${fullWidth ? "max-w-4xl" : ""}`}>
+        {section.body.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
+      {section.table ? (
+        <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
+          <table className="w-full min-w-[860px] table-fixed border-collapse text-left text-sm leading-6 lg:min-w-0">
+            <colgroup>
+              <col style={{ width: "30%" }} />
+              <col style={{ width: "34%" }} />
+              <col style={{ width: "36%" }} />
+            </colgroup>
+            <thead className="bg-[var(--brand-ink)] text-white">
+              <tr>
+                {section.table.columns.map((column) => (
+                  <th
+                    key={column}
+                    scope="col"
+                    className="break-words border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0"
+                  >
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {section.table.rows.map((row) => (
+                <tr key={row.join("|")} className="border-t border-slate-200">
+                  {row.map((cell, index) => (
+                    <td
+                      key={`${row[0]}-${index}`}
+                      className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                    >
+                      {index === 0 ? (
+                        <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
+                      ) : (
+                        cell
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {section.bullets?.length ? (
+        <ul className={`list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700 ${fullWidth ? "max-w-4xl" : ""}`}>
+          {section.bullets.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function UpdateDetailPage({ params }: Props) {
   const { slug } = await params;
   const update = getPolicyUpdate(slug);
@@ -63,6 +132,14 @@ export default async function UpdateDetailPage({ params }: Props) {
   if (!access.isMember) {
     return <MembershipRequired />;
   }
+
+  const firstTableSectionIndex = update.sections.findIndex((section) => section.table);
+  const leadingSections =
+    firstTableSectionIndex === -1 ? update.sections : update.sections.slice(0, firstTableSectionIndex);
+  const tableSections =
+    firstTableSectionIndex === -1 ? [] : update.sections.slice(firstTableSectionIndex, firstTableSectionIndex + 1);
+  const trailingSections =
+    firstTableSectionIndex === -1 ? [] : update.sections.slice(firstTableSectionIndex + 1);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-14">
@@ -114,59 +191,8 @@ export default async function UpdateDetailPage({ params }: Props) {
 
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
-            {update.sections.map((section) => (
-              <section key={section.heading} className="space-y-4">
-                <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
-                <div className="space-y-4 text-sm leading-7 text-slate-700">
-                  {section.body.map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
-                  ))}
-                </div>
-                {section.table ? (
-                  <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
-                    <table className="min-w-[720px] border-collapse text-left text-sm leading-6">
-                      <thead className="bg-[var(--brand-ink)] text-white">
-                        <tr>
-                          {section.table.columns.map((column) => (
-                            <th
-                              key={column}
-                              scope="col"
-                              className="border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] last:border-r-0"
-                            >
-                              {column}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {section.table.rows.map((row) => (
-                          <tr key={row.join("|")} className="border-t border-slate-200">
-                            {row.map((cell, index) => (
-                              <td
-                                key={`${row[0]}-${index}`}
-                                className="align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
-                              >
-                                {index === 0 ? (
-                                  <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
-                                ) : (
-                                  cell
-                                )}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-                {section.bullets?.length ? (
-                  <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
-                    {section.bullets.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
+            {leadingSections.map((section) => (
+              <PolicyUpdateSectionBlock key={section.heading} section={section} />
             ))}
           </div>
 
@@ -192,6 +218,22 @@ export default async function UpdateDetailPage({ params }: Props) {
               </ul>
             </div>
           </aside>
+
+          {tableSections.length ? (
+            <div className="space-y-8 lg:col-span-2">
+              {tableSections.map((section) => (
+                <PolicyUpdateSectionBlock key={section.heading} section={section} fullWidth />
+              ))}
+            </div>
+          ) : null}
+
+          {trailingSections.length ? (
+            <div className="space-y-8 lg:col-span-2">
+              {trailingSections.map((section) => (
+                <PolicyUpdateSectionBlock key={section.heading} section={section} fullWidth />
+              ))}
+            </div>
+          ) : null}
         </div>
       </article>
     </div>
