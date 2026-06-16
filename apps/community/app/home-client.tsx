@@ -506,7 +506,7 @@ export default function HomeClient() {
                 <div className="space-y-2">
                   <p className="section-eyebrow text-[var(--brand-denim)]">MEMBERSHIP</p>
                   <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
-                    {`Welcome, ${displayName}.`}
+                    {isMember ? `Welcome, ${displayName}.` : "Choose your membership path"}
                   </h2>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
@@ -551,67 +551,88 @@ export default function HomeClient() {
                 </div>
               ) : (
                 <div className="mt-6 space-y-5">
-                  <Button onClick={generateChallenge} disabled={challengeLoading}>
-                    {challengeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    Generate verification text
-                  </Button>
-
-                  {challenge ? (
-                    <div className="space-y-4 rounded-lg border bg-white/80 p-4">
-                      <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
-                        {[
-                          ["1", "Post the text publicly on X."],
-                          ["2", "Return here after posting."],
-                          ["3", "Let the site find the post or paste the link."],
-                        ].map(([step, body]) => (
-                          <div key={step} className="rounded-md border bg-white/80 p-3">
-                            <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-ink)] text-xs font-semibold text-[var(--zcash-gold)]">
-                              {step}
-                            </div>
-                            {body}
-                          </div>
-                        ))}
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">POST THIS TEXT ON X</div>
-                        <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-sm leading-6 text-white">
-                          {challenge.suggestedPost}
-                        </pre>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" onClick={copyProofText}>
-                          <Clipboard className="h-4 w-4" />
-                          Copy text
-                        </Button>
-                        <Button type="button" variant="outline" asChild>
-                          <Link href={buildIntentUrl(challenge.suggestedPost)} target="_blank" rel="noopener noreferrer">
-                            Open X composer
-                            <ExternalLink className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button type="button" variant="outline" onClick={findProofPost} disabled={findLoading}>
-                          {findLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                          Find my X post
-                        </Button>
-                      </div>
+                  <div className="rounded-lg border border-[rgba(245,168,0,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
-                        <label htmlFor="postUrl" className="text-sm font-medium">
-                          X post URL
-                        </label>
-                        <input
-                          id="postUrl"
-                          value={postUrl}
-                          onChange={(event) => setPostUrl(event.target.value)}
-                          placeholder="https://x.com/yourhandle/status/..."
-                          className="w-full rounded-md border px-3 py-2 text-sm"
-                        />
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-denim)]">
+                          X SOCIAL PROOF
+                        </div>
+                        <h3 className="text-base font-semibold text-[var(--brand-ink)]">
+                          Start with X social proof
+                        </h3>
+                        <p className="text-sm leading-6 text-slate-600">
+                          Create a short verification post for X. After you publish it, return here so the site can confirm the post and activate membership.
+                        </p>
                       </div>
-                      <Button onClick={verifyProof} disabled={verifyLoading || !postUrl.trim()}>
-                        {verifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                        Complete member verification
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="border border-[rgba(138,90,0,0.35)] bg-[var(--zcash-gold)] text-[var(--brand-ink)] shadow-sm hover:bg-[var(--zcash-gold-soft)]"
+                        onClick={generateChallenge}
+                        disabled={challengeLoading}
+                      >
+                        {challengeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        {challengeLoading ? "Preparing X verification" : "Start X verification"}
                       </Button>
                     </div>
-                  ) : null}
+
+                    {challenge ? (
+                      <div className="mt-4 space-y-4 border-t border-[rgba(245,168,0,0.3)] pt-4">
+                        <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
+                          {[
+                            ["1", "Post the text publicly on X."],
+                            ["2", "Return here after posting."],
+                            ["3", "Let the site find the post or paste the link."],
+                          ].map(([step, body]) => (
+                            <div key={step} className="rounded-md border bg-white/80 p-3">
+                              <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-ink)] text-xs font-semibold text-[var(--zcash-gold)]">
+                                {step}
+                              </div>
+                              {body}
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">POST THIS TEXT ON X</div>
+                          <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-sm leading-6 text-white">
+                            {challenge.suggestedPost}
+                          </pre>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" onClick={copyProofText}>
+                            <Clipboard className="h-4 w-4" />
+                            Copy text
+                          </Button>
+                          <Button type="button" variant="outline" asChild>
+                            <Link href={buildIntentUrl(challenge.suggestedPost)} target="_blank" rel="noopener noreferrer">
+                              Open X composer
+                              <ExternalLink className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button type="button" variant="outline" onClick={findProofPost} disabled={findLoading}>
+                            {findLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                            Find my X post
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <label htmlFor="postUrl" className="text-sm font-medium">
+                            X post URL
+                          </label>
+                          <input
+                            id="postUrl"
+                            value={postUrl}
+                            onChange={(event) => setPostUrl(event.target.value)}
+                            placeholder="https://x.com/yourhandle/status/..."
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <Button onClick={verifyProof} disabled={verifyLoading || !postUrl.trim()}>
+                          {verifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                          Complete X verification
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="rounded-lg border bg-white/80 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
