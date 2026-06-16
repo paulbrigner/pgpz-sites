@@ -76,10 +76,9 @@ const weeklyPolicyMemo: PolicyUpdate = {
     "EU AMLR and MiCA continue to keep privacy-coin exchange and custody access in focus as implementation timelines approach.",
   ],
   actionItems: [
-    "Consider submitting, or joining a coalition statement for, the Ways and Means record by June 23.",
-    "Flag how de minimis thresholds and reporting requirements support adoption and enable users to use Zcash for payments.",
-    "Brief exchange, custodian, and banking partners on Zcash compliance ahead of the AMLR 2027 phase-in.",
-    "Document selective-disclosure workflows for partners' compliance teams.",
+    "Monitor policy updates through the PGPZ Community.",
+    "Share and repost PGPZ X and LinkedIn content.",
+    "Send feedback to PGPZ. How would this legislation help or hurt your operations?",
   ],
   sections: [
     {
@@ -144,11 +143,10 @@ const specialPolicyUpdate: PolicyUpdate = {
     "The practical posture for Zcash is to treat policy as a product constraint: documentation, compliance explanations, user education, and partner-ready selective-disclosure materials matter.",
   ],
   actionItems: [
-    "Document shielded transactions, viewing keys, and selective disclosure in a format usable by partners' compliance and risk teams.",
-    "Keep basis-tracking, transaction documentation, and reporting tooling aligned with emerging tax requirements.",
-    "Prepare concise compliance packages for businesses, exchanges, custodians, and payment partners.",
-    "Engage in legislative records where the ecosystem has concrete stakes, including the Ways and Means tax record and CLARITY Act developer-protection and illicit-finance provisions.",
-    "Engage constructively with Treasury, FinCEN, OFAC, bank regulators, and the President's Council on Digital Assets so privacy-preserving use cases are represented.",
+    "Call your Senator and ask them to support the CLARITY Act with the Blockchain Regulatory Certainty Act provisions preserved.",
+    "Repost PGPZ X and LinkedIn posts to increase visibility and promote the Community.",
+    "Educate your network about Zcash.",
+    "Engage with PGPZ by flagging concerns and the impact of policy developments.",
   ],
   sections: [
     {
