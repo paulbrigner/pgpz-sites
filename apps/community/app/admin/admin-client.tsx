@@ -2,10 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, MailCheck, RefreshCcw, Search, ShieldCheck, UserCheck } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronDown,
+  ChevronRight,
+  MailCheck,
+  MailPlus,
+  RefreshCcw,
+  Save,
+  Search,
+  ShieldCheck,
+  StickyNote,
+  UserCheck,
+} from "lucide-react";
 import {
   SensitiveDataText,
-  useAdminSensitiveData,
 } from "@/components/admin/sensitive-data";
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
@@ -31,7 +42,6 @@ const displayName = (member: AdminMember) =>
   member.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed member";
 
 export default function AdminClient({ initialRoster, currentAdminId }: Props) {
-  const { sensitiveDataVisible } = useAdminSensitiveData();
   const [roster, setRoster] = useState<AdminRoster | null>(initialRoster);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "none" | "manual">("all");
@@ -39,6 +49,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState<Record<string, boolean>>({});
   const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({});
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
+  const [notesSaving, setNotesSaving] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadRoster = async () => {
@@ -63,6 +76,16 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  useEffect(() => {
+    setNotesDrafts((current) => {
+      const next: Record<string, string> = {};
+      for (const member of roster?.members || []) {
+        next[member.id] = current[member.id] ?? member.adminNotes ?? "";
+      }
+      return next;
+    });
+  }, [roster]);
+
   const filteredMembers = useMemo(() => {
     const members = (roster?.members || []).filter((member) => member.id !== currentAdminId);
     const normalized = query.trim().toLowerCase();
@@ -78,6 +101,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         member.membershipProofPostUrl,
         member.membershipProvider,
         member.manualApprovalStatus,
+        member.adminNotes,
       ]
         .filter(Boolean)
         .join(" ")
@@ -116,13 +140,52 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         body: JSON.stringify({ userId: member.id }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Failed to approve manual request");
+      if (!res.ok) throw new Error(body?.error || "Failed to approve member manually");
       setNotice(`Manual approval granted for ${member.email || displayName(member)}.`);
       await loadRoster();
     } catch (err: any) {
-      setError(err?.message || "Failed to approve manual request");
+      setError(err?.message || "Failed to approve member manually");
     } finally {
       setApprovalLoading((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
+  const saveAdminNotes = async (member: AdminMember) => {
+    setNotesSaving((current) => ({ ...current, [member.id]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: member.id,
+          adminNotes: notesDrafts[member.id] ?? "",
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to save admin notes");
+      setNotice(`Admin notes saved for ${member.email || displayName(member)}.`);
+      setRoster((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          members: current.members.map((item) =>
+            item.id === member.id
+              ? {
+                  ...item,
+                  adminNotes: body.adminNotes ?? null,
+                  adminNotesUpdatedAt: body.adminNotesUpdatedAt ?? item.adminNotesUpdatedAt,
+                  adminNotesUpdatedBy: body.adminNotesUpdatedBy ?? item.adminNotesUpdatedBy,
+                }
+              : item,
+          ),
+        };
+      });
+    } catch (err: any) {
+      setError(err?.message || "Failed to save admin notes");
+    } finally {
+      setNotesSaving((current) => ({ ...current, [member.id]: false }));
     }
   };
 
@@ -150,7 +213,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, email, X handle, or proof URL"
+              placeholder="Search name, email, X handle, proof URL, or notes"
               className="w-full rounded-md border py-2 pl-9 pr-3 text-sm"
             />
           </div>
@@ -195,11 +258,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       ) : null}
 
       <div className="overflow-hidden rounded-lg border bg-white/90">
-        <div className="grid grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="hidden grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 md:grid">
           <div>Member</div>
           <div>Status</div>
           <div>Verification</div>
-          <div>Email</div>
+          <div>Welcome</div>
           <div>Actions</div>
         </div>
         {loading ? (
@@ -208,106 +271,220 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           <div className="divide-y">
             {filteredMembers.map((member) => {
               const active = member.membershipStatus === "active";
-              const emailHidden = !sensitiveDataVisible && member.email;
               const welcomeSent = !!member.welcomeEmailSentAt;
               const manualPending = member.manualApprovalStatus === "pending" && !active;
               const manualApproved = member.membershipProvider === "manual" || member.manualApprovalStatus === "approved";
+              const expanded = !!expandedRows[member.id];
+              const notesDraft = notesDrafts[member.id] ?? member.adminNotes ?? "";
+              const notesChanged = notesDraft.trim() !== (member.adminNotes || "");
               return (
                 <div
                   key={member.id}
-                  className="grid grid-cols-1 gap-3 px-4 py-4 text-sm md:grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr]"
+                  className="text-sm"
                 >
-                  <div className="space-y-1">
-                    <div className="font-semibold text-[var(--brand-ink)]">
-                      <SensitiveDataText value={displayName(member)} kind="name" />
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      <SensitiveDataText value={member.email || "No email"} kind="email" />
-                    </div>
-                    {member.linkedinUrl ? (
-                      <Link className="text-xs text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
-                        LinkedIn
-                      </Link>
-                    ) : null}
-                  </div>
-                  <div>
-                    <span className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
-                      active ? "bg-teal-50 text-[var(--brand-teal)]" : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
-                    )}>
-                      {active ? <BadgeCheck className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                      {active ? "Active" : "Unverified"}
-                    </span>
-                    <div className="mt-2 text-xs text-slate-500">{formatDate(member.membershipVerifiedAt)}</div>
-                    {manualPending ? (
-                      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
-                        <UserCheck className="h-3.5 w-3.5" />
-                        Manual requested
+                  <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-[1.1fr_0.85fr_0.85fr_0.9fr_1fr]">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-[var(--brand-ink)]">
+                        <SensitiveDataText value={displayName(member)} kind="name" />
                       </div>
-                    ) : null}
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">
-                      {manualApproved ? "Manual approval" : member.xHandle || "—"}
-                    </div>
-                    {member.membershipProofPostUrl ? (
-                      <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofPostUrl} target="_blank" rel="noopener noreferrer">
-                        Proof post
-                      </Link>
-                    ) : null}
-                    {manualPending && member.manualApprovalRequestedAt ? (
                       <div className="text-xs text-slate-500">
-                        Requested {formatDate(member.manualApprovalRequestedAt)}
+                        <SensitiveDataText value={member.email || "No email"} kind="email" />
                       </div>
-                    ) : null}
-                  </div>
-                  <div className="space-y-2">
-                    <div
-                      className={cn(
+                      {member.linkedinUrl ? (
+                        <Link className="text-xs text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
+                          LinkedIn
+                        </Link>
+                      ) : null}
+                    </div>
+                    <div>
+                      <span className={cn(
                         "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
-                        welcomeSent
-                          ? "bg-emerald-50 text-emerald-800"
-                          : "bg-slate-100 text-slate-600",
-                      )}
-                      title={
-                        welcomeSent
-                          ? `Welcome email sent ${formatDate(member.welcomeEmailSentAt)}`
-                          : "Welcome email has not been sent"
-                      }
-                    >
-                      <MailCheck className="h-3.5 w-3.5" />
-                      {welcomeSent ? "Welcome sent" : "Welcome not sent"}
+                        active ? "bg-teal-50 text-[var(--brand-teal)]" : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
+                      )}>
+                        {active ? <BadgeCheck className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                        {active ? "Active" : "Unverified"}
+                      </span>
+                      <div className="mt-2 text-xs text-slate-500">{formatDate(member.membershipVerifiedAt)}</div>
+                      {manualPending ? (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Manual requested
+                        </div>
+                      ) : null}
                     </div>
-                    {welcomeSent ? (
-                      <div className="text-xs text-slate-500">
-                        Sent {formatDate(member.welcomeEmailSentAt)}
+                    <div className="space-y-1">
+                      <div className="font-medium">
+                        {manualApproved ? "Manual approval" : member.xHandle || "—"}
                       </div>
-                    ) : null}
-                    {member.emailSuppressed ? (
-                      <div className="text-xs text-rose-700">Suppressed</div>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {manualPending ? (
+                      {member.membershipProofPostUrl ? (
+                        <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofPostUrl} target="_blank" rel="noopener noreferrer">
+                          Proof post
+                        </Link>
+                      ) : null}
+                      {manualPending && member.manualApprovalRequestedAt ? (
+                        <div className="text-xs text-slate-500">
+                          Requested {formatDate(member.manualApprovalRequestedAt)}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2">
+                      {welcomeSent ? (
+                        <>
+                          <div
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800"
+                            title={`Welcome email sent ${formatDate(member.welcomeEmailSentAt)}`}
+                          >
+                            <MailCheck className="h-3.5 w-3.5" />
+                            Welcome sent
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Sent {formatDate(member.welcomeEmailSentAt)}
+                          </div>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={emailSending[member.id] || !member.email}
+                          isLoading={!!emailSending[member.id]}
+                          onClick={() => sendWelcome(member)}
+                        >
+                          <MailPlus className="h-4 w-4" />
+                          Send welcome
+                        </Button>
+                      )}
+                      {member.emailSuppressed ? (
+                        <div className="text-xs text-rose-700">Suppressed</div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {!active ? (
+                        <Button
+                          size="sm"
+                          disabled={approvalLoading[member.id]}
+                          isLoading={!!approvalLoading[member.id]}
+                          onClick={() => approveManual(member)}
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Approve manually
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
-                        disabled={approvalLoading[member.id]}
-                        onClick={() => approveManual(member)}
+                        variant="outline"
+                        aria-expanded={expanded}
+                        onClick={() => setExpandedRows((current) => ({ ...current, [member.id]: !expanded }))}
                       >
-                        <UserCheck className="h-4 w-4" />
-                        {approvalLoading[member.id] ? "Approving..." : "Approve"}
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        Details
                       </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={emailSending[member.id] || !member.email}
-                      onClick={() => sendWelcome(member)}
-                      title={emailHidden ? "Email hidden; toggle sensitive data to inspect target." : undefined}
-                    >
-                      {emailSending[member.id] ? "Sending..." : welcomeSent ? "Resend welcome" : "Send welcome"}
-                    </Button>
+                    </div>
                   </div>
+                  {expanded ? (
+                    <div className="border-t bg-slate-50/70 px-4 py-4">
+                      <div className="grid gap-5 lg:grid-cols-[1fr_1fr_1.35fr]">
+                        <div className="space-y-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Profile details
+                          </div>
+                          <dl className="space-y-2 text-xs text-slate-600">
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">First name</dt>
+                              <dd className="text-right text-slate-800">
+                                <SensitiveDataText value={member.firstName || "—"} kind="name" />
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Last name</dt>
+                              <dd className="text-right text-slate-800">
+                                <SensitiveDataText value={member.lastName || "—"} kind="name" />
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">X handle</dt>
+                              <dd className="text-right text-slate-800">{member.xHandle || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">LinkedIn</dt>
+                              <dd className="max-w-[14rem] truncate text-right">
+                                {member.linkedinUrl ? (
+                                  <Link className="text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
+                                    Open profile
+                                  </Link>
+                                ) : "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Membership evidence
+                          </div>
+                          <dl className="space-y-2 text-xs text-slate-600">
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Provider</dt>
+                              <dd className="text-right text-slate-800">{member.membershipProvider || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Proof post ID</dt>
+                              <dd className="max-w-[14rem] truncate text-right text-slate-800">{member.membershipProofPostId || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Retention</dt>
+                              <dd className="text-right text-slate-800">{member.proofRetentionPolicy || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Manual approved</dt>
+                              <dd className="text-right text-slate-800">{formatDate(member.manualApprovalApprovedAt)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Last email</dt>
+                              <dd className="text-right text-slate-800">
+                                {member.lastEmailType ? `${member.lastEmailType} · ${formatDate(member.lastEmailSentAt)}` : "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              <StickyNote className="h-4 w-4" />
+                              Admin notes
+                            </div>
+                            {member.adminNotesUpdatedAt ? (
+                              <div className="text-xs text-slate-500">
+                                Updated {formatDate(member.adminNotesUpdatedAt)}
+                              </div>
+                            ) : null}
+                          </div>
+                          <textarea
+                            value={notesDraft}
+                            onChange={(event) =>
+                              setNotesDrafts((current) => ({ ...current, [member.id]: event.target.value }))
+                            }
+                            maxLength={4000}
+                            rows={5}
+                            aria-label={`Admin notes for ${displayName(member)}`}
+                            placeholder="Add internal context for follow-up, eligibility review, or policy engagement notes."
+                            className="min-h-28 w-full resize-y rounded-md border bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(31,76,111,0.18)]"
+                          />
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-xs text-slate-500">{notesDraft.length}/4000</div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!notesChanged || notesSaving[member.id]}
+                              isLoading={!!notesSaving[member.id]}
+                              onClick={() => saveAdminNotes(member)}
+                            >
+                              <Save className="h-4 w-4" />
+                              Save notes
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

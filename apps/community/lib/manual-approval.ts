@@ -95,9 +95,6 @@ export async function approveManualApproval({
   if (user.Item.membershipStatus === "active") {
     throw new ManualApprovalError("This member is already active.", 409);
   }
-  if (user.Item.manualApprovalStatus !== "pending") {
-    throw new ManualApprovalError("This member has not requested manual approval.", 409);
-  }
 
   const now = new Date().toISOString();
   try {
@@ -107,16 +104,14 @@ export async function approveManualApproval({
       UpdateExpression:
         "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now",
       ConditionExpression:
-        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND #manualApprovalStatus = :pending",
+        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active)",
       ExpressionAttributeNames: {
         "#pk": "pk",
         "#membershipStatus": "membershipStatus",
-        "#manualApprovalStatus": "manualApprovalStatus",
       },
       ExpressionAttributeValues: {
         ":active": "active",
         ":provider": "manual",
-        ":pending": "pending",
         ":now": now,
         ":approved": "approved",
         ":adminUserId": adminUserId,
@@ -124,7 +119,7 @@ export async function approveManualApproval({
     });
   } catch (err: any) {
     if (err?.name === "ConditionalCheckFailedException") {
-      throw new ManualApprovalError("This manual approval request is no longer pending.", 409);
+      throw new ManualApprovalError("This member is already active or no longer eligible for manual approval.", 409);
     }
     throw err;
   }

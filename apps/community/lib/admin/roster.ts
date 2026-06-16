@@ -25,6 +25,9 @@ type RawUser = {
   manualApprovalRequestedAt?: string | null;
   manualApprovalApprovedAt?: string | null;
   manualApprovalApprovedBy?: string | null;
+  adminNotes?: string | null;
+  adminNotesUpdatedAt?: string | null;
+  adminNotesUpdatedBy?: string | null;
 };
 
 export type AdminMember = {
@@ -45,6 +48,9 @@ export type AdminMember = {
   manualApprovalRequestedAt: string | null;
   manualApprovalApprovedAt: string | null;
   manualApprovalApprovedBy: string | null;
+  adminNotes: string | null;
+  adminNotesUpdatedAt: string | null;
+  adminNotesUpdatedBy: string | null;
   isAdmin: boolean;
   welcomeEmailSentAt: string | null;
   lastEmailSentAt: string | null;
@@ -83,7 +89,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy",
+        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -124,12 +130,63 @@ function toAdminMember(user: RawUser): AdminMember | null {
     manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),
     manualApprovalApprovedAt: textOrNull(user.manualApprovalApprovedAt),
     manualApprovalApprovedBy: textOrNull(user.manualApprovalApprovedBy),
+    adminNotes: textOrNull(user.adminNotes),
+    adminNotesUpdatedAt: textOrNull(user.adminNotesUpdatedAt),
+    adminNotesUpdatedBy: textOrNull(user.adminNotesUpdatedBy),
     isAdmin: !!user.isAdmin,
     welcomeEmailSentAt: textOrNull(user.welcomeEmailSentAt),
     lastEmailSentAt: textOrNull(user.lastEmailSentAt),
     lastEmailType: textOrNull(user.lastEmailType),
     emailBounceReason: textOrNull(user.emailBounceReason),
     emailSuppressed: typeof user.emailSuppressed === "boolean" ? user.emailSuppressed : null,
+  };
+}
+
+export async function updateAdminMemberNotes({
+  userId,
+  adminUserId,
+  adminNotes,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  adminNotes: string;
+}) {
+  const trimmedUserId = userId.trim();
+  if (!trimmedUserId) throw new Error("User ID is required.");
+  if (adminNotes.length > 4000) throw new Error("Admin notes must be 4,000 characters or fewer.");
+
+  const now = new Date().toISOString();
+  const normalizedNotes = adminNotes.trim();
+  const key = { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` };
+
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: key,
+    UpdateExpression: normalizedNotes
+      ? "SET adminNotes = :notes, adminNotesUpdatedAt = :now, adminNotesUpdatedBy = :adminUserId"
+      : "SET adminNotesUpdatedAt = :now, adminNotesUpdatedBy = :adminUserId REMOVE adminNotes",
+    ConditionExpression: "attribute_exists(#pk)",
+    ExpressionAttributeNames: {
+      "#pk": "pk",
+    },
+    ExpressionAttributeValues: normalizedNotes
+      ? {
+          ":notes": normalizedNotes,
+          ":now": now,
+          ":adminUserId": adminUserId,
+        }
+      : {
+          ":now": now,
+          ":adminUserId": adminUserId,
+        },
+  });
+
+  return {
+    ok: true,
+    userId: trimmedUserId,
+    adminNotes: normalizedNotes || null,
+    adminNotesUpdatedAt: now,
+    adminNotesUpdatedBy: adminUserId,
   };
 }
 
