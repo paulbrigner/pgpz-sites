@@ -181,8 +181,8 @@ export default async function UpdateDetailPage({ params }: Props) {
 
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
-            {update.sections.map((section) => (
-              <PolicyUpdateSectionBlock key={section.heading} section={section} />
+            {update.sections.map((section, index) => (
+              <PolicyUpdateSectionBlock key={`${section.heading}-${index}`} section={section} />
             ))}
           </div>
 

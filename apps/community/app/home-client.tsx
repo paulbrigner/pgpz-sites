@@ -31,8 +31,8 @@ type XChallenge = {
   suggestedPost: string;
 };
 
-const specialPolicyUpdate = getPolicyUpdate("us-digital-asset-policy-2026-zcash")!;
-const weeklyPolicyUpdate = getPolicyUpdate("zodl-weekly-policy-memo-2026-06-08")!;
+const specialPolicyUpdate = getPolicyUpdate("1H2026-us-digital-asset-policy")!;
+const weeklyPolicyUpdate = getPolicyUpdate("2026-06-08-weekly-policy-memo")!;
 
 const memberResources = [
   {

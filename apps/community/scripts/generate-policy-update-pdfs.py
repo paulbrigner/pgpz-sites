@@ -45,8 +45,8 @@ BRAND = {
 }
 
 PDF_PATH_BY_SLUG = {
-    "zodl-weekly-policy-memo-2026-06-08": ROOT / "public/resources/weekly-policy-memo-2026-06-08.pdf",
-    "us-digital-asset-policy-2026-zcash": ROOT / "public/resources/us-digital-asset-policy-2026-zcash.pdf",
+    "2026-06-08-weekly-policy-memo": ROOT / "public/resources/2026-06-08-weekly-policy-memo.pdf",
+    "1H2026-us-digital-asset-policy": ROOT / "public/resources/1H2026-us-digital-asset-policy.pdf",
 }
 
 

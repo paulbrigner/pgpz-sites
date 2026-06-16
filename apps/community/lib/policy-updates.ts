@@ -54,10 +54,10 @@ export const policyUpdateCategoryLabels: Record<PolicyUpdateCategory, string> = 
 };
 
 const weeklyPolicyMemo: PolicyUpdate = {
-  slug: "zodl-weekly-policy-memo-2026-06-08",
+  slug: "2026-06-08-weekly-policy-memo",
   category: "weekly",
   categoryLabel: policyUpdateCategoryLabels.weekly,
-  title: "ZODL Weekly Policy Memo: Week of June 8, 2026",
+  title: "Weekly Policy Memo: Week of June 8, 2026",
   shortTitle: "Weekly Policy Memo: June 8, 2026",
   publishedAt: "2026-06-08",
   displayDate: "Week of June 8, 2026",
@@ -65,21 +65,23 @@ const weeklyPolicyMemo: PolicyUpdate = {
     "The House Ways and Means Committee held a full-committee hearing on digital-asset taxation, advancing discussion drafts on de minimis relief, stablecoins, mining and staking rewards, routine network fees, and related parity provisions. The week also kept exchange and custody access for privacy assets in focus under EU AMLR and MiCA.",
   emailSubject: "PGPZ Weekly Policy Memo: Week of June 8, 2026",
   emailPreheader:
-    "Digital-asset tax drafts, de minimis relief, network-fee treatment, and privacy-asset access risks.",
-  coverImage: "/resources/weekly-policy-memo-2026-06-08-cover.png",
-  pdfHref: "/resources/weekly-policy-memo-2026-06-08.pdf",
-  portalPath: "/updates/zodl-weekly-policy-memo-2026-06-08",
+    "Digital-asset tax drafts, the DCG Fly-in, CLARITY Act advocacy, and privacy-asset access risks.",
+  coverImage: "/resources/2026-06-08-weekly-policy-memo-cover.png",
+  pdfHref: "/resources/2026-06-08-weekly-policy-memo.pdf",
+  portalPath: "/updates/2026-06-08-weekly-policy-memo",
   keyTakeaways: [
     "The June 9 Ways and Means hearing was a discussion hearing, not a markup, so no legislation advanced out of committee.",
     "Seven tax discussion drafts covered de minimis transaction relief, stablecoin treatment, mining and staking rewards, routine network fees, securities lending, mark-to-market parity, and charitable-deduction parity.",
     "Written submissions for the hearing record are due June 23, 2026.",
+    "The June 10 DCG Fly-in put financial privacy in crypto before congressional offices and connected that advocacy to the CLARITY Act debate.",
     "EU AMLR and MiCA continue to keep privacy-coin exchange and custody access in focus as implementation timelines approach.",
   ],
   actionItems: [
-    "Consider submitting, or joining a coalition statement for, the Ways and Means record by June 23.",
-    "Flag how de minimis thresholds and reporting requirements support adoption and enable users to use Zcash for payments.",
-    "Brief exchange, custodian, and banking partners on Zcash compliance ahead of the AMLR 2027 phase-in.",
-    "Document selective-disclosure workflows for partners' compliance teams.",
+    "Call your Senator and ask them to support the CLARITY Act with the Blockchain Regulatory Certainty Act provisions preserved.",
+    "Share accurate corrections when EU or Philippines privacy-coin ban narratives circulate.",
+    "Repost PGPZ X and LinkedIn posts to increase visibility and promote the Community.",
+    "Educate your network about Zcash.",
+    "Engage with PGPZ by flagging concerns and the impact of policy developments.",
   ],
   sections: [
     {
@@ -90,7 +92,7 @@ const weeklyPolicyMemo: PolicyUpdate = {
       ],
     },
     {
-      heading: "House Ways and Means held its hearing on digital asset taxation",
+      heading: "House Ways and Means Held its Hearing on Digital Asset Taxation",
       body: [
         "On June 9, 2026, the House Ways and Means Committee held a full-committee legislative hearing on digital-asset taxation, organized around seven discussion drafts. Because it was a discussion hearing rather than a markup or floor vote, no legislation was passed out of committee.",
       ],
@@ -111,7 +113,20 @@ const weeklyPolicyMemo: PolicyUpdate = {
       ],
     },
     {
-      heading: "Privacy-coin exchange access stays in focus under EU AMLR and MiCA",
+      heading: "DCG Fly-in Brought Financial Privacy Advocacy to Capitol Hill",
+      body: [
+        "On June 10, Paul Brigner participated in DCG's congressional briefing and fly-in on Capitol Hill focused on financial privacy in crypto. In a June 10 thread, he described briefing Congress with DCG and Aleo on the need for financial privacy, including voter polling on crypto's growing salience, financial privacy, and the CLARITY Act.",
+        "DCG's public recap described the fly-in as convening DCG executives and 20+ blockchain founders for policy discussions on data privacy and digital asset regulation.",
+      ],
+    },
+    {
+      heading: "Why this matters for Zcash",
+      body: [
+        "Meetings like these are crucial to educate policymakers on how Zcash can be compliance-capable financial infrastructure - including transparent transaction modes and selective-disclosure tools - rather than a regulatory risk.",
+      ],
+    },
+    {
+      heading: "Privacy-coin Exchange Access Stays in Focus under EU AMLR and MiCA",
       body: [
         "This week's market volatility renewed attention on the standing regulatory risk for privacy assets: exchange and custody access. Under the EU's Anti-Money Laundering Regulation, licensed crypto-asset service providers face custodial restrictions on privacy coins phasing in by 2027, and MiCA conditions the admission of assets with built-in anonymity on providers being able to identify holders and their transaction history.",
         "Whether banks, exchanges, and custodians will serve the asset often matters more in practice than any single classification question.",
@@ -121,27 +136,27 @@ const weeklyPolicyMemo: PolicyUpdate = {
 };
 
 const specialPolicyUpdate: PolicyUpdate = {
-  slug: "us-digital-asset-policy-2026-zcash",
+  slug: "1H2026-us-digital-asset-policy",
   category: "special",
   categoryLabel: policyUpdateCategoryLabels.special,
   title: "U.S. Digital Asset Policy: Developments in 2026 and Implications for the Zcash Ecosystem",
   shortTitle: "U.S. Digital Asset Policy: H1 2026",
-  publishedAt: "2026-06-12",
-  displayDate: "H1 2026 Special Update",
+  publishedAt: "2026-06-16",
+  displayDate: "H1 2026 U.S. Policy Report",
   summary:
     "The first half of 2026 moved U.S. digital asset policy from agenda-setting into implementation. The direction is more constructive for digital assets, but the issues most important to Zcash - AML, sanctions, banking access, and intermediary risk - remain unresolved.",
   emailSubject: "PGPZ Special Update: U.S. Digital Asset Policy and Zcash",
   emailPreheader:
     "A first-half 2026 special update on market structure, tax, agency guidance, banking access, and privacy-policy risk.",
-  coverImage: "/resources/us-digital-asset-policy-2026-zcash-cover.png",
-  pdfHref: "/resources/us-digital-asset-policy-2026-zcash.pdf",
-  portalPath: "/updates/us-digital-asset-policy-2026-zcash",
+  coverImage: "/resources/1H2026-us-digital-asset-policy-cover.png",
+  pdfHref: "/resources/1H2026-us-digital-asset-policy.pdf",
+  portalPath: "/updates/1H2026-us-digital-asset-policy",
   keyTakeaways: [
     "The federal digital-asset policy environment is more constructive than in prior years, but the most consequential items remain provisional.",
     "Market-structure legislation, agency taxonomy, tax drafts, and the May executive order all improve the operating climate without settling Zcash-specific questions.",
     "The SEC closure of the Zcash Foundation inquiry removes a legacy offerings-related overhang, but it is not a ruling on privacy technology.",
     "AML, sanctions, banking de-risking, and intermediary access remain the principal risks for privacy-preserving assets.",
-    "The practical posture for Zcash is to treat policy as a product constraint: documentation, compliance explanations, user education, and partner-ready selective-disclosure materials matter.",
+    "The practical posture is to leverage policy and regulatory developments to anticipate friction areas: documentation, clear risk explanations, user education, and jurisdiction-specific operating models.",
   ],
   actionItems: [
     "Call your Senator and ask them to support the CLARITY Act with the Blockchain Regulatory Certainty Act provisions preserved.",
@@ -161,7 +176,7 @@ const specialPolicyUpdate: PolicyUpdate = {
     {
       heading: "Summary of H1 2026 developments",
       body: [
-        "The table below summarizes the first-half developments, current status, and relevance to the Zcash ecosystem.",
+        "The table below summarizes the developments discussed in this memo and their current status.",
       ],
       table: {
         columns: [
@@ -216,14 +231,14 @@ const specialPolicyUpdate: PolicyUpdate = {
       ],
     },
     {
-      heading: "Policy direction under the administration",
+      heading: "Policy Direction Under the Administration",
       body: [
         "The most important White House-level signal is tone and direction. The May 19 executive order, 'Integrating Financial Technology Innovation into Regulatory Frameworks,' directs federal financial regulators to identify and reduce barriers that impede partnerships between non-bank fintech firms and federally regulated institutions and asks the Federal Reserve to evaluate access to Reserve Bank payment accounts and services for non-bank and digital-asset firms.",
         "For Zcash, the order is modestly helpful because it reduces the stigma historically attached to non-bank innovation and opens space for compliant, privacy-aware integrations to seek corporate and banking partnerships. It does not resolve any Zcash-specific question, and its practical value depends on how regulators follow through.",
       ],
     },
     {
-      heading: "Congress: market structure and tax",
+      heading: "Congress: Market Structure and Tax",
       body: [
         "Congress remains the venue for durable policy, and two workstreams matter most for Zcash: market structure and digital-asset taxation.",
         "The Digital Asset Market Clarity Act passed the House in 2025 and advanced out of the Senate Banking Committee on a 15-9 vote on May 14, 2026. The bill would shift primary oversight of mature, non-security digital assets toward the CFTC under a disclosure-based commodity framework.",
@@ -232,7 +247,7 @@ const specialPolicyUpdate: PolicyUpdate = {
       ],
     },
     {
-      heading: "The agencies",
+      heading: "The Agencies",
       body: [
         "The most substantive agency development was the SEC and CFTC's move from enforcement toward formal guidance. Their March 17 joint interpretation established a five-part taxonomy covering digital commodities, digital collectibles, digital tools, stablecoins, and digital securities, and it clarified treatment of protocol mining and staking.",
         "For Zcash, the immediate benefit is clarity rather than special treatment. The interpretation reinforces a commodity-style framework for mature, non-security assets, but neither agency is treating privacy as an affirmative policy priority.",
@@ -241,7 +256,7 @@ const specialPolicyUpdate: PolicyUpdate = {
       ],
     },
     {
-      heading: "SEC closure of the Zcash Foundation inquiry",
+      heading: "SEC Closure of the Zcash Foundation Inquiry",
       body: [
         "In January 2026, the Zcash Foundation disclosed that the SEC had closed an inquiry opened by subpoena in August 2023 with no enforcement action, fines, or required operational changes.",
         "The inquiry concerned crypto-asset offerings and the Foundation's funding and governance, not the legality of Zcash's privacy technology. The closure removes a multi-year legacy overhang, but it is not an affirmative endorsement of shielded transactions.",
@@ -249,18 +264,18 @@ const specialPolicyUpdate: PolicyUpdate = {
       ],
     },
     {
-      heading: "What this means for the Zcash ecosystem",
+      heading: "What This Means for the Zcash Ecosystem",
       body: [
         "The favorable side is straightforward: digital-asset policy is no longer organized around the premise that innovation must yield to enforcement. That is a real improvement for developers, infrastructure providers, wallet providers, and merchant-integration efforts acting in good faith.",
         "The harder side is specific: Zcash's privacy model remains exposed to spillover from AML and sanctions debates. Intermediaries may restrict access if they view privacy features as raising examination or other risks.",
-        "The practical posture is to leverage policy and regulatory developments to anticipate friction areas. That means planning for documentation, clear risk explanations, user education, and jurisdiction-specific operating models, and resisting the assumption that a favorable digital-asset headline automatically extends to privacy-preserving assets.",
+        "The practical posture is to leverage policy and regulatory developments to anticipate friction areas. That means planning for documentation, clear risk explanations, user education, and jurisdiction-specific operating models, and resisting the assumption that a favorable headline on digital assets automatically extends to privacy-preserving assets.",
       ],
     },
     {
-      heading: "Risks, caveats, open questions, and recommendations",
+      heading: "Risks, Caveats, and Open Questions",
       body: [
         "The principal risks are regulatory overlap, banking de-risking, tax-reporting complexity, and continued suspicion of privacy-enhancing features. A secondary risk is that Congress or the agencies settle on a framework that is technology-neutral on paper but operationally hostile to privacy-preserving networks in practice.",
-        "The central open question is whether policymakers can distinguish legitimate privacy from illicit opacity. If they can, Zcash has a credible path to durable ecosystem growth. To achieve this, the focus should be on near-term high-leverage actions include engaging Congress and the administration on developer protections, market structure, and illicit finance and providing technical input on how shielded transactions can be supervised at on-and-off ramps without categorically excluding privacy-preserving assets.",
+        "The central open question is whether policymakers can distinguish legitimate privacy from illicit opacity. If they can, Zcash has a credible path to durable ecosystem growth. To achieve this, the focus should be on near-term high-leverage actions: engaging Congress and the administration on developer protections, market structure, and illicit finance and providing technical input on how shielded transactions can be supervised at on-and-off ramps without categorically excluding privacy-preserving assets.",
       ],
     },
   ],
