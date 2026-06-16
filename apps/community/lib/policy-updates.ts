@@ -76,9 +76,10 @@ const weeklyPolicyMemo: PolicyUpdate = {
     "EU AMLR and MiCA continue to keep privacy-coin exchange and custody access in focus as implementation timelines approach.",
   ],
   actionItems: [
-    "Monitor policy updates through the PGPZ Community.",
-    "Share and repost PGPZ X and LinkedIn content.",
-    "Send feedback to PGPZ. How would this legislation help or hurt your operations?",
+    "Consider submitting, or joining a coalition statement for, the Ways and Means record by June 23.",
+    "Flag how de minimis thresholds and reporting requirements support adoption and enable users to use Zcash for payments.",
+    "Brief exchange, custodian, and banking partners on Zcash compliance ahead of the AMLR 2027 phase-in.",
+    "Document selective-disclosure workflows for partners' compliance teams.",
   ],
   sections: [
     {
