@@ -1,5 +1,5 @@
 import { SITE_URL } from "@/lib/config";
-import type { PolicyUpdate, PolicyUpdateTable } from "@/lib/policy-updates";
+import type { PolicyUpdate, PolicyUpdateLink, PolicyUpdateTable } from "@/lib/policy-updates";
 import { getUserGreetingName } from "@/lib/user-display-name";
 
 export type PolicyUpdateEmailRecipient = {
@@ -35,11 +35,50 @@ const normalizeBaseUrl = (baseUrl?: string | null) =>
 export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
   `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
 
-const renderParagraphs = (paragraphs: string[]) =>
+const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
+  const matches = links
+    .map((link) => ({ link, index: text.indexOf(link.text) }))
+    .filter((match) => match.index >= 0)
+    .sort((a, b) => a.index - b.index);
+
+  if (!matches.length) return [{ text }];
+
+  const parts: Array<{ text: string; link?: PolicyUpdateLink }> = [];
+  let cursor = 0;
+
+  matches.forEach(({ link, index }) => {
+    if (index < cursor) return;
+
+    if (index > cursor) parts.push({ text: text.slice(cursor, index) });
+
+    parts.push({ text: link.text, link });
+    cursor = index + link.text.length;
+  });
+
+  if (cursor < text.length) parts.push({ text: text.slice(cursor) });
+
+  return parts;
+};
+
+const renderLinkedHtml = (text: string, links: PolicyUpdateLink[] = []) =>
+  linkedTextParts(text, links)
+    .map((part) => {
+      if (!part.link) return escapeHtml(part.text);
+
+      return `<a href="${escapeHtml(part.link.href)}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(part.text)}</a>`;
+    })
+    .join("");
+
+const renderLinkedText = (text: string, links: PolicyUpdateLink[] = []) =>
+  linkedTextParts(text, links)
+    .map((part) => (part.link ? `${part.text} (${part.link.href})` : part.text))
+    .join("");
+
+const renderParagraphs = (paragraphs: string[], links: PolicyUpdateLink[] = []) =>
   paragraphs
     .map(
       (paragraph) =>
-        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(paragraph)}</p>`,
+        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links)}</p>`,
     )
     .join("");
 
@@ -140,9 +179,10 @@ export function buildPolicyUpdateEmail(
                 (section) => `<tr>
               <td style="padding:0 30px 22px;">
                 <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
-                ${renderParagraphs(section.body)}
+                ${renderParagraphs(section.body, section.links)}
                 ${section.table ? renderTable(section.table) : ""}
                 ${section.bullets?.length ? renderBullets(section.bullets) : ""}
+                ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links) : ""}
               </td>
             </tr>`,
               )
@@ -178,9 +218,10 @@ export function buildPolicyUpdateEmail(
     "",
     ...update.sections.flatMap((section) => [
       section.heading,
-      ...section.body,
+      ...section.body.map((paragraph) => renderLinkedText(paragraph, section.links)),
       ...(section.table ? renderTableText(section.table) : []),
       ...(section.bullets || []).map((item) => `- ${item}`),
+      ...(section.bodyAfterBullets || []).map((paragraph) => renderLinkedText(paragraph, section.links)),
       "",
     ]),
   ].join("\n");

@@ -5,11 +5,18 @@ export type PolicyUpdateSection = {
   body: string[];
   table?: PolicyUpdateTable;
   bullets?: string[];
+  bodyAfterBullets?: string[];
+  links?: PolicyUpdateLink[];
 };
 
 export type PolicyUpdateTable = {
   columns: string[];
   rows: string[][];
+};
+
+export type PolicyUpdateLink = {
+  text: string;
+  href: string;
 };
 
 export type PolicyUpdate = {
@@ -100,6 +107,7 @@ const weeklyPolicyMemo: PolicyUpdate = {
         "Mark-to-market parity.",
         "Charitable-deduction parity.",
       ],
+      bodyAfterBullets: ["The record stays open for written submissions through June 23."],
     },
     {
       heading: "Why this matters for Zcash",
@@ -110,8 +118,17 @@ const weeklyPolicyMemo: PolicyUpdate = {
     {
       heading: "DCG Fly-in Brought Financial Privacy Advocacy to Capitol Hill",
       body: [
-        "On June 10, Paul Brigner participated in DCG's congressional briefing and fly-in on Capitol Hill focused on financial privacy in crypto. In a June 10 thread, he described briefing Congress with DCG and Aleo on the need for financial privacy, including voter polling on crypto's growing salience, financial privacy, and the CLARITY Act.",
-        "DCG's public recap described the fly-in as convening DCG executives and 20+ blockchain founders for policy discussions on data privacy and digital asset regulation.",
+        "On June 10, Paul Brigner participated in DCG's congressional briefing and fly-in on Capitol Hill focused on financial privacy in crypto. In a June 10 thread, he described briefing Congress with DCG and Aleo on the need for financial privacy, including voter polling on crypto's growing salience, financial privacy, and the CLARITY Act. DCG's public recap described the fly-in as convening DCG executives and 20+ blockchain founders for policy discussions on data privacy and digital asset regulation.",
+      ],
+      links: [
+        {
+          text: "June 10 thread",
+          href: "https://x.com/paulbrigner/thread/2064698213236408727",
+        },
+        {
+          text: "DCG's public recap",
+          href: "https://x.com/DCGco/status/2065445282125414580?s=20",
+        },
       ],
     },
     {
@@ -124,7 +141,18 @@ const weeklyPolicyMemo: PolicyUpdate = {
       heading: "Privacy-coin Exchange Access Stays in Focus under EU AMLR and MiCA",
       body: [
         "This week's market volatility renewed attention on the standing regulatory risk for privacy assets: exchange and custody access. Under the EU's Anti-Money Laundering Regulation, licensed crypto-asset service providers face custodial restrictions on privacy coins phasing in by 2027, and MiCA conditions the admission of assets with built-in anonymity on providers being able to identify holders and their transaction history.",
+        "Recent privacy-coin ban narratives show why precision matters. In an EU correction post, Brigner noted that the relevant EU rules restrict what regulated crypto service providers may offer when holders or transaction history cannot be identified; they do not ban the Zcash protocol, ZEC ownership, self-custody, peer-to-peer use, or transparent Zcash transactions. In a Philippines correction post, he similarly noted that reports point to a BSP listing/support rule for licensed VASPs, not a ban on ZEC, the protocol, self-custody, or peer-to-peer use, and that the memo reportedly does not name Zcash.",
         "Whether banks, exchanges, and custodians will serve the asset often matters more in practice than any single classification question.",
+      ],
+      links: [
+        {
+          text: "EU correction post",
+          href: "https://x.com/paulbrigner/status/2060327543387857190?s=20",
+        },
+        {
+          text: "Philippines correction post",
+          href: "https://x.com/paulbrigner/status/2066106057089302602?s=20",
+        },
       ],
     },
   ],

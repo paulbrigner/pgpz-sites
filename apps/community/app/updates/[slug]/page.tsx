@@ -1,10 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getMemberAccess } from "@/lib/member-access";
-import { getPolicyUpdate, policyUpdates, type PolicyUpdateSection } from "@/lib/policy-updates";
+import { getPolicyUpdate, policyUpdates, type PolicyUpdateLink, type PolicyUpdateSection } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,42 @@ function MembershipRequired() {
   );
 }
 
+function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
+  const matches = links
+    .map((link) => ({ link, index: text.indexOf(link.text) }))
+    .filter((match) => match.index >= 0)
+    .sort((a, b) => a.index - b.index);
+
+  if (!matches.length) return text;
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+
+  matches.forEach(({ link, index }, matchIndex) => {
+    if (index < cursor) return;
+
+    if (index > cursor) nodes.push(text.slice(cursor, index));
+
+    nodes.push(
+      <a
+        key={`${link.href}-${matchIndex}`}
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(245,168,0,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
+      >
+        {link.text}
+      </a>,
+    );
+
+    cursor = index + link.text.length;
+  });
+
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+
+  return nodes;
+}
+
 function PolicyUpdateSectionBlock({
   section,
 }: {
@@ -61,7 +98,7 @@ function PolicyUpdateSectionBlock({
       <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
       <div className="space-y-4 text-sm leading-7 text-slate-700">
         {section.body.map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
+          <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
         ))}
       </div>
       {section.table ? (
@@ -112,6 +149,13 @@ function PolicyUpdateSectionBlock({
             <li key={item}>{item}</li>
           ))}
         </ul>
+      ) : null}
+      {section.bodyAfterBullets?.length ? (
+        <div className="space-y-4 text-sm leading-7 text-slate-700">
+          {section.bodyAfterBullets.map((paragraph) => (
+            <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+          ))}
+        </div>
       ) : null}
     </section>
   );

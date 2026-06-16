@@ -66,4 +66,25 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("Development | Status as of June 12, 2026 | Relevance to the Zcash ecosystem");
     expect(built.text).toContain("SEC closure of the Zcash Foundation inquiry");
   });
+
+  it("preserves embedded policy update links in HTML and text email bodies", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      { email: "paul@example.com", name: "Paul Brigner" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain('href="https://x.com/paulbrigner/thread/2064698213236408727"');
+    expect(built.html).toContain(">June 10 thread</a>");
+    expect(built.html).toContain('href="https://x.com/paulbrigner/status/2060327543387857190?s=20"');
+    expect(built.text).toContain(
+      "June 10 thread (https://x.com/paulbrigner/thread/2064698213236408727)",
+    );
+    expect(built.text).toContain(
+      "EU correction post (https://x.com/paulbrigner/status/2060327543387857190?s=20)",
+    );
+    expect(built.text).toContain("The record stays open for written submissions through June 23.");
+  });
 });
