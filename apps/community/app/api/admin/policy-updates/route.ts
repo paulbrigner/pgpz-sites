@@ -3,8 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
-import { listPolicyUpdateRecipients } from "@/lib/admin/roster";
+import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/admin/roster";
 import { recordEmailEvent } from "@/lib/admin/email-log";
+import {
+  findUserProfileByEmail,
+  getUserProfileDisplayName,
+} from "@/lib/admin/user-profile";
 import {
   EMAIL_FROM,
   EMAIL_SERVER,
@@ -56,6 +60,24 @@ async function requireAdminOrForbidden() {
   }
 }
 
+const normalizeEmail = (value: unknown) =>
+  typeof value === "string" ? value.trim().toLowerCase() : "";
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
+  id: string | null;
+};
+
+async function buildDraftRecipient(email: string): Promise<PolicyUpdateSendRecipient> {
+  const profile = await findUserProfileByEmail(email);
+  return {
+    id: profile?.id || null,
+    email,
+    name: profile ? getUserProfileDisplayName(profile) : null,
+  };
+}
+
 export async function GET() {
   const forbidden = await requireAdminOrForbidden();
   if (forbidden) return forbidden;
@@ -83,9 +105,13 @@ export async function POST(request: NextRequest) {
   }
 
   const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+  const draftRecipientEmail = normalizeEmail(body?.draftRecipientEmail || body?.testRecipientEmail);
   const confirmSend = body?.confirmSend === true;
   if (!confirmSend) {
     return NextResponse.json({ error: "confirmSend must be true before sending member email" }, { status: 400 });
+  }
+  if (draftRecipientEmail && !isValidEmail(draftRecipientEmail)) {
+    return NextResponse.json({ error: "Enter a valid draft recipient email" }, { status: 400 });
   }
 
   const update = getPolicyUpdate(slug);
@@ -93,13 +119,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unknown policy update" }, { status: 404 });
   }
 
-  const recipients = await listPolicyUpdateRecipients();
+  const draftMode = !!draftRecipientEmail;
+  const recipients: PolicyUpdateSendRecipient[] = draftMode
+    ? [await buildDraftRecipient(draftRecipientEmail)]
+    : await listPolicyUpdateRecipients();
   if (!recipients.length) {
     return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
   }
 
   const transporter = nodemailer.createTransport(transportConfig);
-  const emailType = `policy_update_${update.category}`;
+  const emailType = `policy_update_${update.category}${draftMode ? "_draft" : ""}`;
   const failures: Array<{ email: string; error: string }> = [];
   let sent = 0;
 
@@ -129,6 +158,8 @@ export async function POST(request: NextRequest) {
           updateSlug: update.slug,
           category: update.category,
           portalUrl: built.portalUrl,
+          draft: draftMode,
+          profileNameResolved: !!recipient.name,
         },
       });
     } catch (err: any) {
@@ -144,6 +175,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           updateSlug: update.slug,
           category: update.category,
+          draft: draftMode,
+          profileNameResolved: !!recipient.name,
         },
       }).catch(() => undefined);
     }
@@ -153,6 +186,9 @@ export async function POST(request: NextRequest) {
     ok: failures.length === 0,
     slug: update.slug,
     title: update.title,
+    draft: draftMode,
+    recipientEmail: draftRecipientEmail || null,
+    resolvedRecipientName: draftMode ? recipients[0]?.name || null : null,
     recipientCount: recipients.length,
     sent,
     failed: failures.length,

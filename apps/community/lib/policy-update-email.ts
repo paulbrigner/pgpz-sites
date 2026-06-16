@@ -1,8 +1,11 @@
 import { SITE_URL } from "@/lib/config";
-import type { PolicyUpdate } from "@/lib/policy-updates";
+import type { PolicyUpdate, PolicyUpdateTable } from "@/lib/policy-updates";
+import { getUserGreetingName } from "@/lib/user-display-name";
 
 export type PolicyUpdateEmailRecipient = {
   name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
   email: string;
 };
 
@@ -45,6 +48,39 @@ const renderBullets = (items: string[]) =>
     .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
     .join("")}</ul>`;
 
+const renderTable = (table: PolicyUpdateTable) =>
+  `<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid ${colors.line};border-radius:12px;overflow:hidden;margin:4px 0 18px;background:#ffffff;">
+    <thead>
+      <tr>
+        ${table.columns
+          .map(
+            (column) =>
+              `<th style="background:${colors.coal};color:#ffffff;border-right:1px solid rgba(255,255,255,0.16);padding:11px 10px;text-align:left;font-size:11px;line-height:1.35;text-transform:uppercase;letter-spacing:0.12em;">${escapeHtml(column)}</th>`,
+          )
+          .join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${table.rows
+        .map(
+          (row) =>
+            `<tr>${row
+              .map(
+                (cell, index) =>
+                  `<td style="border-top:1px solid ${colors.line};border-right:1px solid ${colors.line};padding:12px 10px;vertical-align:top;color:${index === 0 ? colors.ink : colors.slate};font-size:13px;line-height:1.55;font-weight:${index === 0 ? "700" : "400"};">${escapeHtml(cell)}</td>`,
+              )
+              .join("")}</tr>`,
+        )
+        .join("")}
+    </tbody>
+  </table>`;
+
+const renderTableText = (table: PolicyUpdateTable) => [
+  table.columns.join(" | "),
+  ...table.rows.map((row) => row.join(" | ")),
+  "",
+];
+
 export function buildPolicyUpdateEmail(
   update: PolicyUpdate,
   recipient: PolicyUpdateEmailRecipient,
@@ -52,7 +88,7 @@ export function buildPolicyUpdateEmail(
 ) {
   const portalUrl = buildPolicyUpdatePortalUrl(update, baseUrl);
   const archiveUrl = `${normalizeBaseUrl(baseUrl)}/updates`;
-  const name = recipient.name || "there";
+  const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
   const html = `<!doctype html>
 <html>
@@ -105,6 +141,7 @@ export function buildPolicyUpdateEmail(
               <td style="padding:0 30px 22px;">
                 <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
                 ${renderParagraphs(section.body)}
+                ${section.table ? renderTable(section.table) : ""}
                 ${section.bullets?.length ? renderBullets(section.bullets) : ""}
               </td>
             </tr>`,
@@ -142,6 +179,7 @@ export function buildPolicyUpdateEmail(
     ...update.sections.flatMap((section) => [
       section.heading,
       ...section.body,
+      ...(section.table ? renderTableText(section.table) : []),
       ...(section.bullets || []).map((item) => `- ${item}`),
       "",
     ]),

@@ -3,7 +3,13 @@ export type PolicyUpdateCategory = "weekly" | "special";
 export type PolicyUpdateSection = {
   heading: string;
   body: string[];
+  table?: PolicyUpdateTable;
   bullets?: string[];
+};
+
+export type PolicyUpdateTable = {
+  columns: string[];
+  rows: string[][];
 };
 
 export type PolicyUpdate = {
@@ -156,8 +162,52 @@ const specialPolicyUpdate: PolicyUpdate = {
     {
       heading: "Summary of H1 2026 developments",
       body: [
-        "The table in the original report groups the first-half developments into six areas: the May 19 executive order on financial technology innovation, the Digital Asset Market Clarity Act, the SEC-CFTC joint interpretation and token taxonomy, the Digital Asset PARITY Act and Ways and Means tax drafts, Treasury AML and sanctions implementation tied to the GENIUS Act, bank-agency implementation and payment-access review, and the SEC closure of the Zcash Foundation inquiry.",
+        "The table below summarizes the first-half developments, current status, and relevance to the Zcash ecosystem.",
       ],
+      table: {
+        columns: [
+          "Development",
+          "Status as of June 12, 2026",
+          "Relevance to the Zcash ecosystem",
+        ],
+        rows: [
+          [
+            'Executive Order, "Integrating Financial Technology Innovation into Regulatory Frameworks" (May 19, 2026)',
+            "Signed; a policy and process directive that creates no enforceable rights and changes no substantive law.",
+            "Improves the climate for fintech-bank integration; practical effect depends entirely on agency follow-through.",
+          ],
+          [
+            "Digital Asset Market Clarity Act",
+            "Passed the House in 2025; advanced from Senate Banking Committee on a 15-9 vote (May 14, 2026); a Senate floor vote remains to be scheduled.",
+            "Would anchor mature, non-security assets in a CFTC-led commodity framework. Illicit-finance and developer-protection provisions remain contested.",
+          ],
+          [
+            "SEC-CFTC Joint Interpretation and five-part token taxonomy (Mar. 17, 2026)",
+            "Issued; binding on both agencies, but revisable by future agency action absent legislation.",
+            "Reinforces non-security commodity treatment for mature assets and clarifies the status of mining and staking.",
+          ],
+          [
+            "Digital Asset PARITY Act and Ways & Means discussion drafts",
+            "PARITY Act introduced May 19, 2026; committee hearing held June 9, 2026; early stage, no full consensus.",
+            "Mining rewards tax treatment and de minimis payment relief are directly relevant to ZEC payments.",
+          ],
+          [
+            "Treasury (FinCEN / OFAC) AML and sanctions rulemaking tied to GENIUS Act implementation",
+            "Proposed during 2026; implementation ongoing.",
+            "AML, sanctions, and illicit-finance posture remains the principal source of de-risking pressure for privacy-preserving assets.",
+          ],
+          [
+            "Bank-agency GENIUS implementation (OCC, FDIC) and Federal Reserve payment-access review",
+            "Proposals issued / evaluation underway during 2026.",
+            "Clarifies - rather than broadly expands - bank participation; access to banking rails is likely to remain selective.",
+          ],
+          [
+            "SEC closure of the Zcash Foundation inquiry",
+            "Disclosed by the Zcash Foundation in January 2026; closed with no enforcement action.",
+            "Removes a legacy, offerings-related overhang. It is not a ruling on the legality of privacy technology.",
+          ],
+        ],
+      },
       bullets: [
         "The executive order improves the climate for fintech-bank integration, but its practical effect depends on agency follow-through.",
         "The CLARITY Act would anchor mature non-security assets in a CFTC-led commodity framework, though illicit-finance and developer-protection provisions remain contested.",

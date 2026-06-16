@@ -1,4 +1,5 @@
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 
 type RawUser = {
   id?: string;
@@ -97,16 +98,6 @@ async function scanUsers(): Promise<RawUser[]> {
   return items;
 }
 
-const textOrNull = (value: unknown): string | null =>
-  typeof value === "string" && value.trim().length ? value.trim() : null;
-
-const memberName = (user: RawUser) => {
-  const name = textOrNull(user.name);
-  if (name) return name;
-  const composed = [user.firstName, user.lastName].map(textOrNull).filter(Boolean).join(" ");
-  return composed || null;
-};
-
 function toAdminMember(user: RawUser): AdminMember | null {
   if (!user.id) return null;
   const membershipStatus = user.membershipStatus === "active" ? "active" : "none";
@@ -117,7 +108,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
 
   return {
     id: user.id,
-    name: memberName(user),
+    name: getUserDisplayName(user),
     email: textOrNull(user.email),
     firstName: textOrNull(user.firstName),
     lastName: textOrNull(user.lastName),
@@ -188,7 +179,7 @@ export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipien
     .map((member) => ({
       id: member.id,
       email: member.email as string,
-      name: member.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || null,
+      name: getUserDisplayName(member),
     }))
     .sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: "base" }));
 }

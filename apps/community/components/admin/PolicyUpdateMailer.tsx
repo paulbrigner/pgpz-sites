@@ -15,6 +15,9 @@ type ApiState = {
 type SendResult = {
   ok: boolean;
   title: string;
+  draft?: boolean;
+  recipientEmail?: string | null;
+  resolvedRecipientName?: string | null;
   sent: number;
   failed: number;
   recipientCount: number;
@@ -30,8 +33,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [recipientCount, setRecipientCount] = useState<number | null>(null);
   const [selectedSlug, setSelectedSlug] = useState(initialUpdates[0]?.slug || "");
   const [confirmSend, setConfirmSend] = useState(false);
+  const [draftEmail, setDraftEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
 
@@ -82,6 +87,32 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || "Failed to send policy update");
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendDraft = async () => {
+    if (!selectedUpdate || !draftEmail.trim()) return;
+    setDraftSending(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: selectedUpdate.slug,
+          confirmSend: true,
+          draftRecipientEmail: draftEmail.trim(),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to send policy update draft");
+      setResult(body);
+      await loadState();
+    } catch (err: any) {
+      setError(err?.message || "Failed to send policy update draft");
+    } finally {
+      setDraftSending(false);
     }
   };
 
@@ -179,6 +210,31 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Draft send</div>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="email"
+                    value={draftEmail}
+                    onChange={(event) => setDraftEmail(event.target.value)}
+                    placeholder="member@example.com"
+                    className="min-w-0 flex-1 rounded-md border bg-white px-3 py-2 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={draftSending || !draftEmail.trim()}
+                    onClick={sendDraft}
+                  >
+                    {draftSending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
+                    {draftSending ? "Sending..." : "Send draft"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Sends only to this address. If the email matches a PGPZ Community profile, the greeting uses that profile name.
+                </p>
+              </div>
+
               <label className="flex items-start gap-3 rounded-xl border border-[rgba(245,168,0,0.32)] bg-[var(--brand-ice)] p-4 text-sm leading-6 text-slate-700">
                 <input
                   type="checkbox"
@@ -214,8 +270,11 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
       {result ? (
         <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          Sent {result.sent} of {result.recipientCount} emails for {result.title}
+          {result.draft
+            ? `Sent draft to ${result.recipientEmail || "draft recipient"} for ${result.title}`
+            : `Sent ${result.sent} of ${result.recipientCount} emails for ${result.title}`}
           {result.failed ? `; ${result.failed} failed.` : "."}
+          {result.draft && result.resolvedRecipientName ? ` Greeting name: ${result.resolvedRecipientName}.` : ""}
         </div>
       ) : null}
       {error ? (

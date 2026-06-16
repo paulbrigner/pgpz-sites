@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
-import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   EMAIL_FROM,
   EMAIL_SERVER,
@@ -14,15 +13,14 @@ import {
   EMAIL_SERVER_USER,
 } from "@/lib/config";
 import { recordEmailEvent } from "@/lib/admin/email-log";
+import {
+  findUserProfileByEmail,
+  findUserProfileById,
+  getUserProfileDisplayName,
+  type UserProfile,
+} from "@/lib/admin/user-profile";
 
 export const dynamic = "force-dynamic";
-
-type UserRecord = {
-  id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-};
 
 const buildEmailServerConfig = () => {
   if (EMAIL_SERVER_HOST) {
@@ -51,40 +49,10 @@ const buildEmailServerConfig = () => {
   return null;
 };
 
-const coerceUser = (data: any): UserRecord | null => {
-  if (!data?.id) return null;
-  return {
-    id: String(data.id),
-    email: typeof data.email === "string" ? data.email : null,
-    firstName: typeof data.firstName === "string" ? data.firstName : null,
-    lastName: typeof data.lastName === "string" ? data.lastName : null,
-  };
-};
-
-async function findUserByEmail(email: string): Promise<UserRecord | null> {
-  const res = await documentClient.query({
-    TableName: TABLE_NAME,
-    IndexName: "GSI1",
-    KeyConditionExpression: "#gsi1pk = :pk AND #gsi1sk = :sk",
-    ExpressionAttributeNames: { "#gsi1pk": "GSI1PK", "#gsi1sk": "GSI1SK" },
-    ExpressionAttributeValues: { ":pk": `USER#${email}`, ":sk": `USER#${email}` },
-    Limit: 1,
-  });
-  return coerceUser(res.Items?.[0]);
-}
-
-async function findUserById(id: string): Promise<UserRecord | null> {
-  const res = await documentClient.get({
-    TableName: TABLE_NAME,
-    Key: { pk: `USER#${id}`, sk: `USER#${id}` },
-  });
-  return coerceUser(res.Item);
-}
-
 const stripHtml = (value: string) => value.replace(/<[^>]+>/g, " ");
 
-function buildWelcomeEmail(user: UserRecord, to: string) {
-  const name = user.firstName || user.lastName ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : to;
+function buildWelcomeEmail(user: UserProfile | null, to: string) {
+  const name = (user && getUserProfileDisplayName(user)) || to;
   const subject = "Welcome to PGPZ Community";
   const html = `
     <p>Hi ${name || "there"},</p>
@@ -117,9 +85,9 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
 
-    let user: UserRecord | null = null;
-    if (userId) user = await findUserById(userId);
-    if (!user && normalizedEmail) user = await findUserByEmail(normalizedEmail);
+    let user: UserProfile | null = null;
+    if (userId) user = await findUserProfileById(userId);
+    if (!user && normalizedEmail) user = await findUserProfileByEmail(normalizedEmail);
 
     const to = normalizedEmail || user?.email || "";
     if (!to) {
@@ -140,7 +108,7 @@ export async function POST(request: NextRequest) {
         html = customHtml || undefined;
         text = customText || (html ? stripHtml(html) : undefined);
       } else {
-        const built = buildWelcomeEmail(user || { id: "", email: to, firstName: null, lastName: null }, to);
+        const built = buildWelcomeEmail(user, to);
         subject = built.subject;
         html = built.html;
         text = built.text;

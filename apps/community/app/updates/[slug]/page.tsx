@@ -95,7 +95,7 @@ export default async function UpdateDetailPage({ params }: Props) {
               >
                 <Link href={update.pdfHref} target="_blank" rel="noopener noreferrer">
                   <Download className="h-4 w-4" aria-hidden="true" />
-                  Open original PDF
+                  Open PDF resource
                 </Link>
               </Button>
             </div>
@@ -122,6 +122,43 @@ export default async function UpdateDetailPage({ params }: Props) {
                     <p key={paragraph}>{paragraph}</p>
                   ))}
                 </div>
+                {section.table ? (
+                  <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
+                    <table className="min-w-[720px] border-collapse text-left text-sm leading-6">
+                      <thead className="bg-[var(--brand-ink)] text-white">
+                        <tr>
+                          {section.table.columns.map((column) => (
+                            <th
+                              key={column}
+                              scope="col"
+                              className="border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] last:border-r-0"
+                            >
+                              {column}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.table.rows.map((row) => (
+                          <tr key={row.join("|")} className="border-t border-slate-200">
+                            {row.map((cell, index) => (
+                              <td
+                                key={`${row[0]}-${index}`}
+                                className="align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                              >
+                                {index === 0 ? (
+                                  <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
+                                ) : (
+                                  cell
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
                 {section.bullets?.length ? (
                   <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
                     {section.bullets.map((item) => (
