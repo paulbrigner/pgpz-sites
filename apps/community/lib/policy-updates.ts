@@ -53,6 +53,9 @@ export const policyUpdateCategoryLabels: Record<PolicyUpdateCategory, string> = 
   special: "Special Update",
 };
 
+const weeklyPolicyMemoSummary =
+  "The House Ways and Means Committee held a full-committee hearing on digital-asset taxation, advancing discussion drafts on de minimis relief, stablecoins, mining and staking rewards, routine network fees, and related parity provisions. DCG organized a DC Fly-in with a focus on financial privacy. The week also kept exchange and custody access for privacy assets in focus under EU AMLR and MiCA.";
+
 const weeklyPolicyMemo: PolicyUpdate = {
   slug: "2026-06-08-weekly-policy-memo",
   category: "weekly",
@@ -61,8 +64,7 @@ const weeklyPolicyMemo: PolicyUpdate = {
   shortTitle: "Weekly Policy Memo: June 8, 2026",
   publishedAt: "2026-06-08",
   displayDate: "Week of June 8, 2026",
-  summary:
-    "The House Ways and Means Committee held a full-committee hearing on digital-asset taxation, advancing discussion drafts on de minimis relief, stablecoins, mining and staking rewards, routine network fees, and related parity provisions. The week also kept exchange and custody access for privacy assets in focus under EU AMLR and MiCA.",
+  summary: weeklyPolicyMemoSummary,
   emailSubject: "PGPZ Weekly Policy Memo: Week of June 8, 2026",
   emailPreheader:
     "Digital-asset tax drafts, the DCG Fly-in, CLARITY Act advocacy, and privacy-asset access risks.",
@@ -84,13 +86,6 @@ const weeklyPolicyMemo: PolicyUpdate = {
     "Engage with PGPZ by flagging concerns and the impact of policy developments.",
   ],
   sections: [
-    {
-      heading: "Executive Summary",
-      body: [
-        "The House Ways and Means Committee held its full-committee hearing on digital-asset taxation on June 9, advancing seven discussion drafts covering de minimis transaction relief, stablecoin treatment, mining and staking reward treatment, a network-fee exception, and securities-lending, mark-to-market, and charitable-deduction parity.",
-        "It was a discussion hearing rather than a markup, and the record stays open for written submissions through June 23.",
-      ],
-    },
     {
       heading: "House Ways and Means Held its Hearing on Digital Asset Taxation",
       body: [
@@ -122,7 +117,7 @@ const weeklyPolicyMemo: PolicyUpdate = {
     {
       heading: "Why this matters for Zcash",
       body: [
-        "Meetings like these are crucial to educate policymakers on how Zcash can be compliance-capable financial infrastructure - including transparent transaction modes and selective-disclosure tools - rather than a regulatory risk.",
+        "Meetings like these are crucial to educate policymakers on Zcash can be compliance-capable financial infrastructure - including transparent transaction modes and selective-disclosure tools - rather than a regulatory risk.",
       ],
     },
     {
