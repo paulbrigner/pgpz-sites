@@ -53,26 +53,24 @@ function MembershipRequired() {
 
 function PolicyUpdateSectionBlock({
   section,
-  fullWidth = false,
 }: {
   section: PolicyUpdateSection;
-  fullWidth?: boolean;
 }) {
   return (
     <section className="space-y-4">
       <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
-      <div className={`space-y-4 text-sm leading-7 text-slate-700 ${fullWidth ? "max-w-4xl" : ""}`}>
+      <div className="space-y-4 text-sm leading-7 text-slate-700">
         {section.body.map((paragraph) => (
           <p key={paragraph}>{paragraph}</p>
         ))}
       </div>
       {section.table ? (
         <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
-          <table className="w-full min-w-[860px] table-fixed border-collapse text-left text-sm leading-6 lg:min-w-0">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
             <colgroup>
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "34%" }} />
-              <col style={{ width: "36%" }} />
+              <col style={{ width: "29%" }} />
+              <col style={{ width: "33%" }} />
+              <col style={{ width: "38%" }} />
             </colgroup>
             <thead className="bg-[var(--brand-ink)] text-white">
               <tr>
@@ -109,7 +107,7 @@ function PolicyUpdateSectionBlock({
         </div>
       ) : null}
       {section.bullets?.length ? (
-        <ul className={`list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700 ${fullWidth ? "max-w-4xl" : ""}`}>
+        <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
           {section.bullets.map((item) => (
             <li key={item}>{item}</li>
           ))}
@@ -132,14 +130,6 @@ export default async function UpdateDetailPage({ params }: Props) {
   if (!access.isMember) {
     return <MembershipRequired />;
   }
-
-  const firstTableSectionIndex = update.sections.findIndex((section) => section.table);
-  const leadingSections =
-    firstTableSectionIndex === -1 ? update.sections : update.sections.slice(0, firstTableSectionIndex);
-  const tableSections =
-    firstTableSectionIndex === -1 ? [] : update.sections.slice(firstTableSectionIndex, firstTableSectionIndex + 1);
-  const trailingSections =
-    firstTableSectionIndex === -1 ? [] : update.sections.slice(firstTableSectionIndex + 1);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-14">
@@ -191,7 +181,7 @@ export default async function UpdateDetailPage({ params }: Props) {
 
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
-            {leadingSections.map((section) => (
+            {update.sections.map((section) => (
               <PolicyUpdateSectionBlock key={section.heading} section={section} />
             ))}
           </div>
@@ -218,22 +208,6 @@ export default async function UpdateDetailPage({ params }: Props) {
               </ul>
             </div>
           </aside>
-
-          {tableSections.length ? (
-            <div className="space-y-8 lg:col-span-2">
-              {tableSections.map((section) => (
-                <PolicyUpdateSectionBlock key={section.heading} section={section} fullWidth />
-              ))}
-            </div>
-          ) : null}
-
-          {trailingSections.length ? (
-            <div className="space-y-8 lg:col-span-2">
-              {trailingSections.map((section) => (
-                <PolicyUpdateSectionBlock key={section.heading} section={section} fullWidth />
-              ))}
-            </div>
-          ) : null}
         </div>
       </article>
     </div>
