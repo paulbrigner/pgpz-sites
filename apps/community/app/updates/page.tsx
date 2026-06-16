@@ -111,23 +111,21 @@ export default async function UpdatesPage() {
 
       <section className="grid gap-5 lg:grid-cols-2">
         {[
-          ["Weekly Policy Memos", weekly],
-          ["Special Updates", special],
-        ].map(([heading, updates]) => (
-          <div key={heading as string} className="muted-card p-5">
+          { eyebrow: "Recurring", heading: "Weekly Policy Memos", updates: weekly },
+          { eyebrow: "Featured", heading: "Special Updates", updates: special },
+        ].map(({ eyebrow, heading, updates }) => (
+          <div key={heading} className="muted-card p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="section-eyebrow text-[var(--brand-denim)]">
-                  {(heading as string).includes("Weekly") ? "Recurring" : "One-off"}
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">{heading as string}</h2>
+                <p className="section-eyebrow text-[var(--brand-denim)]">{eyebrow}</p>
+                <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">{heading}</h2>
               </div>
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
                 <FileText className="h-5 w-5" aria-hidden="true" />
               </div>
             </div>
             <div className="space-y-3">
-              {(updates as typeof policyUpdates).map((update) => (
+              {updates.map((update) => (
                 <Link
                   key={update.slug}
                   href={update.portalPath}

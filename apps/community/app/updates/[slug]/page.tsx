@@ -65,7 +65,7 @@ export default async function UpdateDetailPage({ params }: Props) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 pb-14">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-14">
       <div>
         <Button variant="outline" asChild>
           <Link href="/updates">
@@ -112,7 +112,7 @@ export default async function UpdateDetailPage({ params }: Props) {
           </div>
         </header>
 
-        <div className="grid gap-6 p-6 lg:grid-cols-[0.72fr_0.28fr] lg:p-8">
+        <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
             {update.sections.map((section) => (
               <section key={section.heading} className="space-y-4">
@@ -171,8 +171,8 @@ export default async function UpdateDetailPage({ params }: Props) {
           </div>
 
           <aside className="space-y-5">
-            <div className="rounded-2xl border bg-[var(--brand-ice)] p-5">
-              <p className="section-eyebrow text-[var(--brand-denim)]">Key takeaways</p>
+            <div className="rounded-2xl border bg-[var(--brand-ice)] p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">Key takeaways</p>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
                 {update.keyTakeaways.map((item) => (
                   <li key={item} className="border-b border-[rgba(245,168,0,0.18)] pb-3 last:border-b-0 last:pb-0">
@@ -181,8 +181,8 @@ export default async function UpdateDetailPage({ params }: Props) {
                 ))}
               </ul>
             </div>
-            <div className="rounded-2xl border bg-white p-5">
-              <p className="section-eyebrow text-[var(--brand-denim)]">Action items</p>
+            <div className="rounded-2xl border bg-white p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">Action items</p>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
                 {update.actionItems.map((item) => (
                   <li key={item} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
