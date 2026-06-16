@@ -9,6 +9,7 @@ import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, M
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
+import { getPolicyUpdate } from "@/lib/policy-updates";
 
 type ProofStatus = {
   membershipStatus: "active" | "none";
@@ -30,40 +31,42 @@ type XChallenge = {
   suggestedPost: string;
 };
 
-const policyReportHref = "/resources/us-digital-asset-policy-2026-zcash.pdf";
-const weeklyPolicyMemoHref = "/resources/weekly-policy-memo-2026-06-08.pdf";
+const specialPolicyUpdate = getPolicyUpdate("us-digital-asset-policy-2026-zcash")!;
+const weeklyPolicyUpdate = getPolicyUpdate("zodl-weekly-policy-memo-2026-06-08")!;
 
 const memberResources = [
   {
-    href: policyReportHref,
-    label: "U.S. Digital Asset Policy report",
-    detail: "Developments in 2026 and implications for Zcash.",
+    href: weeklyPolicyUpdate.portalPath,
+    label: weeklyPolicyUpdate.shortTitle,
+    detail: weeklyPolicyUpdate.summary,
+    category: weeklyPolicyUpdate.categoryLabel,
   },
   {
-    href: weeklyPolicyMemoHref,
-    label: "Weekly Policy Memo: June 8, 2026",
-    detail: "June 8, 2026 weekly policy update.",
+    href: specialPolicyUpdate.portalPath,
+    label: specialPolicyUpdate.shortTitle,
+    detail: specialPolicyUpdate.summary,
+    category: specialPolicyUpdate.categoryLabel,
   },
 ];
 
 const heroFeatureSlides = [
   {
-    eyebrow: "Now available",
+    eyebrow: specialPolicyUpdate.categoryLabel,
     title: "U.S. Digital Asset Policy",
-    body: "2026 developments and implications for Zcash.",
-    href: policyReportHref,
-    caption: "U.S. Digital Asset Policy: Developments in 2026 and Implications for the Zcash Ecosystem",
-    imageSrc: "/resources/us-digital-asset-policy-2026-zcash-cover.png",
+    body: specialPolicyUpdate.emailPreheader,
+    href: specialPolicyUpdate.portalPath,
+    caption: specialPolicyUpdate.title,
+    imageSrc: specialPolicyUpdate.coverImage,
     imageAlt: "U.S. Digital Asset Policy report cover",
     imageFit: "contain",
   },
   {
-    eyebrow: "Weekly update",
+    eyebrow: weeklyPolicyUpdate.categoryLabel,
     title: "Weekly Policy Memo",
-    body: "June 8 policy notes for the Zcash ecosystem.",
-    href: weeklyPolicyMemoHref,
-    caption: "Weekly Policy Memo: June 8, 2026",
-    imageSrc: "/resources/weekly-policy-memo-2026-06-08-cover.png",
+    body: weeklyPolicyUpdate.emailPreheader,
+    href: weeklyPolicyUpdate.portalPath,
+    caption: weeklyPolicyUpdate.title,
+    imageSrc: weeklyPolicyUpdate.coverImage,
     imageAlt: "Weekly Policy Memo cover",
     imageFit: "contain",
   },
@@ -414,8 +417,6 @@ export default function HomeClient() {
               {heroFeature.href ? (
                 <Link
                   href={heroFeature.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="community-hero__feature-card"
                   aria-label={`View ${heroFeature.title}`}
                 >
@@ -429,8 +430,6 @@ export default function HomeClient() {
               {heroFeature.href ? (
                 <Link
                   href={heroFeature.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="community-hero__feature-caption"
                 >
                   {heroFeature.caption}
@@ -669,6 +668,48 @@ export default function HomeClient() {
             </aside>
           </section>
 
+          {isMember ? (
+            <section className="glass-surface p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-2">
+                  <p className="section-eyebrow text-[var(--brand-denim)]">Member policy updates</p>
+                  <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
+                    Weekly memos and special updates
+                  </h2>
+                  <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                    PGPZ members can read the latest weekly policy memo, browse special reports, and return
+                    to prior updates at any time from the archive.
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link href="/updates">
+                    View full archive
+                    <FileText className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {memberResources.map((resource) => (
+                  <Link
+                    key={resource.href}
+                    href={resource.href}
+                    className="group rounded-2xl border bg-white/85 p-5 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_20px_36px_-28px_rgba(30,30,30,0.4)]"
+                  >
+                    <div className="mb-3 inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
+                      {resource.category}
+                    </div>
+                    <h3 className="text-lg font-semibold text-[var(--brand-ink)] group-hover:text-[var(--brand-denim)]">
+                      {resource.label}
+                    </h3>
+                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                      {resource.detail}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">The three pillars of PGPZ</h2>
             <div className="grid gap-4 lg:grid-cols-3">
@@ -701,8 +742,6 @@ export default function HomeClient() {
                         <Link
                           key={resource.href}
                           href={resource.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="flex items-center gap-3 text-sm font-medium text-[var(--brand-denim)] transition-colors hover:text-[var(--zcash-gold-deep)]"
                         >
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
@@ -714,7 +753,6 @@ export default function HomeClient() {
                               {resource.detail}
                             </span>
                           </span>
-                          <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         </Link>
                       ))}
                     </div>

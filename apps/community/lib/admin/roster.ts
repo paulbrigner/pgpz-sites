@@ -63,6 +63,12 @@ export type AdminRoster = {
   };
 };
 
+export type PolicyUpdateRecipient = {
+  id: string;
+  email: string;
+  name: string | null;
+};
+
 export type BuildAdminRosterOptions = {
   statusFilter?: "all" | "active" | "none" | "manual";
 };
@@ -171,4 +177,18 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
       admins: allMembers.filter((member) => member.isAdmin).length,
     },
   };
+}
+
+export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipient[]> {
+  const rawUsers = await scanUsers();
+  return rawUsers
+    .map(toAdminMember)
+    .filter((member): member is AdminMember => !!member)
+    .filter((member) => member.membershipStatus === "active" && !!member.email && !member.emailSuppressed)
+    .map((member) => ({
+      id: member.id,
+      email: member.email as string,
+      name: member.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || null,
+    }))
+    .sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: "base" }));
 }

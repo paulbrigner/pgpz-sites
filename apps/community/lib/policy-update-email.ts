@@ -1,0 +1,151 @@
+import { SITE_URL } from "@/lib/config";
+import type { PolicyUpdate } from "@/lib/policy-updates";
+
+export type PolicyUpdateEmailRecipient = {
+  name?: string | null;
+  email: string;
+};
+
+const colors = {
+  ink: "#1E1E1E",
+  coal: "#17130A",
+  gold: "#F5A800",
+  goldSoft: "#FFE6A3",
+  goldDeep: "#8A5A00",
+  cloud: "#FFF9EA",
+  slate: "#475569",
+  line: "#E2D3A7",
+  teal: "#1F6F68",
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const normalizeBaseUrl = (baseUrl?: string | null) =>
+  (baseUrl || SITE_URL || "https://community.pgpz.org").replace(/\/+$/, "");
+
+export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
+  `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
+
+const renderParagraphs = (paragraphs: string[]) =>
+  paragraphs
+    .map(
+      (paragraph) =>
+        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(paragraph)}</p>`,
+    )
+    .join("");
+
+const renderBullets = (items: string[]) =>
+  `<ul style="margin:0;padding-left:20px;color:${colors.slate};font-size:15px;line-height:1.64;">${items
+    .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
+    .join("")}</ul>`;
+
+export function buildPolicyUpdateEmail(
+  update: PolicyUpdate,
+  recipient: PolicyUpdateEmailRecipient,
+  baseUrl?: string | null,
+) {
+  const portalUrl = buildPolicyUpdatePortalUrl(update, baseUrl);
+  const archiveUrl = `${normalizeBaseUrl(baseUrl)}/updates`;
+  const name = recipient.name || "there";
+  const subject = update.emailSubject;
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(subject)}</title>
+  </head>
+  <body style="margin:0;background:${colors.cloud};font-family:Inter,Segoe UI,Arial,sans-serif;color:${colors.ink};">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(update.emailPreheader)}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${colors.cloud};padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#ffffff;border:1px solid ${colors.line};border-radius:18px;overflow:hidden;box-shadow:0 22px 48px rgba(30,30,30,0.12);">
+            <tr>
+              <td style="background:linear-gradient(135deg,${colors.coal},#2A2111 60%,${colors.goldDeep});padding:28px 30px;color:#ffffff;">
+                <div style="font-size:12px;letter-spacing:0.26em;text-transform:uppercase;font-weight:700;color:${colors.goldSoft};">PGPZ Community</div>
+                <h1 style="margin:12px 0 0;font-size:30px;line-height:1.18;color:#ffffff;">${escapeHtml(update.title)}</h1>
+                <p style="margin:12px 0 0;color:rgba(255,255,255,0.82);font-size:15px;line-height:1.6;">${escapeHtml(update.displayDate)} - ${escapeHtml(update.categoryLabel)}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 30px 8px;">
+                <p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">Hi ${escapeHtml(name)},</p>
+                <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(update.summary)}</p>
+                <div style="margin:22px 0;padding:18px;border:1px solid ${colors.line};border-radius:14px;background:#FFFDF5;">
+                  <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;color:${colors.goldDeep};">Key takeaways</div>
+                  <div style="margin-top:12px;">${renderBullets(update.keyTakeaways)}</div>
+                </div>
+                <div style="margin:22px 0;padding:18px;border:1px solid rgba(31,111,104,0.24);border-radius:14px;background:#F6FFFC;">
+                  <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;color:${colors.teal};">Action items</div>
+                  <div style="margin-top:12px;">${renderBullets(update.actionItems)}</div>
+                </div>
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 28px;">
+                  <tr>
+                    <td style="border-radius:999px;background:${colors.gold};">
+                      <a href="${escapeHtml(portalUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;color:${colors.ink};font-size:14px;font-weight:800;text-decoration:none;">View on member portal</a>
+                    </td>
+                    <td style="width:12px;"></td>
+                    <td style="border-radius:999px;border:1px solid ${colors.line};background:#ffffff;">
+                      <a href="${escapeHtml(archiveUrl)}" style="display:inline-block;padding:11px 17px;border-radius:999px;color:${colors.goldDeep};font-size:14px;font-weight:700;text-decoration:none;">View archive</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            ${update.sections
+              .map(
+                (section) => `<tr>
+              <td style="padding:0 30px 22px;">
+                <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
+                ${renderParagraphs(section.body)}
+                ${section.bullets?.length ? renderBullets(section.bullets) : ""}
+              </td>
+            </tr>`,
+              )
+              .join("")}
+            <tr>
+              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
+                <p style="margin:0;color:${colors.slate};font-size:13px;line-height:1.6;">You are receiving this because your PGPZ Community membership is active. To stop receiving member updates, contact <a href="mailto:admin@pgpz.org" style="color:${colors.goldDeep};">admin@pgpz.org</a>.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = [
+    update.title,
+    `${update.displayDate} - ${update.categoryLabel}`,
+    "",
+    `Hi ${name},`,
+    "",
+    update.summary,
+    "",
+    "Key takeaways:",
+    ...update.keyTakeaways.map((item) => `- ${item}`),
+    "",
+    "Action items:",
+    ...update.actionItems.map((item) => `- ${item}`),
+    "",
+    `View on member portal: ${portalUrl}`,
+    `View archive: ${archiveUrl}`,
+    "",
+    ...update.sections.flatMap((section) => [
+      section.heading,
+      ...section.body,
+      ...(section.bullets || []).map((item) => `- ${item}`),
+      "",
+    ]),
+  ].join("\n");
+
+  return { subject, html, text, portalUrl, archiveUrl };
+}
