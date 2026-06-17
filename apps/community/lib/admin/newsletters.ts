@@ -16,6 +16,8 @@ export type NewsletterStats = {
   lastDraftSentAt: string | null;
 };
 
+export type NewsletterAudienceMode = "all_active_members" | "selected_members";
+
 export type AdminNewsletter = {
   id: string;
   subject: string;
@@ -34,6 +36,20 @@ export type AdminNewsletter = {
   failurePreview: Array<{ email: string; error: string }>;
 };
 
+export type NewsletterSendRun = {
+  id: string;
+  newsletterId: string;
+  subject: string;
+  preheader: string;
+  body: string;
+  previewText: string;
+  audienceMode: NewsletterAudienceMode;
+  sentAt: string;
+  sentBy: string | null;
+  stats: Omit<NewsletterStats, "draftSendCount" | "lastDraftSentAt">;
+  failurePreview: Array<{ email: string; error: string }>;
+};
+
 export type NewsletterDraftInput = {
   id?: string | null;
   subject: string;
@@ -43,6 +59,7 @@ export type NewsletterDraftInput = {
 };
 
 const NEWSLETTER_GSI_PK = "NEWSLETTER";
+const NEWSLETTER_SEND_GSI_PK = "NEWSLETTER_SEND";
 
 const textOrEmpty = (value: unknown) => (typeof value === "string" ? value : "");
 const textOrNull = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
@@ -65,6 +82,17 @@ function validateNewsletterDraft(input: NewsletterDraftInput) {
   if (body.length > 25000) throw new Error("Newsletter body must be 25,000 characters or fewer.");
 
   return { subject, preheader, body };
+}
+
+function normalizeFailurePreview(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((failure: any) => ({
+          email: textOrEmpty(failure?.email),
+          error: textOrEmpty(failure?.error),
+        }))
+        .filter((failure: { email: string; error: string }) => failure.email || failure.error)
+    : [];
 }
 
 function toNewsletter(item: Record<string, any> | undefined | null): AdminNewsletter | null {
@@ -96,14 +124,32 @@ function toNewsletter(item: Record<string, any> | undefined | null): AdminNewsle
     sentAt: textOrNull(item.sentAt),
     sentBy: textOrNull(item.sentBy),
     stats,
-    failurePreview: Array.isArray(item.failurePreview)
-      ? item.failurePreview
-          .map((failure: any) => ({
-            email: textOrEmpty(failure?.email),
-            error: textOrEmpty(failure?.error),
-          }))
-          .filter((failure: { email: string; error: string }) => failure.email || failure.error)
-      : [],
+    failurePreview: normalizeFailurePreview(item.failurePreview),
+  };
+}
+
+function toNewsletterSendRun(item: Record<string, any> | undefined | null): NewsletterSendRun | null {
+  if (!item?.sendRunId || !item?.newsletterId) return null;
+
+  return {
+    id: String(item.sendRunId),
+    newsletterId: String(item.newsletterId),
+    subject: textOrEmpty(item.subject),
+    preheader: textOrEmpty(item.preheader),
+    body: textOrEmpty(item.body),
+    previewText: textOrEmpty(item.previewText) || newsletterPreviewText(textOrEmpty(item.body)),
+    audienceMode: item.audienceMode === "selected_members" ? "selected_members" : "all_active_members",
+    sentAt: textOrEmpty(item.sentAt),
+    sentBy: textOrNull(item.sentBy),
+    stats: {
+      recipientCount: Number(item.recipientCount || 0),
+      sentCount: Number(item.sentCount || 0),
+      failedCount: Number(item.failedCount || 0),
+      openCount: typeof item.openCount === "number" ? item.openCount : 0,
+      clickCount: typeof item.clickCount === "number" ? item.clickCount : 0,
+      unsubscribeCount: typeof item.unsubscribeCount === "number" ? item.unsubscribeCount : 0,
+    },
+    failurePreview: normalizeFailurePreview(item.failurePreview),
   };
 }
 
@@ -135,6 +181,32 @@ export async function listNewsletters(): Promise<AdminNewsletter[]> {
     const bDate = b.status === "sent" ? b.sentAt || b.updatedAt : b.updatedAt;
     return bDate.localeCompare(aDate);
   });
+}
+
+export async function listNewsletterSendRuns(): Promise<NewsletterSendRun[]> {
+  const sends: NewsletterSendRun[] = [];
+  let ExclusiveStartKey: Record<string, any> | undefined;
+
+  do {
+    const res = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI1",
+      KeyConditionExpression: "#gsi1pk = :pk",
+      ExpressionAttributeNames: { "#gsi1pk": "GSI1PK" },
+      ExpressionAttributeValues: { ":pk": NEWSLETTER_SEND_GSI_PK },
+      ExclusiveStartKey,
+      ScanIndexForward: false,
+    });
+
+    for (const item of res.Items || []) {
+      const send = toNewsletterSendRun(item);
+      if (send) sends.push(send);
+    }
+
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey);
+
+  return sends.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 }
 
 export async function getNewsletter(id: string): Promise<AdminNewsletter | null> {
@@ -215,6 +287,60 @@ export async function recordNewsletterDraftSend(newsletterId: string) {
       ":gsi1sk": `${now}#${newsletterId}`,
     },
   });
+}
+
+export async function recordNewsletterSendRun({
+  sendRunId,
+  newsletterId,
+  newsletter,
+  audienceMode,
+  adminUserId,
+  recipientCount,
+  sentCount,
+  failedCount,
+  failurePreview,
+}: {
+  sendRunId: string;
+  newsletterId: string;
+  newsletter: Pick<AdminNewsletter, "subject" | "preheader" | "body" | "previewText">;
+  audienceMode: NewsletterAudienceMode;
+  adminUserId: string | null;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  failurePreview: Array<{ email: string; error: string }>;
+}) {
+  const now = new Date().toISOString();
+  const item = {
+    pk: `NEWSLETTER_SEND#${sendRunId}`,
+    sk: `NEWSLETTER_SEND#${sendRunId}`,
+    type: "NEWSLETTER_SEND",
+    sendRunId,
+    newsletterId,
+    subject: newsletter.subject,
+    preheader: newsletter.preheader,
+    body: newsletter.body,
+    previewText: newsletter.previewText || newsletterPreviewText(newsletter.body),
+    audienceMode,
+    sentAt: now,
+    sentBy: adminUserId,
+    recipientCount,
+    sentCount,
+    failedCount,
+    openCount: 0,
+    clickCount: 0,
+    unsubscribeCount: 0,
+    failurePreview: failurePreview.slice(0, 10),
+    GSI1PK: NEWSLETTER_SEND_GSI_PK,
+    GSI1SK: `${now}#${sendRunId}`,
+  };
+
+  await documentClient.put({
+    TableName: TABLE_NAME,
+    Item: item,
+  });
+
+  return toNewsletterSendRun(item)!;
 }
 
 export async function deleteNewsletterDraft(newsletterId: string) {

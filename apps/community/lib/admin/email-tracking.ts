@@ -6,6 +6,8 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 export type NewsletterTrackingRecord = {
   trackingId: string;
   newsletterId: string;
+  sendRunId: string | null;
+  audienceMode: "all_active_members" | "selected_members";
   userId: string | null;
   email: string | null;
   sentAt: string;
@@ -33,6 +35,8 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
   return {
     trackingId: String(item.trackingId),
     newsletterId: String(item.newsletterId),
+    sendRunId: typeof item.sendRunId === "string" ? item.sendRunId : null,
+    audienceMode: item.audienceMode === "selected_members" ? "selected_members" : "all_active_members",
     userId: typeof item.userId === "string" ? item.userId : null,
     email: typeof item.email === "string" ? item.email : null,
     sentAt: typeof item.sentAt === "string" ? item.sentAt : "",
@@ -50,10 +54,14 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
 
 export async function createNewsletterTrackingRecord({
   newsletterId,
+  sendRunId,
+  audienceMode = "all_active_members",
   userId,
   email,
 }: {
   newsletterId: string;
+  sendRunId?: string | null;
+  audienceMode?: "all_active_members" | "selected_members";
   userId: string | null;
   email: string;
 }) {
@@ -67,6 +75,8 @@ export async function createNewsletterTrackingRecord({
       type: "EMAIL_TRACKING",
       trackingId,
       newsletterId,
+      sendRunId: sendRunId || null,
+      audienceMode,
       userId,
       email,
       sentAt: now,
@@ -137,7 +147,7 @@ export async function recordNewsletterOpen(trackingId: string) {
   });
 
   if (firstOpen) {
-    await incrementNewsletterAggregate(tracking.newsletterId, "openCount");
+    await incrementNewsletterAggregate(tracking, "openCount");
   }
 
   return { ...tracking, firstOpenedAt: tracking.firstOpenedAt || now, lastOpenedAt: now };
@@ -165,7 +175,7 @@ export async function recordNewsletterClick(trackingId: string, url: string) {
   });
 
   if (firstClick) {
-    await incrementNewsletterAggregate(tracking.newsletterId, "clickCount");
+    await incrementNewsletterAggregate(tracking, "clickCount");
   }
 
   return { ...tracking, firstClickedAt: tracking.firstClickedAt || now, lastClickedAt: now, lastClickedUrl: url };
@@ -203,23 +213,52 @@ export async function recordNewsletterUnsubscribe(trackingId: string) {
   }
 
   if (firstUnsubscribe) {
-    await incrementNewsletterAggregate(tracking.newsletterId, "unsubscribeCount");
+    await incrementNewsletterAggregate(tracking, "unsubscribeCount");
   }
 
   return { ...tracking, unsubscribedAt: tracking.unsubscribedAt || now };
 }
 
 async function incrementNewsletterAggregate(
-  newsletterId: string,
+  tracking: NewsletterTrackingRecord,
   field: "openCount" | "clickCount" | "unsubscribeCount",
 ) {
+  if (tracking.sendRunId) {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: { pk: `NEWSLETTER_SEND#${tracking.sendRunId}`, sk: `NEWSLETTER_SEND#${tracking.sendRunId}` },
+      UpdateExpression: `SET ${field} = if_not_exists(${field}, :zero) + :one`,
+      ExpressionAttributeValues: {
+        ":zero": 0,
+        ":one": 1,
+      },
+    });
+    return;
+  }
+
+  if (!(await shouldAggregateTrackingRecord(tracking))) return;
+
   await documentClient.update({
     TableName: TABLE_NAME,
-    Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
+    Key: { pk: `NEWSLETTER#${tracking.newsletterId}`, sk: `NEWSLETTER#${tracking.newsletterId}` },
     UpdateExpression: `SET ${field} = if_not_exists(${field}, :zero) + :one`,
     ExpressionAttributeValues: {
       ":zero": 0,
       ":one": 1,
     },
   });
+}
+
+async function shouldAggregateTrackingRecord(tracking: NewsletterTrackingRecord) {
+  if (tracking.audienceMode !== "selected_members") return true;
+
+  const res = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: { pk: `NEWSLETTER#${tracking.newsletterId}`, sk: `NEWSLETTER#${tracking.newsletterId}` },
+  });
+  const newsletter = res.Item || {};
+  const status = newsletter.status === "sent" ? "sent" : "draft";
+  const sentAt = typeof newsletter.sentAt === "string" ? newsletter.sentAt : null;
+
+  return !(status === "sent" && sentAt && tracking.sentAt && tracking.sentAt < sentAt);
 }

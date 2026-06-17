@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
@@ -7,9 +8,11 @@ import { buildEmailServerConfig, isValidEmail, normalizeEmail } from "@/lib/admi
 import {
   deleteNewsletterDraft,
   getNewsletter,
+  listNewsletterSendRuns,
   listNewsletters,
   markNewsletterSent,
   recordNewsletterDraftSend,
+  recordNewsletterSendRun,
   saveNewsletterDraft,
 } from "@/lib/admin/newsletters";
 import {
@@ -27,6 +30,8 @@ export const dynamic = "force-dynamic";
 type NewsletterSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
 };
+
+type NewsletterAudienceMode = "all_active_members" | "selected_members";
 
 async function requireAdminOrForbidden() {
   try {
@@ -49,18 +54,79 @@ async function buildDraftRecipient(email: string): Promise<NewsletterSendRecipie
   };
 }
 
+function normalizeRecipientIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function resolveNewsletterAudience(body: any) {
+  const audienceMode: NewsletterAudienceMode =
+    body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
+  const allRecipients = await listPolicyUpdateRecipients();
+
+  if (audienceMode === "all_active_members") {
+    return { audienceMode, recipients: allRecipients, activeRecipientCount: allRecipients.length };
+  }
+
+  const recipientIds = normalizeRecipientIds(body?.recipientIds);
+  if (!recipientIds.length) {
+    throw new Error("Select at least one active member recipient.");
+  }
+
+  const selectedIds = new Set(recipientIds);
+  const recipients = allRecipients.filter((recipient) => selectedIds.has(recipient.id));
+  if (recipients.length !== selectedIds.size) {
+    throw new Error("Selected recipients must be active members with unsuppressed email addresses.");
+  }
+
+  return { audienceMode, recipients, activeRecipientCount: allRecipients.length };
+}
+
 export async function GET() {
   const { response } = await requireAdminOrForbidden();
   if (response) return response;
 
-  const [newsletters, recipients] = await Promise.all([
+  const [newsletters, sendRuns, recipients] = await Promise.all([
     listNewsletters(),
+    listNewsletterSendRuns(),
     listPolicyUpdateRecipients(),
   ]);
+  const sendRunNewsletterIds = new Set(sendRuns.map((sendRun) => sendRun.newsletterId));
+  const legacySendRuns = newsletters
+    .filter((newsletter) => newsletter.status === "sent" && !sendRunNewsletterIds.has(newsletter.id))
+    .map((newsletter) => ({
+      id: `legacy-${newsletter.id}`,
+      newsletterId: newsletter.id,
+      subject: newsletter.subject,
+      preheader: newsletter.preheader,
+      body: newsletter.body,
+      previewText: newsletter.previewText,
+      audienceMode: "all_active_members" as const,
+      sentAt: newsletter.sentAt || newsletter.updatedAt,
+      sentBy: newsletter.sentBy,
+      stats: {
+        recipientCount: newsletter.stats.recipientCount,
+        sentCount: newsletter.stats.sentCount,
+        failedCount: newsletter.stats.failedCount,
+        openCount: newsletter.stats.openCount,
+        clickCount: newsletter.stats.clickCount,
+        unsubscribeCount: newsletter.stats.unsubscribeCount,
+      },
+      failurePreview: newsletter.failurePreview,
+    }));
+  const allSendRuns = [...sendRuns, ...legacySendRuns].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 
   return NextResponse.json({
     newsletters,
+    sendRuns: allSendRuns,
     recipientCount: recipients.length,
+    recipients,
   });
 }
 
@@ -194,18 +260,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This newsletter has already been sent" }, { status: 409 });
     }
 
-    const recipients = await listPolicyUpdateRecipients();
+    let resolvedAudience: Awaited<ReturnType<typeof resolveNewsletterAudience>>;
+    try {
+      resolvedAudience = await resolveNewsletterAudience(body);
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: typeof err?.message === "string" ? err.message : "Invalid newsletter audience" },
+        { status: 400 },
+      );
+    }
+
+    const { audienceMode, recipients, activeRecipientCount } = resolvedAudience;
     if (!recipients.length) {
       return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
     }
 
     const transporter = nodemailer.createTransport(transportConfig);
     const failures: Array<{ email: string; error: string }> = [];
+    const sendRunId = randomUUID();
     let sent = 0;
 
     for (const recipient of recipients) {
       const tracking = await createNewsletterTrackingRecord({
         newsletterId: newsletter.id,
+        sendRunId,
+        audienceMode,
         userId: recipient.id,
         email: recipient.email,
       });
@@ -244,6 +323,7 @@ export async function POST(request: NextRequest) {
             newsletterId: newsletter.id,
             trackingId: tracking.trackingId,
             audience: newsletter.audience,
+            audienceMode,
             profileNameResolved: !!recipient.name,
           },
         });
@@ -261,14 +341,18 @@ export async function POST(request: NextRequest) {
             newsletterId: newsletter.id,
             trackingId: tracking.trackingId,
             audience: newsletter.audience,
+            audienceMode,
             profileNameResolved: !!recipient.name,
           },
         }).catch(() => undefined);
       }
     }
 
-    await markNewsletterSent({
+    const sendRun = await recordNewsletterSendRun({
+      sendRunId,
       newsletterId: newsletter.id,
+      newsletter,
+      audienceMode,
       adminUserId,
       recipientCount: recipients.length,
       sentCount: sent,
@@ -276,10 +360,24 @@ export async function POST(request: NextRequest) {
       failurePreview: failures,
     });
 
+    if (audienceMode === "all_active_members") {
+      await markNewsletterSent({
+        newsletterId: newsletter.id,
+        adminUserId,
+        recipientCount: recipients.length,
+        sentCount: sent,
+        failedCount: failures.length,
+        failurePreview: failures,
+      });
+    }
+
     const sentNewsletter = await getNewsletter(newsletter.id);
     return NextResponse.json({
       ok: failures.length === 0,
       newsletter: sentNewsletter || newsletter,
+      sendRun,
+      audienceMode,
+      activeRecipientCount,
       recipientCount: recipients.length,
       sent,
       failed: failures.length,
