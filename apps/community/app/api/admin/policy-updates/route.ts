@@ -39,6 +39,8 @@ type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
 };
 
+type PolicyUpdateAudienceMode = "all_active_members" | "selected_members";
+
 async function buildDraftRecipient(email: string): Promise<PolicyUpdateSendRecipient> {
   const profile = await findUserProfileByEmail(email);
   return {
@@ -48,6 +50,40 @@ async function buildDraftRecipient(email: string): Promise<PolicyUpdateSendRecip
     firstName: profile?.firstName || null,
     lastName: profile?.lastName || null,
   };
+}
+
+function normalizeRecipientIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function resolvePolicyUpdateAudience(body: any) {
+  const audienceMode: PolicyUpdateAudienceMode =
+    body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
+  const allRecipients = await listPolicyUpdateRecipients();
+
+  if (audienceMode === "all_active_members") {
+    return { audienceMode, recipients: allRecipients, activeRecipientCount: allRecipients.length };
+  }
+
+  const recipientIds = normalizeRecipientIds(body?.recipientIds);
+  if (!recipientIds.length) {
+    throw new Error("Select at least one active member recipient.");
+  }
+
+  const selectedIds = new Set(recipientIds);
+  const recipients = allRecipients.filter((recipient) => selectedIds.has(recipient.id));
+  if (recipients.length !== selectedIds.size) {
+    throw new Error("Selected recipients must be active members with unsuppressed email addresses.");
+  }
+
+  return { audienceMode, recipients, activeRecipientCount: allRecipients.length };
 }
 
 export async function GET() {
@@ -63,6 +99,7 @@ export async function GET() {
   return NextResponse.json({
     updates,
     recipientCount: recipients.length,
+    recipients,
     statsBySlug,
     sendHistory,
   });
@@ -99,9 +136,24 @@ export async function POST(request: NextRequest) {
   }
 
   const draftMode = !!draftRecipientEmail;
-  const recipients: PolicyUpdateSendRecipient[] = draftMode
-    ? [await buildDraftRecipient(draftRecipientEmail)]
-    : await listPolicyUpdateRecipients();
+  let audienceMode: PolicyUpdateAudienceMode = "all_active_members";
+  let activeRecipientCount = 0;
+  let recipients: PolicyUpdateSendRecipient[];
+  if (draftMode) {
+    recipients = [await buildDraftRecipient(draftRecipientEmail)];
+  } else {
+    try {
+      const resolvedAudience = await resolvePolicyUpdateAudience(body);
+      audienceMode = resolvedAudience.audienceMode;
+      activeRecipientCount = resolvedAudience.activeRecipientCount;
+      recipients = resolvedAudience.recipients;
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: typeof err?.message === "string" ? err.message : "Invalid policy update audience" },
+        { status: 400 },
+      );
+    }
+  }
   if (!recipients.length) {
     return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
   }
@@ -118,7 +170,7 @@ export async function POST(request: NextRequest) {
           newsletterId: update.slug,
           sendRunId: policyUpdateSendRunId,
           messageType: "policy_update",
-          audienceMode: "all_active_members",
+          audienceMode,
           userId: recipient.id,
           email: recipient.email,
         })
@@ -168,7 +220,7 @@ export async function POST(request: NextRequest) {
           category: update.category,
           policyUpdateSendRunId,
           trackingId: tracking?.trackingId || null,
-          audienceMode: draftMode ? "draft" : "all_active_members",
+          audienceMode: draftMode ? "draft" : audienceMode,
           portalUrl: built.portalUrl,
           draft: draftMode,
           profileNameResolved: !!recipient.name,
@@ -189,7 +241,7 @@ export async function POST(request: NextRequest) {
           category: update.category,
           policyUpdateSendRunId,
           trackingId: tracking?.trackingId || null,
-          audienceMode: draftMode ? "draft" : "all_active_members",
+          audienceMode: draftMode ? "draft" : audienceMode,
           draft: draftMode,
           profileNameResolved: !!recipient.name,
         },
@@ -205,6 +257,7 @@ export async function POST(request: NextRequest) {
       sentCount: sent,
       failedCount: failures.length,
       failurePreview: failures,
+      audienceMode,
     });
   }
 
@@ -216,6 +269,8 @@ export async function POST(request: NextRequest) {
     draft: draftMode,
     recipientEmail: draftRecipientEmail || null,
     resolvedRecipientName: draftMode ? recipients[0]?.firstName || null : null,
+    audienceMode: draftMode ? "draft" : audienceMode,
+    activeRecipientCount,
     recipientCount: recipients.length,
     sent,
     failed: failures.length,

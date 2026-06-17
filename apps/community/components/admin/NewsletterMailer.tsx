@@ -264,9 +264,15 @@ function NewsletterCard({
 function SendRunCard({
   sendRun,
   onUseAsTemplate,
+  onSendToSelected,
+  canSendToSelected,
+  isSendingToSelected,
 }: {
   sendRun: NewsletterSendRun;
   onUseAsTemplate: (sendRun: NewsletterSendRun) => void;
+  onSendToSelected: (sendRun: NewsletterSendRun) => void;
+  canSendToSelected: boolean;
+  isSendingToSelected: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const stats = sendRun.stats;
@@ -307,16 +313,34 @@ function SendRunCard({
               {stats.recipientCount === 1 ? "" : "s"}
             </p>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            title="Create a new draft from this send"
-            onClick={() => onUseAsTemplate(sendRun)}
-          >
-            <CopyPlus className="h-4 w-4" />
-            Use as template
-          </Button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              title="Create a new draft from this send"
+              onClick={() => onUseAsTemplate(sendRun)}
+            >
+              <CopyPlus className="h-4 w-4" />
+              Template
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              title={
+                canSendToSelected
+                  ? "Send this previous newsletter to selected subscribers"
+                  : "Choose selected subscribers and select recipients first"
+              }
+              disabled={!canSendToSelected || isSendingToSelected}
+              isLoading={isSendingToSelected}
+              onClick={() => onSendToSelected(sendRun)}
+            >
+              {isSendingToSelected ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
+              Selected
+            </Button>
+          </div>
         </div>
 
         <p className="mt-4 line-clamp-4 text-sm leading-6 text-slate-700">
@@ -396,6 +420,7 @@ export function NewsletterMailer() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -578,6 +603,48 @@ export function NewsletterMailer() {
       setError(err?.message || "Failed to send newsletter");
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendPreviousNewsletter = async (sendRun: NewsletterSendRun) => {
+    if (audienceMode !== "selected_members" || !selectedRecipientIds.length) {
+      setError("Select at least one active subscriber before sending a previous newsletter.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Send "${sendRun.subject || "this previous newsletter"}" to ${selectedRecipientIds.length} selected subscriber${
+          selectedRecipientIds.length === 1 ? "" : "s"
+        }?`,
+      )
+    ) {
+      return;
+    }
+
+    setSendingPrevious((current) => ({ ...current, [sendRun.id]: true }));
+    setError(null);
+    setNotice(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/newsletters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "sendPrevious",
+          sendRunId: sendRun.id,
+          confirmSend: true,
+          recipientIds: selectedRecipientIds,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as NewsletterResult & { error?: string };
+      if (!res.ok) throw new Error(body?.error || "Failed to send previous newsletter");
+      setResult(body);
+      setNotice(`Sent previous newsletter to ${body.sent || 0} of ${body.recipientCount || 0} selected recipients.`);
+      await loadState();
+    } catch (err: any) {
+      setError(err?.message || "Failed to send previous newsletter");
+    } finally {
+      setSendingPrevious((current) => ({ ...current, [sendRun.id]: false }));
     }
   };
 
@@ -948,6 +1015,9 @@ export function NewsletterMailer() {
                     key={sendRun.id}
                     sendRun={sendRun}
                     onUseAsTemplate={useAsTemplate}
+                    onSendToSelected={sendPreviousNewsletter}
+                    canSendToSelected={audienceMode === "selected_members" && selectedRecipientIds.length > 0}
+                    isSendingToSelected={!!sendingPrevious[sendRun.id]}
                   />
                 ))}
               </div>

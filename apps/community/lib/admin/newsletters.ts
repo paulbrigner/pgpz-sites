@@ -212,6 +212,18 @@ export async function listNewsletterSendRuns(): Promise<NewsletterSendRun[]> {
   return sends.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 }
 
+export async function getNewsletterSendRun(id: string): Promise<NewsletterSendRun | null> {
+  const sendRunId = id.trim();
+  if (!sendRunId || sendRunId.startsWith("legacy-")) return null;
+
+  const res = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: { pk: `NEWSLETTER_SEND#${sendRunId}`, sk: `NEWSLETTER_SEND#${sendRunId}` },
+  });
+
+  return toNewsletterSendRun(res.Item);
+}
+
 export async function getNewsletter(id: string): Promise<AdminNewsletter | null> {
   const newsletterId = id.trim();
   if (!newsletterId) return null;

@@ -34,7 +34,7 @@ export type PolicyUpdateSendHistoryItem = {
   subject: string;
   sentAt: string;
   lastEventAt: string;
-  audienceMode: "all_active_members";
+  audienceMode: "all_active_members" | "selected_members";
   stats: {
     recipientCount: number;
     sentCount: number;
@@ -121,7 +121,7 @@ function createPolicyUpdateHistoryRun({
     subject: subject || defaults.subject,
     sentAt: createdAt,
     lastEventAt: createdAt,
-    audienceMode: "all_active_members",
+    audienceMode: metadata.audienceMode === "selected_members" ? "selected_members" : "all_active_members",
     stats: {
       recipientCount: 0,
       sentCount: 0,
@@ -161,7 +161,7 @@ function toPolicyUpdateSendHistoryItem(item: Record<string, any> | undefined | n
     subject: textOrEmpty(item.subject),
     sentAt: textOrEmpty(item.sentAt),
     lastEventAt: textOrEmpty(item.lastEventAt) || textOrEmpty(item.sentAt),
-    audienceMode: "all_active_members",
+    audienceMode: item.audienceMode === "selected_members" ? "selected_members" : "all_active_members",
     stats: {
       recipientCount: Number(item.recipientCount || 0),
       sentCount: Number(item.sentCount || 0),
@@ -392,6 +392,7 @@ export async function recordPolicyUpdateSendRun({
   sentCount,
   failedCount,
   failurePreview,
+  audienceMode,
 }: {
   sendRunId: string;
   update: PolicyUpdateHistoryContext;
@@ -399,6 +400,7 @@ export async function recordPolicyUpdateSendRun({
   sentCount: number;
   failedCount: number;
   failurePreview: Array<{ email: string; error: string }>;
+  audienceMode: "all_active_members" | "selected_members";
 }) {
   const now = new Date().toISOString();
   const item = {
@@ -414,7 +416,7 @@ export async function recordPolicyUpdateSendRun({
     subject: update.emailSubject,
     sentAt: now,
     lastEventAt: now,
-    audienceMode: "all_active_members",
+    audienceMode,
     recipientCount,
     sentCount,
     failedCount,

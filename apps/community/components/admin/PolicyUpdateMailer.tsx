@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, FileText, MailCheck, RefreshCcw, Send } from "lucide-react";
+import { BarChart3, FileText, MailCheck, RefreshCcw, Search, Send, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ type PolicyUpdateSendHistoryItem = {
   subject: string;
   sentAt: string;
   lastEventAt: string;
-  audienceMode: "all_active_members";
+  audienceMode: "all_active_members" | "selected_members";
   stats: {
     recipientCount: number;
     sentCount: number;
@@ -42,8 +42,15 @@ type PolicyUpdateSendHistoryItem = {
 type ApiState = {
   updates: PolicyUpdateSummary[];
   recipientCount: number;
+  recipients: AudienceRecipient[];
   statsBySlug: Record<string, PolicyUpdateEmailStats>;
   sendHistory: PolicyUpdateSendHistoryItem[];
+};
+
+type AudienceRecipient = {
+  id: string;
+  email: string;
+  name: string | null;
 };
 
 type SendResult = {
@@ -82,8 +89,20 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
-function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryItem }) {
+function PolicyUpdateSendHistoryCard({
+  send,
+  onSendToSelected,
+  canSendToSelected,
+  isSendingToSelected,
+}: {
+  send: PolicyUpdateSendHistoryItem;
+  onSendToSelected: (send: PolicyUpdateSendHistoryItem) => void;
+  canSendToSelected: boolean;
+  isSendingToSelected: boolean;
+}) {
   const stats = send.stats;
+  const audienceLabel =
+    send.audienceMode === "selected_members" ? "Selected members" : "All active members";
   const deliveryMetrics = [
     ["Recipients", stats.recipientCount],
     ["Sent", stats.sentCount],
@@ -120,17 +139,34 @@ function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryIt
               ) : null}
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Sent {formatDateTime(send.sentAt)} · All active members
+              Sent {formatDateTime(send.sentAt)} · {audienceLabel}
             </p>
             {send.subject ? (
               <p className="mt-3 text-sm font-medium leading-6 text-slate-700">{send.subject}</p>
             ) : null}
           </div>
-          <Button variant="outline" asChild>
-            <Link href={`/updates/${send.updateSlug}`} target="_blank" rel="noopener noreferrer">
-              Portal view
-            </Link>
-          </Button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              title={
+                canSendToSelected
+                  ? "Send this previous update to selected subscribers"
+                  : "Choose selected subscribers and select recipients first"
+              }
+              disabled={!canSendToSelected || isSendingToSelected}
+              onClick={() => onSendToSelected(send)}
+            >
+              {isSendingToSelected ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
+              Selected
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/updates/${send.updateSlug}`} target="_blank" rel="noopener noreferrer">
+                Portal view
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-3 lg:grid-cols-7">
@@ -179,13 +215,18 @@ function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryIt
 export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [updates, setUpdates] = useState<PolicyUpdateSummary[]>(initialUpdates);
   const [recipientCount, setRecipientCount] = useState<number | null>(null);
+  const [audienceRecipients, setAudienceRecipients] = useState<AudienceRecipient[]>([]);
   const [statsBySlug, setStatsBySlug] = useState<Record<string, PolicyUpdateEmailStats>>({});
   const [sendHistory, setSendHistory] = useState<PolicyUpdateSendHistoryItem[]>([]);
   const [selectedSlug, setSelectedSlug] = useState(initialUpdates[0]?.slug || "");
+  const [audienceMode, setAudienceMode] = useState<"all_active_members" | "selected_members">("all_active_members");
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
+  const [audienceQuery, setAudienceQuery] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
   const [draftEmail, setDraftEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -195,6 +236,27 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     [selectedSlug, updates],
   );
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
+  const selectedRecipients = useMemo(() => {
+    const selected = new Set(selectedRecipientIds);
+    return audienceRecipients.filter((recipient) => selected.has(recipient.id));
+  }, [audienceRecipients, selectedRecipientIds]);
+  const filteredAudienceRecipients = useMemo(() => {
+    const normalized = audienceQuery.trim().toLowerCase();
+    if (!normalized) return audienceRecipients;
+    return audienceRecipients.filter((recipient) =>
+      [recipient.name, recipient.email]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized),
+    );
+  }, [audienceQuery, audienceRecipients]);
+  const selectedAudienceLabel =
+    audienceMode === "all_active_members"
+      ? `${recipientCount ?? 0} active member${recipientCount === 1 ? "" : "s"}`
+      : `${selectedRecipientIds.length} selected member${selectedRecipientIds.length === 1 ? "" : "s"}`;
+  const audienceReady =
+    audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
 
   const loadState = async () => {
     setLoading(true);
@@ -205,6 +267,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!res.ok) throw new Error(body?.error || "Failed to load policy update sender");
       setUpdates(body.updates || []);
       setRecipientCount(typeof body.recipientCount === "number" ? body.recipientCount : 0);
+      setAudienceRecipients(body.recipients || []);
       setStatsBySlug(body.statsBySlug || {});
       setSendHistory(body.sendHistory || []);
       if (!selectedSlug && body.updates?.[0]?.slug) setSelectedSlug(body.updates[0].slug);
@@ -220,8 +283,15 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setSelectedRecipientIds((current) => {
+      const validIds = new Set(audienceRecipients.map((recipient) => recipient.id));
+      return current.filter((id) => validIds.has(id));
+    });
+  }, [audienceRecipients]);
+
   const sendUpdate = async () => {
-    if (!selectedUpdate || !confirmSend) return;
+    if (!selectedUpdate || !confirmSend || !audienceReady) return;
     setSending(true);
     setError(null);
     setResult(null);
@@ -229,7 +299,12 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       const res = await fetch("/api/admin/policy-updates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: selectedUpdate.slug, confirmSend: true }),
+        body: JSON.stringify({
+          slug: selectedUpdate.slug,
+          confirmSend: true,
+          audienceMode,
+          recipientIds: audienceMode === "selected_members" ? selectedRecipientIds : undefined,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to send policy update");
@@ -241,6 +316,29 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     } finally {
       setSending(false);
     }
+  };
+
+  const toggleRecipient = (recipientId: string) => {
+    setSelectedRecipientIds((current) =>
+      current.includes(recipientId)
+        ? current.filter((id) => id !== recipientId)
+        : [...current, recipientId],
+    );
+    setConfirmSend(false);
+  };
+
+  const selectVisibleRecipients = () => {
+    setSelectedRecipientIds((current) => {
+      const next = new Set(current);
+      for (const recipient of filteredAudienceRecipients) next.add(recipient.id);
+      return Array.from(next);
+    });
+    setConfirmSend(false);
+  };
+
+  const clearSelectedRecipients = () => {
+    setSelectedRecipientIds([]);
+    setConfirmSend(false);
   };
 
   const sendDraft = async () => {
@@ -266,6 +364,47 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || "Failed to send policy update draft");
     } finally {
       setDraftSending(false);
+    }
+  };
+
+  const sendPreviousUpdate = async (send: PolicyUpdateSendHistoryItem) => {
+    if (audienceMode !== "selected_members" || !selectedRecipientIds.length) {
+      setError("Select at least one active subscriber before sending a previous update.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Send "${send.shortTitle || send.title || "this previous update"}" to ${selectedRecipientIds.length} selected subscriber${
+          selectedRecipientIds.length === 1 ? "" : "s"
+        }?`,
+      )
+    ) {
+      return;
+    }
+
+    setSendingPrevious((current) => ({ ...current, [send.id]: true }));
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: send.updateSlug,
+          confirmSend: true,
+          audienceMode: "selected_members",
+          recipientIds: selectedRecipientIds,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to send previous policy update");
+      setResult(body);
+      setConfirmSend(false);
+      await loadState();
+    } catch (err: any) {
+      setError(err?.message || "Failed to send previous policy update");
+    } finally {
+      setSendingPrevious((current) => ({ ...current, [send.id]: false }));
     }
   };
 
@@ -391,6 +530,128 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
               </div>
 
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Audience</div>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      Send this update to all active subscribers or to selected subscribers only.
+                    </p>
+                  </div>
+                  <div className="rounded-full border bg-white px-3 py-1.5 text-xs font-semibold text-[var(--brand-ink)]">
+                    {selectedAudienceLabel}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudienceMode("all_active_members");
+                      setConfirmSend(false);
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3 py-3 text-left text-sm transition",
+                      audienceMode === "all_active_members"
+                        ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                        : "border-slate-200 bg-white/60 hover:bg-white",
+                    )}
+                  >
+                    <span className="flex items-center gap-2 font-semibold text-[var(--brand-ink)]">
+                      <Send className="h-4 w-4" />
+                      All active members
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Full subscriber distribution.
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAudienceMode("selected_members");
+                      setConfirmSend(false);
+                    }}
+                    className={cn(
+                      "rounded-lg border px-3 py-3 text-left text-sm transition",
+                      audienceMode === "selected_members"
+                        ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                        : "border-slate-200 bg-white/60 hover:bg-white",
+                    )}
+                  >
+                    <span className="flex items-center gap-2 font-semibold text-[var(--brand-ink)]">
+                      <UsersRound className="h-4 w-4" />
+                      Selected subscribers
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Useful for newer members or catch-up sends.
+                    </span>
+                  </button>
+                </div>
+
+                {audienceMode === "selected_members" ? (
+                  <div className="mt-4 rounded-lg border bg-white p-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="relative min-w-0 flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          value={audienceQuery}
+                          onChange={(event) => setAudienceQuery(event.target.value)}
+                          placeholder="Search active member name or email"
+                          className="w-full rounded-md border bg-white py-2 pl-9 pr-3 text-sm"
+                        />
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={selectVisibleRecipients}>
+                          Select visible
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={clearSelectedRecipients}>
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 max-h-60 overflow-y-auto rounded-md border">
+                      {filteredAudienceRecipients.length ? (
+                        filteredAudienceRecipients.map((recipient) => {
+                          const checked = selectedRecipientIds.includes(recipient.id);
+                          return (
+                            <label
+                              key={recipient.id}
+                              className={cn(
+                                "flex cursor-pointer items-start gap-3 border-b px-3 py-2 text-sm last:border-b-0",
+                                checked ? "bg-[var(--brand-ice)]" : "bg-white hover:bg-slate-50",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4"
+                                checked={checked}
+                                onChange={() => toggleRecipient(recipient.id)}
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold text-[var(--brand-ink)]">
+                                  {recipient.name || recipient.email}
+                                </span>
+                                <span className="block truncate text-xs text-slate-500">{recipient.email}</span>
+                              </span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <div className="px-3 py-4 text-sm text-slate-500">No active recipients match that search.</div>
+                      )}
+                    </div>
+                    {selectedRecipients.length ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Selected: {selectedRecipients.map((recipient) => recipient.email).join(", ")}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-amber-700">Select at least one active subscriber before sending.</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Draft send</div>
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row">
@@ -422,9 +683,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   className="mt-1 h-4 w-4"
                   checked={confirmSend}
                   onChange={(event) => setConfirmSend(event.target.checked)}
+                  disabled={!audienceReady}
                 />
                 <span>
-                  I understand this will send the selected update to all active member subscribers with unsuppressed emails.
+                  I understand this will send the selected update to {selectedAudienceLabel} with unsuppressed emails.
                   I have reviewed the portal page and email subject.
                 </span>
               </label>
@@ -432,11 +694,15 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={!confirmSend || sending || !recipientCount}
+                  disabled={!confirmSend || sending || !audienceReady}
                   onClick={sendUpdate}
                 >
                   {sending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
-                  {sending ? "Sending..." : "Send selected update"}
+                  {sending
+                    ? "Sending..."
+                    : audienceMode === "selected_members"
+                      ? "Send update to selected"
+                      : "Send selected update"}
                 </Button>
                 <p className="text-xs text-slate-500">
                   Sends are logged per recipient in the email log table.
@@ -454,8 +720,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div>
             <h3 className="text-lg font-semibold text-[var(--brand-ink)]">Sent update history</h3>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              All-subscriber policy update sends are listed here with delivery totals and engagement stats when
-              tracking was available for that send.
+              Policy update sends are listed here with delivery totals, engagement stats when tracking was available,
+              and a selected-subscriber catch-up send action.
             </p>
             <span className="mt-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               {sendHistory.length} send{sendHistory.length === 1 ? "" : "s"}
@@ -471,12 +737,18 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         ) : sendHistory.length ? (
           <div className="space-y-3">
             {sendHistory.map((send) => (
-              <PolicyUpdateSendHistoryCard key={send.id} send={send} />
+              <PolicyUpdateSendHistoryCard
+                key={send.id}
+                send={send}
+                onSendToSelected={sendPreviousUpdate}
+                canSendToSelected={audienceMode === "selected_members" && selectedRecipientIds.length > 0}
+                isSendingToSelected={!!sendingPrevious[send.id]}
+              />
             ))}
           </div>
         ) : (
           <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-            Sent weekly and featured updates will show here after they are distributed to all active members.
+            Sent weekly and featured updates will show here after they are distributed to members.
           </div>
         )}
       </div>
