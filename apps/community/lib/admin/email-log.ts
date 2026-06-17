@@ -17,6 +17,20 @@ export interface EmailLogParams {
   metadata?: Record<string, unknown>;
 }
 
+export type PolicyUpdateEmailStats = {
+  sent: number;
+  failed: number;
+  draftSent: number;
+  lastSentAt: string | null;
+};
+
+const emptyPolicyUpdateStats = (): PolicyUpdateEmailStats => ({
+  sent: 0,
+  failed: 0,
+  draftSent: 0,
+  lastSentAt: null,
+});
+
 export async function recordEmailEvent(params: EmailLogParams) {
   const now = new Date().toISOString();
   const logId = randomUUID();
@@ -76,4 +90,59 @@ export async function recordEmailEvent(params: EmailLogParams) {
       ExpressionAttributeValues: values,
     });
   }
+}
+
+export async function summarizePolicyUpdateEmailStats(slugs: string[]) {
+  const requested = new Set(slugs);
+  const stats: Record<string, PolicyUpdateEmailStats> = {};
+  for (const slug of slugs) stats[slug] = emptyPolicyUpdateStats();
+
+  if (!requested.size) return stats;
+
+  let ExclusiveStartKey: Record<string, any> | undefined;
+
+  do {
+    const res = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI1",
+      KeyConditionExpression: "#gsi1pk = :pk",
+      ProjectionExpression: "createdAt, emailType, #status, metadata",
+      ExpressionAttributeNames: {
+        "#gsi1pk": "GSI1PK",
+        "#status": "status",
+      },
+      ExpressionAttributeValues: { ":pk": "EMAIL_LOG" },
+      ExclusiveStartKey,
+      ScanIndexForward: false,
+      Limit: 500,
+    });
+
+    for (const item of res.Items || []) {
+      const metadata = item.metadata as Record<string, unknown> | null | undefined;
+      const slug = typeof metadata?.updateSlug === "string" ? metadata.updateSlug : "";
+      if (!requested.has(slug)) continue;
+
+      const aggregate = stats[slug] || emptyPolicyUpdateStats();
+      const draft = metadata?.draft === true;
+      const status = item.status === "failed" ? "failed" : item.status === "sent" ? "sent" : "";
+
+      if (status === "sent" && draft) {
+        aggregate.draftSent += 1;
+      } else if (status === "sent") {
+        aggregate.sent += 1;
+        const createdAt = typeof item.createdAt === "string" ? item.createdAt : null;
+        if (createdAt && (!aggregate.lastSentAt || createdAt > aggregate.lastSentAt)) {
+          aggregate.lastSentAt = createdAt;
+        }
+      } else if (status === "failed" && !draft) {
+        aggregate.failed += 1;
+      }
+
+      stats[slug] = aggregate;
+    }
+
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey);
+
+  return stats;
 }

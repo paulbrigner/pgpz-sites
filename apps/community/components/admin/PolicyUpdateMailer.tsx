@@ -2,14 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, MailCheck, RefreshCcw, Send } from "lucide-react";
+import { BarChart3, FileText, MailCheck, RefreshCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 
+type PolicyUpdateEmailStats = {
+  sent: number;
+  failed: number;
+  draftSent: number;
+  lastSentAt: string | null;
+};
+
 type ApiState = {
   updates: PolicyUpdateSummary[];
   recipientCount: number;
+  statsBySlug: Record<string, PolicyUpdateEmailStats>;
 };
 
 type SendResult = {
@@ -28,9 +36,30 @@ type Props = {
   initialUpdates: PolicyUpdateSummary[];
 };
 
+const emptyStats: PolicyUpdateEmailStats = {
+  sent: 0,
+  failed: 0,
+  draftSent: 0,
+  lastSentAt: null,
+};
+
+const formatDateTime = (value: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [updates, setUpdates] = useState<PolicyUpdateSummary[]>(initialUpdates);
   const [recipientCount, setRecipientCount] = useState<number | null>(null);
+  const [statsBySlug, setStatsBySlug] = useState<Record<string, PolicyUpdateEmailStats>>({});
   const [selectedSlug, setSelectedSlug] = useState(initialUpdates[0]?.slug || "");
   const [confirmSend, setConfirmSend] = useState(false);
   const [draftEmail, setDraftEmail] = useState("");
@@ -44,6 +73,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     () => updates.find((update) => update.slug === selectedSlug) || updates[0] || null,
     [selectedSlug, updates],
   );
+  const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
 
   const loadState = async () => {
     setLoading(true);
@@ -54,6 +84,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!res.ok) throw new Error(body?.error || "Failed to load policy update sender");
       setUpdates(body.updates || []);
       setRecipientCount(typeof body.recipientCount === "number" ? body.recipientCount : 0);
+      setStatsBySlug(body.statsBySlug || {});
       if (!selectedSlug && body.updates?.[0]?.slug) setSelectedSlug(body.updates[0].slug);
     } catch (err: any) {
       setError(err?.message || "Failed to load policy update sender");
@@ -144,22 +175,24 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
             Available updates
           </div>
           <div className="space-y-2">
-            {updates.map((update) => (
-              <button
-                key={update.slug}
-                type="button"
-                onClick={() => {
-                  setSelectedSlug(update.slug);
-                  setConfirmSend(false);
-                  setResult(null);
-                }}
-                className={cn(
-                  "w-full rounded-xl border p-3 text-left transition",
-                  selectedUpdate?.slug === update.slug
-                    ? "border-[rgba(245,168,0,0.72)] bg-[var(--brand-ice)]"
-                    : "border-slate-200 bg-white hover:border-slate-300",
-                )}
-              >
+            {updates.map((update) => {
+              const stats = statsBySlug[update.slug] || emptyStats;
+              return (
+                <button
+                  key={update.slug}
+                  type="button"
+                  onClick={() => {
+                    setSelectedSlug(update.slug);
+                    setConfirmSend(false);
+                    setResult(null);
+                  }}
+                  className={cn(
+                    "w-full rounded-xl border p-3 text-left transition",
+                    selectedUpdate?.slug === update.slug
+                      ? "border-[rgba(245,168,0,0.72)] bg-[var(--brand-ice)]"
+                      : "border-slate-200 bg-white hover:border-slate-300",
+                  )}
+                >
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
                     <FileText className="h-4 w-4" aria-hidden="true" />
@@ -172,10 +205,16 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                       {update.shortTitle}
                     </span>
                     <span className="mt-1 block text-xs text-slate-500">{update.displayDate}</span>
+                    <span className="mt-2 flex flex-wrap gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      <span>Sent {stats.sent}</span>
+                      <span>Drafts {stats.draftSent}</span>
+                      {stats.failed ? <span className="text-rose-700">Failed {stats.failed}</span> : null}
+                    </span>
                   </span>
                 </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -207,6 +246,26 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 <div className="rounded-xl border bg-slate-50 p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Portal link</div>
                   <div className="mt-2 truncate text-sm font-medium text-[var(--brand-denim)]">{selectedUpdate.portalPath}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-white p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <BarChart3 className="h-4 w-4" />
+                  Message stats
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                  {[
+                    ["Member sends", selectedStats.sent.toLocaleString()],
+                    ["Draft sends", selectedStats.draftSent.toLocaleString()],
+                    ["Failures", selectedStats.failed.toLocaleString()],
+                    ["Last sent", formatDateTime(selectedStats.lastSentAt)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border bg-slate-50 p-3">
+                      <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+                      <div className="mt-1 text-sm font-semibold text-[var(--brand-ink)]">{value}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

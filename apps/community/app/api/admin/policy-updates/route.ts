@@ -3,53 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
+import { buildEmailServerConfig, isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
+import { summarizePolicyUpdateEmailStats } from "@/lib/admin/email-log";
 import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/admin/roster";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import {
   findUserProfileByEmail,
   getUserProfileDisplayName,
 } from "@/lib/admin/user-profile";
-import {
-  EMAIL_FROM,
-  EMAIL_SERVER,
-  EMAIL_SERVER_HOST,
-  EMAIL_SERVER_PASSWORD,
-  EMAIL_SERVER_PORT,
-  EMAIL_SERVER_SECURE,
-  EMAIL_SERVER_USER,
-  SITE_URL,
-} from "@/lib/config";
+import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
 import { getPolicyUpdate, getPolicyUpdateSummaries } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
-
-const buildEmailServerConfig = () => {
-  if (EMAIL_SERVER_HOST) {
-    return {
-      host: EMAIL_SERVER_HOST,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  if (EMAIL_SERVER && EMAIL_SERVER.includes("://")) return EMAIL_SERVER as any;
-  if (EMAIL_SERVER) {
-    return {
-      host: EMAIL_SERVER,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  return null;
-};
 
 async function requireAdminOrForbidden() {
   try {
@@ -59,11 +25,6 @@ async function requireAdminOrForbidden() {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 }
-
-const normalizeEmail = (value: unknown) =>
-  typeof value === "string" ? value.trim().toLowerCase() : "";
-
-const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
@@ -83,9 +44,12 @@ export async function GET() {
   if (forbidden) return forbidden;
 
   const recipients = await listPolicyUpdateRecipients();
+  const updates = getPolicyUpdateSummaries();
+  const statsBySlug = await summarizePolicyUpdateEmailStats(updates.map((update) => update.slug));
   return NextResponse.json({
-    updates: getPolicyUpdateSummaries(),
+    updates,
     recipientCount: recipients.length,
+    statsBySlug,
   });
 }
 export async function POST(request: NextRequest) {
