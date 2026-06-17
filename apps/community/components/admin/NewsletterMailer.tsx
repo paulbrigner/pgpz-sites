@@ -181,9 +181,15 @@ function NewsletterCard({
           </div>
           <div className="flex shrink-0 gap-2">
             {sent ? (
-              <Button type="button" size="sm" variant="outline" onClick={() => onUseAsTemplate(newsletter)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                title="Create a new draft from this newsletter"
+                onClick={() => onUseAsTemplate(newsletter)}
+              >
                 <CopyPlus className="h-4 w-4" />
-                Template
+                Use as template
               </Button>
             ) : (
               <>
@@ -297,9 +303,15 @@ function SendRunCard({
               {stats.recipientCount === 1 ? "" : "s"}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => onUseAsTemplate(sendRun)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            title="Create a new draft from this send"
+            onClick={() => onUseAsTemplate(sendRun)}
+          >
             <CopyPlus className="h-4 w-4" />
-            Template
+            Use as template
           </Button>
         </div>
 
@@ -915,6 +927,10 @@ export function NewsletterMailer() {
                     {label}
                   </button>
                 ))}
+                <Button type="button" size="sm" variant="outline" onClick={loadState} disabled={loading}>
+                  <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
+                  Refresh stats
+                </Button>
               </div>
             </div>
             {filteredSendRuns.length ? (

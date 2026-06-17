@@ -118,9 +118,13 @@ const weeklyPolicyMemo: PolicyUpdate = {
     {
       heading: "DCG Fly-in Brought Financial Privacy Advocacy to Capitol Hill",
       body: [
-        "On June 10, Paul Brigner participated in DCG's congressional briefing and fly-in on Capitol Hill focused on financial privacy in crypto. In a June 10 thread, he described briefing Congress with DCG and Aleo on the need for financial privacy, including voter polling on crypto's growing salience, financial privacy, and the CLARITY Act. DCG's public recap described the fly-in as convening DCG executives and 20+ blockchain founders for policy discussions on data privacy and digital asset regulation.",
+        "On June 10, Paul Brigner, Chief Policy & Regulatory Officer of Zodl, participated in DCG's congressional briefing and fly-in on Capitol Hill focused on financial privacy in crypto. In a June 10 thread, he described briefing Congress with DCG and Aleo on the need for financial privacy, including voter polling on crypto's growing salience, financial privacy, and the CLARITY Act. DCG's public recap described the fly-in as convening DCG executives and 20+ blockchain founders for policy discussions on data privacy and digital asset regulation.",
       ],
       links: [
+        {
+          text: "Zodl",
+          href: "https://zodl.com/",
+        },
         {
           text: "June 10 thread",
           href: "https://x.com/paulbrigner/thread/2064698213236408727",
