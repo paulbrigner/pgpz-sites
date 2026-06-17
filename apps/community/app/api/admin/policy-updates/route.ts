@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { buildEmailServerConfig, isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
-import { summarizePolicyUpdateEmailStats } from "@/lib/admin/email-log";
+import { listPolicyUpdateSendHistory, summarizePolicyUpdateEmailStats } from "@/lib/admin/email-log";
 import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/admin/roster";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import {
@@ -47,11 +48,15 @@ export async function GET() {
 
   const recipients = await listPolicyUpdateRecipients();
   const updates = getPolicyUpdateSummaries();
-  const statsBySlug = await summarizePolicyUpdateEmailStats(updates.map((update) => update.slug));
+  const [statsBySlug, sendHistory] = await Promise.all([
+    summarizePolicyUpdateEmailStats(updates.map((update) => update.slug)),
+    listPolicyUpdateSendHistory(updates),
+  ]);
   return NextResponse.json({
     updates,
     recipientCount: recipients.length,
     statsBySlug,
+    sendHistory,
   });
 }
 export async function POST(request: NextRequest) {
@@ -95,6 +100,7 @@ export async function POST(request: NextRequest) {
 
   const transporter = nodemailer.createTransport(transportConfig);
   const emailType = `policy_update_${update.category}${draftMode ? "_draft" : ""}`;
+  const policyUpdateSendRunId = draftMode ? null : randomUUID();
   const failures: Array<{ email: string; error: string }> = [];
   let sent = 0;
 
@@ -128,6 +134,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           updateSlug: update.slug,
           category: update.category,
+          policyUpdateSendRunId,
+          audienceMode: draftMode ? "draft" : "all_active_members",
           portalUrl: built.portalUrl,
           draft: draftMode,
           profileNameResolved: !!recipient.name,
@@ -146,6 +154,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           updateSlug: update.slug,
           category: update.category,
+          policyUpdateSendRunId,
+          audienceMode: draftMode ? "draft" : "all_active_members",
           draft: draftMode,
           profileNameResolved: !!recipient.name,
         },
@@ -156,6 +166,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: failures.length === 0,
     slug: update.slug,
+    sendRunId: policyUpdateSendRunId,
     title: update.title,
     draft: draftMode,
     recipientEmail: draftRecipientEmail || null,

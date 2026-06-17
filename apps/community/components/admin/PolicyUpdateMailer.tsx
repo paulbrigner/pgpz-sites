@@ -14,10 +14,31 @@ type PolicyUpdateEmailStats = {
   lastSentAt: string | null;
 };
 
+type PolicyUpdateSendHistoryItem = {
+  id: string;
+  updateSlug: string;
+  title: string;
+  shortTitle: string;
+  category: string;
+  categoryLabel: string;
+  subject: string;
+  sentAt: string;
+  lastEventAt: string;
+  audienceMode: "all_active_members";
+  stats: {
+    recipientCount: number;
+    sentCount: number;
+    failedCount: number;
+  };
+  failurePreview: Array<{ email: string; error: string }>;
+  source: "send_run" | "legacy_email_log";
+};
+
 type ApiState = {
   updates: PolicyUpdateSummary[];
   recipientCount: number;
   statsBySlug: Record<string, PolicyUpdateEmailStats>;
+  sendHistory: PolicyUpdateSendHistoryItem[];
 };
 
 type SendResult = {
@@ -56,10 +77,75 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
+function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryItem }) {
+  const stats = send.stats;
+  const metrics = [
+    ["Recipients", stats.recipientCount],
+    ["Sent", stats.sentCount],
+    ["Failed", stats.failedCount],
+  ] as const;
+
+  return (
+    <article className="overflow-hidden rounded-2xl border bg-white/95 shadow-sm">
+      <div className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-semibold text-[var(--brand-ink)]">
+                {send.shortTitle || send.title}
+              </h3>
+              <span className="rounded-full bg-[var(--brand-ice)] px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[var(--brand-denim)]">
+                {send.categoryLabel}
+              </span>
+              {send.source === "legacy_email_log" ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Reconstructed
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Sent {formatDateTime(send.sentAt)} · All active members
+            </p>
+            {send.subject ? (
+              <p className="mt-3 text-sm font-medium leading-6 text-slate-700">{send.subject}</p>
+            ) : null}
+          </div>
+          <Button variant="outline" asChild>
+            <Link href={`/updates/${send.updateSlug}`} target="_blank" rel="noopener noreferrer">
+              Portal view
+            </Link>
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 border-t bg-slate-50/80 px-4 py-3">
+        {metrics.map(([label, value]) => (
+          <div key={label}>
+            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+            <div className="mt-1 text-sm font-semibold text-[var(--brand-ink)]">{value.toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
+      {send.failurePreview.length ? (
+        <div className="border-t border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-900">
+          <div className="font-semibold">Recent failures</div>
+          <ul className="mt-2 space-y-1">
+            {send.failurePreview.map((failure) => (
+              <li key={`${send.id}-${failure.email}-${failure.error}`}>
+                {failure.email || "Unknown"}: {failure.error || "Failed"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [updates, setUpdates] = useState<PolicyUpdateSummary[]>(initialUpdates);
   const [recipientCount, setRecipientCount] = useState<number | null>(null);
   const [statsBySlug, setStatsBySlug] = useState<Record<string, PolicyUpdateEmailStats>>({});
+  const [sendHistory, setSendHistory] = useState<PolicyUpdateSendHistoryItem[]>([]);
   const [selectedSlug, setSelectedSlug] = useState(initialUpdates[0]?.slug || "");
   const [confirmSend, setConfirmSend] = useState(false);
   const [draftEmail, setDraftEmail] = useState("");
@@ -85,6 +171,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setUpdates(body.updates || []);
       setRecipientCount(typeof body.recipientCount === "number" ? body.recipientCount : 0);
       setStatsBySlug(body.statsBySlug || {});
+      setSendHistory(body.sendHistory || []);
       if (!selectedSlug && body.updates?.[0]?.slug) setSelectedSlug(body.updates[0].slug);
     } catch (err: any) {
       setError(err?.message || "Failed to load policy update sender");
@@ -325,6 +412,37 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
             <div className="text-sm text-slate-600">No policy updates are configured.</div>
           )}
         </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border bg-white/90 p-5">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-[var(--brand-ink)]">Sent update history</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              All-subscriber policy update sends are listed here with delivery totals from the email log.
+            </p>
+            <span className="mt-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {sendHistory.length} send{sendHistory.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={loadState} disabled={loading}>
+            <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh stats
+          </Button>
+        </div>
+        {loading && !sendHistory.length ? (
+          <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">Loading sent updates...</div>
+        ) : sendHistory.length ? (
+          <div className="space-y-3">
+            {sendHistory.map((send) => (
+              <PolicyUpdateSendHistoryCard key={send.id} send={send} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+            Sent weekly and featured updates will show here after they are distributed to all active members.
+          </div>
+        )}
       </div>
 
       {result ? (
