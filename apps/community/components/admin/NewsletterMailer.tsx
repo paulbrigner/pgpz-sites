@@ -26,6 +26,7 @@ type NewsletterStats = {
   openCount: number | null;
   clickCount: number | null;
   unsubscribeCount: number | null;
+  possibleForwardOpenCount: number | null;
   lastDraftSentAt: string | null;
 };
 
@@ -36,6 +37,7 @@ type NewsletterSendStats = {
   openCount: number | null;
   clickCount: number | null;
   unsubscribeCount: number | null;
+  possibleForwardOpenCount: number | null;
 };
 
 type Newsletter = {
@@ -127,10 +129,11 @@ function NewsletterStatsRow({ newsletter }: { newsletter: Newsletter }) {
     ["Opens", stats.openCount],
     ["Clicks", stats.clickCount],
     ["Unsubs", stats.unsubscribeCount],
+    ["Possible forwards", stats.possibleForwardOpenCount],
   ] as const;
 
   return (
-    <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-7">
+    <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-4 lg:grid-cols-8">
       {metrics.map(([label, value]) => (
         <div key={label}>
           <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
@@ -276,6 +279,7 @@ function SendRunCard({
     ["Opens", stats.openCount],
     ["Clicks", stats.clickCount],
     ["Unsubs", stats.unsubscribeCount],
+    ["Possible forwards", stats.possibleForwardOpenCount],
   ] as const;
 
   return (
@@ -319,7 +323,7 @@ function SendRunCard({
           {sendRun.previewText || sendRun.body || "No newsletter body saved."}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-4 lg:grid-cols-7">
         {metrics.map(([label, value]) => (
           <div key={label}>
             <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
@@ -329,7 +333,7 @@ function SendRunCard({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <p className="text-xs text-slate-500">
-          Stats are tied to this send only. Email client privacy features can affect opens.
+          Stats are tied to this send only. Possible forwards are inferred from multiple distinct hashed opener fingerprints.
         </p>
         <Button type="button" size="sm" variant="outline" onClick={() => setExpanded((current) => !current)}>
           <BarChart3 className="h-4 w-4" />
@@ -354,6 +358,10 @@ function SendRunCard({
               <div className="mt-1 text-slate-700">
                 {stats.sentCount ? `${Math.round(((stats.clickCount || 0) / stats.sentCount) * 100)}%` : "—"}
               </div>
+            </div>
+            <div className="rounded-xl border bg-white p-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Possible forwards</div>
+              <div className="mt-1 text-slate-700">{metricText(stats.possibleForwardOpenCount)}</div>
             </div>
           </div>
           {sendRun.failurePreview.length ? (

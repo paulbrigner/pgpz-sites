@@ -1,13 +1,24 @@
 import "server-only";
 
-import { randomUUID } from "crypto";
+import { createHmac, randomUUID } from "crypto";
+import { NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+
+export type EmailMessageType = "newsletter" | "policy_update";
+export type EmailTrackingAudienceMode = "all_active_members" | "selected_members";
+
+export type TrackingClientInfo = {
+  ip?: string | null;
+  userAgent?: string | null;
+  acceptLanguage?: string | null;
+};
 
 export type NewsletterTrackingRecord = {
   trackingId: string;
   newsletterId: string;
   sendRunId: string | null;
-  audienceMode: "all_active_members" | "selected_members";
+  messageType: EmailMessageType;
+  audienceMode: EmailTrackingAudienceMode;
   userId: string | null;
   email: string | null;
   sentAt: string;
@@ -15,6 +26,9 @@ export type NewsletterTrackingRecord = {
   firstOpenedAt: string | null;
   lastOpenedAt: string | null;
   openCount: number;
+  openFingerprints: string[];
+  uniqueOpenClientCount: number;
+  possibleForwardOpenCount: number;
   firstClickedAt: string | null;
   lastClickedAt: string | null;
   lastClickedUrl: string | null;
@@ -29,13 +43,45 @@ const trackingKey = (trackingId: string) => ({
 
 const normalizeTrackingId = (trackingId: string) => trackingId.trim().replace(/\.png$/i, "");
 
+export function trackingClientInfoFromHeaders(headers: Headers): TrackingClientInfo {
+  return {
+    ip:
+      headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      headers.get("x-real-ip") ||
+      headers.get("cf-connecting-ip") ||
+      null,
+    userAgent: headers.get("user-agent"),
+    acceptLanguage: headers.get("accept-language"),
+  };
+}
+
+function openClientFingerprint(clientInfo?: TrackingClientInfo | null) {
+  const material = [
+    clientInfo?.ip?.trim().toLowerCase() || "",
+    clientInfo?.userAgent?.trim() || "",
+    clientInfo?.acceptLanguage?.trim().toLowerCase() || "",
+  ].join("\n");
+
+  if (!material.trim()) return null;
+
+  return createHmac("sha256", NEXTAUTH_SECRET || "pgpz-email-tracking")
+    .update(material)
+    .digest("hex")
+    .slice(0, 32);
+}
+
 function toTrackingRecord(item: Record<string, any> | undefined | null): NewsletterTrackingRecord | null {
   if (!item?.trackingId || !item?.newsletterId) return null;
+
+  const openFingerprints = Array.isArray(item.openFingerprints)
+    ? item.openFingerprints.filter((value: unknown) => typeof value === "string")
+    : [];
 
   return {
     trackingId: String(item.trackingId),
     newsletterId: String(item.newsletterId),
     sendRunId: typeof item.sendRunId === "string" ? item.sendRunId : null,
+    messageType: item.messageType === "policy_update" ? "policy_update" : "newsletter",
     audienceMode: item.audienceMode === "selected_members" ? "selected_members" : "all_active_members",
     userId: typeof item.userId === "string" ? item.userId : null,
     email: typeof item.email === "string" ? item.email : null,
@@ -44,6 +90,9 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
     firstOpenedAt: typeof item.firstOpenedAt === "string" ? item.firstOpenedAt : null,
     lastOpenedAt: typeof item.lastOpenedAt === "string" ? item.lastOpenedAt : null,
     openCount: Number(item.openCount || 0),
+    openFingerprints,
+    uniqueOpenClientCount: Number(item.uniqueOpenClientCount || openFingerprints.length || 0),
+    possibleForwardOpenCount: Number(item.possibleForwardOpenCount || 0),
     firstClickedAt: typeof item.firstClickedAt === "string" ? item.firstClickedAt : null,
     lastClickedAt: typeof item.lastClickedAt === "string" ? item.lastClickedAt : null,
     lastClickedUrl: typeof item.lastClickedUrl === "string" ? item.lastClickedUrl : null,
@@ -55,13 +104,15 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
 export async function createNewsletterTrackingRecord({
   newsletterId,
   sendRunId,
+  messageType = "newsletter",
   audienceMode = "all_active_members",
   userId,
   email,
 }: {
   newsletterId: string;
   sendRunId?: string | null;
-  audienceMode?: "all_active_members" | "selected_members";
+  messageType?: EmailMessageType;
+  audienceMode?: EmailTrackingAudienceMode;
   userId: string | null;
   email: string;
 }) {
@@ -76,6 +127,7 @@ export async function createNewsletterTrackingRecord({
       trackingId,
       newsletterId,
       sendRunId: sendRunId || null,
+      messageType,
       audienceMode,
       userId,
       email,
@@ -84,6 +136,9 @@ export async function createNewsletterTrackingRecord({
       firstOpenedAt: null,
       lastOpenedAt: null,
       openCount: 0,
+      openFingerprints: [],
+      uniqueOpenClientCount: 0,
+      possibleForwardOpenCount: 0,
       firstClickedAt: null,
       lastClickedAt: null,
       lastClickedUrl: null,
@@ -126,31 +181,62 @@ export async function getNewsletterTrackingRecord(trackingId: string) {
   return toTrackingRecord(res.Item);
 }
 
-export async function recordNewsletterOpen(trackingId: string) {
+export async function recordNewsletterOpen(trackingId: string, clientInfo?: TrackingClientInfo | null) {
   const tracking = await getNewsletterTrackingRecord(trackingId);
   if (!tracking) return null;
 
   const now = new Date().toISOString();
   const firstOpen = !tracking.firstOpenedAt;
+  const fingerprint = openClientFingerprint(clientInfo);
+  const previousFingerprints = tracking.openFingerprints || [];
+  const newFingerprint = !!fingerprint && !previousFingerprints.includes(fingerprint);
+  const nextFingerprints = newFingerprint ? [...previousFingerprints, fingerprint] : previousFingerprints;
+  const possibleForwardOpen = newFingerprint && previousFingerprints.length > 0;
+
+  const setParts = [
+    firstOpen ? "firstOpenedAt = :now" : "",
+    "lastOpenedAt = :now",
+    "openCount = if_not_exists(openCount, :zero) + :one",
+  ].filter(Boolean);
+  const expressionValues: Record<string, unknown> = {
+    ":now": now,
+    ":zero": 0,
+    ":one": 1,
+  };
+
+  if (fingerprint) {
+    setParts.push("openFingerprints = :openFingerprints");
+    setParts.push("uniqueOpenClientCount = :uniqueOpenClientCount");
+    setParts.push("possibleForwardOpenCount = :possibleForwardOpenCount");
+    expressionValues[":openFingerprints"] = nextFingerprints;
+    expressionValues[":uniqueOpenClientCount"] = nextFingerprints.length;
+    expressionValues[":possibleForwardOpenCount"] =
+      tracking.possibleForwardOpenCount + (possibleForwardOpen ? 1 : 0);
+  }
 
   await documentClient.update({
     TableName: TABLE_NAME,
     Key: trackingKey(tracking.trackingId),
-    UpdateExpression: firstOpen
-      ? "SET firstOpenedAt = :now, lastOpenedAt = :now, openCount = if_not_exists(openCount, :zero) + :one"
-      : "SET lastOpenedAt = :now, openCount = if_not_exists(openCount, :zero) + :one",
-    ExpressionAttributeValues: {
-      ":now": now,
-      ":zero": 0,
-      ":one": 1,
-    },
+    UpdateExpression: `SET ${setParts.join(", ")}`,
+    ExpressionAttributeValues: expressionValues,
   });
 
   if (firstOpen) {
-    await incrementNewsletterAggregate(tracking, "openCount");
+    await incrementMessageAggregate(tracking, "openCount");
+  }
+  if (possibleForwardOpen) {
+    await incrementMessageAggregate(tracking, "possibleForwardOpenCount");
   }
 
-  return { ...tracking, firstOpenedAt: tracking.firstOpenedAt || now, lastOpenedAt: now };
+  return {
+    ...tracking,
+    firstOpenedAt: tracking.firstOpenedAt || now,
+    lastOpenedAt: now,
+    openCount: tracking.openCount + 1,
+    openFingerprints: nextFingerprints,
+    uniqueOpenClientCount: nextFingerprints.length,
+    possibleForwardOpenCount: tracking.possibleForwardOpenCount + (possibleForwardOpen ? 1 : 0),
+  };
 }
 
 export async function recordNewsletterClick(trackingId: string, url: string) {
@@ -175,7 +261,7 @@ export async function recordNewsletterClick(trackingId: string, url: string) {
   });
 
   if (firstClick) {
-    await incrementNewsletterAggregate(tracking, "clickCount");
+    await incrementMessageAggregate(tracking, "clickCount");
   }
 
   return { ...tracking, firstClickedAt: tracking.firstClickedAt || now, lastClickedAt: now, lastClickedUrl: url };
@@ -213,29 +299,32 @@ export async function recordNewsletterUnsubscribe(trackingId: string) {
   }
 
   if (firstUnsubscribe) {
-    await incrementNewsletterAggregate(tracking, "unsubscribeCount");
+    await incrementMessageAggregate(tracking, "unsubscribeCount");
   }
 
   return { ...tracking, unsubscribedAt: tracking.unsubscribedAt || now };
 }
 
-async function incrementNewsletterAggregate(
+async function incrementMessageAggregate(
   tracking: NewsletterTrackingRecord,
-  field: "openCount" | "clickCount" | "unsubscribeCount",
+  field: "openCount" | "clickCount" | "unsubscribeCount" | "possibleForwardOpenCount",
 ) {
   if (tracking.sendRunId) {
+    const prefix = tracking.messageType === "policy_update" ? "POLICY_UPDATE_SEND" : "NEWSLETTER_SEND";
     await documentClient.update({
       TableName: TABLE_NAME,
-      Key: { pk: `NEWSLETTER_SEND#${tracking.sendRunId}`, sk: `NEWSLETTER_SEND#${tracking.sendRunId}` },
-      UpdateExpression: `SET ${field} = if_not_exists(${field}, :zero) + :one`,
+      Key: { pk: `${prefix}#${tracking.sendRunId}`, sk: `${prefix}#${tracking.sendRunId}` },
+      UpdateExpression: `SET ${field} = if_not_exists(${field}, :zero) + :one, lastEventAt = :now`,
       ExpressionAttributeValues: {
         ":zero": 0,
         ":one": 1,
+        ":now": new Date().toISOString(),
       },
     });
     return;
   }
 
+  if (tracking.messageType !== "newsletter") return;
   if (!(await shouldAggregateTrackingRecord(tracking))) return;
 
   await documentClient.update({

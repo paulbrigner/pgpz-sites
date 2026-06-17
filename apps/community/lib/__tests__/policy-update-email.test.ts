@@ -94,4 +94,27 @@ describe("buildPolicyUpdateEmail", () => {
     );
     expect(built.text).toContain("The record stays open for written submissions through June 23.");
   });
+
+  it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+      {
+        trackingId: "policy-track-123",
+        trackLinks: true,
+        includeOpenPixel: true,
+        includeUnsubscribe: true,
+      },
+    );
+
+    expect(built.html).toContain("/api/email/open/policy-track-123.png");
+    expect(built.html).toContain(
+      "/api/email/click/policy-track-123?url=https%3A%2F%2Fcommunity.pgpz.org%2Fupdates%2F2026-06-08-weekly-policy-memo",
+    );
+    expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
+    expect(built.text).toContain("Unsubscribe: https://community.pgpz.org/api/email/unsubscribe/policy-track-123");
+  });
 });

@@ -39,9 +39,14 @@ export type PolicyUpdateSendHistoryItem = {
     recipientCount: number;
     sentCount: number;
     failedCount: number;
+    openCount: number | null;
+    clickCount: number | null;
+    unsubscribeCount: number | null;
+    possibleForwardOpenCount: number | null;
   };
   failurePreview: Array<{ email: string; error: string }>;
   source: "send_run" | "legacy_email_log";
+  engagementTracked: boolean;
 };
 
 export type PolicyUpdateHistoryContext = {
@@ -71,6 +76,7 @@ const emptyPolicyUpdateStats = (): PolicyUpdateEmailStats => ({
 });
 
 const POLICY_UPDATE_LEGACY_RUN_GAP_MS = 15 * 60 * 1000;
+const POLICY_UPDATE_SEND_GSI_PK = "POLICY_UPDATE_SEND";
 
 const textOrEmpty = (value: unknown) => (typeof value === "string" ? value : "");
 const textOrNull = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
@@ -120,9 +126,54 @@ function createPolicyUpdateHistoryRun({
       recipientCount: 0,
       sentCount: 0,
       failedCount: 0,
+      openCount: null,
+      clickCount: null,
+      unsubscribeCount: null,
+      possibleForwardOpenCount: null,
     },
     failurePreview: [],
     source,
+    engagementTracked: false,
+  };
+}
+
+function normalizeFailurePreview(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((failure: any) => ({
+          email: textOrEmpty(failure?.email),
+          error: textOrEmpty(failure?.error),
+        }))
+        .filter((failure: { email: string; error: string }) => failure.email || failure.error)
+    : [];
+}
+
+function toPolicyUpdateSendHistoryItem(item: Record<string, any> | undefined | null): PolicyUpdateSendHistoryItem | null {
+  if (!item?.sendRunId || !item?.updateSlug) return null;
+
+  return {
+    id: String(item.sendRunId),
+    updateSlug: textOrEmpty(item.updateSlug),
+    title: textOrEmpty(item.title) || textOrEmpty(item.shortTitle) || textOrEmpty(item.updateSlug),
+    shortTitle: textOrEmpty(item.shortTitle) || textOrEmpty(item.title) || textOrEmpty(item.updateSlug),
+    category: textOrEmpty(item.category),
+    categoryLabel: textOrEmpty(item.categoryLabel) || "Policy update",
+    subject: textOrEmpty(item.subject),
+    sentAt: textOrEmpty(item.sentAt),
+    lastEventAt: textOrEmpty(item.lastEventAt) || textOrEmpty(item.sentAt),
+    audienceMode: "all_active_members",
+    stats: {
+      recipientCount: Number(item.recipientCount || 0),
+      sentCount: Number(item.sentCount || 0),
+      failedCount: Number(item.failedCount || 0),
+      openCount: typeof item.openCount === "number" ? item.openCount : 0,
+      clickCount: typeof item.clickCount === "number" ? item.clickCount : 0,
+      unsubscribeCount: typeof item.unsubscribeCount === "number" ? item.unsubscribeCount : 0,
+      possibleForwardOpenCount: typeof item.possibleForwardOpenCount === "number" ? item.possibleForwardOpenCount : 0,
+    },
+    failurePreview: normalizeFailurePreview(item.failurePreview),
+    source: "send_run",
+    engagementTracked: true,
   };
 }
 
@@ -334,13 +385,86 @@ export async function summarizePolicyUpdateEmailStats(slugs: string[]) {
   return stats;
 }
 
+export async function recordPolicyUpdateSendRun({
+  sendRunId,
+  update,
+  recipientCount,
+  sentCount,
+  failedCount,
+  failurePreview,
+}: {
+  sendRunId: string;
+  update: PolicyUpdateHistoryContext;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  failurePreview: Array<{ email: string; error: string }>;
+}) {
+  const now = new Date().toISOString();
+  const item = {
+    pk: `POLICY_UPDATE_SEND#${sendRunId}`,
+    sk: `POLICY_UPDATE_SEND#${sendRunId}`,
+    type: "POLICY_UPDATE_SEND",
+    sendRunId,
+    updateSlug: update.slug,
+    title: update.title,
+    shortTitle: update.shortTitle,
+    category: update.category,
+    categoryLabel: update.categoryLabel,
+    subject: update.emailSubject,
+    sentAt: now,
+    lastEventAt: now,
+    audienceMode: "all_active_members",
+    recipientCount,
+    sentCount,
+    failedCount,
+    openCount: 0,
+    clickCount: 0,
+    unsubscribeCount: 0,
+    possibleForwardOpenCount: 0,
+    failurePreview: failurePreview.slice(0, 10),
+    GSI1PK: POLICY_UPDATE_SEND_GSI_PK,
+    GSI1SK: `${now}#${sendRunId}`,
+  };
+
+  await documentClient.put({
+    TableName: TABLE_NAME,
+    Item: item,
+  });
+
+  return toPolicyUpdateSendHistoryItem(item)!;
+}
+
 export async function listPolicyUpdateSendHistory(updates: PolicyUpdateHistoryContext[]) {
   const requested = new Set(updates.map((update) => update.slug));
   const logs: PolicyUpdateEmailLogItem[] = [];
+  const sendRuns: PolicyUpdateSendHistoryItem[] = [];
 
   if (!requested.size) return [];
 
   let ExclusiveStartKey: Record<string, any> | undefined;
+
+  do {
+    const res = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI1",
+      KeyConditionExpression: "#gsi1pk = :pk",
+      ExpressionAttributeNames: { "#gsi1pk": "GSI1PK" },
+      ExpressionAttributeValues: { ":pk": POLICY_UPDATE_SEND_GSI_PK },
+      ExclusiveStartKey,
+      ScanIndexForward: false,
+    });
+
+    for (const item of res.Items || []) {
+      const sendRun = toPolicyUpdateSendHistoryItem(item);
+      if (sendRun && requested.has(sendRun.updateSlug)) sendRuns.push(sendRun);
+    }
+
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey);
+
+  const firstClassSendRunIds = new Set(sendRuns.map((sendRun) => sendRun.id));
+  ExclusiveStartKey = undefined;
 
   do {
     const res = await documentClient.query({
@@ -365,11 +489,20 @@ export async function listPolicyUpdateSendHistory(updates: PolicyUpdateHistoryCo
       const metadata = item.metadata as Record<string, unknown> | null | undefined;
       const slug = typeof metadata?.updateSlug === "string" ? metadata.updateSlug : "";
       if (!requested.has(slug)) continue;
+      const explicitRunId =
+        typeof metadata?.policyUpdateSendRunId === "string"
+          ? metadata.policyUpdateSendRunId
+          : typeof metadata?.sendRunId === "string"
+            ? metadata.sendRunId
+            : "";
+      if (explicitRunId && firstClassSendRunIds.has(explicitRunId)) continue;
       logs.push(item);
     }
 
     ExclusiveStartKey = res.LastEvaluatedKey as any;
   } while (ExclusiveStartKey);
 
-  return groupPolicyUpdateEmailLogs(logs, updates);
+  return [...sendRuns, ...groupPolicyUpdateEmailLogs(logs, updates)].sort((a, b) =>
+    b.sentAt.localeCompare(a.sentAt),
+  );
 }

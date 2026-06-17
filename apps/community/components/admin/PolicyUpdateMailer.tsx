@@ -29,9 +29,14 @@ type PolicyUpdateSendHistoryItem = {
     recipientCount: number;
     sentCount: number;
     failedCount: number;
+    openCount: number | null;
+    clickCount: number | null;
+    unsubscribeCount: number | null;
+    possibleForwardOpenCount: number | null;
   };
   failurePreview: Array<{ email: string; error: string }>;
   source: "send_run" | "legacy_email_log";
+  engagementTracked: boolean;
 };
 
 type ApiState = {
@@ -79,10 +84,16 @@ const formatDateTime = (value: string | null) => {
 
 function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryItem }) {
   const stats = send.stats;
-  const metrics = [
+  const deliveryMetrics = [
     ["Recipients", stats.recipientCount],
     ["Sent", stats.sentCount],
     ["Failed", stats.failedCount],
+  ] as const;
+  const engagementMetrics = [
+    ["Opens", stats.openCount],
+    ["Clicks", stats.clickCount],
+    ["Unsubs", stats.unsubscribeCount],
+    ["Possible forwards", stats.possibleForwardOpenCount],
   ] as const;
 
   return (
@@ -102,6 +113,11 @@ function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryIt
                   Reconstructed
                 </span>
               ) : null}
+              {!send.engagementTracked ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                  Delivery only
+                </span>
+              ) : null}
             </div>
             <p className="mt-1 text-xs text-slate-500">
               Sent {formatDateTime(send.sentAt)} · All active members
@@ -117,14 +133,33 @@ function PolicyUpdateSendHistoryCard({ send }: { send: PolicyUpdateSendHistoryIt
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2 border-t bg-slate-50/80 px-4 py-3">
-        {metrics.map(([label, value]) => (
+      <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-3 lg:grid-cols-7">
+        {deliveryMetrics.map(([label, value]) => (
           <div key={label}>
             <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
             <div className="mt-1 text-sm font-semibold text-[var(--brand-ink)]">{value.toLocaleString()}</div>
           </div>
         ))}
+        {engagementMetrics.map(([label, value]) => (
+          <div key={label}>
+            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+            <div className="mt-1 text-sm font-semibold text-[var(--brand-ink)]">
+              {typeof value === "number" ? value.toLocaleString() : "—"}
+            </div>
+          </div>
+        ))}
       </div>
+      {!send.engagementTracked ? (
+        <div className="border-t bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+          Engagement stats are unavailable for this reconstructed send because the email was sent before tracking
+          tokens were attached to policy-update emails.
+        </div>
+      ) : (
+        <div className="border-t px-4 py-3 text-xs leading-5 text-slate-500">
+          Possible forwards are inferred from multiple distinct hashed opener fingerprints on a single recipient
+          tracking token. Email privacy proxies can affect this signal.
+        </div>
+      )}
       {send.failurePreview.length ? (
         <div className="border-t border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-900">
           <div className="font-semibold">Recent failures</div>
@@ -419,7 +454,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div>
             <h3 className="text-lg font-semibold text-[var(--brand-ink)]">Sent update history</h3>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              All-subscriber policy update sends are listed here with delivery totals from the email log.
+              All-subscriber policy update sends are listed here with delivery totals and engagement stats when
+              tracking was available for that send.
             </p>
             <span className="mt-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               {sendHistory.length} send{sendHistory.length === 1 ? "" : "s"}

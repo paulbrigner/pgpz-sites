@@ -13,6 +13,7 @@ export type NewsletterStats = {
   openCount: number | null;
   clickCount: number | null;
   unsubscribeCount: number | null;
+  possibleForwardOpenCount: number | null;
   lastDraftSentAt: string | null;
 };
 
@@ -106,6 +107,7 @@ function toNewsletter(item: Record<string, any> | undefined | null): AdminNewsle
     openCount: typeof item.openCount === "number" ? item.openCount : null,
     clickCount: typeof item.clickCount === "number" ? item.clickCount : null,
     unsubscribeCount: typeof item.unsubscribeCount === "number" ? item.unsubscribeCount : null,
+    possibleForwardOpenCount: typeof item.possibleForwardOpenCount === "number" ? item.possibleForwardOpenCount : null,
     lastDraftSentAt: textOrNull(item.lastDraftSentAt),
   };
 
@@ -148,6 +150,7 @@ function toNewsletterSendRun(item: Record<string, any> | undefined | null): News
       openCount: typeof item.openCount === "number" ? item.openCount : 0,
       clickCount: typeof item.clickCount === "number" ? item.clickCount : 0,
       unsubscribeCount: typeof item.unsubscribeCount === "number" ? item.unsubscribeCount : 0,
+      possibleForwardOpenCount: typeof item.possibleForwardOpenCount === "number" ? item.possibleForwardOpenCount : 0,
     },
     failurePreview: normalizeFailurePreview(item.failurePreview),
   };
@@ -259,6 +262,7 @@ export async function saveNewsletterDraft(input: NewsletterDraftInput): Promise<
     openCount: existing?.stats.openCount ?? null,
     clickCount: existing?.stats.clickCount ?? null,
     unsubscribeCount: existing?.stats.unsubscribeCount ?? null,
+    possibleForwardOpenCount: existing?.stats.possibleForwardOpenCount ?? null,
     lastDraftSentAt: existing?.stats.lastDraftSentAt || null,
     failurePreview: existing?.failurePreview || [],
     GSI1PK: NEWSLETTER_GSI_PK,
@@ -330,6 +334,7 @@ export async function recordNewsletterSendRun({
     openCount: 0,
     clickCount: 0,
     unsubscribeCount: 0,
+    possibleForwardOpenCount: 0,
     failurePreview: failurePreview.slice(0, 10),
     GSI1PK: NEWSLETTER_SEND_GSI_PK,
     GSI1SK: `${now}#${sendRunId}`,
@@ -379,7 +384,7 @@ export async function markNewsletterSent({
     TableName: TABLE_NAME,
     Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
     UpdateExpression:
-      "SET #status = :status, sentAt = :now, sentBy = :adminUserId, updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, openCount = :zero, clickCount = :zero, unsubscribeCount = :zero, failurePreview = :failurePreview, GSI1SK = :gsi1sk",
+      "SET #status = :status, sentAt = :now, sentBy = :adminUserId, updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, openCount = :zero, clickCount = :zero, unsubscribeCount = :zero, possibleForwardOpenCount = :zero, failurePreview = :failurePreview, GSI1SK = :gsi1sk",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":status": "sent",

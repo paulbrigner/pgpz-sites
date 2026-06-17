@@ -51,8 +51,10 @@ describe("groupPolicyUpdateEmailLogs", () => {
     );
 
     expect(runs).toHaveLength(2);
-    expect(runs[0].stats).toEqual({ recipientCount: 1, sentCount: 1, failedCount: 0 });
-    expect(runs[1].stats).toEqual({ recipientCount: 2, sentCount: 1, failedCount: 1 });
+    expect(runs[0].stats).toMatchObject({ recipientCount: 1, sentCount: 1, failedCount: 0 });
+    expect(runs[0].engagementTracked).toBe(false);
+    expect(runs[0].stats.openCount).toBeNull();
+    expect(runs[1].stats).toMatchObject({ recipientCount: 2, sentCount: 1, failedCount: 1 });
     expect(runs[1].failurePreview).toEqual([
       { email: "two@example.com", error: "SMTP rejected recipient" },
     ]);
@@ -90,8 +92,9 @@ describe("groupPolicyUpdateEmailLogs", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].id).toBe("send-run-1");
     expect(runs[0].source).toBe("send_run");
+    expect(runs[0].engagementTracked).toBe(false);
     expect(runs[0].categoryLabel).toBe("Featured");
-    expect(runs[0].stats).toEqual({ recipientCount: 2, sentCount: 2, failedCount: 0 });
+    expect(runs[0].stats).toMatchObject({ recipientCount: 2, sentCount: 2, failedCount: 0 });
   });
 
   it("ignores draft sends", () => {

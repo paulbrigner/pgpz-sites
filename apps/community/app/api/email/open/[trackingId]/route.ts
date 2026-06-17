@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordNewsletterOpen } from "@/lib/admin/email-tracking";
+import { recordNewsletterOpen, trackingClientInfoFromHeaders } from "@/lib/admin/email-tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +12,9 @@ type Props = {
   params: Promise<{ trackingId: string }>;
 };
 
-export async function GET(_request: NextRequest, { params }: Props) {
+export async function GET(request: NextRequest, { params }: Props) {
   const { trackingId } = await params;
-  await recordNewsletterOpen(trackingId).catch((err) => {
+  await recordNewsletterOpen(trackingId, trackingClientInfoFromHeaders(request.headers)).catch((err) => {
     console.error("Newsletter open tracking failed", err);
   });
 

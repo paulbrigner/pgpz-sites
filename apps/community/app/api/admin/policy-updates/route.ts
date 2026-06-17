@@ -5,9 +5,17 @@ import { randomUUID } from "crypto";
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { buildEmailServerConfig, isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
-import { listPolicyUpdateSendHistory, summarizePolicyUpdateEmailStats } from "@/lib/admin/email-log";
+import {
+  listPolicyUpdateSendHistory,
+  recordEmailEvent,
+  recordPolicyUpdateSendRun,
+  summarizePolicyUpdateEmailStats,
+} from "@/lib/admin/email-log";
+import {
+  createNewsletterTrackingRecord,
+  markNewsletterTrackingSent,
+} from "@/lib/admin/email-tracking";
 import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/admin/roster";
-import { recordEmailEvent } from "@/lib/admin/email-log";
 import {
   findUserProfileByEmail,
   getUserProfileDisplayName,
@@ -105,6 +113,16 @@ export async function POST(request: NextRequest) {
   let sent = 0;
 
   for (const recipient of recipients) {
+    const tracking = !draftMode
+      ? await createNewsletterTrackingRecord({
+          newsletterId: update.slug,
+          sendRunId: policyUpdateSendRunId,
+          messageType: "policy_update",
+          audienceMode: "all_active_members",
+          userId: recipient.id,
+          email: recipient.email,
+        })
+      : null;
     const built = buildPolicyUpdateEmail(
       update,
       {
@@ -114,6 +132,14 @@ export async function POST(request: NextRequest) {
         lastName: recipient.lastName,
       },
       SITE_URL,
+      tracking
+        ? {
+            trackingId: tracking.trackingId,
+            trackLinks: true,
+            includeOpenPixel: true,
+            includeUnsubscribe: true,
+          }
+        : undefined,
     );
     try {
       const sendResult = await transporter.sendMail({
@@ -123,6 +149,12 @@ export async function POST(request: NextRequest) {
         text: built.text,
         html: built.html,
       });
+      if (tracking) {
+        await markNewsletterTrackingSent({
+          trackingId: tracking.trackingId,
+          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
+        });
+      }
       sent += 1;
       await recordEmailEvent({
         userId: recipient.id,
@@ -135,6 +167,7 @@ export async function POST(request: NextRequest) {
           updateSlug: update.slug,
           category: update.category,
           policyUpdateSendRunId,
+          trackingId: tracking?.trackingId || null,
           audienceMode: draftMode ? "draft" : "all_active_members",
           portalUrl: built.portalUrl,
           draft: draftMode,
@@ -155,12 +188,24 @@ export async function POST(request: NextRequest) {
           updateSlug: update.slug,
           category: update.category,
           policyUpdateSendRunId,
+          trackingId: tracking?.trackingId || null,
           audienceMode: draftMode ? "draft" : "all_active_members",
           draft: draftMode,
           profileNameResolved: !!recipient.name,
         },
       }).catch(() => undefined);
     }
+  }
+
+  if (!draftMode && policyUpdateSendRunId) {
+    await recordPolicyUpdateSendRun({
+      sendRunId: policyUpdateSendRunId,
+      update,
+      recipientCount: recipients.length,
+      sentCount: sent,
+      failedCount: failures.length,
+      failurePreview: failures,
+    });
   }
 
   return NextResponse.json({

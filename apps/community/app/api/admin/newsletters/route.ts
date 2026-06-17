@@ -119,6 +119,7 @@ export async function GET() {
         openCount: newsletter.stats.openCount,
         clickCount: newsletter.stats.clickCount,
         unsubscribeCount: newsletter.stats.unsubscribeCount,
+        possibleForwardOpenCount: newsletter.stats.possibleForwardOpenCount,
       },
       failurePreview: newsletter.failurePreview,
     }));

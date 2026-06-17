@@ -16,8 +16,24 @@ export type PolicyUpdateEmailRecipient = {
   email: string;
 };
 
+export type PolicyUpdateEmailTracking = {
+  trackingId?: string | null;
+  trackLinks?: boolean;
+  includeOpenPixel?: boolean;
+  includeUnsubscribe?: boolean;
+};
+
 export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
   `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
+
+const trackedClickUrl = (baseUrl: string, trackingId: string, href: string) =>
+  `${baseUrl}/api/email/click/${encodeURIComponent(trackingId)}?url=${encodeURIComponent(href)}`;
+
+const trackingOpenPixel = (baseUrl: string, trackingId: string) =>
+  `<img src="${escapeHtml(`${baseUrl}/api/email/open/${encodeURIComponent(trackingId)}.png`)}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;opacity:0;" />`;
+
+const trackedHref = (baseUrl: string, href: string, tracking?: PolicyUpdateEmailTracking) =>
+  tracking?.trackLinks && tracking.trackingId ? trackedClickUrl(baseUrl, tracking.trackingId, href) : href;
 
 const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
   const matches = links
@@ -44,12 +60,17 @@ const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
   return parts;
 };
 
-const renderLinkedHtml = (text: string, links: PolicyUpdateLink[] = []) =>
+const renderLinkedHtml = (
+  text: string,
+  links: PolicyUpdateLink[] = [],
+  baseUrl: string,
+  tracking?: PolicyUpdateEmailTracking,
+) =>
   linkedTextParts(text, links)
     .map((part) => {
       if (!part.link) return escapeHtml(part.text);
 
-      return `<a href="${escapeHtml(part.link.href)}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(part.text)}</a>`;
+      return `<a href="${escapeHtml(trackedHref(baseUrl, part.link.href, tracking))}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(part.text)}</a>`;
     })
     .join("");
 
@@ -58,11 +79,16 @@ const renderLinkedText = (text: string, links: PolicyUpdateLink[] = []) =>
     .map((part) => (part.link ? `${part.text} (${part.link.href})` : part.text))
     .join("");
 
-const renderParagraphs = (paragraphs: string[], links: PolicyUpdateLink[] = []) =>
+const renderParagraphs = (
+  paragraphs: string[],
+  links: PolicyUpdateLink[] = [],
+  baseUrl: string,
+  tracking?: PolicyUpdateEmailTracking,
+) =>
   paragraphs
     .map(
       (paragraph) =>
-        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links)}</p>`,
+        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links, baseUrl, tracking)}</p>`,
     )
     .join("");
 
@@ -108,12 +134,26 @@ export function buildPolicyUpdateEmail(
   update: PolicyUpdate,
   recipient: PolicyUpdateEmailRecipient,
   baseUrl?: string | null,
+  tracking?: PolicyUpdateEmailTracking,
 ) {
-  const portalUrl = buildPolicyUpdatePortalUrl(update, baseUrl);
-  const archiveUrl = `${normalizeBaseUrl(baseUrl)}/updates`;
+  const base = normalizeBaseUrl(baseUrl);
+  const portalUrl = buildPolicyUpdatePortalUrl(update, base);
+  const archiveUrl = `${base}/updates`;
+  const portalLinkHref = trackedHref(base, portalUrl, tracking);
+  const archiveLinkHref = trackedHref(base, archiveUrl, tracking);
+  const communityLinkHref = trackedHref(base, base, tracking);
+  const unsubscribeUrl =
+    tracking?.includeUnsubscribe && tracking.trackingId
+      ? `${base}/api/email/unsubscribe/${encodeURIComponent(tracking.trackingId)}`
+      : null;
+  const openPixel =
+    tracking?.includeOpenPixel && tracking.trackingId ? trackingOpenPixel(base, tracking.trackingId) : "";
   const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
-  const footerHtml = renderMemberEmailFooter({ portalUrl: normalizeBaseUrl(baseUrl) });
+  const unsubscribeHtml = unsubscribeUrl
+    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
+    : undefined;
+  const footerHtml = renderMemberEmailFooter({ portalUrl: base, unsubscribeHtml });
   const html = `<!doctype html>
 <html>
   <head>
@@ -149,11 +189,11 @@ export function buildPolicyUpdateEmail(
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 28px;">
                   <tr>
                     <td style="border-radius:999px;background:${colors.gold};">
-                      <a href="${escapeHtml(portalUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;color:${colors.ink};font-size:14px;font-weight:800;text-decoration:none;">View on member portal</a>
+                      <a href="${escapeHtml(portalLinkHref)}" style="display:inline-block;padding:12px 18px;border-radius:999px;color:${colors.ink};font-size:14px;font-weight:800;text-decoration:none;">View on member portal</a>
                     </td>
                     <td style="width:12px;"></td>
                     <td style="border-radius:999px;border:1px solid ${colors.line};background:#ffffff;">
-                      <a href="${escapeHtml(archiveUrl)}" style="display:inline-block;padding:11px 17px;border-radius:999px;color:${colors.goldDeep};font-size:14px;font-weight:700;text-decoration:none;">View archive</a>
+                      <a href="${escapeHtml(archiveLinkHref)}" style="display:inline-block;padding:11px 17px;border-radius:999px;color:${colors.goldDeep};font-size:14px;font-weight:700;text-decoration:none;">View archive</a>
                     </td>
                   </tr>
                 </table>
@@ -164,17 +204,17 @@ export function buildPolicyUpdateEmail(
                 (section) => `<tr>
               <td style="padding:0 30px 22px;">
                 <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
-                ${renderParagraphs(section.body, section.links)}
+                ${renderParagraphs(section.body, section.links, base, tracking)}
                 ${section.table ? renderTable(section.table) : ""}
                 ${section.bullets?.length ? renderBullets(section.bullets) : ""}
-                ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links) : ""}
+                ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, base, tracking) : ""}
               </td>
             </tr>`,
               )
               .join("")}
             <tr>
               <td style="padding:0 30px 26px;">
-                ${renderForwardedEmailCommunityCta({ portalUrl: normalizeBaseUrl(baseUrl) })}
+                ${renderForwardedEmailCommunityCta({ portalUrl: base, href: communityLinkHref })}
               </td>
             </tr>
             <tr>
@@ -186,6 +226,7 @@ export function buildPolicyUpdateEmail(
         </td>
       </tr>
     </table>
+    ${openPixel}
   </body>
 </html>`;
 
@@ -216,6 +257,7 @@ export function buildPolicyUpdateEmail(
     ]),
     renderForwardedEmailCommunityText(baseUrl),
     "",
+    unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
   ].join("\n");
 
   return { subject, html, text, portalUrl, archiveUrl };
