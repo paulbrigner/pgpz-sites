@@ -11,6 +11,7 @@ import {
   RefreshCcw,
   Save,
   Send,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -89,10 +90,11 @@ function NewsletterStatsRow({ newsletter }: { newsletter: Newsletter }) {
     ["Drafts", stats.draftSendCount],
     ["Opens", stats.openCount],
     ["Clicks", stats.clickCount],
+    ["Unsubs", stats.unsubscribeCount],
   ] as const;
 
   return (
-    <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 border-t bg-slate-50/80 px-4 py-3 sm:grid-cols-7">
       {metrics.map(([label, value]) => (
         <div key={label}>
           <div className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
@@ -105,11 +107,15 @@ function NewsletterStatsRow({ newsletter }: { newsletter: Newsletter }) {
 
 function NewsletterCard({
   newsletter,
+  isDeleting,
   onEdit,
+  onDelete,
   onUseAsTemplate,
 }: {
   newsletter: Newsletter;
+  isDeleting: boolean;
   onEdit: (newsletter: Newsletter) => void;
+  onDelete: (newsletter: Newsletter) => void;
   onUseAsTemplate: (newsletter: Newsletter) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -144,10 +150,24 @@ function NewsletterCard({
                 Template
               </Button>
             ) : (
-              <Button type="button" size="sm" variant="outline" onClick={() => onEdit(newsletter)}>
-                <Edit3 className="h-4 w-4" />
-                Edit
-              </Button>
+              <>
+                <Button type="button" size="sm" variant="outline" onClick={() => onEdit(newsletter)}>
+                  <Edit3 className="h-4 w-4" />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                  disabled={isDeleting}
+                  isLoading={isDeleting}
+                  onClick={() => onDelete(newsletter)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeleting ? "Deleting" : "Delete"}
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -159,7 +179,7 @@ function NewsletterCard({
       <NewsletterStatsRow newsletter={newsletter} />
       <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <p className="text-xs text-slate-500">
-          Open, click, and unsubscribe tracking is not instrumented yet; delivery stats are tracked.
+          Open and click stats count unique tracked recipients and can be affected by email client privacy settings.
         </p>
         <Button type="button" size="sm" variant="outline" onClick={() => setExpanded((current) => !current)}>
           <BarChart3 className="h-4 w-4" />
@@ -206,6 +226,7 @@ export function NewsletterMailer() {
   const [saving, setSaving] = useState(false);
   const [draftSending, setDraftSending] = useState(false);
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<NewsletterResult | null>(null);
@@ -378,6 +399,33 @@ export function NewsletterMailer() {
     }
   };
 
+  const deleteDraft = async (newsletter: Newsletter) => {
+    if (!window.confirm(`Delete draft "${newsletter.subject || "Untitled newsletter"}"? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeleting((current) => ({ ...current, [newsletter.id]: true }));
+    setError(null);
+    setNotice(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/newsletters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id: newsletter.id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to delete newsletter draft");
+      if (form.id === newsletter.id) setForm(emptyForm);
+      setNotice("Newsletter draft deleted.");
+      await loadState();
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete newsletter draft");
+    } finally {
+      setDeleting((current) => ({ ...current, [newsletter.id]: false }));
+    }
+  };
+
   const canSave = !!form.subject.trim() && !!form.body.trim() && !saving;
   const canSendDraft = canSave && !!draftEmail.trim() && !draftSending;
   const canSendNewsletter = !!form.id && !dirty && confirmSend && !sending && !!recipientCount;
@@ -530,7 +578,9 @@ export function NewsletterMailer() {
                   <NewsletterCard
                     key={newsletter.id}
                     newsletter={newsletter}
+                    isDeleting={!!deleting[newsletter.id]}
                     onEdit={editDraft}
+                    onDelete={deleteDraft}
                     onUseAsTemplate={useAsTemplate}
                   />
                 ))}
@@ -555,7 +605,9 @@ export function NewsletterMailer() {
                   <NewsletterCard
                     key={newsletter.id}
                     newsletter={newsletter}
+                    isDeleting={false}
                     onEdit={editDraft}
+                    onDelete={deleteDraft}
                     onUseAsTemplate={useAsTemplate}
                   />
                 ))}

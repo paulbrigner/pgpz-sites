@@ -1,6 +1,11 @@
-import { SITE_URL } from "@/lib/config";
 import type { PolicyUpdate, PolicyUpdateLink, PolicyUpdateTable } from "@/lib/policy-updates";
 import { getUserGreetingName } from "@/lib/user-display-name";
+import {
+  brandedEmailColors as colors,
+  escapeHtml,
+  normalizeBaseUrl,
+  renderMemberEmailFooter,
+} from "@/lib/branded-email";
 
 export type PolicyUpdateEmailRecipient = {
   name?: string | null;
@@ -8,29 +13,6 @@ export type PolicyUpdateEmailRecipient = {
   lastName?: string | null;
   email: string;
 };
-
-const colors = {
-  ink: "#1E1E1E",
-  coal: "#17130A",
-  gold: "#F5A800",
-  goldSoft: "#FFE6A3",
-  goldDeep: "#8A5A00",
-  cloud: "#FFF9EA",
-  slate: "#475569",
-  line: "#E2D3A7",
-  teal: "#1F6F68",
-};
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
-const normalizeBaseUrl = (baseUrl?: string | null) =>
-  (baseUrl || SITE_URL || "https://community.pgpz.org").replace(/\/+$/, "");
 
 export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
   `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
@@ -129,6 +111,7 @@ export function buildPolicyUpdateEmail(
   const archiveUrl = `${normalizeBaseUrl(baseUrl)}/updates`;
   const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
+  const footerHtml = renderMemberEmailFooter({ portalUrl: normalizeBaseUrl(baseUrl) });
   const html = `<!doctype html>
 <html>
   <head>
@@ -189,7 +172,7 @@ export function buildPolicyUpdateEmail(
               .join("")}
             <tr>
               <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
-                <p style="margin:0;color:${colors.slate};font-size:13px;line-height:1.6;">You are receiving this because your PGPZ Community membership is active. To stop receiving member updates, contact <a href="mailto:admin@pgpz.org" style="color:${colors.goldDeep};">admin@pgpz.org</a>.</p>
+                ${footerHtml}
               </td>
             </tr>
           </table>

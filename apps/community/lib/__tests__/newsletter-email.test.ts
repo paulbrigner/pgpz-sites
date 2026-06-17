@@ -28,4 +28,25 @@ describe("buildNewsletterEmail", () => {
     expect(built.html).toContain("Hi there,");
     expect(built.text).toContain("Hi there,");
   });
+
+  it("adds tracking links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
+    const built = buildNewsletterEmail(
+      newsletter,
+      { email: "paul@example.com", name: "Paul Brigner" },
+      "https://community.pgpz.org",
+      {
+        trackingId: "track-123",
+        trackLinks: true,
+        includeOpenPixel: true,
+        includeUnsubscribe: true,
+      },
+    );
+
+    expect(built.html).toContain("/api/email/open/track-123.png");
+    expect(built.html).toContain(
+      "/api/email/click/track-123?url=https%3A%2F%2Fcommunity.pgpz.org%2Fupdates",
+    );
+    expect(built.html).toContain("/api/email/unsubscribe/track-123");
+    expect(built.text).toContain("Unsubscribe: https://community.pgpz.org/api/email/unsubscribe/track-123");
+  });
 });

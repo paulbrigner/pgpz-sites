@@ -217,6 +217,22 @@ export async function recordNewsletterDraftSend(newsletterId: string) {
   });
 }
 
+export async function deleteNewsletterDraft(newsletterId: string) {
+  const id = newsletterId.trim();
+  if (!id) throw new Error("Newsletter ID is required.");
+
+  const newsletter = await getNewsletter(id);
+  if (!newsletter) throw new Error("Newsletter not found.");
+  if (newsletter.status !== "draft") throw new Error("Only draft newsletters can be deleted.");
+
+  await documentClient.delete({
+    TableName: TABLE_NAME,
+    Key: { pk: `NEWSLETTER#${id}`, sk: `NEWSLETTER#${id}` },
+  });
+
+  return { ok: true, newsletterId: id };
+}
+
 export async function markNewsletterSent({
   newsletterId,
   adminUserId,
@@ -237,7 +253,7 @@ export async function markNewsletterSent({
     TableName: TABLE_NAME,
     Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
     UpdateExpression:
-      "SET #status = :status, sentAt = :now, sentBy = :adminUserId, updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, failurePreview = :failurePreview, GSI1SK = :gsi1sk",
+      "SET #status = :status, sentAt = :now, sentBy = :adminUserId, updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, openCount = :zero, clickCount = :zero, unsubscribeCount = :zero, failurePreview = :failurePreview, GSI1SK = :gsi1sk",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":status": "sent",
@@ -246,6 +262,7 @@ export async function markNewsletterSent({
       ":recipientCount": recipientCount,
       ":sentCount": sentCount,
       ":failedCount": failedCount,
+      ":zero": 0,
       ":failurePreview": failurePreview.slice(0, 10),
       ":gsi1sk": `${now}#${newsletterId}`,
     },

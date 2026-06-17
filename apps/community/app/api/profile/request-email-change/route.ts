@@ -8,48 +8,15 @@ import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
 import {
   EMAIL_FROM,
-  EMAIL_SERVER,
-  EMAIL_SERVER_HOST,
-  EMAIL_SERVER_PORT,
-  EMAIL_SERVER_SECURE,
-  EMAIL_SERVER_USER,
-  EMAIL_SERVER_PASSWORD,
   NEXTAUTH_SECRET,
   NEXTAUTH_TABLE,
   NEXTAUTH_URL,
 } from "@/lib/config";
 import { documentClient } from "@/lib/dynamodb";
+import { buildEmailServerConfig } from "@/lib/admin/email-transport";
+import { buildEmailChangeConfirmationEmail } from "@/lib/system-email";
 
 const EMAIL_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
-const buildEmailServerConfig = () => {
-  if (EMAIL_SERVER_HOST) {
-    return {
-      host: EMAIL_SERVER_HOST,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  if (EMAIL_SERVER && EMAIL_SERVER.includes("://")) {
-    return EMAIL_SERVER as any;
-  }
-  if (EMAIL_SERVER) {
-    return {
-      host: EMAIL_SERVER,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  return null;
-};
 
 const isValidEmail = (value: string) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -101,19 +68,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email provider not configured" }, { status: 500 });
     }
     const transporter = nodemailer.createTransport(transportConfig);
-    const html = `
-      <p>You requested to change your email on PGPZ Community.</p>
-      <p>Click the button below to confirm your new email. This link expires in 30 minutes.</p>
-      <p><a href="${confirmUrl.toString()}" style="display:inline-block;padding:10px 16px;background:#000;color:#fff;text-decoration:none;border-radius:6px;">Confirm email change</a></p>
-      <p>If you didn't request this, you can ignore this email.</p>
-    `;
-    const text = `Confirm your email change: ${confirmUrl.toString()}\nThis link expires in 30 minutes. If you didn't request this, ignore the email.`;
+    const built = buildEmailChangeConfirmationEmail(confirmUrl.toString());
     await transporter.sendMail({
       to: normalizedEmail,
       from: EMAIL_FROM,
-      subject: "Confirm your email change",
-      text,
-      html,
+      subject: built.subject,
+      text: built.text,
+      html: built.html,
     });
 
     return NextResponse.json({ ok: true });

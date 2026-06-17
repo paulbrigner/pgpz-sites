@@ -17,6 +17,7 @@ import {
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
+import { buildMagicLinkEmail } from "@/lib/system-email";
 
 if (!process.env.NEXTAUTH_URL && NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = NEXTAUTH_URL;
@@ -51,54 +52,6 @@ const emailServerConfig = (() => {
 
   return undefined as any;
 })();
-
-const magicLinkText = ({ url, host }: { url: string; host: string }) =>
-  `Sign in to ${host}\n${url}\n\n`;
-
-const magicLinkHtml = ({
-  url,
-  host,
-  theme,
-}: {
-  url: string;
-  host: string;
-  theme: Record<string, string | undefined>;
-}) => {
-  const escapedHost = host.replace(/\./g, "&#8203;.");
-  const brandColor = theme.brandColor || "#F5A800";
-  const buttonText = theme.buttonText || "#1f1f22";
-
-  return `
-<body style="background: #fff8e7;">
-  <table width="100%" border="0" cellspacing="20" cellpadding="0"
-    style="background: #fffdf7; max-width: 600px; margin: auto; border-radius: 8px; border: 1px solid #ffd88a;">
-    <tr>
-      <td align="center"
-        style="padding: 20px 0 10px; font-size: 22px; font-family: Helvetica, Arial, sans-serif; color: #1f1f22;">
-        Sign in to <strong>${escapedHost}</strong>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table border="0" cellspacing="0" cellpadding="0">
-          <tr>
-            <td align="center" style="border-radius: 5px;" bgcolor="${brandColor}"><a href="${url}"
-                target="_blank"
-                style="font-size: 18px; font-family: Helvetica, Arial, sans-serif; color: ${buttonText}; text-decoration: none; border-radius: 5px; padding: 10px 20px; border: 1px solid ${brandColor}; display: inline-block; font-weight: bold;">Sign in</a></td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-    <tr>
-      <td align="center"
-        style="padding: 0 20px 20px; font-size: 16px; line-height: 22px; font-family: Helvetica, Arial, sans-serif; color: #3d4658;">
-        If you did not request this email, you can safely ignore it.
-      </td>
-    </tr>
-  </table>
-</body>
-	`;
-};
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -185,9 +138,10 @@ async function assertLegalAcceptanceForAccountEmail(identifier: string, url: str
   }
 }
 
-const sendMagicLink = async ({ identifier, url, provider, theme }: any) => {
+const sendMagicLink = async ({ identifier, url, provider }: any) => {
   const { host } = new URL(url);
-  const subject = `Sign in to ${host}`;
+  const built = buildMagicLinkEmail({ url, host });
+  const subject = built.subject;
   await assertLegalAcceptanceForAccountEmail(identifier, url);
   const transporter = nodemailer.createTransport(provider.server);
   let failureLogged = false;
@@ -197,8 +151,8 @@ const sendMagicLink = async ({ identifier, url, provider, theme }: any) => {
       to: identifier,
       from: provider.from,
       subject,
-      text: magicLinkText({ url, host }),
-      html: magicLinkHtml({ url, host, theme: theme || {} }),
+      text: built.text,
+      html: built.html,
     });
 
     const rejected = (result.rejected || []).filter(Boolean).map(String);

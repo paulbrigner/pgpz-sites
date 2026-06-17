@@ -5,28 +5,16 @@ import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { EMAIL_FROM } from "@/lib/config";
 import { recordEmailEvent } from "@/lib/admin/email-log";
-import { buildEmailServerConfig, stripHtml } from "@/lib/admin/email-transport";
+import { buildEmailServerConfig } from "@/lib/admin/email-transport";
 import {
   findUserProfileByEmail,
   findUserProfileById,
   getUserProfileDisplayName,
   type UserProfile,
 } from "@/lib/admin/user-profile";
+import { buildCustomAdminEmail, buildWelcomeEmail } from "@/lib/system-email";
 
 export const dynamic = "force-dynamic";
-
-function buildWelcomeEmail(user: UserProfile | null, to: string) {
-  const name = (user && getUserProfileDisplayName(user)) || to;
-  const subject = "Welcome to PGPZ Community";
-  const html = `
-    <p>Hi ${name || "there"},</p>
-    <p>Welcome to the PGPZ Community. Your membership is active and you can sign in any time to access community resources.</p>
-    <p>If you have questions, reply to this email and we will help.</p>
-    <p>Thanks,<br/>PGPZ Community Team</p>
-  `;
-  const text = stripHtml(html);
-  return { subject, html, text };
-}
 
 type EmailType = "welcome" | "custom";
 
@@ -68,11 +56,19 @@ export async function POST(request: NextRequest) {
       const customHtml = typeof body?.html === "string" ? body.html.trim() : "";
       const customText = typeof body?.text === "string" ? body.text.trim() : "";
       if (customSubject || customHtml || customText) {
-        subject = customSubject || "Welcome to PGPZ Community";
-        html = customHtml || undefined;
-        text = customText || (html ? stripHtml(html) : undefined);
+        const built = buildCustomAdminEmail({
+          subject: customSubject || "Welcome to PGPZ Community",
+          html: customHtml || undefined,
+          text: customText || undefined,
+        });
+        subject = built.subject;
+        html = built.html;
+        text = built.text;
       } else {
-        const built = buildWelcomeEmail(user, to);
+        const built = buildWelcomeEmail({
+          recipientName: user ? getUserProfileDisplayName(user) : null,
+          fallbackEmail: to,
+        });
         subject = built.subject;
         html = built.html;
         text = built.text;
@@ -80,11 +76,19 @@ export async function POST(request: NextRequest) {
       markWelcome = true;
     } else {
       subject = typeof body?.subject === "string" ? body.subject.trim() : "";
-      html = typeof body?.html === "string" ? body.html.trim() : "";
-      text = typeof body?.text === "string" ? body.text.trim() : stripHtml(html || "");
-      if (!subject || (!html && !text)) {
+      const customHtml = typeof body?.html === "string" ? body.html.trim() : "";
+      const customText = typeof body?.text === "string" ? body.text.trim() : "";
+      if (!subject || (!customHtml && !customText)) {
         return NextResponse.json({ error: "subject and html or text are required for custom emails" }, { status: 400 });
       }
+      const built = buildCustomAdminEmail({
+        subject,
+        html: customHtml || undefined,
+        text: customText || undefined,
+      });
+      subject = built.subject;
+      html = built.html;
+      text = built.text;
     }
 
     const transporter = nodemailer.createTransport(transportConfig);
@@ -92,7 +96,7 @@ export async function POST(request: NextRequest) {
       to,
       from: EMAIL_FROM,
       subject,
-      text: text || stripHtml(html || ""),
+      text,
       html: html || undefined,
     });
 

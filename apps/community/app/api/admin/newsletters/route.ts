@@ -5,12 +5,17 @@ import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { buildEmailServerConfig, isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import {
+  deleteNewsletterDraft,
   getNewsletter,
   listNewsletters,
   markNewsletterSent,
   recordNewsletterDraftSend,
   saveNewsletterDraft,
 } from "@/lib/admin/newsletters";
+import {
+  createNewsletterTrackingRecord,
+  markNewsletterTrackingSent,
+} from "@/lib/admin/email-tracking";
 import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/admin/roster";
 import { findUserProfileByEmail, getUserProfileDisplayName } from "@/lib/admin/user-profile";
 import { recordEmailEvent } from "@/lib/admin/email-log";
@@ -86,6 +91,18 @@ export async function POST(request: NextRequest) {
     } catch (err: any) {
       const message = typeof err?.message === "string" ? err.message : "Failed to save newsletter draft";
       return NextResponse.json({ error: message }, { status: message.includes("cannot be edited") ? 409 : 400 });
+    }
+  }
+
+  if (action === "delete") {
+    const newsletterId = typeof body?.id === "string" ? body.id.trim() : "";
+    try {
+      const result = await deleteNewsletterDraft(newsletterId);
+      return NextResponse.json(result);
+    } catch (err: any) {
+      const message = typeof err?.message === "string" ? err.message : "Failed to delete newsletter draft";
+      const status = message.includes("not found") ? 404 : message.includes("Only draft") ? 409 : 400;
+      return NextResponse.json({ error: message }, { status });
     }
   }
 
@@ -187,7 +204,22 @@ export async function POST(request: NextRequest) {
     let sent = 0;
 
     for (const recipient of recipients) {
-      const built = buildNewsletterEmail(newsletter, { email: recipient.email, name: recipient.name }, SITE_URL);
+      const tracking = await createNewsletterTrackingRecord({
+        newsletterId: newsletter.id,
+        userId: recipient.id,
+        email: recipient.email,
+      });
+      const built = buildNewsletterEmail(
+        newsletter,
+        { email: recipient.email, name: recipient.name },
+        SITE_URL,
+        {
+          trackingId: tracking.trackingId,
+          trackLinks: true,
+          includeOpenPixel: true,
+          includeUnsubscribe: true,
+        },
+      );
       try {
         const sendResult = await transporter.sendMail({
           to: recipient.email,
@@ -195,6 +227,10 @@ export async function POST(request: NextRequest) {
           subject: built.subject,
           text: built.text,
           html: built.html,
+        });
+        await markNewsletterTrackingSent({
+          trackingId: tracking.trackingId,
+          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
         });
         sent += 1;
         await recordEmailEvent({
@@ -206,6 +242,7 @@ export async function POST(request: NextRequest) {
           providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
           metadata: {
             newsletterId: newsletter.id,
+            trackingId: tracking.trackingId,
             audience: newsletter.audience,
             profileNameResolved: !!recipient.name,
           },
@@ -222,6 +259,7 @@ export async function POST(request: NextRequest) {
           error,
           metadata: {
             newsletterId: newsletter.id,
+            trackingId: tracking.trackingId,
             audience: newsletter.audience,
             profileNameResolved: !!recipient.name,
           },
