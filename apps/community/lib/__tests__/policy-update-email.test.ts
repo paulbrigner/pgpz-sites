@@ -19,7 +19,10 @@ describe("buildPolicyUpdateEmail", () => {
     );
 
     expect(built.html).toContain("Hi Paul Brigner,");
+    expect(built.html).toContain("Did someone forward you this email?");
+    expect(built.html).toContain('src="https://community.pgpz.org/community-join-qr.png"');
     expect(built.text).toContain("Hi Paul Brigner,");
+    expect(built.text).toContain("Join the PGPZ Community to receive updates directly");
   });
 
   it("builds a greeting from first and last name fields", () => {

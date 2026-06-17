@@ -4,6 +4,8 @@ import {
   brandedEmailColors as colors,
   escapeHtml,
   normalizeBaseUrl,
+  renderForwardedEmailCommunityCta,
+  renderForwardedEmailCommunityText,
   renderMemberEmailFooter,
 } from "@/lib/branded-email";
 
@@ -171,6 +173,11 @@ export function buildPolicyUpdateEmail(
               )
               .join("")}
             <tr>
+              <td style="padding:0 30px 26px;">
+                ${renderForwardedEmailCommunityCta({ portalUrl: normalizeBaseUrl(baseUrl) })}
+              </td>
+            </tr>
+            <tr>
               <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
                 ${footerHtml}
               </td>
@@ -207,6 +214,8 @@ export function buildPolicyUpdateEmail(
       ...(section.bodyAfterBullets || []).map((paragraph) => renderLinkedText(paragraph, section.links)),
       "",
     ]),
+    renderForwardedEmailCommunityText(baseUrl),
+    "",
   ].join("\n");
 
   return { subject, html, text, portalUrl, archiveUrl };

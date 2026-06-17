@@ -65,6 +65,44 @@ export function renderMemberEmailFooter({
   return `<p style="margin:0;color:${brandedEmailColors.slate};font-size:13px;line-height:1.6;">You are receiving this because your PGPZ Community membership is active. Visit <a href="${escapeHtml(url)}" style="color:${brandedEmailColors.goldDeep};">PGPZ Community</a> for member resources.${optOut}</p>`;
 }
 
+export function renderForwardedEmailCommunityCta({
+  portalUrl,
+  href,
+}: {
+  portalUrl?: string | null;
+  href?: string | null;
+}) {
+  const url = normalizeBaseUrl(portalUrl);
+  const linkHref = href || url;
+  const qrUrl = `${url}/community-join-qr.png`;
+  const colors = brandedEmailColors;
+
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid ${colors.line};border-radius:16px;background:#FFFDF5;overflow:hidden;">
+    <tr>
+      <td style="padding:18px 18px 18px 20px;vertical-align:middle;">
+        <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">Join the Community</div>
+        <h2 style="margin:8px 0 8px;color:${colors.ink};font-size:19px;line-height:1.28;">Did someone forward you this email?</h2>
+        <p style="margin:0 0 12px;color:${colors.slate};font-size:14px;line-height:1.62;">Join the PGPZ Community to receive updates directly and access other important resources.</p>
+        <a href="${escapeHtml(linkHref)}" style="color:${colors.goldDeep};font-size:14px;font-weight:800;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(url)}</a>
+      </td>
+      <td width="132" style="padding:16px 18px 16px 0;vertical-align:middle;text-align:right;">
+        <a href="${escapeHtml(linkHref)}" style="display:inline-block;text-decoration:none;">
+          <img src="${escapeHtml(qrUrl)}" width="112" height="112" alt="QR code for ${escapeHtml(url)}" style="display:block;width:112px;height:112px;border:0;border-radius:12px;" />
+        </a>
+      </td>
+    </tr>
+  </table>`;
+}
+
+export function renderForwardedEmailCommunityText(portalUrl?: string | null) {
+  const url = normalizeBaseUrl(portalUrl);
+  return [
+    "Did someone forward you this email?",
+    "Join the PGPZ Community to receive updates directly and access other important resources.",
+    url,
+  ].join("\n");
+}
+
 export function textToEmailHtml(value: string) {
   return value
     .trim()

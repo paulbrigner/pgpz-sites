@@ -4,6 +4,8 @@ import {
   brandedEmailColors as colors,
   escapeHtml,
   normalizeBaseUrl,
+  renderForwardedEmailCommunityCta,
+  renderForwardedEmailCommunityText,
   renderMemberEmailFooter,
 } from "@/lib/branded-email";
 
@@ -73,6 +75,10 @@ export function buildNewsletterEmail(
   const subject = newsletter.subject;
   const preheader = newsletter.preheader || newsletter.body.replace(/\s+/g, " ").trim().slice(0, 160);
   const bodyHtml = renderBodyHtml(newsletter.body, portalUrl, tracking);
+  const communityLinkHref =
+    tracking?.trackLinks && tracking.trackingId
+      ? trackedClickUrl(portalUrl, tracking.trackingId, portalUrl)
+      : portalUrl;
   const unsubscribeUrl =
     tracking?.includeUnsubscribe && tracking.trackingId
       ? `${portalUrl}/api/email/unsubscribe/${encodeURIComponent(tracking.trackingId)}`
@@ -106,6 +112,7 @@ export function buildNewsletterEmail(
               <td style="padding:28px 30px 12px;">
                 <p style="margin:0 0 16px;color:${colors.slate};font-size:15px;line-height:1.7;">Hi ${escapeHtml(name)},</p>
                 ${bodyHtml}
+                ${renderForwardedEmailCommunityCta({ portalUrl, href: communityLinkHref })}
               </td>
             </tr>
             <tr>
@@ -125,6 +132,8 @@ export function buildNewsletterEmail(
     `Hi ${name},`,
     "",
     renderBodyText(newsletter.body),
+    "",
+    renderForwardedEmailCommunityText(portalUrl),
     "",
     `PGPZ Community: ${portalUrl}`,
     unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
