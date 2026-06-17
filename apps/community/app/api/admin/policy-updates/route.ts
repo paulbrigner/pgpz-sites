@@ -36,6 +36,8 @@ async function buildDraftRecipient(email: string): Promise<PolicyUpdateSendRecip
     id: profile?.id || null,
     email,
     name: profile ? getUserProfileDisplayName(profile) : null,
+    firstName: profile?.firstName || null,
+    lastName: profile?.lastName || null,
   };
 }
 
@@ -99,7 +101,12 @@ export async function POST(request: NextRequest) {
   for (const recipient of recipients) {
     const built = buildPolicyUpdateEmail(
       update,
-      { email: recipient.email, name: recipient.name },
+      {
+        email: recipient.email,
+        name: recipient.name,
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+      },
       SITE_URL,
     );
     try {
@@ -152,7 +159,7 @@ export async function POST(request: NextRequest) {
     title: update.title,
     draft: draftMode,
     recipientEmail: draftRecipientEmail || null,
-    resolvedRecipientName: draftMode ? recipients[0]?.name || null : null,
+    resolvedRecipientName: draftMode ? recipients[0]?.firstName || null : null,
     recipientCount: recipients.length,
     sent,
     failed: failures.length,

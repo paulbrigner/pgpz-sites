@@ -8,19 +8,19 @@ const newsletter = {
 };
 
 describe("buildNewsletterEmail", () => {
-  it("greets recipients by profile name and links URLs", () => {
+  it("greets recipients by first name and links URLs", () => {
     const built = buildNewsletterEmail(
       newsletter,
-      { email: "paul@example.com", name: "Paul Brigner" },
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
       "https://community.pgpz.org",
     );
 
     expect(built.subject).toBe("PGPZ Community Newsletter");
-    expect(built.html).toContain("Hi Paul Brigner,");
+    expect(built.html).toContain("Hi Paul,");
     expect(built.html).toContain('href="https://community.pgpz.org/updates"');
     expect(built.html).toContain("Did someone forward you this email?");
     expect(built.html).toContain('src="https://community.pgpz.org/community-join-qr.png"');
-    expect(built.text).toContain("Hi Paul Brigner,");
+    expect(built.text).toContain("Hi Paul,");
     expect(built.text).toContain("Read more at https://community.pgpz.org/updates.");
     expect(built.text).toContain("Join the PGPZ Community to receive updates directly");
   });
@@ -35,7 +35,7 @@ describe("buildNewsletterEmail", () => {
   it("adds tracking links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
     const built = buildNewsletterEmail(
       newsletter,
-      { email: "paul@example.com", name: "Paul Brigner" },
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
       "https://community.pgpz.org",
       {
         trackingId: "track-123",

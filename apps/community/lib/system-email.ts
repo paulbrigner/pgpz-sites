@@ -9,6 +9,7 @@ import {
   stripHtmlToText,
   textToEmailHtml,
 } from "@/lib/branded-email";
+import { getUserGreetingName } from "@/lib/user-display-name";
 
 export function buildMagicLinkEmail({
   url,
@@ -77,14 +78,17 @@ export function buildEmailChangeConfirmationEmail(confirmUrl: string) {
 
 export function buildWelcomeEmail({
   recipientName,
-  fallbackEmail,
+  recipientFirstName,
+  recipientLastName,
   portalUrl,
 }: {
   recipientName?: string | null;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
   fallbackEmail?: string | null;
   portalUrl?: string | null;
 }) {
-  const name = recipientName || fallbackEmail || "there";
+  const name = getUserGreetingName({ name: recipientName, firstName: recipientFirstName, lastName: recipientLastName });
   const url = normalizeBaseUrl(portalUrl);
   const subject = "Welcome to PGPZ Community";
   const preheader = "Your PGPZ Community membership is active.";

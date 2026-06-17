@@ -51,6 +51,8 @@ async function buildDraftRecipient(email: string): Promise<NewsletterSendRecipie
     id: profile?.id || null,
     email,
     name: profile ? getUserProfileDisplayName(profile) : null,
+    firstName: profile?.firstName || null,
+    lastName: profile?.lastName || null,
   };
 }
 
@@ -192,7 +194,16 @@ export async function POST(request: NextRequest) {
         adminUserId,
       });
       const recipient = await buildDraftRecipient(draftRecipientEmail);
-      const built = buildNewsletterEmail(newsletter, { email: recipient.email, name: recipient.name }, SITE_URL);
+      const built = buildNewsletterEmail(
+        newsletter,
+        {
+          email: recipient.email,
+          name: recipient.name,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+        },
+        SITE_URL,
+      );
       const transporter = nodemailer.createTransport(transportConfig);
       const sendResult = await transporter.sendMail({
         to: recipient.email,
@@ -222,7 +233,7 @@ export async function POST(request: NextRequest) {
         draft: true,
         newsletter,
         recipientEmail: recipient.email,
-        resolvedRecipientName: recipient.name || null,
+        resolvedRecipientName: recipient.firstName || null,
       });
     } catch (err: any) {
       const message = typeof err?.message === "string" ? err.message : "Failed to send newsletter draft";
@@ -290,7 +301,12 @@ export async function POST(request: NextRequest) {
       });
       const built = buildNewsletterEmail(
         newsletter,
-        { email: recipient.email, name: recipient.name },
+        {
+          email: recipient.email,
+          name: recipient.name,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+        },
         SITE_URL,
         {
           trackingId: tracking.trackingId,

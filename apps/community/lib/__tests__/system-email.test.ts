@@ -36,14 +36,27 @@ describe("system email builders", () => {
   it("renders welcome emails with member footer and portal CTA", () => {
     const built = buildWelcomeEmail({
       recipientName: "Paul Brigner",
+      recipientFirstName: "Paul",
+      recipientLastName: "Brigner",
       fallbackEmail: "paul@example.com",
       portalUrl: "https://community.pgpz.org",
     });
 
-    expect(built.html).toContain("Hi Paul Brigner,");
+    expect(built.html).toContain("Hi Paul,");
     expect(built.html).toContain("Visit PGPZ Community");
     expect(built.html).toContain("You are receiving this because your PGPZ Community membership is active");
-    expect(built.text).toContain("Hi Paul Brigner,");
+    expect(built.text).toContain("Hi Paul,");
+  });
+
+  it("falls back to a generic welcome greeting when first name is unavailable", () => {
+    const built = buildWelcomeEmail({
+      recipientName: "Paul Brigner",
+      fallbackEmail: "paul@example.com",
+      portalUrl: "https://community.pgpz.org",
+    });
+
+    expect(built.html).toContain("Hi there,");
+    expect(built.text).toContain("Hi there,");
   });
 
   it("wraps custom admin emails in the branded shell", () => {

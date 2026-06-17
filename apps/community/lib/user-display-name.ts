@@ -18,4 +18,4 @@ export const getUserDisplayName = (user: UserDisplayNameSource): string | null =
 export const getUserGreetingName = (
   user: UserDisplayNameSource,
   fallback = "there",
-): string => getUserDisplayName(user) || fallback;
+): string => textOrNull(user.firstName) || fallback;

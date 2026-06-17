@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
       } else {
         const built = buildWelcomeEmail({
           recipientName: user ? getUserProfileDisplayName(user) : null,
+          recipientFirstName: user?.firstName || null,
+          recipientLastName: user?.lastName || null,
           fallbackEmail: to,
         });
         subject = built.subject;

@@ -74,6 +74,8 @@ export type PolicyUpdateRecipient = {
   id: string;
   email: string;
   name: string | null;
+  firstName: string | null;
+  lastName: string | null;
 };
 
 export type BuildAdminRosterOptions = {
@@ -237,6 +239,8 @@ export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipien
       id: member.id,
       email: member.email as string,
       name: getUserDisplayName(member),
+      firstName: member.firstName,
+      lastName: member.lastName,
     }))
     .sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: "base" }));
 }

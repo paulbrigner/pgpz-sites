@@ -6,7 +6,7 @@ const weeklyUpdate = getLatestPolicyUpdate("weekly");
 const specialUpdate = getLatestPolicyUpdate("special");
 
 describe("buildPolicyUpdateEmail", () => {
-  it("greets recipients by profile name", () => {
+  it("greets recipients by first name", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 
     const built = buildPolicyUpdateEmail(
@@ -14,18 +14,20 @@ describe("buildPolicyUpdateEmail", () => {
       {
         email: "paul@example.com",
         name: "Paul Brigner",
+        firstName: "Paul",
+        lastName: "Brigner",
       },
       "https://community.pgpz.org",
     );
 
-    expect(built.html).toContain("Hi Paul Brigner,");
+    expect(built.html).toContain("Hi Paul,");
     expect(built.html).toContain("Did someone forward you this email?");
     expect(built.html).toContain('src="https://community.pgpz.org/community-join-qr.png"');
-    expect(built.text).toContain("Hi Paul Brigner,");
+    expect(built.text).toContain("Hi Paul,");
     expect(built.text).toContain("Join the PGPZ Community to receive updates directly");
   });
 
-  it("builds a greeting from first and last name fields", () => {
+  it("uses only the stored first name field for greetings", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 
     const built = buildPolicyUpdateEmail(
@@ -38,8 +40,10 @@ describe("buildPolicyUpdateEmail", () => {
       "https://community.pgpz.org",
     );
 
-    expect(built.html).toContain("Hi Paul Brigner,");
-    expect(built.text).toContain("Hi Paul Brigner,");
+    expect(built.html).toContain("Hi Paul,");
+    expect(built.text).toContain("Hi Paul,");
+    expect(built.html).not.toContain("Hi Paul Brigner,");
+    expect(built.text).not.toContain("Hi Paul Brigner,");
   });
 
   it("falls back when no profile name is available", () => {
@@ -60,7 +64,7 @@ describe("buildPolicyUpdateEmail", () => {
 
     const built = buildPolicyUpdateEmail(
       specialUpdate,
-      { email: "paul@example.com", name: "Paul Brigner" },
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
       "https://community.pgpz.org",
     );
 
@@ -75,7 +79,7 @@ describe("buildPolicyUpdateEmail", () => {
 
     const built = buildPolicyUpdateEmail(
       weeklyUpdate,
-      { email: "paul@example.com", name: "Paul Brigner" },
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
       "https://community.pgpz.org",
     );
 
