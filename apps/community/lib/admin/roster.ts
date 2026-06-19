@@ -41,6 +41,7 @@ export type AdminMember = {
   membershipStatus: "active" | "none";
   membershipProvider: string | null;
   membershipVerifiedAt: string | null;
+  joinedAt: string | null;
   membershipProofPostUrl: string | null;
   membershipProofPostId: string | null;
   proofRetentionPolicy: string | null;
@@ -125,6 +126,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
     membershipStatus,
     membershipProvider: textOrNull(user.membershipProvider),
     membershipVerifiedAt: textOrNull(user.membershipVerifiedAt),
+    joinedAt: textOrNull(user.membershipVerifiedAt),
     membershipProofPostUrl: textOrNull(user.membershipProofPostUrl),
     membershipProofPostId: textOrNull(user.membershipProofPostId),
     proofRetentionPolicy: textOrNull(user.proofRetentionPolicy),
