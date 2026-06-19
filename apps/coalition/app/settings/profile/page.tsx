@@ -15,7 +15,11 @@ export default function ProfileSettingsPage() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [company, setCompany] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [xHandle, setXHandle] = useState("");
+  const [memberDirectoryOptIn, setMemberDirectoryOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +28,7 @@ export default function ProfileSettingsPage() {
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [initial, setInitial] = useState<
-    { firstName: string; lastName: string; linkedinUrl: string } | null
+    { firstName: string; lastName: string; company: string; jobTitle: string; linkedinUrl: string; xHandle: string; memberDirectoryOptIn: boolean } | null
   >(null);
 
   const sessionUser = session?.user as any | undefined;
@@ -35,11 +39,19 @@ export default function ProfileSettingsPage() {
     const next = {
       firstName: (sessionUser.firstName as string) || "",
       lastName: (sessionUser.lastName as string) || "",
+      company: (sessionUser.company as string) || "",
+      jobTitle: (sessionUser.jobTitle as string) || "",
       linkedinUrl: (sessionUser.linkedinUrl as string) || "",
+      xHandle: (sessionUser.xHandle as string) || "",
+      memberDirectoryOptIn: sessionUser.memberDirectoryOptIn === true,
     };
     setFirstName(next.firstName);
     setLastName(next.lastName);
+    setCompany(next.company);
+    setJobTitle(next.jobTitle);
     setLinkedinUrl(next.linkedinUrl);
+    setXHandle(next.xHandle);
+    setMemberDirectoryOptIn(next.memberDirectoryOptIn);
     setNewEmail(currentEmail || "");
     setInitial(next);
   }, [authenticated, sessionUser, currentEmail]);
@@ -60,6 +72,8 @@ export default function ProfileSettingsPage() {
     try {
       if (!firstName.trim()) throw new Error("First name is required");
       if (!lastName.trim()) throw new Error("Last name is required");
+      if (!company.trim()) throw new Error("Corporate affiliation is required");
+      if (!jobTitle.trim()) throw new Error("Job title is required");
       if (linkedinUrl.trim()) {
         try {
           const url = new URL(linkedinUrl.trim());
@@ -74,7 +88,11 @@ export default function ProfileSettingsPage() {
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
+          company: company.trim(),
+          jobTitle: jobTitle.trim(),
           linkedinUrl: linkedinUrl.trim(),
+          xHandle: xHandle.trim(),
+          memberDirectoryOptIn,
         }),
       });
       if (!res.ok) {
@@ -84,7 +102,11 @@ export default function ProfileSettingsPage() {
       const next = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        company: company.trim(),
+        jobTitle: jobTitle.trim(),
         linkedinUrl: linkedinUrl.trim(),
+        xHandle: xHandle.trim(),
+        memberDirectoryOptIn,
       };
       setMessage("Profile updated");
       setInitial(next);
@@ -101,7 +123,11 @@ export default function ProfileSettingsPage() {
     return (
       firstName.trim() !== initial.firstName ||
       lastName.trim() !== initial.lastName ||
-      linkedinUrl.trim() !== initial.linkedinUrl
+      company.trim() !== initial.company ||
+      jobTitle.trim() !== initial.jobTitle ||
+      linkedinUrl.trim() !== initial.linkedinUrl ||
+      xHandle.trim() !== initial.xHandle ||
+      memberDirectoryOptIn !== initial.memberDirectoryOptIn
     );
   };
 
@@ -215,6 +241,34 @@ export default function ProfileSettingsPage() {
               />
             </div>
           </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="company" className="text-sm font-medium">
+                Corporate affiliation
+              </label>
+              <input
+                id="company"
+                value={company}
+                onChange={(event) => setCompany(event.target.value)}
+                placeholder="Organization or company"
+                required
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="jobTitle" className="text-sm font-medium">
+                Job title
+              </label>
+              <input
+                id="jobTitle"
+                value={jobTitle}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Policy lead, counsel, founder..."
+                required
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
           <div className="space-y-2">
             <label htmlFor="linkedin" className="text-sm font-medium">
               LinkedIn URL
@@ -226,6 +280,32 @@ export default function ProfileSettingsPage() {
               placeholder="https://www.linkedin.com/in/username"
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="xHandle" className="text-sm font-medium">
+              X handle
+            </label>
+            <input
+              id="xHandle"
+              value={xHandle}
+              onChange={(event) => setXHandle(event.target.value)}
+              placeholder="@pgpz"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="rounded-lg border bg-white/70 p-4">
+            <div className="flex gap-3">
+              <input
+                id="memberDirectoryOptIn"
+                type="checkbox"
+                checked={memberDirectoryOptIn}
+                onChange={(event) => setMemberDirectoryOptIn(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
+              />
+              <label htmlFor="memberDirectoryOptIn" className="text-sm leading-6 text-slate-600">
+                Show my name, affiliation, title, email, LinkedIn URL, and X handle to other active coalition members in the member directory.
+              </label>
+            </div>
           </div>
           <Button type="submit" disabled={submitting}>
             {submitting ? "Saving..." : "Save changes"}

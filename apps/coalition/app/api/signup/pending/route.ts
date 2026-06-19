@@ -4,6 +4,7 @@ import { getToken } from "next-auth/jwt";
 import { NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
+import { normalizeXHandle } from "@/lib/x-handle";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -17,7 +18,11 @@ const validateProfile = (body: any) => {
   const email = normalizeEmail(body?.email);
   const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
+  const company = typeof body?.company === "string" ? body.company.trim() : "";
+  const jobTitle = typeof body?.jobTitle === "string" ? body.jobTitle.trim() : "";
   const linkedinUrl = normalizeLinkedinUrl(body?.linkedinUrl);
+  const xHandle = normalizeXHandle(body?.xHandle);
+  const memberDirectoryOptIn = body?.memberDirectoryOptIn === true;
   const legalAccepted = body?.legalAccepted === true;
   const legalDocumentVersion =
     typeof body?.legalDocumentVersion === "string" ? body.legalDocumentVersion.trim() : "";
@@ -27,6 +32,10 @@ const validateProfile = (body: any) => {
   }
   if (!firstName) throw new Error("First name is required.");
   if (!lastName) throw new Error("Last name is required.");
+  if (!company) throw new Error("Corporate affiliation is required.");
+  if (!jobTitle) throw new Error("Job title is required.");
+  if (company.length > 180) throw new Error("Corporate affiliation must be 180 characters or fewer.");
+  if (jobTitle.length > 180) throw new Error("Job title must be 180 characters or fewer.");
   if (!legalAccepted || legalDocumentVersion !== LEGAL_DOCUMENT_VERSION) {
     throw new Error("Please accept the current Terms of Service, Privacy Policy, and Coalition Guidelines.");
   }
@@ -40,7 +49,7 @@ const validateProfile = (body: any) => {
     }
   }
 
-  return { email, firstName, lastName, linkedinUrl };
+  return { email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn };
 };
 
 const pendingKey = (email: string, signupProfileId: string) => ({
@@ -65,7 +74,11 @@ export async function POST(request: NextRequest) {
         email: profile.email,
         firstName: profile.firstName,
         lastName: profile.lastName,
+        company: profile.company,
+        jobTitle: profile.jobTitle,
         linkedinUrl: profile.linkedinUrl || null,
+        xHandle: profile.xHandle || null,
+        memberDirectoryOptIn: profile.memberDirectoryOptIn,
         legalAcceptedAt: now,
         legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         createdAt: now,
@@ -120,7 +133,11 @@ export async function PATCH(request: NextRequest) {
     const firstName = typeof item.firstName === "string" ? item.firstName.trim() : "";
     const lastName = typeof item.lastName === "string" ? item.lastName.trim() : "";
     const name = `${firstName} ${lastName}`.trim();
+    const company = typeof item.company === "string" ? item.company.trim() : "";
+    const jobTitle = typeof item.jobTitle === "string" ? item.jobTitle.trim() : "";
     const linkedinUrl = typeof item.linkedinUrl === "string" ? item.linkedinUrl.trim() : "";
+    const xHandle = typeof item.xHandle === "string" ? item.xHandle.trim() : "";
+    const memberDirectoryOptIn = item.memberDirectoryOptIn === true;
     const legalAcceptedAt = typeof item.legalAcceptedAt === "string" ? item.legalAcceptedAt : null;
     const legalDocumentVersion =
       typeof item.legalDocumentVersion === "string" ? item.legalDocumentVersion : null;
@@ -129,7 +146,11 @@ export async function PATCH(request: NextRequest) {
       "firstName = :firstName",
       "lastName = :lastName",
       "#name = :name",
+      "company = :company",
+      "jobTitle = :jobTitle",
       "linkedinUrl = :linkedinUrl",
+      "xHandle = :xHandle",
+      "memberDirectoryOptIn = :memberDirectoryOptIn",
       "legalAcceptedAt = if_not_exists(legalAcceptedAt, :legalAcceptedAt)",
       "legalDocumentVersion = if_not_exists(legalDocumentVersion, :legalDocumentVersion)",
     ];
@@ -138,7 +159,11 @@ export async function PATCH(request: NextRequest) {
       ":firstName": firstName,
       ":lastName": lastName,
       ":name": name,
+      ":company": company || null,
+      ":jobTitle": jobTitle || null,
       ":linkedinUrl": linkedinUrl || null,
+      ":xHandle": xHandle || null,
+      ":memberDirectoryOptIn": memberDirectoryOptIn,
       ":legalAcceptedAt": legalAcceptedAt || new Date().toISOString(),
       ":legalDocumentVersion": legalDocumentVersion || LEGAL_DOCUMENT_VERSION,
     };
@@ -156,7 +181,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       applied: true,
-      profile: { firstName, lastName, name, linkedinUrl },
+      profile: { firstName, lastName, name, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn },
     });
   } catch (err) {
     console.error("/api/signup/pending PATCH error:", err);

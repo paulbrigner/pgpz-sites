@@ -2,10 +2,11 @@ import dynamicImport from "next/dynamic";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { AdminShellSkeleton } from "@/components/admin/AdminSkeleton";
+import { getPolicyUpdateSummaries } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
 
-const AdminClient = dynamicImport(() => import("./admin-client"), {
+const AdminConsole = dynamicImport(() => import("./admin-console").then((mod) => mod.AdminConsole), {
   loading: () => <AdminShellSkeleton />,
 });
 
@@ -17,5 +18,7 @@ export default async function AdminPage() {
   } catch (err) {
     console.error("Admin page session load failed", err);
   }
-  return <AdminClient initialRoster={null} currentAdminId={adminUserId} />;
+  return (
+    <AdminConsole initialUpdates={getPolicyUpdateSummaries()} currentAdminId={adminUserId} />
+  );
 }

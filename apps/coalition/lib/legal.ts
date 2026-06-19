@@ -38,7 +38,7 @@ export const termsDocument: LegalDocument = {
     {
       title: "1. Accounts and access",
       paragraphs: [
-        "You may need an account and manual approval to use some parts of the Service. When you create an account, you agree to provide accurate, current, and complete information, including your name, LinkedIn URL, and email address, and to keep that information up to date.",
+        "You may need an account, invitation, or manual approval to use some parts of the Service. When you create an account, you agree to provide accurate, current, and complete information, including your name, corporate affiliation, job title, LinkedIn URL, X handle, email address, and member-directory preference, and to keep that information up to date.",
         "Coalition access is selective. We may approve, deny, suspend, or remove access when we believe it is necessary to protect the purpose, trust, or operation of the Service.",
       ],
     },
@@ -108,7 +108,7 @@ export const privacyDocument: LegalDocument = {
     {
       title: "1. Information we collect",
       paragraphs: [
-        "We collect information you provide directly, such as your first and last name, LinkedIn URL, email address, account records, coalition materials, messages, support requests, and preferences.",
+        "We collect information you provide directly, such as your first and last name, corporate affiliation, job title, LinkedIn URL, X handle, email address, account records, coalition materials, messages, support requests, and preferences.",
         "We also collect information automatically, such as IP address, browser type, device information, page views, referring pages, log data, and cookie identifiers.",
       ],
     },
@@ -122,8 +122,8 @@ export const privacyDocument: LegalDocument = {
     {
       title: "3. Accounts and profile information",
       paragraphs: [
-        "If you create an account, we may store and display the profile information you provide, including your first and last name, LinkedIn URL, and email address.",
-        "Some profile or participation information may be visible to other approved coalition members.",
+        "If you create an account, we may store the profile information you provide, including your first and last name, corporate affiliation, job title, LinkedIn URL, X handle, email address, and directory preference.",
+        "If you opt into the member directory and your membership is active, your profile contact details may be visible to other active coalition members.",
       ],
     },
     {

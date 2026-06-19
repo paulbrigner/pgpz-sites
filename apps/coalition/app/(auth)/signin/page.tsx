@@ -55,7 +55,11 @@ const savePendingSignupProfile = async (profile: {
   email: string;
   firstName: string;
   lastName: string;
+  company: string;
+  jobTitle: string;
   linkedinUrl: string;
+  xHandle: string;
+  memberDirectoryOptIn: boolean;
   legalAccepted: boolean;
   legalDocumentVersion: string;
 }) => {
@@ -135,7 +139,11 @@ function EmailSignIn({
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [company, setCompany] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [xHandle, setXHandle] = useState("");
+  const [memberDirectoryOptIn, setMemberDirectoryOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +152,9 @@ function EmailSignIn({
 
   const isSignup = mode === "signup";
   const showSentState = sentVisible || !!message;
+  const activatedInvite = reason === "invitation-activated";
+  const expiredInvite = reason === "invitation-expired";
+  const invalidInvite = reason === "invitation-invalid";
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -161,6 +172,8 @@ function EmailSignIn({
       if (isSignup) {
         if (!firstName.trim()) throw new Error("First name is required.");
         if (!lastName.trim()) throw new Error("Last name is required.");
+        if (!company.trim()) throw new Error("Corporate affiliation is required.");
+        if (!jobTitle.trim()) throw new Error("Job title is required.");
         if (!legalAccepted) {
           throw new Error(
             "Please accept the Terms of Service, Privacy Policy, and Coalition Guidelines before creating an account."
@@ -179,7 +192,11 @@ function EmailSignIn({
           email: normalizedEmail,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
+          company: company.trim(),
+          jobTitle: jobTitle.trim(),
           linkedinUrl: linkedinUrl.trim(),
+          xHandle: xHandle.trim(),
+          memberDirectoryOptIn,
           legalAccepted: true,
           legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         };
@@ -210,12 +227,39 @@ function EmailSignIn({
         <div className="space-y-2">
           <p className="section-eyebrow text-[var(--brand-denim)]">PGPZ Coalition</p>
           <h1 className="text-3xl font-semibold text-[var(--brand-ink)]">
-            {isSignup ? "Request access with email" : reason === "email-updated" ? "Sign in with your new email" : "Sign in"}
+            {isSignup
+              ? "Request access with email"
+              : activatedInvite
+                ? "Account activated"
+                : reason === "email-updated"
+                  ? "Sign in with your new email"
+                  : "Sign in"}
           </h1>
           <p className="text-sm leading-6 text-slate-600">
-            We use email magic links for account access and a short profile to set up your coalition access request.
+            {activatedInvite
+              ? "Your coalition account is active. Use your email to receive a secure sign-in link."
+              : "We use email magic links for account access and a short profile to set up your coalition access request."}
           </p>
         </div>
+
+        {expiredInvite || invalidInvite ? (
+          <Alert className="mt-5" variant="destructive">
+            <AlertTitle>{expiredInvite ? "Invitation expired" : "Invitation unavailable"}</AlertTitle>
+            <AlertDescription>
+              Ask a PGPZ Coalition admin to send a fresh invitation email.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {activatedInvite ? (
+          <Alert className="mt-5">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Account activated</AlertTitle>
+            <AlertDescription>
+              Your coalition membership is active. Send yourself a secure link below to sign in.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {showSentState ? (
           <Alert className="mt-5">
@@ -282,6 +326,37 @@ function EmailSignIn({
             </div>
           ) : null}
 
+          {isSignup ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="company" className="text-sm font-medium">
+                  Corporate affiliation
+                </label>
+                <input
+                  id="company"
+                  value={company}
+                  onChange={(event) => setCompany(event.target.value)}
+                  placeholder="Organization or company"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="jobTitle" className="text-sm font-medium">
+                  Job title
+                </label>
+                <input
+                  id="jobTitle"
+                  value={jobTitle}
+                  onChange={(event) => setJobTitle(event.target.value)}
+                  placeholder="Policy lead, counsel, founder..."
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
               Email
@@ -310,6 +385,32 @@ function EmailSignIn({
                   placeholder="https://www.linkedin.com/in/username"
                   className="w-full rounded-md border px-3 py-2 text-sm"
                 />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="xHandle" className="text-sm font-medium">
+                  X handle
+                </label>
+                <input
+                  id="xHandle"
+                  value={xHandle}
+                  onChange={(event) => setXHandle(event.target.value)}
+                  placeholder="@pgpz"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="rounded-lg border bg-white/70 p-4">
+                <div className="flex gap-3">
+                  <input
+                    id="memberDirectoryOptIn"
+                    type="checkbox"
+                    checked={memberDirectoryOptIn}
+                    onChange={(event) => setMemberDirectoryOptIn(event.target.checked)}
+                    className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
+                  />
+                  <label htmlFor="memberDirectoryOptIn" className="text-sm leading-6 text-slate-600">
+                    Show my name, affiliation, title, email, LinkedIn URL, and X handle to other active coalition members after I am approved.
+                  </label>
+                </div>
               </div>
               <div className="rounded-lg border bg-white/70 p-4">
                 <div className="flex gap-3">

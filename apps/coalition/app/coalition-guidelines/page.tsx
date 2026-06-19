@@ -6,6 +6,6 @@ export const metadata = {
   description: "Coalition Guidelines for PGPZ Coalition.",
 };
 
-export default function CommunityGuidelinesPage() {
+export default function CoalitionGuidelinesPage() {
   return <LegalDocumentPage document={coalitionGuidelinesDocument} />;
 }

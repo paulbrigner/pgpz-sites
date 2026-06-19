@@ -2,7 +2,7 @@ import "server-only";
 
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
-export type MembershipStatus = "active" | "none";
+export type MembershipStatus = "active" | "invited" | "none";
 
 export class MembershipStatusError extends Error {
   status: number;
@@ -27,7 +27,8 @@ export async function getUserMembershipStatus(userId: string) {
   });
 
   const item = res.Item || {};
-  const membershipStatus = item.membershipStatus === "active" ? "active" : "none";
+  const membershipStatus =
+    item.membershipStatus === "active" ? "active" : item.membershipStatus === "invited" ? "invited" : "none";
   const manualApprovalStatus =
     item.manualApprovalStatus === "pending" || item.manualApprovalStatus === "approved"
       ? item.manualApprovalStatus

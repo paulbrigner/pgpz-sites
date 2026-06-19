@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -15,22 +16,35 @@ import {
   Loader2,
   Mail,
   Megaphone,
+  MessageCircle,
+  Newspaper,
   Scale,
   Send,
   ShieldCheck,
   UserCheck,
+  UsersRound,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
 
 type MembershipStatus = {
-  membershipStatus: "active" | "none";
+  membershipStatus: "active" | "invited" | "none";
   membershipProvider: string | null;
   membershipVerifiedAt: string | null;
   manualApprovalStatus: "none" | "pending" | "approved" | string | null;
   manualApprovalRequestedAt: string | null;
   manualApprovalApprovedAt: string | null;
+};
+
+type DirectoryMember = {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  jobTitle: string | null;
+  linkedinUrl: string | null;
+  xHandle: string | null;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -91,6 +105,9 @@ export default function HomeClient() {
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [manualApprovalLoading, setManualApprovalLoading] = useState(false);
+  const [directoryMembers, setDirectoryMembers] = useState<DirectoryMember[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resourceTitle, setResourceTitle] = useState("");
@@ -111,7 +128,10 @@ export default function HomeClient() {
 
   const activeFromSession = sessionUser?.membershipStatus === "active";
   const activeFromStatus = membershipStatus?.membershipStatus === "active";
+  const invitedFromSession = sessionUser?.membershipStatus === "invited";
+  const invitedFromStatus = membershipStatus?.membershipStatus === "invited";
   const isMember = activeFromSession || activeFromStatus;
+  const isInvited = !isMember && (invitedFromSession || invitedFromStatus);
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     membershipStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
@@ -126,12 +146,16 @@ export default function HomeClient() {
     isMember && (membershipProvider === "manual" || manualApprovalStatus === "approved");
   const onboardingTitle = manualApprovalPending
     ? "Coalition access request submitted"
-    : isMembershipRequestOnboarding
-      ? "Email confirmed"
-      : "Request coalition access";
+    : isInvited
+      ? "Invitation pending"
+      : isMembershipRequestOnboarding
+        ? "Email confirmed"
+        : "Request coalition access";
   const onboardingDescription = manualApprovalPending
     ? "A PGPZ admin will review your membership request. You will be able to sign back in here after approval."
-    : "This coalition is reviewed manually so partner access stays focused, trusted, and useful.";
+    : isInvited
+      ? "Open the activation link in your invitation email to activate coalition membership."
+      : "This coalition is reviewed manually so partner access stays focused, trusted, and useful.";
 
   const refreshStatus = useCallback(async () => {
     if (!authenticated) return;
@@ -151,6 +175,30 @@ export default function HomeClient() {
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (!isMember) {
+      setDirectoryMembers([]);
+      return;
+    }
+
+    const loadDirectory = async () => {
+      setDirectoryLoading(true);
+      setDirectoryError(null);
+      try {
+        const res = await fetch("/api/members/directory", { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error || "Unable to load member directory");
+        setDirectoryMembers(body?.members || []);
+      } catch (err: any) {
+        setDirectoryError(err?.message || "Unable to load member directory");
+      } finally {
+        setDirectoryLoading(false);
+      }
+    };
+
+    void loadDirectory();
+  }, [isMember]);
 
   useEffect(() => {
     if (!authenticated || pendingProfileApplied.current) return;
@@ -367,19 +415,25 @@ export default function HomeClient() {
                 <div className="space-y-2">
                   <p className="section-eyebrow text-[var(--brand-denim)]">MEMBERSHIP</p>
                   <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
-                    {isMember ? `Welcome, ${displayName}.` : "Request coalition membership access"}
+                    {isMember
+                      ? `Welcome, ${displayName}.`
+                      : isInvited
+                        ? "Activate your coalition invitation"
+                        : "Request coalition membership access"}
                   </h2>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
                       ? "Your PGPZ Coalition membership is active. Use this space to coordinate policy resources, messaging, and campaign work with trusted partners."
-                      : "Coalition access is approved manually so participation stays limited to selected Zcash ecosystem partners working on crypto policy."}
+                      : isInvited
+                        ? "Your account is in invited state. It will not receive member mail or appear in active-member workflows until the invitation link is activated."
+                        : "Coalition access is approved manually so participation stays limited to selected Zcash ecosystem partners working on crypto policy."}
                   </p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
                   isMember ? "bg-emerald-50 text-[var(--brand-teal)]" : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]"
                 }`}>
                   {isMember ? <BadgeCheck className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                  {isMember ? "Active coalition member" : "Approval required"}
+                  {isMember ? "Active coalition member" : isInvited ? "Invited" : "Approval required"}
                 </div>
               </div>
 
@@ -400,6 +454,28 @@ export default function HomeClient() {
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600">
                       Manual approval by a PGPZ admin.
                     </div>
+                  </div>
+                </div>
+              ) : isInvited ? (
+                <div className="mt-6 rounded-lg border border-[rgba(47,111,104,0.3)] bg-white/90 p-5 shadow-[0_16px_28px_-24px_rgba(16,40,39,0.32)]">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-denim)]">
+                        INVITATION
+                      </div>
+                      <h3 className="text-lg font-semibold text-[var(--brand-ink)]">
+                        Activation link required
+                      </h3>
+                      <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                        Use the activation button in your invitation email to move from invited to active membership.
+                        Until then, this account is excluded from member emails, directories, and coalition activities.
+                      </p>
+                    </div>
+                    <Button type="button" size="lg" variant="outline" asChild>
+                      <Link href="mailto:admin@pgpz.org?subject=PGPZ%20Coalition%20Invitation%20Help">
+                        Contact admin
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -575,13 +651,127 @@ export default function HomeClient() {
             </div>
           </section>
 
+          {isMember ? (
+            <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+              <article className="glass-item p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
+                    <MessageCircle className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="section-eyebrow text-[var(--brand-denim)]">SIGNAL GROUP</p>
+                    <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
+                      Join the members-only Signal group
+                    </h2>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      Scan the QR code from your phone or open the secure Signal link to join the coalition member channel.
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <Button asChild>
+                        <Link
+                          href="https://signal.group/#CjQKIK5Li1s23K9yp5UbvHeyzVXAs-1WpSFKxyLslxXIqOJCEhCbzgPjjoDLC3hsdoeeDxPX"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open Signal link
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 inline-block rounded-2xl border border-[rgba(245,168,0,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(16,40,39,0.48)]">
+                  <Image
+                    src="/coalition-signal-qr.png"
+                    alt="QR code to join the PGPZ Coalition Signal group"
+                    width={192}
+                    height={192}
+                    className="h-48 w-48 rounded-xl"
+                  />
+                </div>
+              </article>
+
+              <article className="glass-item p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="section-eyebrow text-[var(--brand-denim)]">MEMBER DIRECTORY</p>
+                    <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
+                      Active member contacts
+                    </h2>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      Members shown here have opted into sharing contact details with other active coalition members.
+                    </p>
+                  </div>
+                  <UsersRound className="h-6 w-6 shrink-0 text-[var(--brand-denim)]" aria-hidden="true" />
+                </div>
+                <div className="mt-5 space-y-3">
+                  {directoryLoading ? (
+                    <div className="rounded-lg border bg-white/80 p-4 text-sm text-slate-600">Loading members...</div>
+                  ) : directoryError ? (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{directoryError}</div>
+                  ) : directoryMembers.length ? (
+                    directoryMembers.slice(0, 6).map((member) => (
+                      <details key={member.id} className="rounded-lg border bg-white/85 p-4">
+                        <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--brand-ink)]">
+                          <span>{member.name}</span>
+                          {member.company ? <span className="ml-2 font-normal text-slate-500">- {member.company}</span> : null}
+                        </summary>
+                        <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-600 sm:grid-cols-2">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Title</div>
+                            <div>{member.jobTitle || "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Email</div>
+                            <a className="text-[var(--brand-denim)] underline" href={`mailto:${member.email}`}>{member.email}</a>
+                          </div>
+                          {member.linkedinUrl ? (
+                            <div>
+                              <Link className="text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
+                                LinkedIn profile
+                              </Link>
+                            </div>
+                          ) : null}
+                          {member.xHandle ? (
+                            <div>
+                              <Link
+                                className="text-[var(--brand-denim)] underline"
+                                href={`https://x.com/${member.xHandle.replace(/^@/, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {member.xHandle} on X
+                              </Link>
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border bg-white/80 p-4 text-sm text-slate-600">
+                      No active members have opted into the directory yet.
+                    </div>
+                  )}
+                </div>
+              </article>
+            </section>
+          ) : null}
+
           <section className="grid gap-5 lg:grid-cols-2">
             <article className="glass-item p-6">
-              <p className="section-eyebrow text-[var(--brand-denim)]">COMING NEXT</p>
-              <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">Building the partner workspace</h2>
+              <p className="section-eyebrow text-[var(--brand-denim)]">MEMBER UPDATES</p>
+              <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">Policy memos and special updates</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Future versions of the PGPZ Coalition site will add richer member profiles, resource collections, campaign planning pages, and member-only policy updates.
+                Browse recurring weekly memos and featured reports prepared for active coalition members.
               </p>
+              <div className="mt-5">
+                <Button variant="outline" asChild>
+                  <Link href="/updates">
+                    View updates
+                    <Newspaper className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </article>
 
             <article className="glass-item p-6">

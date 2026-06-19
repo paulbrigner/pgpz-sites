@@ -9,18 +9,25 @@ The coalition site is a selective workspace for Zcash ecosystem partners involve
 - Email magic-link authentication with NextAuth.
 - DynamoDB-backed user/profile/session persistence.
 - Manual admin approval for coalition membership access.
-- Admin roster for pending, active, and unapproved members.
-- Welcome email tooling backed by AWS SES SMTP.
+- Admin-created invitations with one-time activation links and an `invited` state.
+- Admin roster for pending, invited, active, and unapproved members with expandable member details.
+- Welcome, invitation, newsletter, and policy-update email tooling backed by AWS SES SMTP.
+- Policy update archive with recurring weekly updates and featured/special updates.
+- Email open, click, unsubscribe, delivery, and send-run stats for newsletters and policy updates.
+- Active-member directory for members who opt into sharing contact details, including LinkedIn profiles and X handles when provided.
+- Members-only Signal group CTA with a scan-ready QR code on the authenticated home screen.
 - Zcash-inspired visual system using `#F5A800` as the primary gold with a distinct civic green/teal coalition palette.
 
 ## Membership Flow
 
-1. User requests access with email and profile details.
+1. User requests access with email, profile details, corporate affiliation, job title, LinkedIn URL, X handle, and directory preference.
 2. User confirms the email magic link.
 3. User submits a coalition approval request.
 4. A PGPZ admin reviews the request.
 5. Admin approval activates coalition membership.
 6. Approved members can return to the partner workspace.
+
+Admins can also create a member directly from the admin roster. New admin-created members start as `invited`; they are excluded from active-member email sends, the member directory, and other active-member workflows until they activate the account from the invitation email.
 
 There is no X social-proof approval path in this app.
 
@@ -71,3 +78,7 @@ npm run build
 ## Deployment
 
 The app is configured for AWS Amplify via `amplify.yml`. Runtime environment variables should be configured in the Amplify app before deployment.
+
+## Design Resources
+
+See [PGPZ UX Enhancement Process](docs/ux-enhancement-process.md) for the Coalition Figma resource structure, capture workflow, and handoff process.

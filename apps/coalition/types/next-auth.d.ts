@@ -7,12 +7,17 @@ declare module "next-auth" {
       firstName?: string | null;
       lastName?: string | null;
       linkedinUrl?: string | null;
+      xHandle?: string | null;
+      company?: string | null;
+      jobTitle?: string | null;
+      memberDirectoryOptIn?: boolean | null;
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      membershipStatus?: "active" | "none" | null;
-      membershipProvider?: "manual" | string | null;
+      membershipStatus?: "active" | "invited" | "none" | null;
+      membershipProvider?: "manual" | "admin_invite" | string | null;
       membershipVerifiedAt?: string | null;
+      invitationStatus?: "pending" | "accepted" | string | null;
       manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
       manualApprovalRequestedAt?: string | null;
       manualApprovalApprovedAt?: string | null;
@@ -30,10 +35,15 @@ declare module "next-auth" {
     firstName?: string | null;
     lastName?: string | null;
     linkedinUrl?: string | null;
+    xHandle?: string | null;
+    company?: string | null;
+    jobTitle?: string | null;
+    memberDirectoryOptIn?: boolean | null;
     email?: string | null;
-    membershipStatus?: "active" | "none" | null;
-    membershipProvider?: "manual" | string | null;
+    membershipStatus?: "active" | "invited" | "none" | null;
+    membershipProvider?: "manual" | "admin_invite" | string | null;
     membershipVerifiedAt?: string | null;
+    invitationStatus?: "pending" | "accepted" | string | null;
     manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
     manualApprovalRequestedAt?: string | null;
     manualApprovalApprovedAt?: string | null;
@@ -49,9 +59,14 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     email?: string | null;
-    membershipStatus?: "active" | "none" | null;
-    membershipProvider?: "manual" | string | null;
+    membershipStatus?: "active" | "invited" | "none" | null;
+    membershipProvider?: "manual" | "admin_invite" | string | null;
     membershipVerifiedAt?: string | null;
+    company?: string | null;
+    jobTitle?: string | null;
+    xHandle?: string | null;
+    memberDirectoryOptIn?: boolean | null;
+    invitationStatus?: "pending" | "accepted" | string | null;
     manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
     manualApprovalRequestedAt?: string | null;
     manualApprovalApprovedAt?: string | null;

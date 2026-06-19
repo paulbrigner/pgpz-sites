@@ -35,6 +35,10 @@ export async function requestManualApproval(userId: string) {
     };
   }
 
+  if (user.Item.membershipStatus === "invited") {
+    throw new ManualApprovalError("This account is invited. Use the invitation email to activate membership.", 409);
+  }
+
   if (user.Item.manualApprovalStatus === "pending") {
     return {
       status: "pending" as const,
