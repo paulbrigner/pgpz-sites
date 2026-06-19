@@ -96,6 +96,26 @@ describe("system email builders", () => {
     expect(built.text).toContain("Please activate here too: https://coalition.pgpz.org/api/invitations/activate?token=xyz");
   });
 
+  it("renders spaced markdown links in editable invitation templates", () => {
+    const activationUrl = "https://coalition.pgpz.org/api/invitations/activate?token=draft-preview-token";
+    const built = buildInvitationEmail({
+      recipientFirstName: "Alice",
+      activationUrl,
+      template: {
+        subject: "Preview invitation",
+        body:
+          "Hi [Name],\n\nJoin the [PGPZ Coalition] (https://coalition.pgpz.org) and [activate today] ([Activation Link]).",
+      },
+    });
+
+    expect(built.html).toContain('href="https://coalition.pgpz.org"');
+    expect(built.html).toContain(">PGPZ Coalition</a>");
+    expect(built.html).toContain(`href="${activationUrl}"`);
+    expect(built.html).toContain(">activate today</a>");
+    expect(built.html).not.toContain("[PGPZ Coalition]");
+    expect(built.text).toContain(`activate today: ${activationUrl}`);
+  });
+
   it("wraps custom admin emails in the branded shell", () => {
     const built = buildCustomAdminEmail({
       subject: "Member note",

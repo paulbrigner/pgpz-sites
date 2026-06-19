@@ -77,9 +77,9 @@ const applyInvitationTemplate = (value: string, context: InvitationTemplateConte
 
 const brandedInvitationLinkColor = "#8A5A00";
 const brandedInvitationUnderlineColor = "#F5A800";
+const markdownLinkPattern = /\[([^\]\n]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/g;
 
 const renderInlineInvitationTemplate = (value: string) => {
-  const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
   let html = "";
   let lastIndex = 0;
   for (const match of value.matchAll(markdownLinkPattern)) {
@@ -91,6 +91,9 @@ const renderInlineInvitationTemplate = (value: string) => {
   html += escapeHtml(value.slice(lastIndex));
   return html;
 };
+
+const renderInvitationTemplateTextLine = (value: string) =>
+  value.replace(markdownLinkPattern, (_match, label, url) => `${label}: ${url}`);
 
 const renderInvitationTemplateHtml = (body: string, activationUrl: string) => {
   const paragraphs = body
@@ -119,12 +122,12 @@ const renderInvitationTemplateText = (body: string, activationUrl: string) => {
     .filter(Boolean);
   const [greeting, ...rest] = paragraphs;
   return [
-    greeting || "",
+    greeting ? renderInvitationTemplateTextLine(greeting) : "",
     "",
     "Activate your PGPZ Coalition account:",
     activationUrl,
     "",
-    ...rest.flatMap((paragraph) => [paragraph, ""]),
+    ...rest.flatMap((paragraph) => [renderInvitationTemplateTextLine(paragraph), ""]),
     "This activation link is intended for you. If you were not expecting this invitation, you can ignore this email.",
   ]
     .join("\n")
