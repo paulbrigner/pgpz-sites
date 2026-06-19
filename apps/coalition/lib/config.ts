@@ -17,7 +17,28 @@ export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;
 export const KEY_PAIR_ID = process.env.KEY_PAIR_ID as string;
 export const PRIVATE_KEY_SECRET = (process.env.PRIVATE_KEY_SECRET || "").replace(/\\n/g, "\n") as string;
 
-export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  process.env.NEXTAUTH_URL ||
-  "https://coalition.pgpz.org";
+export const DEFAULT_SITE_URL = "https://coalition.pgpz.org";
+
+const LOCAL_SITE_URL_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i;
+
+export function resolveSiteUrl({
+  nextPublicSiteUrl,
+  nextAuthUrl,
+  nodeEnv,
+}: {
+  nextPublicSiteUrl?: string | null;
+  nextAuthUrl?: string | null;
+  nodeEnv?: string | null;
+}) {
+  const configuredUrl = (nextPublicSiteUrl || nextAuthUrl || "").trim();
+  if (nodeEnv === "production" && LOCAL_SITE_URL_PATTERN.test(configuredUrl)) {
+    return DEFAULT_SITE_URL;
+  }
+  return configuredUrl || DEFAULT_SITE_URL;
+}
+
+export const SITE_URL = resolveSiteUrl({
+  nextPublicSiteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+  nextAuthUrl: process.env.NEXTAUTH_URL,
+  nodeEnv: process.env.NODE_ENV,
+});

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { activateInvitation, InvitationError } from "@/lib/admin/invitations";
+import { SITE_URL } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") || "";
-  const redirectUrl = new URL("/signin", request.nextUrl.origin);
+  const redirectUrl = new URL("/signin", SITE_URL);
   redirectUrl.searchParams.set("callbackUrl", "/");
 
   try {
