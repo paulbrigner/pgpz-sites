@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { SessionProvider } from "next-auth/react";
+import { AccessTracker } from "@/components/access/AccessTracker";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -9,5 +10,10 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
-  return <SessionProvider>{children}</SessionProvider>;
+  return (
+    <SessionProvider>
+      <AccessTracker />
+      {children}
+    </SessionProvider>
+  );
 }
