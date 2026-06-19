@@ -12,6 +12,7 @@ The coalition site is a selective workspace for Zcash ecosystem partners involve
 - Admin-created invitations with one-time activation links and an `invited` state.
 - Admin roster for pending, invited, active, and unapproved members with expandable member details.
 - Welcome, invitation, newsletter, and policy-update email tooling backed by AWS SES SMTP.
+- Admin-editable invitation email template language for launch and future invite cohorts.
 - Policy update archive with recurring weekly updates and featured/special updates.
 - Email open, click, unsubscribe, delivery, and send-run stats for newsletters and policy updates.
 - Active-member directory for members who opt into sharing contact details, including LinkedIn profiles and X handles when provided.

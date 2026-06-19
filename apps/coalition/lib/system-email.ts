@@ -14,6 +14,124 @@ import { getUserGreetingName } from "@/lib/user-display-name";
 const coalitionSignalGroupUrl =
   "https://signal.group/#CjQKIK5Li1s23K9yp5UbvHeyzVXAs-1WpSFKxyLslxXIqOJCEhCbzgPjjoDLC3hsdoeeDxPX";
 
+export const DEFAULT_INVITATION_EMAIL_SUBJECT = "Special invitation to join the PGPZ Coalition";
+
+export const DEFAULT_INVITATION_EMAIL_BODY = `Hi [Name],
+
+I’m writing to extend a special invitation for you to join the PGPZ Coalition — a new, focused group of policy professionals, advocates, and ecosystem participants committed to advancing informed, constructive policy engagement around Zcash.
+
+You have been selected for this invitation because of your involvement in crypto policy and your interest in the long-term success of the Zcash ecosystem. As policymakers continue to make decisions that will shape the future of privacy-preserving digital cash, Zcash needs credible, coordinated, and practical policy engagement from people who understand both the technology and the policy environment.
+
+PGPZ — Pretty Good Policy for Zcash — is an evolution of the prior PGP* (Pretty Good Policy) for Crypto initiative. This next phase will be very different from the earlier iteration. Rather than serving as a broad crypto policy convening, PGPZ will be more focused, more action-oriented, and centered on Zcash-impacting policy developments, policymaker education, advocacy strategy, and practical coordination.
+
+As part of this launch, I would also like to invite you to the first PGPZ Coalition Launch Breakfast — our inaugural “Pretty Good Pancake” breakfast for the coalition.
+
+Date: Tuesday, June 30, 2026
+Time: 9:00 – 11:00 am
+Location: Blockchain Association office (large conference room)
+Address: 1155 F St. NW, Suite 300, Washington, D.C. 20004
+Room: Large conference room
+
+Agenda
+
+9:00 – 9:30 am
+Networking breakfast
+
+9:30 – 11:00 am
+Roundtable discussion featuring a special speaker, TBA
+
+The breakfast will bring together a small group of invited participants for a candid discussion about Zcash policy priorities, key developments affecting the ecosystem, and how the PGPZ Coalition can help ensure that Zcash is accurately understood in policy debates.
+
+The roundtable will be held under Chatham House Rule to support open and constructive discussion. There will be no livestream or public broadcast, though we expect to accommodate a limited number of remote participants who are unable to attend in person.
+
+Because room capacity is limited and registration is subject to approval, please RSVP as soon as possible here:
+
+[RSVP for the PGPZ Coalition Launch Breakfast](https://luma.com/pgpfor-evvd?utm_source=chatgpt.com)
+
+I hope you will consider joining the PGPZ Coalition and participating in this first launch breakfast. Your perspective would be valuable as we begin this next phase of coordinated Zcash policy engagement.
+
+Best,
+Paul Brigner
+Founder of PGPZ
+Chief Policy & Regulatory Officer,
+Zcash Open Development Lab`;
+
+type InvitationTemplateContext = {
+  name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  activationUrl: string;
+};
+
+type InvitationTemplateInput = {
+  subject?: string | null;
+  body?: string | null;
+};
+
+const applyInvitationTemplate = (value: string, context: InvitationTemplateContext) =>
+  value
+    .replace(/\[Name\]|\{\{name\}\}/gi, context.name)
+    .replace(/\[First Name\]|\{\{firstName\}\}/gi, context.firstName || context.name)
+    .replace(/\[Last Name\]|\{\{lastName\}\}/gi, context.lastName || "")
+    .replace(/\[Activation Link\]|\{\{activationUrl\}\}/gi, context.activationUrl);
+
+const brandedInvitationLinkColor = "#8A5A00";
+const brandedInvitationUnderlineColor = "#F5A800";
+
+const renderInlineInvitationTemplate = (value: string) => {
+  const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  let html = "";
+  let lastIndex = 0;
+  for (const match of value.matchAll(markdownLinkPattern)) {
+    const index = match.index || 0;
+    html += escapeHtml(value.slice(lastIndex, index));
+    html += `<a href="${escapeHtml(match[2])}" style="color:${brandedInvitationLinkColor};font-weight:800;text-decoration:underline;text-decoration-color:${brandedInvitationUnderlineColor};text-underline-offset:3px;">${escapeHtml(match[1])}</a>`;
+    lastIndex = index + match[0].length;
+  }
+  html += escapeHtml(value.slice(lastIndex));
+  return html;
+};
+
+const renderInvitationTemplateHtml = (body: string, activationUrl: string) => {
+  const paragraphs = body
+    .trim()
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const [greeting, ...rest] = paragraphs;
+  const renderedRest = rest
+    .map((paragraph) => renderEmailParagraph(renderInlineInvitationTemplate(paragraph).replace(/\n/g, "<br />")))
+    .join("");
+
+  return [
+    greeting ? renderEmailParagraph(renderInlineInvitationTemplate(greeting).replace(/\n/g, "<br />")) : "",
+    renderEmailButton({ href: activationUrl, label: "Activate PGPZ Coalition account" }),
+    renderedRest,
+    renderEmailParagraph("This activation link is intended for you. If you were not expecting this invitation, you can ignore this email."),
+  ].join("");
+};
+
+const renderInvitationTemplateText = (body: string, activationUrl: string) => {
+  const paragraphs = body
+    .trim()
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  const [greeting, ...rest] = paragraphs;
+  return [
+    greeting || "",
+    "",
+    "Activate your PGPZ Coalition account:",
+    activationUrl,
+    "",
+    ...rest.flatMap((paragraph) => [paragraph, ""]),
+    "This activation link is intended for you. If you were not expecting this invitation, you can ignore this email.",
+  ]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 export function buildMagicLinkEmail({
   url,
   host,
@@ -139,24 +257,31 @@ export function buildInvitationEmail({
   recipientFirstName,
   recipientLastName,
   activationUrl,
+  template,
 }: {
   recipientName?: string | null;
   recipientFirstName?: string | null;
   recipientLastName?: string | null;
   activationUrl: string;
+  template?: InvitationTemplateInput | null;
 }) {
   const name = getUserGreetingName({ name: recipientName, firstName: recipientFirstName, lastName: recipientLastName });
-  const subject = "Activate your PGPZ Coalition account";
-  const preheader = "You have been invited to join the PGPZ Coalition member workspace.";
-  const bodyHtml = [
-    renderEmailParagraph(`Hi ${escapeHtml(name)},`),
-    renderEmailParagraph(
-      "You have been invited to the PGPZ Coalition member workspace. Activate your account to access coalition updates, member contacts, Signal group details, and shared policy resources.",
-    ),
-    renderEmailButton({ href: activationUrl, label: "Activate account" }),
-    renderEmailParagraph("This invitation link is intended for you. If you were not expecting this invitation, you can ignore this email."),
-    renderEmailParagraph("Thanks,<br />PGPZ Coalition Team"),
-  ].join("");
+  const context = {
+    name,
+    firstName: recipientFirstName,
+    lastName: recipientLastName,
+    activationUrl,
+  };
+  const subject = applyInvitationTemplate(
+    template?.subject?.trim() || DEFAULT_INVITATION_EMAIL_SUBJECT,
+    context,
+  );
+  const templateBody = applyInvitationTemplate(
+    template?.body?.trim() || DEFAULT_INVITATION_EMAIL_BODY,
+    context,
+  );
+  const preheader = "You have been invited to join the PGPZ Coalition.";
+  const bodyHtml = renderInvitationTemplateHtml(templateBody, activationUrl);
   const html = renderBrandedEmailShell({
     title: subject,
     preheader,
@@ -166,18 +291,7 @@ export function buildInvitationEmail({
       "You are receiving this because a PGPZ Coalition admin invited this email address.",
     ),
   });
-  const text = [
-    `Hi ${name},`,
-    "",
-    "You have been invited to the PGPZ Coalition member workspace.",
-    "Activate your account:",
-    activationUrl,
-    "",
-    "If you were not expecting this invitation, you can ignore this email.",
-    "",
-    "Thanks,",
-    "PGPZ Coalition Team",
-  ].join("\n");
+  const text = renderInvitationTemplateText(templateBody, activationUrl);
 
   return { subject, html, text, preheader };
 }

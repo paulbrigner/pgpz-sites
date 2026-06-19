@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { buildEmailServerConfig, normalizeEmail, stripHtml } from "@/lib/admin/email-transport";
+import { getInvitationEmailTemplate } from "@/lib/admin/invitation-template";
 import {
   createInvitationActivationLink,
   InvitationError,
@@ -115,11 +116,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "This member is already active" }, { status: 409 });
       }
       const invitation = await createInvitationActivationLink({ userId: user.id, adminUserId });
+      const template = await getInvitationEmailTemplate();
       built = buildInvitationEmail({
         recipientName: getUserDisplayName(user),
         recipientFirstName: user.firstName,
         recipientLastName: user.lastName,
         activationUrl: invitation.activationUrl,
+        template,
       });
     } else if (type === "welcome") {
       if (user?.membershipStatus !== "active") {

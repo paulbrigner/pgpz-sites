@@ -69,11 +69,31 @@ describe("system email builders", () => {
       activationUrl: "https://coalition.pgpz.org/api/invitations/activate?token=abc",
     });
 
-    expect(built.subject).toBe("Activate your PGPZ Coalition account");
+    expect(built.subject).toBe("Special invitation to join the PGPZ Coalition");
     expect(built.html).toContain("Coalition invitation");
-    expect(built.html).toContain("Activate account");
-    expect(built.text).toContain("You have been invited to the PGPZ Coalition member workspace.");
+    expect(built.html).toContain("Activate PGPZ Coalition account");
+    expect(built.html).toContain("PGPZ Coalition Launch Breakfast");
+    expect(built.html).toContain("RSVP for the PGPZ Coalition Launch Breakfast");
+    expect(built.html).toContain("Hi Paul,");
+    expect(built.text).toContain("PGPZ — Pretty Good Policy for Zcash");
     expect(built.text).toContain("https://coalition.pgpz.org/api/invitations/activate?token=abc");
+  });
+
+  it("supports editable invitation templates with member placeholders", () => {
+    const built = buildInvitationEmail({
+      recipientFirstName: "Alice",
+      recipientLastName: "Policy",
+      activationUrl: "https://coalition.pgpz.org/api/invitations/activate?token=xyz",
+      template: {
+        subject: "Join PGPZ, [First Name]",
+        body: "Hi [Name],\n\nPlease activate here too: [Activation Link]\n\nBest,\nPGPZ",
+      },
+    });
+
+    expect(built.subject).toBe("Join PGPZ, Alice");
+    expect(built.html).toContain("Hi Alice,");
+    expect(built.html).toContain("Activate PGPZ Coalition account");
+    expect(built.text).toContain("Please activate here too: https://coalition.pgpz.org/api/invitations/activate?token=xyz");
   });
 
   it("wraps custom admin emails in the branded shell", () => {

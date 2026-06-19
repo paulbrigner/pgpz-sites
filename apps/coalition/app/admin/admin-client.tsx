@@ -38,6 +38,14 @@ type CreateMemberForm = {
   sendInvitation: boolean;
 };
 
+type InvitationTemplateState = {
+  subject: string;
+  body: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  isDefault: boolean;
+};
+
 const emptyCreateForm: CreateMemberForm = {
   email: "",
   firstName: "",
@@ -84,7 +92,29 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateMemberForm>(emptyCreateForm);
   const [creating, setCreating] = useState(false);
+  const [invitationTemplate, setInvitationTemplate] = useState<InvitationTemplateState | null>(null);
+  const [templateDraft, setTemplateDraft] = useState({ subject: "", body: "" });
+  const [templateLoading, setTemplateLoading] = useState(true);
+  const [templateSaving, setTemplateSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const loadInvitationTemplate = async () => {
+    setTemplateLoading(true);
+    try {
+      const res = await fetch("/api/admin/email-templates/invitation", { cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to load invitation template");
+      setInvitationTemplate(body);
+      setTemplateDraft({
+        subject: body.subject || "",
+        body: body.body || "",
+      });
+    } catch (err: any) {
+      setError(err?.message || "Failed to load invitation template");
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
 
   const loadRoster = async () => {
     setLoading(true);
@@ -107,6 +137,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     void loadRoster();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
+
+  useEffect(() => {
+    void loadInvitationTemplate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setNotesDrafts((current) => {
@@ -266,6 +301,35 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     }
   };
 
+  const saveInvitationTemplate = async () => {
+    setTemplateSaving(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/email-templates/invitation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(templateDraft),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to save invitation template");
+      setInvitationTemplate(body);
+      setTemplateDraft({
+        subject: body.subject || "",
+        body: body.body || "",
+      });
+      setNotice("Invitation email template saved.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to save invitation template");
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const templateChanged =
+    !!invitationTemplate &&
+    (templateDraft.subject.trim() !== invitationTemplate.subject || templateDraft.body.trim() !== invitationTemplate.body);
+
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
@@ -283,6 +347,64 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           </div>
         ))}
       </div>
+
+      <section className="rounded-lg border bg-white/85 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Invitation email template</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Edit the language used when sending activation invitations to invited coalition members.
+            </p>
+            <div className="mt-2 text-xs font-medium text-slate-500">
+              {templateLoading
+                ? "Loading template..."
+                : invitationTemplate?.isDefault
+                  ? "Using the default launch invitation."
+                  : `Last updated ${formatDate(invitationTemplate?.updatedAt || null)}.`}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={templateLoading || templateSaving} onClick={loadInvitationTemplate}>
+              <RefreshCcw className={cn("h-4 w-4", templateLoading && "animate-spin")} />
+              Reload
+            </Button>
+            <Button
+              type="button"
+              disabled={!templateChanged || templateLoading || templateSaving}
+              isLoading={templateSaving}
+              onClick={saveInvitationTemplate}
+            >
+              <Save className="h-4 w-4" />
+              Save template
+            </Button>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium">Subject</span>
+            <input
+              value={templateDraft.subject}
+              onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))}
+              maxLength={180}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium">Body</span>
+            <textarea
+              value={templateDraft.body}
+              onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))}
+              maxLength={20000}
+              rows={18}
+              className="min-h-96 w-full resize-y rounded-md border px-3 py-2 font-mono text-sm leading-6"
+            />
+          </label>
+          <div className="rounded-lg border bg-white/70 p-3 text-xs leading-5 text-slate-600">
+            Available placeholders: <code>[Name]</code>, <code>[First Name]</code>, <code>[Last Name]</code>,{" "}
+            <code>[Activation Link]</code>. A prominent activation button is inserted automatically after the greeting.
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-lg border bg-white/85 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
