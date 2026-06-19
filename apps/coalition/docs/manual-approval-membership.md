@@ -14,7 +14,7 @@ PGPZ Coalition membership can be activated through manual admin approval or thro
 
 1. An admin adds a member from `/admin` with email, name, corporate affiliation, job title, LinkedIn URL, X handle, and directory preference.
 2. `POST /api/admin/members` creates the member with `membershipStatus = invited` and `membershipProvider = admin_invite`.
-3. The admin can edit the invitation email template from the user-management admin screen. The saved template controls future invitation sends and supports `[Name]`, `[First Name]`, `[Last Name]`, and `[Activation Link]` placeholders.
+3. The admin can edit the invitation email template from the user-management admin screen and send a draft copy before saving. The saved template controls future invitation sends and supports `[Name]`, `[First Name]`, `[Last Name]`, and `[Activation Link]` placeholders.
 4. The admin can send or resend an invitation email from the roster.
 5. `POST /api/admin/email/send` creates a one-time activation token and sends a branded activation email with a conspicuous activation button inserted after the greeting.
 6. `GET /api/invitations/activate?token=...` activates the member, changes `membershipStatus` to `active`, records `invitationAcceptedAt`, and invalidates the token.
@@ -30,7 +30,7 @@ Invited members are not active members. They are excluded from newsletter and po
 
 ## Admin Review
 
-Admins can filter the roster to manual requests, invited members, active members, or unapproved members. The roster supports expandable member details, admin notes, manual approval, welcome email sends, editable invitation template language, and invitation email sends. Approval and activation are intentionally explicit so coalition access remains limited to selected Zcash ecosystem partners working on crypto policy.
+Admins can filter the roster to manual requests, invited members, active members, or unapproved members. The roster supports expandable member details, admin notes, manual approval, welcome email sends, editable invitation template language, draft template sends, and invitation email sends. Approval and activation are intentionally explicit so coalition access remains limited to selected Zcash ecosystem partners working on crypto policy.
 
 ## Member Directory
 

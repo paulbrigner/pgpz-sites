@@ -46,7 +46,7 @@ const defaultTemplate = (): InvitationEmailTemplate => ({
 const normalizeTemplateValue = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
-function validateTemplate(input: SaveInvitationEmailTemplateInput) {
+export function validateInvitationEmailTemplate(input: SaveInvitationEmailTemplateInput) {
   const subject = normalizeTemplateValue(input.subject);
   const body = normalizeTemplateValue(input.body);
 
@@ -80,7 +80,7 @@ export async function getInvitationEmailTemplate(): Promise<InvitationEmailTempl
 }
 
 export async function saveInvitationEmailTemplate(input: SaveInvitationEmailTemplateInput) {
-  const values = validateTemplate(input);
+  const values = validateInvitationEmailTemplate(input);
   const now = new Date().toISOString();
 
   await documentClient.put({
@@ -103,4 +103,3 @@ export async function saveInvitationEmailTemplate(input: SaveInvitationEmailTemp
     isDefault: false,
   };
 }
-
