@@ -11,6 +11,9 @@ import {
 } from "@/lib/branded-email";
 import { getUserGreetingName } from "@/lib/user-display-name";
 
+const coalitionSignalGroupUrl =
+  "https://signal.group/#CjQKIK5Li1s23K9yp5UbvHeyzVXAs-1WpSFKxyLslxXIqOJCEhCbzgPjjoDLC3hsdoeeDxPX";
+
 export function buildMagicLinkEmail({
   url,
   host,
@@ -98,6 +101,10 @@ export function buildWelcomeEmail({
       "Welcome to the PGPZ Coalition. Your membership is active and you can sign in any time to access coalition resources, messaging, member contacts, and campaign materials.",
     ),
     renderEmailButton({ href: url, label: "Visit PGPZ Coalition" }),
+    renderEmailParagraph(
+      "Join the members-only Signal group for time-sensitive coordination, quick policy updates, and direct conversation with other coalition members.",
+    ),
+    renderEmailButton({ href: coalitionSignalGroupUrl, label: "Join Signal group" }),
     renderEmailParagraph("If you have questions, reply to this email and we will help."),
     renderEmailParagraph("Thanks,<br />PGPZ Coalition Team"),
   ].join("");
@@ -114,6 +121,9 @@ export function buildWelcomeEmail({
     "Welcome to the PGPZ Coalition. Your membership is active and you can sign in any time to access coalition resources, messaging, member contacts, and campaign materials.",
     "",
     `Visit PGPZ Coalition: ${url}`,
+    "",
+    "Join the members-only Signal group for time-sensitive coordination, quick policy updates, and direct conversation with other coalition members:",
+    coalitionSignalGroupUrl,
     "",
     "If you have questions, reply to this email and we will help.",
     "",
