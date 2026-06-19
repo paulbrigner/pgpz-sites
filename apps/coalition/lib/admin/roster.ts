@@ -50,6 +50,7 @@ export type AdminMember = {
   membershipStatus: MemberStatus;
   membershipProvider: string | null;
   membershipVerifiedAt: string | null;
+  joinedAt: string | null;
   invitationEmailSentAt: string | null;
   invitationAcceptedAt: string | null;
   invitationStatus: "pending" | "accepted" | null;
@@ -155,6 +156,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
     membershipStatus: normalizeMembershipStatus(user.membershipStatus),
     membershipProvider: textOrNull(user.membershipProvider),
     membershipVerifiedAt: textOrNull(user.membershipVerifiedAt),
+    joinedAt: textOrNull(user.membershipVerifiedAt),
     invitationEmailSentAt: textOrNull(user.invitationEmailSentAt),
     invitationAcceptedAt: textOrNull(user.invitationAcceptedAt),
     invitationStatus: user.invitationStatus === "accepted" ? "accepted" : user.invitationStatus === "pending" ? "pending" : null,

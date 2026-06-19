@@ -46,6 +46,9 @@ type InvitationTemplateState = {
   isDefault: boolean;
 };
 
+type SortKey = "firstName" | "lastName" | "company" | "joinedAt";
+type SortDirection = "asc" | "desc";
+
 const emptyCreateForm: CreateMemberForm = {
   email: "",
   firstName: "",
@@ -69,6 +72,19 @@ const formatDate = (value: string | null) => {
   });
 };
 
+const formatDateTime = (value: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const displayName = (member: AdminMember) =>
   member.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed member";
 
@@ -76,6 +92,34 @@ const statusLabel = (member: AdminMember) => {
   if (member.membershipStatus === "active") return "Active";
   if (member.membershipStatus === "invited") return "Invited";
   return "Unapproved";
+};
+
+const memberNeedsAction = (member: AdminMember) => {
+  const active = member.membershipStatus === "active";
+  if (member.manualApprovalStatus === "pending" && !active) return true;
+  if (active && !member.welcomeEmailSentAt && !!member.email && !member.emailSuppressed) return true;
+  return !active && member.manualApprovalStatus !== "pending" && !!member.email && !member.emailSuppressed && !member.invitationEmailSentAt;
+};
+
+const compareText = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+  const aText = (a || "").trim();
+  const bText = (b || "").trim();
+  if (aText && !bText) return -1;
+  if (!aText && bText) return 1;
+  const compare = aText.localeCompare(bText, undefined, { sensitivity: "base" });
+  return direction === "desc" ? -compare : compare;
+};
+
+const compareJoinedAt = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+  const aTime = a ? Date.parse(a) : NaN;
+  const bTime = b ? Date.parse(b) : NaN;
+  const aValid = Number.isFinite(aTime);
+  const bValid = Number.isFinite(bTime);
+  if (aValid && !bValid) return -1;
+  if (!aValid && bValid) return 1;
+  if (!aValid && !bValid) return 0;
+  const compare = aTime - bTime;
+  return direction === "desc" ? -compare : compare;
 };
 
 export default function AdminClient({ initialRoster, currentAdminId }: Props) {
@@ -99,6 +143,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [templateDraftEmail, setTemplateDraftEmail] = useState("");
   const [templateDraftSending, setTemplateDraftSending] = useState(false);
   const [bulkInviting, setBulkInviting] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("lastName");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [actionsFirst, setActionsFirst] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadInvitationTemplate = async () => {
@@ -157,29 +204,55 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   }, [roster]);
 
   const filteredMembers = useMemo(() => {
-    const members = (roster?.members || []).filter((member) => member.id !== currentAdminId);
+    let members = (roster?.members || []).filter((member) => member.id !== currentAdminId);
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return members;
-    return members.filter((member) => {
-      const haystack = [
-        member.name,
-        member.email,
-        member.firstName,
-        member.lastName,
-        member.company,
-        member.jobTitle,
-        member.linkedinUrl,
-        member.xHandle,
-        member.membershipProvider,
-        member.manualApprovalStatus,
-        member.adminNotes,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(normalized);
+    if (normalized) {
+      members = members.filter((member) => {
+        const haystack = [
+          member.name,
+          member.email,
+          member.firstName,
+          member.lastName,
+          member.company,
+          member.jobTitle,
+          member.linkedinUrl,
+          member.xHandle,
+          member.membershipProvider,
+          member.manualApprovalStatus,
+          member.adminNotes,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalized);
+      });
+    }
+
+    return [...members].sort((a, b) => {
+      if (actionsFirst) {
+        const actionCompare = Number(memberNeedsAction(b)) - Number(memberNeedsAction(a));
+        if (actionCompare) return actionCompare;
+      }
+
+      let compare = 0;
+      if (sortKey === "joinedAt") {
+        compare = compareJoinedAt(a.joinedAt, b.joinedAt, sortDirection);
+      } else if (sortKey === "company") {
+        compare = compareText(a.company, b.company, sortDirection);
+      } else if (sortKey === "firstName") {
+        compare = compareText(a.firstName || a.name || a.email, b.firstName || b.name || b.email, sortDirection);
+      } else {
+        compare = compareText(a.lastName || a.name || a.email, b.lastName || b.name || b.email, sortDirection);
+      }
+
+      return compare || compareText(a.lastName || a.name || a.email, b.lastName || b.name || b.email);
     });
-  }, [currentAdminId, query, roster]);
+  }, [actionsFirst, currentAdminId, query, roster, sortDirection, sortKey]);
+
+  const actionNeededCount = useMemo(
+    () => (roster?.members || []).filter((member) => member.id !== currentAdminId && memberNeedsAction(member)).length,
+    [currentAdminId, roster],
+  );
 
   const bulkInviteableMembers = useMemo(
     () =>
@@ -672,6 +745,41 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             </Button>
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            Sort
+            <select
+              value={sortKey}
+              onChange={(event) => setSortKey(event.target.value as SortKey)}
+              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
+            >
+              <option value="lastName">Last name</option>
+              <option value="firstName">First name</option>
+              <option value="company">Company</option>
+              <option value="joinedAt">Date joined</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            Order
+            <select
+              value={sortDirection}
+              onChange={(event) => setSortDirection(event.target.value as SortDirection)}
+              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <input
+              type="checkbox"
+              checked={actionsFirst}
+              onChange={(event) => setActionsFirst(event.target.checked)}
+              className="h-4 w-4 accent-[var(--zcash-gold)]"
+            />
+            Actions first ({actionNeededCount})
+          </label>
+        </div>
       </div>
 
       {notice ? (
@@ -686,10 +794,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       ) : null}
 
       <div className="overflow-hidden rounded-lg border bg-white/90">
-        <div className="hidden grid-cols-[1.1fr_0.8fr_0.9fr_0.85fr_1.15fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 md:grid">
+        <div className="hidden grid-cols-[1.05fr_0.75fr_0.85fr_0.75fr_0.85fr_1.05fr] gap-3 border-b bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 md:grid">
           <div>Member</div>
           <div>Status</div>
           <div>Affiliation</div>
+          <div>Joined</div>
           <div>Email</div>
           <div>Actions</div>
         </div>
@@ -708,7 +817,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               const notesChanged = notesDraft.trim() !== (member.adminNotes || "");
               return (
                 <div key={member.id} className="text-sm">
-                  <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-[1.1fr_0.8fr_0.9fr_0.85fr_1.15fr]">
+                  <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-[1.05fr_0.75fr_0.85fr_0.75fr_0.85fr_1.05fr]">
                     <div className="space-y-1">
                       <div className="font-semibold text-[var(--brand-ink)]">
                         <SensitiveDataText value={displayName(member)} kind="name" />
@@ -758,6 +867,10 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       {member.memberDirectoryOptIn ? (
                         <div className="text-xs text-[var(--brand-denim)]">Directory opt-in</div>
                       ) : null}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-medium text-[var(--brand-ink)]">{formatDateTime(member.joinedAt)}</div>
+                      <div className="text-xs text-slate-500">Joined</div>
                     </div>
                     <div className="space-y-2">
                       {active ? (
@@ -903,6 +1016,10 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Provider</dt>
                               <dd className="text-right text-slate-800">{member.membershipProvider || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Joined</dt>
+                              <dd className="text-right text-slate-800">{formatDateTime(member.joinedAt)}</dd>
                             </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Manual status</dt>
