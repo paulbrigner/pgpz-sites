@@ -44,8 +44,11 @@ describe("system email builders", () => {
 
     expect(built.html).toContain("Hi Paul,");
     expect(built.html).toContain("Visit PGPZ Community");
+    expect(built.html).toContain("Join Signal group");
+    expect(built.html).toContain("https://signal.group/#CjQKIEvyw3Ze5YXfGya1u442-BQLrXrN8s7dHoTRk3Jh-8r9EhAhSfVI2Umy4mA1Hq2VFDe_");
     expect(built.html).toContain("You are receiving this because your PGPZ Community membership is active");
     expect(built.text).toContain("Hi Paul,");
+    expect(built.text).toContain("Join the members-only Signal group");
   });
 
   it("falls back to a generic welcome greeting when first name is unavailable", () => {

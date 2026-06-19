@@ -11,6 +11,9 @@ import {
 } from "@/lib/branded-email";
 import { getUserGreetingName } from "@/lib/user-display-name";
 
+const communitySignalGroupUrl =
+  "https://signal.group/#CjQKIEvyw3Ze5YXfGya1u442-BQLrXrN8s7dHoTRk3Jh-8r9EhAhSfVI2Umy4mA1Hq2VFDe_";
+
 export function buildMagicLinkEmail({
   url,
   host,
@@ -98,6 +101,10 @@ export function buildWelcomeEmail({
       "Welcome to the PGPZ Community. Your membership is active and you can sign in any time to access community resources.",
     ),
     renderEmailButton({ href: url, label: "Visit PGPZ Community" }),
+    renderEmailParagraph(
+      "Join the members-only Signal group for timely PGPZ community coordination, quick updates, and member-to-member conversation.",
+    ),
+    renderEmailButton({ href: communitySignalGroupUrl, label: "Join Signal group" }),
     renderEmailParagraph("If you have questions, reply to this email and we will help."),
     renderEmailParagraph("Thanks,<br />PGPZ Community Team"),
   ].join("");
@@ -114,6 +121,9 @@ export function buildWelcomeEmail({
     "Welcome to the PGPZ Community. Your membership is active and you can sign in any time to access community resources.",
     "",
     `Visit PGPZ Community: ${url}`,
+    "",
+    "Join the members-only Signal group for timely PGPZ community coordination, quick updates, and member-to-member conversation:",
+    communitySignalGroupUrl,
     "",
     "If you have questions, reply to this email and we will help.",
     "",
