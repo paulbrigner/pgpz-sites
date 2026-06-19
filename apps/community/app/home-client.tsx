@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, Mail, MessageCircle, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
@@ -690,45 +690,86 @@ export default function HomeClient() {
           </section>
 
           {isMember ? (
-            <section className="glass-surface p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-2">
-                  <p className="section-eyebrow text-[var(--brand-denim)]">Member policy updates</p>
-                  <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
-                    Weekly memos and special updates
-                  </h2>
-                  <p className="max-w-3xl text-sm leading-6 text-slate-600">
-                    PGPZ members can read the latest weekly policy memo, browse special reports, and return
-                    to prior updates at any time from the archive.
-                  </p>
-                </div>
-                <Button asChild>
-                  <Link href="/updates">
-                    View full archive
-                    <FileText className="h-4 w-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-              </div>
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                {memberResources.map((resource) => (
-                  <Link
-                    key={resource.href}
-                    href={resource.href}
-                    className="group rounded-2xl border bg-white/85 p-5 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_20px_36px_-28px_rgba(30,30,30,0.4)]"
-                  >
-                    <div className="mb-3 inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
-                      {resource.category}
-                    </div>
-                    <h3 className="text-lg font-semibold text-[var(--brand-ink)] group-hover:text-[var(--brand-denim)]">
-                      {resource.label}
-                    </h3>
-                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
-                      {resource.detail}
+            <>
+              <section className="glass-surface grid gap-6 p-6 lg:grid-cols-[1fr_220px] lg:items-center">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
+                    <MessageCircle className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="section-eyebrow text-[var(--brand-denim)]">SIGNAL GROUP</p>
+                    <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
+                      Join the members-only Signal group
+                    </h2>
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                      Scan the QR code from your phone or open the secure Signal link for timely PGPZ community
+                      coordination, quick updates, and member-to-member conversation.
                     </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <Button asChild>
+                        <Link
+                          href="https://signal.group/#CjQKIEvyw3Ze5YXfGya1u442-BQLrXrN8s7dHoTRk3Jh-8r9EhAhSfVI2Umy4mA1Hq2VFDe_"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open Signal link
+                          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="justify-self-start rounded-2xl border border-[rgba(245,168,0,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(30,30,30,0.48)] lg:justify-self-end">
+                  <Image
+                    src="/community-signal-qr.png"
+                    alt="QR code to join the PGPZ Community Signal group"
+                    width={192}
+                    height={192}
+                    className="h-48 w-48 rounded-xl"
+                  />
+                </div>
+              </section>
+
+              <section className="glass-surface p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-2">
+                    <p className="section-eyebrow text-[var(--brand-denim)]">Member policy updates</p>
+                    <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
+                      Weekly memos and special updates
+                    </h2>
+                    <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                      PGPZ members can read the latest weekly policy memo, browse special reports, and return
+                      to prior updates at any time from the archive.
+                    </p>
+                  </div>
+                  <Button asChild>
+                    <Link href="/updates">
+                      View full archive
+                      <FileText className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                </div>
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  {memberResources.map((resource) => (
+                    <Link
+                      key={resource.href}
+                      href={resource.href}
+                      className="group rounded-2xl border bg-white/85 p-5 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_20px_36px_-28px_rgba(30,30,30,0.4)]"
+                    >
+                      <div className="mb-3 inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
+                        {resource.category}
+                      </div>
+                      <h3 className="text-lg font-semibold text-[var(--brand-ink)] group-hover:text-[var(--brand-denim)]">
+                        {resource.label}
+                      </h3>
+                      <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                        {resource.detail}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            </>
           ) : null}
 
           <section className="space-y-4">
