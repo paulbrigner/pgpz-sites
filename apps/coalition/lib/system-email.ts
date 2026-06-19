@@ -78,22 +78,94 @@ const applyInvitationTemplate = (value: string, context: InvitationTemplateConte
 const brandedInvitationLinkColor = "#8A5A00";
 const brandedInvitationUnderlineColor = "#F5A800";
 const markdownLinkPattern = /\[([^\]\n]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/g;
+const inlineMarkdownPattern =
+  /`([^`\n]+)`|\[([^\]\n]+)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)|\*\*([^\n]+?)\*\*|\*([^*\n]+?)\*/g;
+const unorderedListItemPattern = /^[-*+]\s+(.+)$/;
+const orderedListItemPattern = /^\d+[.)]\s+(.+)$/;
+
+type InvitationTemplateListBlock = {
+  kind: "ordered" | "unordered";
+  items: string[];
+};
 
 const renderInlineInvitationTemplate = (value: string) => {
   let html = "";
   let lastIndex = 0;
-  for (const match of value.matchAll(markdownLinkPattern)) {
+  for (const match of value.matchAll(inlineMarkdownPattern)) {
     const index = match.index || 0;
     html += escapeHtml(value.slice(lastIndex, index));
-    html += `<a href="${escapeHtml(match[2])}" style="color:${brandedInvitationLinkColor};font-weight:800;text-decoration:underline;text-decoration-color:${brandedInvitationUnderlineColor};text-underline-offset:3px;">${escapeHtml(match[1])}</a>`;
+    if (match[1] !== undefined) {
+      html += `<code style="border-radius:4px;background:#F6FAF2;padding:1px 4px;color:#102827;font-family:Menlo,Consolas,monospace;font-size:0.92em;">${escapeHtml(match[1])}</code>`;
+    } else if (match[2] !== undefined && match[3] !== undefined) {
+      html += `<a href="${escapeHtml(match[3])}" style="color:${brandedInvitationLinkColor};font-weight:800;text-decoration:underline;text-decoration-color:${brandedInvitationUnderlineColor};text-underline-offset:3px;">${renderInlineInvitationTemplate(match[2])}</a>`;
+    } else if (match[4] !== undefined) {
+      html += `<strong style="font-weight:800;color:#102827;">${renderInlineInvitationTemplate(match[4])}</strong>`;
+    } else if (match[5] !== undefined) {
+      html += `<em style="font-style:italic;color:#102827;">${renderInlineInvitationTemplate(match[5])}</em>`;
+    }
     lastIndex = index + match[0].length;
   }
   html += escapeHtml(value.slice(lastIndex));
   return html;
 };
 
-const renderInvitationTemplateTextLine = (value: string) =>
-  value.replace(markdownLinkPattern, (_match, label, url) => `${label}: ${url}`);
+const renderInvitationTemplateTextLine = (value: string): string =>
+  value
+    .replace(markdownLinkPattern, (_match, label, url) => `${renderInvitationTemplateTextLine(label)}: ${url}`)
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\*\*([^\n]+?)\*\*/g, "$1")
+    .replace(/\*([^*\n]+?)\*/g, "$1");
+
+const parseInvitationTemplateListBlock = (value: string): InvitationTemplateListBlock | null => {
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return null;
+
+  const unorderedItems = lines.map((line) => unorderedListItemPattern.exec(line)?.[1] || null);
+  if (unorderedItems.every(Boolean)) {
+    return { kind: "unordered", items: unorderedItems as string[] };
+  }
+
+  const orderedItems = lines.map((line) => orderedListItemPattern.exec(line)?.[1] || null);
+  if (orderedItems.every(Boolean)) {
+    return { kind: "ordered", items: orderedItems as string[] };
+  }
+
+  return null;
+};
+
+const renderInvitationTemplateList = (list: InvitationTemplateListBlock) => {
+  const tag = list.kind === "ordered" ? "ol" : "ul";
+  const listStyleType = list.kind === "ordered" ? "decimal" : "disc";
+  const items = list.items
+    .map(
+      (item) =>
+        `<li style="margin:0 0 6px;padding-left:2px;">${renderInlineInvitationTemplate(item)}</li>`,
+    )
+    .join("");
+
+  return `<${tag} style="margin:0 0 16px 22px;padding:0;color:#475569;font-size:15px;line-height:1.7;list-style-type:${listStyleType};">${items}</${tag}>`;
+};
+
+const renderInvitationTemplateHtmlBlock = (value: string) => {
+  const list = parseInvitationTemplateListBlock(value);
+  if (list) return renderInvitationTemplateList(list);
+  return renderEmailParagraph(renderInlineInvitationTemplate(value).replace(/\n/g, "<br />"));
+};
+
+const renderInvitationTemplateTextBlock = (value: string) => {
+  const list = parseInvitationTemplateListBlock(value);
+  if (!list) return renderInvitationTemplateTextLine(value);
+
+  return list.items
+    .map((item, index) => {
+      const marker = list.kind === "ordered" ? `${index + 1}.` : "-";
+      return `${marker} ${renderInvitationTemplateTextLine(item)}`;
+    })
+    .join("\n");
+};
 
 const renderInvitationTemplateHtml = (body: string, activationUrl: string) => {
   const paragraphs = body
@@ -103,11 +175,11 @@ const renderInvitationTemplateHtml = (body: string, activationUrl: string) => {
     .filter(Boolean);
   const [greeting, ...rest] = paragraphs;
   const renderedRest = rest
-    .map((paragraph) => renderEmailParagraph(renderInlineInvitationTemplate(paragraph).replace(/\n/g, "<br />")))
+    .map((paragraph) => renderInvitationTemplateHtmlBlock(paragraph))
     .join("");
 
   return [
-    greeting ? renderEmailParagraph(renderInlineInvitationTemplate(greeting).replace(/\n/g, "<br />")) : "",
+    greeting ? renderInvitationTemplateHtmlBlock(greeting) : "",
     renderEmailButton({ href: activationUrl, label: "Activate PGPZ Coalition account" }),
     renderedRest,
     renderEmailParagraph("This activation link is intended for you. If you were not expecting this invitation, you can ignore this email."),
@@ -127,7 +199,7 @@ const renderInvitationTemplateText = (body: string, activationUrl: string) => {
     "Activate your PGPZ Coalition account:",
     activationUrl,
     "",
-    ...rest.flatMap((paragraph) => [renderInvitationTemplateTextLine(paragraph), ""]),
+    ...rest.flatMap((paragraph) => [renderInvitationTemplateTextBlock(paragraph), ""]),
     "This activation link is intended for you. If you were not expecting this invitation, you can ignore this email.",
   ]
     .join("\n")

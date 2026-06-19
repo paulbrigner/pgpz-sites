@@ -116,6 +116,44 @@ describe("system email builders", () => {
     expect(built.text).toContain(`activate today: ${activationUrl}`);
   });
 
+  it("renders a safe markdown subset in editable invitation templates", () => {
+    const built = buildInvitationEmail({
+      recipientFirstName: "Alice",
+      activationUrl: "https://coalition.pgpz.org/api/invitations/activate?token=abc",
+      template: {
+        subject: "Preview invitation",
+        body: [
+          "Hi [Name],",
+          "",
+          "Please review **important details**, *policy context*, and `PGPZ` before joining.",
+          "",
+          "- **Capacity** is limited",
+          "- Bring [questions](https://coalition.pgpz.org/questions)",
+          "",
+          "1. RSVP",
+          "2. Activate your account",
+          "",
+          "Raw HTML stays escaped: <strong>not bold</strong>",
+        ].join("\n"),
+      },
+    });
+
+    expect(built.html).toContain("<strong");
+    expect(built.html).toContain(">important details</strong>");
+    expect(built.html).toContain("<em");
+    expect(built.html).toContain(">policy context</em>");
+    expect(built.html).toContain("<code");
+    expect(built.html).toContain(">PGPZ</code>");
+    expect(built.html).toContain("<ul");
+    expect(built.html).toContain("<ol");
+    expect(built.html).toContain('href="https://coalition.pgpz.org/questions"');
+    expect(built.html).toContain("&lt;strong&gt;not bold&lt;/strong&gt;");
+    expect(built.html).not.toContain("<strong>not bold</strong>");
+    expect(built.text).toContain("Please review important details, policy context, and PGPZ before joining.");
+    expect(built.text).toContain("- Capacity is limited");
+    expect(built.text).toContain("Bring questions: https://coalition.pgpz.org/questions");
+  });
+
   it("wraps custom admin emails in the branded shell", () => {
     const built = buildCustomAdminEmail({
       subject: "Member note",

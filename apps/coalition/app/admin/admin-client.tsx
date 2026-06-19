@@ -429,6 +429,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           <div className="rounded-lg border bg-white/70 p-3 text-xs leading-5 text-slate-600">
             Available placeholders: <code>[Name]</code>, <code>[First Name]</code>, <code>[Last Name]</code>,{" "}
             <code>[Activation Link]</code>. A prominent activation button is inserted automatically after the greeting.
+            {" "}Markdown supported: <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and simple lists.
           </div>
           <div className="grid gap-3 rounded-lg border bg-white/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <label className="space-y-1 text-sm">
