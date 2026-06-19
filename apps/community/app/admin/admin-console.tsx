@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Newspaper, Users } from "lucide-react";
+import { Activity, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
+import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
 import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "users" | "updates" | "newsletters";
+type AdminTab = "users" | "updates" | "newsletters" | "access";
 
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
@@ -39,6 +40,12 @@ const tabs: Array<{
     description: "Draft, publish, and review message stats",
     icon: Newspaper,
   },
+  {
+    id: "access",
+    label: "Access log",
+    description: "Recent member logins and page views",
+    icon: Activity,
+  },
 ];
 
 export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
@@ -47,7 +54,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 lg:grid-cols-3">
+        <div className="grid gap-2 lg:grid-cols-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -85,6 +92,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       {activeTab === "users" ? <AdminClient initialRoster={null} currentAdminId={currentAdminId} /> : null}
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
+      {activeTab === "access" ? <AccessLogPanel /> : null}
     </div>
   );
 }

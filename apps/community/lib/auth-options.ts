@@ -16,8 +16,10 @@ import {
 } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { recordEmailEvent } from "@/lib/admin/email-log";
+import { recordAccessEvent } from "@/lib/admin/access-log";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { buildMagicLinkEmail } from "@/lib/system-email";
+import { getUserDisplayName } from "@/lib/user-display-name";
 
 if (!process.env.NEXTAUTH_URL && NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = NEXTAUTH_URL;
@@ -332,6 +334,22 @@ export const authOptions = {
       }
 
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }: any) {
+      try {
+        if (!user?.id) return;
+        await recordAccessEvent({
+          eventType: "login",
+          userId: String(user.id),
+          email: typeof user.email === "string" ? user.email : null,
+          name: getUserDisplayName(user),
+          membershipStatus: typeof user.membershipStatus === "string" ? user.membershipStatus : null,
+        });
+      } catch (err) {
+        console.error("signIn event: failed to record access log", err);
+      }
     },
   },
   pages: {
