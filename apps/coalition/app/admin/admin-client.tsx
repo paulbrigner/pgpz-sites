@@ -98,6 +98,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateDraftEmail, setTemplateDraftEmail] = useState("");
   const [templateDraftSending, setTemplateDraftSending] = useState(false);
+  const [bulkInviting, setBulkInviting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadInvitationTemplate = async () => {
@@ -180,6 +181,19 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     });
   }, [currentAdminId, query, roster]);
 
+  const bulkInviteableMembers = useMemo(
+    () =>
+      (roster?.members || []).filter(
+        (member) =>
+          member.membershipStatus !== "active" &&
+          !!member.email &&
+          !member.emailSuppressed &&
+          !member.invitationEmailSentAt &&
+          member.manualApprovalStatus !== "pending",
+      ),
+    [roster],
+  );
+
   const sendEmail = async (member: AdminMember, type: "welcome" | "invitation") => {
     setEmailSending((current) => ({ ...current, [`${member.id}:${type}`]: true }));
     setNotice(null);
@@ -198,6 +212,37 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       setError(err?.message || `Failed to send ${type} email`);
     } finally {
       setEmailSending((current) => ({ ...current, [`${member.id}:${type}`]: false }));
+    }
+  };
+
+  const inviteOutstandingMembers = async () => {
+    const count = bulkInviteableMembers.length;
+    if (!count) return;
+    if (!window.confirm(`Send invitation emails to ${count} outstanding invite-able member${count === 1 ? "" : "s"}?`)) {
+      return;
+    }
+
+    setBulkInviting(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/email/invitations/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmSend: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to send outstanding invitations");
+      setNotice(
+        body?.failed
+          ? `Sent ${body.sent || 0} invitation${body.sent === 1 ? "" : "s"}; ${body.failed} failed.`
+          : `Sent ${body.sent || 0} outstanding invitation${body.sent === 1 ? "" : "s"}.`,
+      );
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to send outstanding invitations");
+    } finally {
+      setBulkInviting(false);
     }
   };
 
@@ -467,10 +512,22 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               Add a member in invited state, then send an activation email when ready.
             </p>
           </div>
-          <Button type="button" onClick={() => setCreateOpen((open) => !open)}>
-            <UserPlus className="h-4 w-4" />
-            {createOpen ? "Close form" : "Add member"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!bulkInviteableMembers.length || bulkInviting}
+              isLoading={bulkInviting}
+              onClick={inviteOutstandingMembers}
+            >
+              <MailPlus className="h-4 w-4" />
+              Invite outstanding ({bulkInviteableMembers.length})
+            </Button>
+            <Button type="button" onClick={() => setCreateOpen((open) => !open)}>
+              <UserPlus className="h-4 w-4" />
+              {createOpen ? "Close form" : "Add member"}
+            </Button>
+          </div>
         </div>
         {createOpen ? (
           <form onSubmit={createMember} className="mt-5 grid gap-3">

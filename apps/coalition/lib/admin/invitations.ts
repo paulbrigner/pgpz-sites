@@ -230,11 +230,13 @@ export async function markInvitationEmailSent({
     TableName: TABLE_NAME,
     Key: userKey(userId),
     UpdateExpression:
-      "SET invitationEmailSentAt = :now, invitationEmailSentBy = :adminUserId, invitationStatus = :pending, updatedAt = :now",
+      "SET invitationEmailSentAt = :now, invitationEmailSentBy = :adminUserId, invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now",
     ExpressionAttributeValues: {
       ":now": now,
       ":adminUserId": adminUserId || null,
       ":pending": "pending",
+      ":invited": "invited",
+      ":provider": "admin_invite",
     },
   });
   return now;
