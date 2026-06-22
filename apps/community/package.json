@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "serve": "serve out",
+    "forum:update": "NODE_OPTIONS=--conditions=react-server tsx scripts/export-policy-update-forum-markdown.ts",
     "test": "vitest run --passWithNoTests",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
@@ -62,8 +63,10 @@
     "eslint-plugin-storybook": "^0.11.6",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
+    "server-only": "^0.0.1",
     "storybook": "8.3.6",
     "tailwindcss": "^4.1.12",
+    "tsx": "^4.22.4",
     "tw-animate-css": "^1.3.7",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

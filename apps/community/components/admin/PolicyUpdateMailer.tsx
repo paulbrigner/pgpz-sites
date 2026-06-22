@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,14 @@ type UploadPrepareResponse = {
     fileSize: number;
     contentType: string;
   };
+};
+
+type MarkdownExportResponse = {
+  ok?: boolean;
+  error?: string;
+  title?: string;
+  fileName?: string;
+  markdown?: string;
 };
 
 type Props = {
@@ -339,6 +347,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
   const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
+  const [exportingMarkdownSlug, setExportingMarkdownSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -354,6 +363,11 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const selectedIsGenerating = Boolean(
     selectedUpdate && generatingContentSlug === selectedUpdate.slug,
   );
+  const selectedIsExportingMarkdown = Boolean(
+    selectedUpdate && exportingMarkdownSlug === selectedUpdate.slug,
+  );
+  const selectedCanExportMarkdown =
+    !!selectedUpdate && (selectedUpdate.source !== "uploaded" || selectedHasGeneratedContent);
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
     const selected = new Set(selectedRecipientIds);
@@ -582,6 +596,47 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setSelectedSlug(selectedUpdate.slug);
     } finally {
       setGeneratingContentSlug(null);
+    }
+  };
+
+  const exportSelectedMarkdown = async () => {
+    if (!selectedUpdate) return;
+
+    setExportingMarkdownSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "exportMarkdown",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as MarkdownExportResponse;
+      if (!res.ok || !body.markdown) throw new Error(body?.error || "Failed to export Markdown");
+
+      const fileName = body.fileName || `${selectedUpdate.slug}.md`;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(body.markdown).catch(() => undefined);
+      }
+
+      const blob = new Blob([body.markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setUploadNotice(`Exported Markdown for ${body.title || selectedUpdate.shortTitle}.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to export Markdown");
+    } finally {
+      setExportingMarkdownSlug(null);
     }
   };
 
@@ -930,6 +985,20 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
                       Portal view
                     </Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={exportSelectedMarkdown}
+                    disabled={!selectedCanExportMarkdown || selectedIsExportingMarkdown}
+                    title={
+                      selectedCanExportMarkdown
+                        ? "Copy and download a clean Markdown version"
+                        : "Generate page content before exporting Markdown"
+                    }
+                  >
+                    <Download className={cn("h-4 w-4", selectedIsExportingMarkdown && "animate-pulse")} />
+                    {selectedIsExportingMarkdown ? "Exporting..." : "Markdown"}
                   </Button>
                   {selectedUpdate.source === "uploaded" && selectedVisibilityStatus !== "published" ? (
                     <Button

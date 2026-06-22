@@ -42,6 +42,10 @@ import {
 } from "@/lib/admin/policy-update-uploads";
 import { generatePolicyUpdatePageContent } from "@/lib/admin/policy-update-generation";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
+import {
+  buildPolicyUpdateForumMarkdown,
+  policyUpdateMarkdownFileName,
+} from "@/lib/policy-update-markdown";
 import { s3Client } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
@@ -569,6 +573,31 @@ async function resolvePolicyUpdateAudience(body: any) {
   return { audienceMode, recipients, activeRecipientCount: allRecipients.length };
 }
 
+async function exportPolicyUpdateMarkdown(body: any) {
+  const slug = textFromBody(body, "slug");
+  if (!slug) {
+    return NextResponse.json({ error: "Choose a policy update to export" }, { status: 400 });
+  }
+
+  const update = await getDistributablePolicyUpdate(slug);
+  if (!update) {
+    return NextResponse.json({ error: "Unknown policy update" }, { status: 404 });
+  }
+
+  const markdown = buildPolicyUpdateForumMarkdown(update, {
+    siteUrl: SITE_URL,
+    greeting: textFromBody(body, "greeting") || "Hi everyone,",
+  });
+
+  return NextResponse.json({
+    ok: true,
+    slug: update.slug,
+    title: update.title,
+    fileName: policyUpdateMarkdownFileName(update),
+    markdown,
+  });
+}
+
 export async function GET() {
   const admin = await requireAdminOrForbidden();
   if (admin.response) return admin.response;
@@ -612,6 +641,9 @@ export async function POST(request: NextRequest) {
   }
   if (body?.action === "generateContent") {
     return generateUploadedPolicyUpdateContent(body, adminUserId);
+  }
+  if (body?.action === "exportMarkdown") {
+    return exportPolicyUpdateMarkdown(body);
   }
   if (body?.action === "publishUpdate" || body?.action === "unpublishUpdate") {
     const slug = textFromBody(body, "slug");

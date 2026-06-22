@@ -75,6 +75,39 @@ npm test
 npm run build
 ```
 
+## Forum Markdown Export
+
+After an update has been uploaded and generated in the admin interface, use **Admin → Update distribution → Markdown** to copy and download a clean Markdown version for forum posting. The export uses direct links and public email-asset image URLs, with no tracking links, open pixel, unsubscribe link, or inline attachments.
+
+The command-line exporter is available as a fallback:
+
+```bash
+AWS_PROFILE=pgpcommunity REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth \
+  npm run forum:update -- \
+  --slug 2026-06-15-weekly-policy-memo \
+  --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
+```
+
+If the local AWS SSO session is expired, refresh it first:
+
+```bash
+aws sso login --profile pgpcommunity
+```
+
+Before the generated record is available, the exporter can use the source PDF as a fallback while still pointing social images at the expected public email-asset URLs for that slug:
+
+```bash
+npm run forum:update -- \
+  --source pdf \
+  --pdf "/path/to/weekly-policy-memo.pdf" \
+  --slug 2026-06-15-weekly-policy-memo \
+  --title "Weekly Policy Memo: June 15, 2026" \
+  --published-at 2026-06-15 \
+  --display-date "Week of June 15, 2026" \
+  --summary "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements" \
+  --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
+```
+
 ## Deployment
 
 The app is configured for AWS Amplify via `amplify.yml`. Required runtime environment variables should be configured in the Amplify app before deployment.
