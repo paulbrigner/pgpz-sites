@@ -33,17 +33,6 @@ export const POLICY_UPDATE_UPLOAD_BUCKET =
     process.env.PGPZ_CONTENT_BUCKET) as string | undefined;
 export const POLICY_UPDATE_UPLOAD_PREFIX =
   (process.env.POLICY_UPDATE_UPLOAD_PREFIX || "policy-updates/uploads").replace(/^\/+|\/+$/g, "");
-export const VENICE_API_KEY = process.env.VENICE_API_KEY as string | undefined;
-export const POLICY_UPDATE_GENERATION_BASE_URL = trimBaseUrl(
-  process.env.POLICY_UPDATE_GENERATION_BASE_URL,
-  "https://api.venice.ai/api/v1",
-);
-export const POLICY_UPDATE_GENERATION_MODEL =
-  process.env.POLICY_UPDATE_GENERATION_MODEL || "openai-gpt-55";
-export const POLICY_UPDATE_GENERATION_TIMEOUT_MS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_TIMEOUT_MS) || 180000;
-export const POLICY_UPDATE_GENERATION_MAX_TOKENS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_MAX_TOKENS) || 6000;
 
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||

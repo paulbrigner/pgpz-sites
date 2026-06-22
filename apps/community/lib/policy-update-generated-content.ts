@@ -242,7 +242,7 @@ export function normalizeGeneratedPolicyUpdateContent(
 ): GeneratedPolicyUpdateContent {
   const record = generatedObject(value);
   if (!record) {
-    throw new Error("Venice response did not include a content object.");
+    throw new Error("Generated policy update content did not include a content object.");
   }
 
   const summary = cleanText(record.summary, MAX_SUMMARY_CHARS) || fallback.summary;
