@@ -41,9 +41,9 @@ export const POLICY_UPDATE_GENERATION_BASE_URL = trimBaseUrl(
 export const POLICY_UPDATE_GENERATION_MODEL =
   process.env.POLICY_UPDATE_GENERATION_MODEL || "openai-gpt-55";
 export const POLICY_UPDATE_GENERATION_TIMEOUT_MS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_TIMEOUT_MS) || 90000;
+  parseNumber(process.env.POLICY_UPDATE_GENERATION_TIMEOUT_MS) || 120000;
 export const POLICY_UPDATE_GENERATION_MAX_TOKENS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_MAX_TOKENS) || 2500;
+  parseNumber(process.env.POLICY_UPDATE_GENERATION_MAX_TOKENS) || 6000;
 
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||

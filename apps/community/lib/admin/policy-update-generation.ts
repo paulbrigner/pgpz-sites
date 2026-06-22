@@ -30,6 +30,8 @@ const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
 const MAX_FALLBACK_PARAGRAPHS = 6;
+const MONTH_NAME_PATTERN =
+  "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 
 class VeniceTimeoutError extends Error {
   constructor() {
@@ -51,6 +53,31 @@ function compactWhitespace(value: string) {
     .trim();
 }
 
+function stripPdfChrome(value: string) {
+  return value
+    .replace(/PGPZ Community\s+Member Policy Resource/gi, " ")
+    .replace(/community\.pgpz\.org\s*\|\s*PGPZ Community\s*\|\s*Page\s+\d+/gi, " ")
+    .replace(/--- Page \d+ of \d+ ---/gi, " ")
+    .replace(/https:\/\/community\.pgpz\.org\/updates\/[^\s]+/gi, " ")
+    .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, " ");
+}
+
+function sourceTextForGeneration(value: string) {
+  return compactWhitespace(
+    stripPdfChrome(value)
+      .replace(/\s+(Key Takeaways)\b/gi, "\n\n$1\n")
+      .replace(/\s+(Action Items?)\b/gi, "\n\n$1\n")
+      .replace(/\s+(X Post of the Week:)/gi, "\n\n$1")
+      .replace(/\s+(Notable Posts?:)/gi, "\n\n$1")
+      .replace(/\s+(Why this matters for Zcash:?)/gi, "\n\n$1")
+      .replace(/\s+(Policy Developments?:)/gi, "\n\n$1")
+      .replace(/\s+(Regulatory Developments?:)/gi, "\n\n$1")
+      .replace(/\s+(Executive Summary)\b/gi, "\n\n$1\n")
+      .replace(/\s+[•]\s+/g, "\n- ")
+      .replace(/\s+l\s+(?=[A-Z0-9])/g, "\n- "),
+  );
+}
+
 function truncatePromptText(value: string) {
   if (value.length <= MAX_PDF_TEXT_CHARS) return value;
   return `${value.slice(0, MAX_PDF_TEXT_CHARS)}\n\n[Source text truncated for generation.]`;
@@ -62,7 +89,7 @@ function sentenceCase(value: string) {
 }
 
 function splitSourceLines(value: string) {
-  return value
+  return sourceTextForGeneration(value)
     .split(/\n+/g)
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
@@ -74,7 +101,7 @@ function splitSourceLines(value: string) {
 }
 
 function splitParagraphsFromText(value: string) {
-  return compactWhitespace(value)
+  return sourceTextForGeneration(value)
     .split(/\n{2,}/g)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
     .filter((paragraph) => paragraph.length > 80)
@@ -117,6 +144,128 @@ function listItemsFromLines(lines: string[], maxItems: number) {
     .slice(0, maxItems);
 }
 
+function splitFallbackHeading(line: string) {
+  const clean = line.replace(/\s+/g, " ").trim();
+  const datedBodyPattern = new RegExp(`\\s+(On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2},\\s+\\d{4}\\b.*)$`, "i");
+  const datedBody = clean.match(datedBodyPattern);
+
+  if (/^(X Post of the Week:|Notable Posts?:)/i.test(clean)) {
+    if (datedBody?.index && datedBody.index > 20) {
+      return {
+        heading: clean.slice(0, datedBody.index).trim(),
+        remainder: datedBody[1].trim(),
+      };
+    }
+    return { heading: clean, remainder: "" };
+  }
+
+  const why = clean.match(/^(Why this matters for Zcash:?)(.*)$/i);
+  if (why) {
+    return {
+      heading: "Why this matters for Zcash",
+      remainder: why[2].replace(/^[:\s-]+/, "").trim(),
+    };
+  }
+
+  const action = clean.match(/^(Action Items?:?)(.*)$/i);
+  if (action) {
+    return {
+      heading: action[1].replace(/:$/, ""),
+      remainder: action[2].replace(/^[:\s-]+/, "").trim(),
+    };
+  }
+
+  return null;
+}
+
+function fallbackBodyFromLines(lines: string[]) {
+  const body: string[] = [];
+  const bullets: string[] = [];
+
+  for (const line of lines) {
+    const clean = line.replace(/\s+/g, " ").trim();
+    if (!clean) continue;
+    if (/^[-*•]\s+/.test(clean)) {
+      bullets.push(sentenceCase(clean.replace(/^[-*•]\s+/, "")));
+    } else {
+      body.push(sentenceCase(clean));
+    }
+  }
+
+  return { body, bullets };
+}
+
+function fallbackSectionsFromText(
+  record: UploadedPolicyUpdateRecord,
+  extracted: ExtractedPolicyUpdatePdf,
+) {
+  const lines = splitSourceLines(extracted.text);
+  const sections: GeneratedPolicyUpdateContent["sections"] = [];
+  let current:
+    | {
+        heading: string;
+        lines: string[];
+      }
+    | null = null;
+  let skippingSidebar: "keyTakeaways" | "actionItems" | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    const { body, bullets } = fallbackBodyFromLines(current.lines);
+    if (body.length || bullets.length) {
+      const section: GeneratedPolicyUpdateContent["sections"][number] = {
+        heading: current.heading,
+        body: body.length ? body.slice(0, 5) : ["Review the corresponding section in the source PDF."],
+      };
+      if (bullets.length) section.bullets = bullets.slice(0, 8);
+      section.links = extracted.links
+        .filter((link) =>
+          [section.heading, ...section.body, ...(section.bullets || [])].some((text) =>
+            text.toLowerCase().includes(link.text.toLowerCase()),
+          ),
+        )
+        .slice(0, 8)
+        .map((link) => ({ text: link.text, href: link.href }));
+      if (!section.links.length) delete section.links;
+      sections.push(section);
+    }
+    current = null;
+  };
+
+  for (const line of lines) {
+    if (/^Key Takeaways$/i.test(line)) {
+      flush();
+      skippingSidebar = "keyTakeaways";
+      continue;
+    }
+    if (/^Action Items?$/i.test(line)) {
+      flush();
+      skippingSidebar = "actionItems";
+      continue;
+    }
+
+    const heading = splitFallbackHeading(line);
+    if (heading && !/^Action Items?$/i.test(heading.heading)) {
+      flush();
+      skippingSidebar = null;
+      current = { heading: heading.heading, lines: heading.remainder ? [heading.remainder] : [] };
+      continue;
+    }
+
+    if (skippingSidebar) continue;
+    if (!current) {
+      current = {
+        heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
+        lines: [],
+      };
+    }
+    current.lines.push(line);
+  }
+
+  flush();
+  return sections.length ? sections.slice(0, 10) : undefined;
+}
+
 function fallbackPolicyUpdateContent(
   record: UploadedPolicyUpdateRecord,
   extracted: ExtractedPolicyUpdatePdf,
@@ -140,15 +289,10 @@ function fallbackPolicyUpdateContent(
 
   const keyTakeaways = listItemsFromLines(keyTakeawayLines, 5);
   const actionItems = listItemsFromLines(actionItemLines, 5);
+  const sections = fallbackSectionsFromText(record, extracted);
   const overviewParagraphs = paragraphs
     .filter((paragraph) => !/^Detected PDF links:/i.test(paragraph))
     .slice(0, MAX_FALLBACK_PARAGRAPHS);
-  const linksParagraph =
-    extracted.links.length > 0
-      ? `The source PDF includes ${extracted.links.length} embedded reference link${
-          extracted.links.length === 1 ? "" : "s"
-        } that should be preserved during admin review.`
-      : "";
 
   return {
     shortTitle: record.shortTitle,
@@ -157,7 +301,7 @@ function fallbackPolicyUpdateContent(
     emailPreheader: record.emailPreheader || summary.slice(0, 220),
     keyTakeaways: keyTakeaways.length ? keyTakeaways : sentenceItemsFromText(summary, 3),
     actionItems: actionItems.length ? actionItems : record.actionItems,
-    sections: [
+    sections: sections || [
       {
         heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
         body: overviewParagraphs.length ? overviewParagraphs : [summary],
@@ -166,18 +310,6 @@ function fallbackPolicyUpdateContent(
           href: link.href,
         })),
       },
-      ...(linksParagraph
-        ? [
-            {
-              heading: "Source Links",
-              body: [linksParagraph],
-              links: extracted.links.slice(0, 8).map((link) => ({
-                text: link.text,
-                href: link.href,
-              })),
-            },
-          ]
-        : []),
     ],
   };
 }
@@ -396,7 +528,9 @@ function promptForPolicyUpdate(record: UploadedPolicyUpdateRecord, extracted: Ex
     ? JSON.stringify(extracted.tables.slice(0, MAX_TABLES_FOR_PROMPT), null, 2)
     : "No structured tables were detected by the PDF parser. If the extracted text clearly contains tabular content, recreate it as a table.";
 
-  return `Create polished page content for a PGPZ Community policy update from the uploaded PDF source.
+  return `Convert the uploaded PDF source into faithful, well-structured PGPZ Community page content.
+
+Your job is document conversion, not article writing. The generated page should closely track the source document while fitting the existing PGPZ Community page/email design. The website will apply the visual palette and typography; you supply clean structured content.
 
 Return strict JSON only. Do not wrap the response in markdown.
 
@@ -421,14 +555,21 @@ Required JSON shape:
 }
 
 Rules:
-- Use only facts from the source text and metadata. Do not invent citations, claims, dates, or events.
-- Keep the tone analytical, concise, and policy-focused through the Zcash lens.
+- Treat the PDF source text as authoritative. Use only facts, claims, dates, links, and framing present in the source text or metadata.
+- Preserve the source document's order, section hierarchy, and emphasis as closely as the JSON schema allows.
+- Use the source's actual headings where possible. Do not collapse the document into one generic "Policy Update" section.
+- Convert each meaningful source section into its own section object. For recurring source headings such as "Why this matters for Zcash" or "Action Item", keep them attached to the relevant nearby development rather than moving them to an unrelated section.
+- Keep the source's analytical tone and Zcash policy lens. Lightly clean extraction artifacts, but do not rewrite into marketing copy.
+- Copy the source key takeaways and action items into the sidebar arrays when the source contains those lists. Do not invent new takeaways or actions.
 - Weekly updates should not include an "Executive Summary" section unless the source document explicitly has that section. Put the overview in "summary" instead.
 - Special/featured updates may include "Executive Summary" only when the source document supports it.
 - Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
 - Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
+- Ignore repeated PDF chrome such as PGPZ Community headers, footers, page numbers, member-resource labels, QR-code captions, and community signup boilerplate unless it is part of the actual policy content.
+- Do not add filler such as "open the PDF resource", "the source PDF includes links", "this draft page can be published", or "review the source document".
+- The page content should be useful without opening the PDF: include the substantive body text, bullets, and tables from the source, not just a summary.
+- Keep paragraphs readable for the portal: usually 80-180 words each, split long source paragraphs at natural sentence boundaries, and use bullets for source bullet lists.
 - Avoid markdown formatting in strings.
-- The generated page should be useful without opening the PDF, while the PDF remains the complete source resource.
 
 Metadata:
 - Category: ${record.category}
@@ -445,8 +586,8 @@ ${tables}
 Detected PDF links:
 ${formatDetectedLinks(extracted.links) || "No external PDF link annotations were detected."}
 
-Extracted PDF text:
-${truncatePromptText(extracted.text)}`;
+Cleaned extracted PDF text:
+${truncatePromptText(sourceTextForGeneration(extracted.text))}`;
 }
 
 async function postVeniceChat(requestBody: Record<string, unknown>, useJsonMode = true) {
@@ -504,7 +645,7 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
       {
         role: "system",
         content:
-          "You are a careful PGPZ Community policy editor. You transform PDF source material into structured website content and output valid JSON only.",
+          "You are a meticulous PGPZ Community document-conversion editor. Preserve the source document faithfully, clean PDF extraction artifacts, and output valid JSON only.",
       },
       {
         role: "user",
