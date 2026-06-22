@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { PNG } from "pngjs";
 import {
   POLICY_UPDATE_GENERATION_BASE_URL,
   POLICY_UPDATE_GENERATION_MAX_TOKENS,
@@ -49,12 +50,14 @@ type ViewportRect = {
   bottom: number;
 };
 
+type PdfMatrix = [number, number, number, number, number, number];
+
 const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
 const MAX_FALLBACK_PARAGRAPHS = 6;
-const IMAGE_RENDER_SCALE = 3;
 const MAX_EXTRACTED_IMAGES = 8;
+const PDF_IMAGE_OBJECT_TIMEOUT_MS = 5000;
 const MONTH_NAME_PATTERN =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 
@@ -409,11 +412,11 @@ function fallbackFromRecord(record: UploadedPolicyUpdateRecord) {
   };
 }
 
-function ensurePdfRuntimePolyfills(canvasRuntime?: any) {
+function ensurePdfRuntimePolyfills() {
   const scope = globalThis as any;
 
   if (typeof scope.DOMMatrix === "undefined") {
-    scope.DOMMatrix = canvasRuntime?.DOMMatrix || class DOMMatrix {
+    scope.DOMMatrix = class DOMMatrix {
       a = 1;
       b = 0;
       c = 0;
@@ -454,7 +457,7 @@ function ensurePdfRuntimePolyfills(canvasRuntime?: any) {
   }
 
   if (typeof scope.ImageData === "undefined") {
-    scope.ImageData = canvasRuntime?.ImageData || class ImageData {
+    scope.ImageData = class ImageData {
       data: Uint8ClampedArray;
       width: number;
       height: number;
@@ -474,7 +477,7 @@ function ensurePdfRuntimePolyfills(canvasRuntime?: any) {
   }
 
   if (typeof scope.Path2D === "undefined") {
-    scope.Path2D = canvasRuntime?.Path2D || class Path2D {
+    scope.Path2D = class Path2D {
       constructor(_path?: unknown) {}
       addPath() {}
       closePath() {}
@@ -491,9 +494,8 @@ function ensurePdfRuntimePolyfills(canvasRuntime?: any) {
 }
 
 async function loadPdfJs() {
-  const canvasRuntime = await import("@napi-rs/canvas").catch(() => null);
-  ensurePdfRuntimePolyfills(canvasRuntime);
-  return import("pdfjs-dist/legacy/build/pdf.mjs");
+  ensurePdfRuntimePolyfills();
+  return import("pdfjs-dist/build/pdf.mjs");
 }
 
 function textItemPosition(item: any) {
@@ -650,10 +652,9 @@ function xImageRole({
   return "notable-posts";
 }
 
-function annotationRectToViewportRect(annotation: LinkAnnotation, viewport: any): ViewportRect | null {
-  if (!annotation.rect.length || typeof viewport?.convertToViewportRectangle !== "function") return null;
-  const rect = viewport.convertToViewportRectangle(annotation.rect);
-  if (!Array.isArray(rect) || rect.length !== 4) return null;
+function annotationRectToPdfRect(annotation: LinkAnnotation): ViewportRect | null {
+  if (!annotation.rect.length) return null;
+  const rect = annotation.rect;
   return {
     left: Math.min(rect[0], rect[2]),
     top: Math.min(rect[1], rect[3]),
@@ -677,12 +678,11 @@ function rectIntersectionArea(a: ViewportRect, b: ViewportRect) {
 function bestOverlappingLink(
   imageRect: ViewportRect,
   annotations: LinkAnnotation[],
-  viewport: any,
 ) {
   let best: { annotation: LinkAnnotation; score: number } | null = null;
 
   for (const annotation of annotations) {
-    const annotationRect = annotationRectToViewportRect(annotation, viewport);
+    const annotationRect = annotationRectToPdfRect(annotation);
     if (!annotationRect) continue;
     const overlap = rectIntersectionArea(imageRect, annotationRect);
     if (!overlap) continue;
@@ -693,6 +693,52 @@ function bestOverlappingLink(
   }
 
   return best && best.score > 0.2 ? best.annotation : null;
+}
+
+const IDENTITY_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0];
+
+function multiplyPdfMatrix(current: PdfMatrix, transform: PdfMatrix): PdfMatrix {
+  const [a1, b1, c1, d1, e1, f1] = current;
+  const [a2, b2, c2, d2, e2, f2] = transform;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+function pdfMatrixFromArgs(args: unknown): PdfMatrix | null {
+  if (!Array.isArray(args) || args.length < 6) return null;
+  const values = args.slice(0, 6).map(Number);
+  return values.every(Number.isFinite) ? (values as PdfMatrix) : null;
+}
+
+function transformPoint(matrix: PdfMatrix, x: number, y: number) {
+  const [a, b, c, d, e, f] = matrix;
+  return {
+    x: a * x + c * y + e,
+    y: b * x + d * y + f,
+  };
+}
+
+function imageRectFromMatrix(matrix: PdfMatrix): ViewportRect {
+  const points = [
+    transformPoint(matrix, 0, 0),
+    transformPoint(matrix, 1, 0),
+    transformPoint(matrix, 0, 1),
+    transformPoint(matrix, 1, 1),
+  ];
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys),
+  };
 }
 
 function imageMetadataFromLink({
@@ -793,13 +839,86 @@ async function uploadExtractedImageAsset({
   return `/api/policy-updates/${encodeURIComponent(record.slug)}/assets/${assetName}`;
 }
 
+function waitForPdfImageObject(page: any, objectId: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timed out extracting PDF image object ${objectId}.`)),
+      PDF_IMAGE_OBJECT_TIMEOUT_MS,
+    );
+
+    try {
+      page.objs.get(objectId, (data: unknown) => {
+        clearTimeout(timer);
+        resolve(data);
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+    }
+  });
+}
+
+function rgbaBytesFromPdfImage(image: any, imageKind: any) {
+  const width = Number(image?.width || 0);
+  const height = Number(image?.height || 0);
+  const data = image?.data;
+  if (!width || !height || !data || typeof data.length !== "number") return null;
+
+  const pixelCount = width * height;
+  const rgba = Buffer.alloc(pixelCount * 4);
+
+  if (image.kind === imageKind?.RGBA_32BPP && data.length >= pixelCount * 4) {
+    Buffer.from(data).copy(rgba, 0, 0, pixelCount * 4);
+    return { width, height, data: rgba };
+  }
+
+  if (image.kind === imageKind?.RGB_24BPP && data.length >= pixelCount * 3) {
+    for (let source = 0, target = 0; target < rgba.length; source += 3, target += 4) {
+      rgba[target] = data[source];
+      rgba[target + 1] = data[source + 1];
+      rgba[target + 2] = data[source + 2];
+      rgba[target + 3] = 255;
+    }
+    return { width, height, data: rgba };
+  }
+
+  if (image.kind === imageKind?.GRAYSCALE_1BPP) {
+    for (let index = 0; index < pixelCount; index += 1) {
+      const byte = data[index >> 3] || 0;
+      const bit = 7 - (index & 7);
+      const value = byte & (1 << bit) ? 255 : 0;
+      const target = index * 4;
+      rgba[target] = value;
+      rgba[target + 1] = value;
+      rgba[target + 2] = value;
+      rgba[target + 3] = 255;
+    }
+    return { width, height, data: rgba };
+  }
+
+  return null;
+}
+
+function encodePdfImageAsPng(image: any, imageKind: any) {
+  const rgba = rgbaBytesFromPdfImage(image, imageKind);
+  if (!rgba) return null;
+
+  const png = new PNG({ width: rgba.width, height: rgba.height });
+  png.data = rgba.data;
+  return {
+    bytes: PNG.sync.write(png),
+    width: rgba.width,
+    height: rgba.height,
+  };
+}
+
 async function extractPageImageAssets({
   record,
   page,
   pageNumber,
   annotations,
   pageText,
-  imagePaintOperator,
+  pdfjs,
   socialImageCounter,
 }: {
   record: UploadedPolicyUpdateRecord;
@@ -807,48 +926,51 @@ async function extractPageImageAssets({
   pageNumber: number;
   annotations: LinkAnnotation[];
   pageText: string;
-  imagePaintOperator: number;
+  pdfjs: any;
   socialImageCounter: { count: number };
 }) {
-  const { createCanvas } = await import("@napi-rs/canvas");
-  const viewport = page.getViewport({ scale: IMAGE_RENDER_SCALE });
-  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-  const context = canvas.getContext("2d");
-  await page.render({
-    canvasContext: context,
-    viewport,
-    recordOperations: true,
-  }).promise;
-
   const operatorList = await page.getOperatorList();
-  const bboxes = page.recordedBBoxes;
   const extracted: ExtractedPolicyUpdateImage[] = [];
   let imageIndex = 0;
+  let currentMatrix: PdfMatrix = [...IDENTITY_MATRIX];
+  const matrixStack: PdfMatrix[] = [];
 
   for (let opIndex = 0; opIndex < operatorList.fnArray.length; opIndex += 1) {
-    if (operatorList.fnArray[opIndex] !== imagePaintOperator || !bboxes || bboxes.isEmpty(opIndex)) continue;
+    const fn = operatorList.fnArray[opIndex];
+    const args = operatorList.argsArray[opIndex] || [];
+
+    if (fn === pdfjs.OPS.save) {
+      matrixStack.push([...currentMatrix]);
+      continue;
+    }
+
+    if (fn === pdfjs.OPS.restore) {
+      currentMatrix = matrixStack.pop() || [...IDENTITY_MATRIX];
+      continue;
+    }
+
+    if (fn === pdfjs.OPS.transform) {
+      const transform = pdfMatrixFromArgs(args);
+      if (transform) {
+        currentMatrix = multiplyPdfMatrix(currentMatrix, transform);
+      }
+      continue;
+    }
+
+    if (fn !== pdfjs.OPS.paintImageXObject) continue;
 
     imageIndex += 1;
-    const args = operatorList.argsArray[opIndex] || [];
+    const objectId = typeof args[0] === "string" ? args[0] : "";
+    if (!objectId) continue;
+
     const sourceWidth = Number(args[1] || 0);
     const sourceHeight = Number(args[2] || 0);
-    const imageRect = {
-      left: bboxes.minX(opIndex) * canvas.width,
-      top: bboxes.minY(opIndex) * canvas.height,
-      right: bboxes.maxX(opIndex) * canvas.width,
-      bottom: bboxes.maxY(opIndex) * canvas.height,
-    };
+    const imageRect = imageRectFromMatrix(currentMatrix);
+    const displayWidth = Math.round(rectArea(imageRect) ? imageRect.right - imageRect.left : sourceWidth);
+    const displayHeight = Math.round(rectArea(imageRect) ? imageRect.bottom - imageRect.top : sourceHeight);
+    if (displayWidth < 120 || displayHeight < 120) continue;
 
-    const padding = 6;
-    const left = Math.max(0, Math.floor(imageRect.left) - padding);
-    const top = Math.max(0, Math.floor(imageRect.top) - padding);
-    const right = Math.min(canvas.width, Math.ceil(imageRect.right) + padding);
-    const bottom = Math.min(canvas.height, Math.ceil(imageRect.bottom) + padding);
-    const width = right - left;
-    const height = bottom - top;
-    if (width < 120 || height < 120) continue;
-
-    const link = bestOverlappingLink(imageRect, annotations, viewport);
+    const link = bestOverlappingLink(imageRect, annotations);
     const isSocialLink = !!link && /(?:x|twitter)\.com\//i.test(link.href);
     if (isSocialLink) socialImageCounter.count += 1;
 
@@ -868,13 +990,19 @@ async function extractPageImageAssets({
         });
     if (!metadata) continue;
 
-    const crop = createCanvas(width, height);
-    crop.getContext("2d").drawImage(canvas, left, top, width, height, 0, 0, width, height);
-    const bytes = crop.toBuffer("image/png");
+    let encodedImage: { bytes: Buffer; width: number; height: number } | null = null;
+    try {
+      const image = await waitForPdfImageObject(page, objectId);
+      encodedImage = encodePdfImageAsPng(image, pdfjs.ImageKind);
+    } catch {
+      encodedImage = null;
+    }
+    if (!encodedImage) continue;
+
     const src = await uploadExtractedImageAsset({
       record,
       assetName: metadata.assetName,
-      bytes,
+      bytes: encodedImage.bytes,
     });
 
     const href = "href" in metadata && typeof metadata.href === "string" ? metadata.href : undefined;
@@ -883,8 +1011,8 @@ async function extractPageImageAssets({
       alt: metadata.alt,
       caption: metadata.caption,
       ...(href ? { href } : {}),
-      width,
-      height,
+      width: encodedImage.width,
+      height: encodedImage.height,
       page: pageNumber,
       role: metadata.role,
     });
@@ -1174,7 +1302,7 @@ export async function extractPolicyUpdatePdfContent(
             pageNumber,
             annotations: pageLinks,
             pageText,
-            imagePaintOperator: pdfjs.OPS.paintImageXObject,
+            pdfjs,
             socialImageCounter,
           });
           extractedImages.push(...images);

@@ -21,7 +21,6 @@
     "@aws-sdk/cloudfront-signer": "^3.862.0",
     "@aws-sdk/lib-dynamodb": "^3.864.0",
     "@aws-sdk/s3-request-presigner": "3.879.0",
-    "@napi-rs/canvas": "^0.1.100",
     "@next-auth/dynamodb-adapter": "^1.0.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-navigation-menu": "^1.2.14",
@@ -33,6 +32,7 @@
     "next-auth": "4.24.11",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "5.4.296",
+    "pngjs": "^7.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwind-merge": "^3.3.1"
@@ -53,6 +53,7 @@
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
     "@types/node": "^24.2.1",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "esbuild": "^0.25.8",
