@@ -243,14 +243,14 @@ function socialMarkerHeading(line: string) {
 }
 
 function isArticleBodyStart(line: string) {
-  return new RegExp(`^${ARTICLE_BODY_START_PATTERN}`, "i").test(line);
+  return new RegExp(`^${ARTICLE_BODY_START_PATTERN}`).test(line);
 }
 
 function inlineArticleHeading(line: string) {
   const match = line
     .replace(/\s+/g, " ")
     .trim()
-    .match(new RegExp(`^(.*?)\\s+(${ARTICLE_BODY_START_PATTERN}.*)$`, "i"));
+    .match(new RegExp(`^(.*?)\\s+(${ARTICLE_BODY_START_PATTERN}.*)$`));
   if (!match) return null;
 
   const heading = match[1].replace(/\s+/g, " ").trim();
