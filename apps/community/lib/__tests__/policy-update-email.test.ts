@@ -59,6 +59,26 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("Hi there,");
   });
 
+  it("turns terse topic-list summaries into a proper email intro", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        summary: "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements",
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      "This week&#39;s PGPZ Community policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+    expect(built.text).toContain(
+      "This week's PGPZ Community policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+  });
+
   it("renders policy update tables in HTML and text email bodies", () => {
     if (!specialUpdate) throw new Error("Missing special update fixture");
 

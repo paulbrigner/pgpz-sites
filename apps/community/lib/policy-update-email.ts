@@ -122,6 +122,23 @@ const renderBullets = (items: string[]) =>
     .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
     .join("")}</ul>`;
 
+function policyUpdateEmailIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
+  const summary = update.summary.replace(/\s+/g, " ").trim();
+  if (!summary) {
+    return update.category === "weekly"
+      ? "This week's PGPZ Community policy memo is now available."
+      : "This PGPZ Community update is now available.";
+  }
+
+  if (/[.!?]$/.test(summary)) return summary;
+
+  const prefix =
+    update.category === "weekly"
+      ? "This week's PGPZ Community policy memo covers"
+      : "This PGPZ Community update covers";
+  return `${prefix} ${summary}.`;
+}
+
 const renderTable = (table: PolicyUpdateTable) =>
   `<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid ${colors.line};border-radius:12px;overflow:hidden;margin:4px 0 18px;background:#ffffff;">
     <thead>
@@ -293,6 +310,7 @@ export function buildPolicyUpdateEmail(
     tracking?.includeOpenPixel && tracking.trackingId ? trackingOpenPixel(base, tracking.trackingId) : "";
   const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
+  const intro = policyUpdateEmailIntro(update);
   const unsubscribeHtml = unsubscribeUrl
     ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
     : undefined;
@@ -320,7 +338,7 @@ export function buildPolicyUpdateEmail(
             <tr>
               <td style="padding:28px 30px 8px;">
                 <p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">Hi ${escapeHtml(name)},</p>
-                <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(update.summary)}</p>
+                <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(intro)}</p>
                 <div style="margin:22px 0;padding:18px;border:1px solid ${colors.line};border-radius:14px;background:#FFFDF5;">
                   <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;color:${colors.goldDeep};">Key takeaways</div>
                   <div style="margin-top:12px;">${renderBullets(update.keyTakeaways)}</div>
@@ -367,7 +385,7 @@ export function buildPolicyUpdateEmail(
     "",
     `Hi ${name},`,
     "",
-    update.summary,
+    intro,
     "",
     "Key takeaways:",
     ...update.keyTakeaways.map((item) => `- ${item}`),
