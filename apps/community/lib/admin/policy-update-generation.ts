@@ -87,7 +87,11 @@ function stripPdfChrome(value: string) {
     .replace(/community\.pgpz\.org\s*\|\s*PGPZ Community\s*\|\s*Page\s+\d+/gi, " ")
     .replace(/--- Page \d+ of \d+ ---/gi, " ")
     .replace(/https:\/\/community\.pgpz\.org\/updates\/[^\s]+/gi, " ")
-    .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, " ");
+    .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, " ")
+    .replace(
+      /We are excited to announce the launch of the PGPZ Community Signal chat[\s\S]*?scan the QR code to get started!?/gi,
+      " ",
+    );
 }
 
 function sourceTextForGeneration(value: string) {
@@ -197,18 +201,6 @@ function splitReadableParagraphs(value: string, maxLength = 760) {
 
 function splitFallbackHeading(line: string) {
   const clean = line.replace(/\s+/g, " ").trim();
-  const datedBodyPattern = new RegExp(`\\s+(On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2},\\s+\\d{4}\\b.*)$`, "i");
-  const datedBody = clean.match(datedBodyPattern);
-
-  if (/^(X Post of the Week:|Notable Posts?:)/i.test(clean)) {
-    if (datedBody?.index && datedBody.index > 20) {
-      return {
-        heading: clean.slice(0, datedBody.index).trim(),
-        remainder: datedBody[1].trim(),
-      };
-    }
-    return { heading: clean, remainder: "" };
-  }
 
   const why = clean.match(/^(Why this matters for Zcash:?)(.*)$/i);
   if (why) {
@@ -224,6 +216,45 @@ function splitFallbackHeading(line: string) {
       heading: action[1].replace(/:$/, ""),
       remainder: action[2].replace(/^[:\s-]+/, "").trim(),
     };
+  }
+
+  return null;
+}
+
+function socialMarkerHeading(line: string) {
+  const clean = line.replace(/\s+/g, " ").trim().replace(/:$/, "");
+  if (/^X Post of the Week$/i.test(clean)) return "X Post of the Week";
+  if (/^Notable Post$/i.test(clean)) return "Notable Post";
+  if (/^Notable Posts$/i.test(clean)) return "Notable Posts";
+  return null;
+}
+
+function isArticleBodyStart(line: string) {
+  return new RegExp(`^On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2},\\s+\\d{4}\\b`, "i").test(line);
+}
+
+function articleHeadingAt(lines: string[], index: number) {
+  const headingLines: string[] = [];
+
+  for (let offset = 0; offset < 4 && index + offset < lines.length; offset += 1) {
+    const line = lines[index + offset];
+    if (isArticleBodyStart(line)) {
+      return headingLines.length
+        ? {
+            heading: headingLines.join(" "),
+            bodyStartIndex: index + offset,
+          }
+        : null;
+    }
+    if (
+      socialMarkerHeading(line) ||
+      splitFallbackHeading(line) ||
+      /^Key Takeaways$/i.test(line) ||
+      /^Action Items?$/i.test(line)
+    ) {
+      return null;
+    }
+    headingLines.push(line);
   }
 
   return null;
@@ -286,7 +317,13 @@ function fallbackSectionsFromText(
     current = null;
   };
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (/^Weekly Policy Memo:/i.test(line) || /^https?:\/\/community\.pgpz\.org\b/i.test(line)) {
+      continue;
+    }
+
     if (/^Key Takeaways$/i.test(line)) {
       flush();
       skippingSidebar = "keyTakeaways";
@@ -298,11 +335,34 @@ function fallbackSectionsFromText(
       continue;
     }
 
-    const heading = splitFallbackHeading(line);
-    if (heading && !/^Action Items?$/i.test(heading.heading)) {
+    const socialHeading = socialMarkerHeading(line);
+    if (socialHeading) {
       flush();
       skippingSidebar = null;
-      current = { heading: heading.heading, lines: heading.remainder ? [heading.remainder] : [] };
+      sections.push({ heading: socialHeading, body: [] });
+      continue;
+    }
+
+    const articleHeading = articleHeadingAt(lines, index);
+    if (articleHeading) {
+      flush();
+      skippingSidebar = null;
+      current = { heading: articleHeading.heading, lines: [lines[articleHeading.bodyStartIndex]] };
+      index = articleHeading.bodyStartIndex;
+      continue;
+    }
+
+    const heading = splitFallbackHeading(line);
+    if (heading) {
+      skippingSidebar = null;
+      if (!current) {
+        current = {
+          heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
+          lines: [],
+        };
+      }
+      current.lines.push(heading.heading);
+      if (heading.remainder) current.lines.push(heading.remainder);
       continue;
     }
 
@@ -327,8 +387,9 @@ function fallbackPolicyUpdateContent(
   const lines = splitSourceLines(extracted.text);
   const paragraphs = splitParagraphsFromText(extracted.text);
   const summary =
+    record.summary ||
     paragraphs.find((paragraph) => !paragraph.includes(record.title) && paragraph.length <= 850) ||
-    record.summary;
+    extracted.text.slice(0, 850);
 
   const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [
     /^Action Items$/i,
@@ -968,10 +1029,10 @@ async function extractPageImageAssets({
     const imageRect = imageRectFromMatrix(currentMatrix);
     const displayWidth = Math.round(rectArea(imageRect) ? imageRect.right - imageRect.left : sourceWidth);
     const displayHeight = Math.round(rectArea(imageRect) ? imageRect.bottom - imageRect.top : sourceHeight);
-    if (displayWidth < 120 || displayHeight < 120) continue;
-
     const link = bestOverlappingLink(imageRect, annotations);
     const isSocialLink = !!link && /(?:x|twitter)\.com\//i.test(link.href);
+    if (!isSocialLink && (displayWidth < 120 || displayHeight < 120)) continue;
+    if (isSocialLink && sourceWidth < 700 && sourceHeight < 400) continue;
     if (isSocialLink) socialImageCounter.count += 1;
 
     const metadata = link
