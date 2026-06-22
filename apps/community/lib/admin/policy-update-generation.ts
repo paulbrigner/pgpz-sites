@@ -585,6 +585,7 @@ Rules:
 - Treat the PDF source text as authoritative. Use only facts, claims, dates, links, and framing present in the source text or metadata.
 - Preserve the source document's order, section hierarchy, and emphasis as closely as the JSON schema allows.
 - Use the source's actual headings where possible. Do not collapse the document into one generic "Policy Update" section.
+- For source social-post blocks labeled "X Post of the Week:", "Notable Post:", or "Notable Posts:", keep the label and the following substantive title together in the section heading using this exact pattern: "X Post of the Week: [Title]" or "Notable Post: [Title]". Put any embedded X screenshot asset paths in that same section's images array so the portal can render the source-post image before the article text.
 - Convert each meaningful source section into its own section object. For recurring source headings such as "Why this matters for Zcash" or "Action Item", keep them attached to the relevant nearby development rather than moving them to an unrelated section.
 - Keep the source's analytical tone and Zcash policy lens. Lightly clean extraction artifacts, but do not rewrite into marketing copy.
 - Copy the source key takeaways and action items into the sidebar arrays when the source contains those lists. Do not invent new takeaways or actions.
@@ -593,6 +594,7 @@ Rules:
 - Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
 - Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
 - If image asset paths are already present in existing metadata or source content, place them in the closest relevant section's images array. Do not invent image URLs.
+- Never include generic PGPZ Community signup/member QR images, "Not a PGPZ member?" QR images, or QR images whose purpose is joining the PGPZ Community itself. Signal chat QR images are allowed when they are part of the source document content.
 - Ignore repeated PDF chrome such as PGPZ Community headers, footers, page numbers, member-resource labels, QR-code captions, and community signup boilerplate unless it is part of the actual policy content.
 - Do not add filler such as "open the PDF resource", "the source PDF includes links", "this draft page can be published", or "review the source document".
 - The page content should be useful without opening the PDF: include the substantive body text, bullets, and tables from the source, not just a summary.

@@ -10,6 +10,10 @@ import {
 } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
 import {
+  isPolicyUpdateSocialPostSection,
+  splitPolicyUpdateSocialPostHeading,
+} from "@/lib/policy-update-sections";
+import {
   getPolicyUpdate,
   policyUpdates,
   type PolicyUpdateImage,
@@ -102,9 +106,17 @@ function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
   return nodes;
 }
 
-function PolicyUpdateSectionImages({ images }: { images: PolicyUpdateImage[] }) {
+function PolicyUpdateSectionImages({
+  images,
+  variant = "default",
+}: {
+  images: PolicyUpdateImage[];
+  variant?: "default" | "social";
+}) {
+  const isSocial = variant === "social";
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className={isSocial ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
       {images.map((image) => {
         const isCompact =
           typeof image.width === "number" &&
@@ -115,8 +127,10 @@ function PolicyUpdateSectionImages({ images }: { images: PolicyUpdateImage[] }) 
           <figure
             key={image.src}
             className={[
-              "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] bg-[var(--brand-ice)] p-3",
-              isCompact ? "max-w-xs" : "sm:col-span-2",
+              "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] p-3",
+              isSocial ? "mx-auto max-w-[44rem] bg-white" : "bg-[var(--brand-ice)]",
+              !isSocial && isCompact ? "max-w-xs" : "",
+              !isSocial && !isCompact ? "sm:col-span-2" : "",
             ].join(" ")}
           >
             <img
@@ -126,7 +140,7 @@ function PolicyUpdateSectionImages({ images }: { images: PolicyUpdateImage[] }) 
               height={image.height}
               className={[
                 "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
-                isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
+                isSocial ? "max-h-[38rem]" : isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
               ].join(" ")}
               loading="lazy"
             />
@@ -145,6 +159,46 @@ function PolicyUpdateSectionBlock({
 }: {
   section: PolicyUpdateSection;
 }) {
+  const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
+  const isSocialPostSection = isPolicyUpdateSocialPostSection(section);
+  const heading = socialHeading?.title || section.heading;
+
+  if (isSocialPostSection) {
+    return (
+      <section className="space-y-5 border-l-4 border-[var(--zcash-gold)] bg-[var(--brand-ice)] px-5 py-5">
+        <p className="section-eyebrow text-[var(--brand-denim)]">{socialHeading?.label || "Source post"}</p>
+        {section.images?.length ? <PolicyUpdateSectionImages images={section.images} variant="social" /> : null}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold leading-snug text-[var(--brand-ink)] lg:text-2xl">
+            {heading}
+          </h2>
+          <div className="space-y-4 text-sm leading-7 text-slate-700">
+            {section.body.map((paragraph) => (
+              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+            ))}
+          </div>
+        </div>
+        {section.table ? (
+          <PolicyUpdateTable table={section.table} />
+        ) : null}
+        {section.bullets?.length ? (
+          <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
+            {section.bullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+        {section.bodyAfterBullets?.length ? (
+          <div className="space-y-4 text-sm leading-7 text-slate-700">
+            {section.bodyAfterBullets.map((paragraph) => (
+              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
       <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
@@ -154,48 +208,7 @@ function PolicyUpdateSectionBlock({
         ))}
       </div>
       {section.images?.length ? <PolicyUpdateSectionImages images={section.images} /> : null}
-      {section.table ? (
-        <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
-          <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
-            <colgroup>
-              <col style={{ width: "29%" }} />
-              <col style={{ width: "33%" }} />
-              <col style={{ width: "38%" }} />
-            </colgroup>
-            <thead className="bg-[var(--brand-ink)] text-white">
-              <tr>
-                {section.table.columns.map((column) => (
-                  <th
-                    key={column}
-                    scope="col"
-                    className="break-words border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0"
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {section.table.rows.map((row) => (
-                <tr key={row.join("|")} className="border-t border-slate-200">
-                  {row.map((cell, index) => (
-                    <td
-                      key={`${row[0]}-${index}`}
-                      className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
-                    >
-                      {index === 0 ? (
-                        <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
-                      ) : (
-                        cell
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      {section.table ? <PolicyUpdateTable table={section.table} /> : null}
       {section.bullets?.length ? (
         <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
           {section.bullets.map((item) => (
@@ -211,6 +224,51 @@ function PolicyUpdateSectionBlock({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["table"]> }) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
+      <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
+        <colgroup>
+          <col style={{ width: "29%" }} />
+          <col style={{ width: "33%" }} />
+          <col style={{ width: "38%" }} />
+        </colgroup>
+        <thead className="bg-[var(--brand-ink)] text-white">
+          <tr>
+            {table.columns.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className="break-words border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0"
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row) => (
+            <tr key={row.join("|")} className="border-t border-slate-200">
+              {row.map((cell, index) => (
+                <td
+                  key={`${row[0]}-${index}`}
+                  className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                >
+                  {index === 0 ? (
+                    <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
+                  ) : (
+                    cell
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

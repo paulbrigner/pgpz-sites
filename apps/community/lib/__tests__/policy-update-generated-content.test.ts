@@ -52,6 +52,50 @@ describe("normalizeGeneratedPolicyUpdateContent", () => {
     });
   });
 
+  it("filters generic PGPZ signup QR images while preserving Signal QR images", () => {
+    const normalized = normalizeGeneratedPolicyUpdateContent(
+      {
+        summary: "Generated summary.",
+        emailPreheader: "Generated preheader.",
+        keyTakeaways: ["Takeaway"],
+        actionItems: ["Action"],
+        sections: [
+          {
+            heading: "Community links",
+            body: ["Join the Signal chat."],
+            images: [
+              {
+                src: "/api/policy-updates/test/assets/member-join-qr.png",
+                alt: "QR code for joining the PGPZ Community",
+                caption: "PGPZ Community signup QR included in the source memo.",
+                width: 384,
+                height: 384,
+              },
+              {
+                src: "/api/policy-updates/test/assets/signal-chat-qr.png",
+                alt: "QR code for joining the PGPZ Community Signal chat",
+                caption: "Scan to join the PGPZ Community Signal chat.",
+                width: 230,
+                height: 230,
+              },
+            ],
+          },
+        ],
+      },
+      fallback,
+    );
+
+    expect(normalized.sections[0].images).toEqual([
+      {
+        src: "/api/policy-updates/test/assets/signal-chat-qr.png",
+        alt: "QR code for joining the PGPZ Community Signal chat",
+        caption: "Scan to join the PGPZ Community Signal chat.",
+        width: 230,
+        height: 230,
+      },
+    ]);
+  });
+
   it("falls back when generated arrays are empty", () => {
     const normalized = normalizeGeneratedPolicyUpdateContent(
       {

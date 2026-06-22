@@ -1,4 +1,5 @@
 import type { PolicyUpdate, PolicyUpdateLink, PolicyUpdateTable } from "@/lib/policy-updates";
+import { splitPolicyUpdateSocialPostHeading } from "@/lib/policy-update-sections";
 import { getUserGreetingName } from "@/lib/user-display-name";
 import {
   brandedEmailColors as colors,
@@ -130,6 +131,16 @@ const renderTableText = (table: PolicyUpdateTable) => [
   "",
 ];
 
+const renderSectionHeading = (heading: string) => {
+  const socialHeading = splitPolicyUpdateSocialPostHeading(heading);
+  if (!socialHeading) {
+    return `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(heading)}</h2>`;
+  }
+
+  return `<div style="margin:0 0 8px;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">${escapeHtml(socialHeading.label)}</div>
+                <h2 style="margin:0 0 10px;color:${colors.ink};font-size:19px;line-height:1.32;">${escapeHtml(socialHeading.title)}</h2>`;
+};
+
 export function buildPolicyUpdateEmail(
   update: PolicyUpdate,
   recipient: PolicyUpdateEmailRecipient,
@@ -203,7 +214,7 @@ export function buildPolicyUpdateEmail(
               .map(
                 (section) => `<tr>
               <td style="padding:0 30px 22px;">
-                <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
+                ${renderSectionHeading(section.heading)}
                 ${renderParagraphs(section.body, section.links, base, tracking)}
                 ${section.table ? renderTable(section.table) : ""}
                 ${section.bullets?.length ? renderBullets(section.bullets) : ""}

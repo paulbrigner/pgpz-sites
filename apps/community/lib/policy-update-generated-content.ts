@@ -1,4 +1,5 @@
 import type { PolicyUpdateSection } from "@/lib/policy-updates";
+import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
 
 export type GeneratedPolicyUpdateContent = {
   shortTitle?: string;
@@ -116,13 +117,14 @@ function normalizeImages(value: unknown) {
       const height = Number(record.height);
       if (!src || !alt || seen.has(src)) return null;
       seen.add(src);
-      return {
+      const image = {
         src,
         alt,
         ...(caption ? { caption } : {}),
         ...(Number.isFinite(width) && width > 0 ? { width } : {}),
         ...(Number.isFinite(height) && height > 0 ? { height } : {}),
       };
+      return isPolicyUpdateDisplayImageAllowed(image) ? image : null;
     })
     .filter((image): image is {
       src: string;

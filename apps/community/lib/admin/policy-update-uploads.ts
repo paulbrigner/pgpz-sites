@@ -16,6 +16,7 @@ import {
   POLICY_UPDATE_UPLOAD_BUCKET,
   POLICY_UPDATE_UPLOAD_PREFIX,
 } from "@/lib/config";
+import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
 
 const POLICY_UPDATE_UPLOAD_GSI_PK = "POLICY_UPDATE_UPLOAD";
 
@@ -158,13 +159,14 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
             const width = Number(imageRecord.width);
             const height = Number(imageRecord.height);
             if (!src || !alt) return null;
-            return {
+            const displayImage = {
               src,
               alt,
               ...(caption ? { caption } : {}),
               ...(Number.isFinite(width) && width > 0 ? { width } : {}),
               ...(Number.isFinite(height) && height > 0 ? { height } : {}),
             };
+            return isPolicyUpdateDisplayImageAllowed(displayImage) ? displayImage : null;
           })
           .filter((image): image is NonNullable<typeof image> => !!image);
         if (images.length) section.images = images;
