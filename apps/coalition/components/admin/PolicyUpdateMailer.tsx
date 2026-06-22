@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, FileText, MailCheck, RefreshCcw, Search, Send, UploadCloud, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -120,10 +120,74 @@ const todayInputValue = () => new Date().toISOString().slice(0, 10);
 const titleFromFileName = (fileName: string) =>
   fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
+const previewSlugFromInput = (value: string) => {
+  let input = value.trim();
+  if (!input) return "";
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      input = new URL(input).pathname;
+    } catch {
+      // Fall back to plain text cleanup below.
+    }
+  }
+  input = input.split(/[?#]/)[0] || "";
+  try {
+    input = decodeURIComponent(input);
+  } catch {
+    // Keep the raw input if it is not valid URI-encoded text.
+  }
+  input = input.replace(/^\/+|\/+$/g, "").replace(/^updates\//i, "");
+  return input
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+};
+
 const fileHasPdfSignature = async (file: File) => {
   const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
   return String.fromCharCode(...bytes) === "%PDF-";
 };
+
+const visibilityLabel = (update: PolicyUpdateSummary) => {
+  if (update.source !== "uploaded") return "Published";
+  if (update.visibilityStatus === "published") return "Published";
+  if (update.visibilityStatus === "unpublished") return "Unpublished";
+  return "Draft";
+};
+
+const visibilityClassName = (update: PolicyUpdateSummary) => {
+  const status = update.source === "uploaded" ? update.visibilityStatus || "draft" : "published";
+  if (status === "published") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "unpublished") return "border-slate-200 bg-slate-50 text-slate-600";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+};
+
+const generationLabel = (update: PolicyUpdateSummary, isGenerating = false) => {
+  if (update.source !== "uploaded") return "";
+  if (isGenerating) return "Generating";
+  if (update.generationStatus === "generated" && generationUsedFallback(update)) return "Fallback used";
+  if (update.generationStatus === "generated") return "Generated";
+  if (update.generationStatus === "failed") return "Generation failed";
+  return "Needs content";
+};
+
+const generationClassName = (update: PolicyUpdateSummary, isGenerating = false) => {
+  if (isGenerating) return "border-sky-200 bg-sky-50 text-sky-700";
+  if (update.generationStatus === "generated" && generationUsedFallback(update)) {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+  if (update.generationStatus === "generated") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (update.generationStatus === "failed") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+};
+
+const generationUsedFallback = (update: PolicyUpdateSummary) =>
+  update.source === "uploaded" && /\+pdf-fallback\b/i.test(update.generatedModel || "");
+
+const generationModelName = (update: PolicyUpdateSummary) =>
+  (update.generatedModel || "")
+    .replace(/\+pdf-fallback\b/i, "")
+    .trim();
 
 function PolicyUpdateSendHistoryCard({
   send,
@@ -262,6 +326,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [draftEmail, setDraftEmail] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadSlug, setUploadSlug] = useState("");
   const [uploadCategory, setUploadCategory] = useState<"weekly" | "special">("weekly");
   const [uploadPublishedAt, setUploadPublishedAt] = useState(todayInputValue);
   const [uploadSummary, setUploadSummary] = useState("");
@@ -272,6 +337,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
+  const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
+  const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -279,6 +346,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const selectedUpdate = useMemo(
     () => updates.find((update) => update.slug === selectedSlug) || updates[0] || null,
     [selectedSlug, updates],
+  );
+  const selectedVisibilityStatus =
+    selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
+  const selectedCanSendMembers = selectedVisibilityStatus === "published";
+  const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
+  const selectedIsGenerating = Boolean(
+    selectedUpdate && generatingContentSlug === selectedUpdate.slug,
   );
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
@@ -302,6 +376,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       : `${selectedRecipientIds.length} selected member${selectedRecipientIds.length === 1 ? "" : "s"}`;
   const audienceReady =
     audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
+  const uploadSlugPreview = useMemo(() => previewSlugFromInput(uploadSlug), [uploadSlug]);
 
   const loadState = async () => {
     setLoading(true);
@@ -378,6 +453,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
       const metadata = {
         title: uploadTitle.trim(),
+        urlSlug: uploadSlug.trim(),
         category: uploadCategory,
         publishedAt: uploadPublishedAt,
         summary: uploadSummary.trim(),
@@ -422,9 +498,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!completeRes.ok) throw new Error(body?.error || "Failed to finish policy update upload.");
 
       const uploadedSlug = body?.update?.slug || "";
-      setUploadNotice(`Uploaded ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
+      setUploadNotice(`Uploaded draft: ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
       setUploadFile(null);
       setUploadTitle("");
+      setUploadSlug("");
       setUploadSummary("");
       setUploadInputKey((current) => current + 1);
       await loadState();
@@ -436,8 +513,85 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     }
   };
 
+  const changeSelectedVisibility = async (action: "publishUpdate" | "unpublishUpdate") => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded") return;
+    const verb = action === "publishUpdate" ? "publish" : "unpublish";
+    if (!window.confirm(`${verb === "publish" ? "Publish" : "Unpublish"} "${selectedUpdate.shortTitle || selectedUpdate.title}"?`)) {
+      return;
+    }
+
+    setVisibilityUpdatingSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || `Failed to ${verb} policy update`);
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+      setConfirmSend(false);
+      setUploadNotice(
+        action === "publishUpdate"
+          ? `Published ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`
+          : `Unpublished ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`,
+      );
+    } catch (err: any) {
+      setError(err?.message || `Failed to ${verb} policy update`);
+    } finally {
+      setVisibilityUpdatingSlug(null);
+    }
+  };
+
+  const generateSelectedContent = async () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded") return;
+    if (
+      selectedUpdate.generationStatus === "generated" &&
+      !window.confirm(`Regenerate page content for "${selectedUpdate.shortTitle || selectedUpdate.title}"?`)
+    ) {
+      return;
+    }
+
+    setGeneratingContentSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generateContent",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to generate policy update content");
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+      setUploadNotice(`Generated page content for ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate policy update content");
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+    } finally {
+      setGeneratingContentSlug(null);
+    }
+  };
+
   const sendUpdate = async () => {
     if (!selectedUpdate || !confirmSend || !audienceReady) return;
+    if (!selectedCanSendMembers) {
+      setError("Publish this update before sending it to subscribers.");
+      setConfirmSend(false);
+      return;
+    }
     setSending(true);
     setError(null);
     setResult(null);
@@ -601,6 +755,20 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 placeholder="Update title"
                 className="w-full rounded-md border bg-white px-3 py-2 text-sm"
               />
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={uploadSlug}
+                  onChange={(event) => setUploadSlug(event.target.value)}
+                  placeholder="Optional URL slug"
+                  className="w-full rounded-md border bg-white px-3 py-2 text-sm"
+                />
+                <p className="text-[0.68rem] leading-5 text-slate-500">
+                  {uploadSlug.trim()
+                    ? `URL: /updates/${uploadSlugPreview || "invalid-slug"}`
+                    : "Leave blank to generate a unique URL slug from the title and date."}
+                </p>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <select
                   value={uploadCategory}
@@ -641,6 +809,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="space-y-2">
             {updates.map((update) => {
               const stats = statsBySlug[update.slug] || emptyStats;
+              const isGenerating = generatingContentSlug === update.slug;
               return (
                 <button
                   key={update.slug}
@@ -667,8 +836,26 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                         {update.categoryLabel}
                       </span>
                       {update.source === "uploaded" ? (
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-slate-600">
                           Uploaded
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]",
+                          visibilityClassName(update),
+                        )}
+                      >
+                        {visibilityLabel(update)}
+                      </span>
+                      {update.source === "uploaded" ? (
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]",
+                            generationClassName(update, isGenerating),
+                          )}
+                        >
+                          {generationLabel(update, isGenerating)}
                         </span>
                       ) : null}
                     </span>
@@ -700,17 +887,117 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   <div className="inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
                     {selectedUpdate.categoryLabel}
                   </div>
+                  <div
+                    className={cn(
+                      "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]",
+                      visibilityClassName(selectedUpdate),
+                    )}
+                  >
+                    {visibilityLabel(selectedUpdate)}
+                  </div>
+                  {selectedUpdate.source === "uploaded" ? (
+                    <div
+                      className={cn(
+                        "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]",
+                        generationClassName(selectedUpdate, selectedIsGenerating),
+                      )}
+                    >
+                      {generationLabel(selectedUpdate, selectedIsGenerating)}
+                    </div>
+                  ) : null}
                   <h3 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
                     {selectedUpdate.title}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{selectedUpdate.summary}</p>
                 </div>
-                <Button variant="outline" asChild>
-                  <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
-                    Portal view
-                  </Link>
-                </Button>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {selectedUpdate.source === "uploaded" ? (
+                    <Button
+                      type="button"
+                      variant={selectedHasGeneratedContent ? "outline" : "default"}
+                      onClick={generateSelectedContent}
+                      disabled={generatingContentSlug === selectedUpdate.slug}
+                    >
+                      <Sparkles className={cn("h-4 w-4", generatingContentSlug === selectedUpdate.slug && "animate-pulse")} />
+                      {generatingContentSlug === selectedUpdate.slug
+                        ? "Generating..."
+                        : selectedHasGeneratedContent
+                          ? "Regenerate"
+                          : "Generate content"}
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" asChild>
+                    <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
+                      Portal view
+                    </Link>
+                  </Button>
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus !== "published" ? (
+                    <Button
+                      type="button"
+                      onClick={() => changeSelectedVisibility("publishUpdate")}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                    >
+                      <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
+                      Publish
+                    </Button>
+                  ) : null}
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus === "published" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => changeSelectedVisibility("unpublishUpdate")}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                    >
+                      <EyeOff className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
+                      Unpublish
+                    </Button>
+                  ) : null}
+                </div>
               </div>
+
+              {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
+                  <span className="font-semibold">Generating page content.</span>{" "}
+                  The previous status will refresh when this run finishes.
+                </div>
+              ) : selectedUpdate.source === "uploaded" && !selectedHasGeneratedContent ? (
+                <div
+                  className={cn(
+                    "rounded-xl border px-4 py-3 text-sm leading-6",
+                    selectedUpdate.generationStatus === "failed"
+                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                      : "border-amber-200 bg-amber-50 text-amber-950",
+                  )}
+                >
+                  {selectedUpdate.generationStatus === "failed" ? (
+                    <>
+                      <span className="font-semibold">Generation failed.</span>{" "}
+                      {selectedUpdate.generationError || "Review the upload and try again."}
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">Generate page content before publishing.</span>{" "}
+                      Until then, the draft preview uses the basic upload metadata and fallback page copy.
+                    </>
+                  )}
+                </div>
+              ) : selectedUpdate.source === "uploaded" && generationUsedFallback(selectedUpdate) ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <span className="font-semibold">Fallback used.</span>{" "}
+                      The AI conversion did not finish before the configured timeout, so this page content was
+                      generated with the deterministic PDF parser. Review the portal page before publishing or sending.
+                      {generationModelName(selectedUpdate) ? (
+                        <span className="mt-1 block text-xs uppercase tracking-[0.16em] text-amber-800">
+                          Requested model: {generationModelName(selectedUpdate)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border bg-slate-50 p-4">
@@ -887,6 +1174,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   Sends only to this address. If the email matches a PGPZ Coalition profile, the greeting uses that profile name.
+                  {selectedCanSendMembers ? "" : " Portal and PDF links require admin access until this update is published."}
                 </p>
               </div>
 
@@ -896,18 +1184,19 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   className="mt-1 h-4 w-4"
                   checked={confirmSend}
                   onChange={(event) => setConfirmSend(event.target.checked)}
-                  disabled={!audienceReady}
+                  disabled={!audienceReady || !selectedCanSendMembers}
                 />
                 <span>
-                  I understand this will send the selected update to {selectedAudienceLabel} with unsuppressed emails.
-                  I have reviewed the portal page and email subject.
+                  {selectedCanSendMembers
+                    ? `I understand this will send the selected update to ${selectedAudienceLabel} with unsuppressed emails. I have reviewed the portal page and email subject.`
+                    : "Publish this update before sending it to subscribers."}
                 </span>
               </label>
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={!confirmSend || sending || !audienceReady}
+                  disabled={!confirmSend || sending || !audienceReady || !selectedCanSendMembers}
                   onClick={sendUpdate}
                 >
                   {sending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}

@@ -1,9 +1,7 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
-import { NEXTAUTH_SECRET } from "@/lib/config";
 import { getUploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
+import { hasPolicyUpdateResourceAccess } from "@/lib/policy-update-access";
 import { s3Client } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
@@ -13,31 +11,21 @@ function contentDispositionFileName(fileName: string) {
   return fileName.replace(/["\\\r\n]/g, "_") || "policy-update.pdf";
 }
 
-async function hasPolicyUpdatePdfAccess(request: NextRequest) {
-  const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-  const userId = typeof token?.sub === "string" ? token.sub : "";
-  if (!userId) return false;
-
-  const user = await documentClient.get({
-    TableName: TABLE_NAME,
-    Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
-    ProjectionExpression: "membershipStatus, isAdmin",
-  });
-
-  return user.Item?.membershipStatus === "active" || user.Item?.isAdmin === true;
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  if (!(await hasPolicyUpdatePdfAccess(request))) {
+  const access = await hasPolicyUpdateResourceAccess(request);
+  if (!access.allowed) {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
   }
 
   const { slug } = await params;
   const upload = await getUploadedPolicyUpdateRecord(slug);
   if (!upload) {
+    return NextResponse.json({ error: "Unknown policy update PDF" }, { status: 404 });
+  }
+  if (upload.visibilityStatus !== "published" && !access.isAdmin) {
     return NextResponse.json({ error: "Unknown policy update PDF" }, { status: 404 });
   }
 

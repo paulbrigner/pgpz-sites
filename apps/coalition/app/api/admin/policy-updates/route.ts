@@ -29,11 +29,18 @@ import {
   getDistributablePolicyUpdate,
   getDistributablePolicyUpdateSummaries,
   getPolicyUpdateUploadBucket,
+  getUploadedPolicyUpdateRecord,
   normalizePolicyUpdateCategory,
   policyUpdateToSummary,
   policyUpdateUploadObjectKey,
+  publishUploadedPolicyUpdate,
+  saveGeneratedPolicyUpdateContent,
+  savePolicyUpdateGenerationFailure,
   saveUploadedPolicyUpdate,
+  unpublishUploadedPolicyUpdate,
+  uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
+import { generatePolicyUpdatePageContent } from "@/lib/admin/policy-update-generation";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
 import { s3Client } from "@/lib/s3";
 
@@ -43,12 +50,17 @@ const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function requireAdminOrForbidden() {
   try {
-    await requireAdminSession();
-    return null;
+    return { session: await requireAdminSession(), response: null };
   } catch {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    return {
+      session: null,
+      response: NextResponse.json({ error: "Admin access required" }, { status: 403 }),
+    };
   }
 }
+
+const adminUserIdFromSession = (session: any) =>
+  typeof session?.user?.id === "string" ? session.user.id : null;
 
 type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
@@ -93,6 +105,32 @@ const titleFromFileName = (fileName: string) =>
   fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
 const isPublishedDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const normalizeCustomSlug = (value: string) => {
+  let input = value.trim();
+  if (!input) return "";
+
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      input = new URL(input).pathname;
+    } catch {
+      // Fall back to plain text cleanup below.
+    }
+  }
+
+  input = input.split(/[?#]/)[0] || "";
+  try {
+    input = decodeURIComponent(input);
+  } catch {
+    // Keep the raw input if it is not valid URI-encoded text.
+  }
+
+  input = input.replace(/^\/+|\/+$/g, "").replace(/^updates\//i, "");
+  return input
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+};
 
 const textFromBody = (body: any, name: string) =>
   typeof body?.[name] === "string" ? body[name].trim() : "";
@@ -155,6 +193,41 @@ const streamToBuffer = async (body: any) => {
   return Buffer.concat(chunks);
 };
 
+async function policyUpdateSlugExists(slug: string) {
+  const normalized = slug.toLowerCase();
+  const updates = await getDistributablePolicyUpdateSummaries();
+  return updates.some((update) => update.slug.toLowerCase() === normalized);
+}
+
+async function resolvePolicyUpdateUploadSlug({
+  requestedSlug,
+  title,
+  publishedAt,
+}: {
+  requestedSlug: string;
+  title: string;
+  publishedAt: string;
+}) {
+  const rawRequestedSlug = requestedSlug.trim();
+  const customSlug = normalizeCustomSlug(rawRequestedSlug);
+  if (rawRequestedSlug && !customSlug) {
+    throw new Error("Enter a valid URL slug using letters, numbers, or hyphens.");
+  }
+
+  const slug =
+    customSlug ||
+    createPolicyUpdateUploadSlug({
+      title,
+      publishedAt,
+    });
+
+  if (await policyUpdateSlugExists(slug)) {
+    throw new Error(`The URL slug "${slug}" is already in use.`);
+  }
+
+  return slug;
+}
+
 async function preparePolicyUpdateUpload(body: any) {
   const bucket = getPolicyUpdateUploadBucket();
   if (!bucket) {
@@ -190,10 +263,19 @@ async function preparePolicyUpdateUpload(body: any) {
     emailPreheaderValue: textFromBody(body, "emailPreheader"),
     fileName,
   });
-  const slug = createPolicyUpdateUploadSlug({
-    title: metadata.title,
-    publishedAt: metadata.publishedAt,
-  });
+  let slug;
+  try {
+    slug = await resolvePolicyUpdateUploadSlug({
+      requestedSlug: textFromBody(body, "urlSlug") || textFromBody(body, "slug"),
+      title: metadata.title,
+      publishedAt: metadata.publishedAt,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Invalid policy update URL slug" },
+      { status: 400 },
+    );
+  }
   const s3Key = policyUpdateUploadObjectKey(slug);
   const uploadHeaders = {
     "Content-Type": "application/pdf",
@@ -227,7 +309,7 @@ async function preparePolicyUpdateUpload(body: any) {
   });
 }
 
-async function completePolicyUpdateUpload(body: any) {
+async function completePolicyUpdateUpload(body: any, adminUserId: string | null) {
   const bucket = getPolicyUpdateUploadBucket();
   if (!bucket) {
     return NextResponse.json(
@@ -241,6 +323,12 @@ async function completePolicyUpdateUpload(body: any) {
   const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
   if (!slug || !s3Key || s3Key !== policyUpdateUploadObjectKey(slug)) {
     return NextResponse.json({ error: "Invalid upload completion request" }, { status: 400 });
+  }
+  if (await policyUpdateSlugExists(slug)) {
+    return NextResponse.json(
+      { error: `The URL slug "${slug}" is already in use.` },
+      { status: 400 },
+    );
   }
 
   let head;
@@ -291,7 +379,7 @@ async function completePolicyUpdateUpload(body: any) {
     s3Bucket: bucket,
     s3Key,
     uploadedAt,
-    uploadedBy: null,
+    uploadedBy: adminUserId,
   });
 
   const update = await getDistributablePolicyUpdate(upload.slug);
@@ -347,10 +435,19 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
     fileName,
   });
   const uploadedAt = new Date().toISOString();
-  const slug = createPolicyUpdateUploadSlug({
-    title: metadata.title,
-    publishedAt: metadata.publishedAt,
-  });
+  let slug;
+  try {
+    slug = await resolvePolicyUpdateUploadSlug({
+      requestedSlug: formText(form, "urlSlug") || formText(form, "slug"),
+      title: metadata.title,
+      publishedAt: metadata.publishedAt,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Invalid policy update URL slug" },
+      { status: 400 },
+    );
+  }
   const s3Key = policyUpdateUploadObjectKey(slug);
 
   await s3Client.send(
@@ -382,6 +479,73 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
   });
 }
 
+async function generateUploadedPolicyUpdateContent(body: any, adminUserId: string | null) {
+  const slug = textFromBody(body, "slug");
+  if (!slug) {
+    return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
+  }
+
+  const record = await getUploadedPolicyUpdateRecord(slug);
+  if (!record) {
+    return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+  }
+
+  try {
+    const object = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: record.s3Bucket,
+        Key: record.s3Key,
+      }),
+    );
+    const bytes = await streamToBuffer(object.Body);
+    if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw new Error("Stored upload is not a valid PDF.");
+    }
+
+    const generated = await generatePolicyUpdatePageContent(record, bytes);
+    const updated = await saveGeneratedPolicyUpdateContent({
+      slug: record.slug,
+      shortTitle: generated.shortTitle,
+      summary: generated.summary,
+      emailSubject: generated.emailSubject,
+      emailPreheader: generated.emailPreheader,
+      keyTakeaways: generated.keyTakeaways,
+      actionItems: generated.actionItems,
+      sections: generated.sections,
+      generatedBy: adminUserId,
+      generatedModel: generated.generatedModel,
+      sourceTextLength: generated.sourceTextLength,
+      sourceTextSha256: generated.sourceTextSha256,
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      update: policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(updated), "uploaded", updated),
+    });
+  } catch (err: any) {
+    const message = typeof err?.message === "string" ? err.message : "Failed to generate policy update content.";
+    const failed = await savePolicyUpdateGenerationFailure({
+      slug: record.slug,
+      error: message,
+      generatedBy: adminUserId,
+      generatedModel: "pdf-source-exact",
+    }).catch(() => null);
+
+    return NextResponse.json(
+      {
+        error: message,
+        update: failed
+          ? policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(failed), "uploaded", failed)
+          : null,
+      },
+      { status: 500 },
+    );
+  }
+}
+
 async function resolvePolicyUpdateAudience(body: any) {
   const audienceMode: PolicyUpdateAudienceMode =
     body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
@@ -406,8 +570,8 @@ async function resolvePolicyUpdateAudience(body: any) {
 }
 
 export async function GET() {
-  const forbidden = await requireAdminOrForbidden();
-  if (forbidden) return forbidden;
+  const admin = await requireAdminOrForbidden();
+  if (admin.response) return admin.response;
 
   const recipients = await listPolicyUpdateRecipients();
   const updates = await getDistributablePolicyUpdateSummaries();
@@ -424,8 +588,9 @@ export async function GET() {
   });
 }
 export async function POST(request: NextRequest) {
-  const forbidden = await requireAdminOrForbidden();
-  if (forbidden) return forbidden;
+  const admin = await requireAdminOrForbidden();
+  if (admin.response) return admin.response;
+  const adminUserId = adminUserIdFromSession(admin.session);
 
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
@@ -443,7 +608,28 @@ export async function POST(request: NextRequest) {
     return preparePolicyUpdateUpload(body);
   }
   if (body?.action === "completeUpload") {
-    return completePolicyUpdateUpload(body);
+    return completePolicyUpdateUpload(body, adminUserId);
+  }
+  if (body?.action === "generateContent") {
+    return generateUploadedPolicyUpdateContent(body, adminUserId);
+  }
+  if (body?.action === "publishUpdate" || body?.action === "unpublishUpdate") {
+    const slug = textFromBody(body, "slug");
+    if (!slug) {
+      return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
+    }
+    const upload =
+      body.action === "publishUpdate"
+        ? await publishUploadedPolicyUpdate(slug, adminUserId)
+        : await unpublishUploadedPolicyUpdate(slug, adminUserId);
+    if (!upload) {
+      return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+    }
+    const update = uploadedPolicyUpdateToPolicyUpdate(upload);
+    return NextResponse.json({
+      ok: true,
+      update: policyUpdateToSummary(update, "uploaded", upload),
+    });
   }
 
   const transportConfig = buildEmailServerConfig();
@@ -467,6 +653,13 @@ export async function POST(request: NextRequest) {
   }
 
   const draftMode = !!draftRecipientEmail;
+  const uploadedRecord = await getUploadedPolicyUpdateRecord(slug);
+  if (!draftMode && uploadedRecord && uploadedRecord.visibilityStatus !== "published") {
+    return NextResponse.json(
+      { error: "Publish this update before sending it to subscribers." },
+      { status: 400 },
+    );
+  }
   let audienceMode: PolicyUpdateAudienceMode = "all_active_members";
   let activeRecipientCount = 0;
   let recipients: PolicyUpdateSendRecipient[];

@@ -1,4 +1,6 @@
 export type PolicyUpdateCategory = "weekly" | "special";
+export type PolicyUpdateVisibilityStatus = "draft" | "published" | "unpublished";
+export type PolicyUpdateGenerationStatus = "not_started" | "generated" | "failed";
 
 export type PolicyUpdateSection = {
   heading: string;
@@ -7,6 +9,7 @@ export type PolicyUpdateSection = {
   bullets?: string[];
   bodyAfterBullets?: string[];
   links?: PolicyUpdateLink[];
+  images?: PolicyUpdateImage[];
 };
 
 export type PolicyUpdateTable = {
@@ -17,6 +20,15 @@ export type PolicyUpdateTable = {
 export type PolicyUpdateLink = {
   text: string;
   href: string;
+};
+
+export type PolicyUpdateImage = {
+  src: string;
+  alt: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+  href?: string;
 };
 
 export type PolicyUpdate = {
@@ -55,8 +67,20 @@ export type PolicyUpdateSummary = Pick<
   | "portalPath"
 > & {
   source?: "static" | "uploaded";
+  visibilityStatus?: PolicyUpdateVisibilityStatus;
+  publishedOn?: string | null;
+  publishedBy?: string | null;
+  unpublishedOn?: string | null;
+  unpublishedBy?: string | null;
   uploadedAt?: string | null;
   fileName?: string | null;
+  generationStatus?: PolicyUpdateGenerationStatus | null;
+  generatedAt?: string | null;
+  generatedBy?: string | null;
+  generatedModel?: string | null;
+  generationError?: string | null;
+  generationSourceTextLength?: number | null;
+  generationSourceTextSha256?: string | null;
 };
 
 export const policyUpdateCategoryLabels: Record<PolicyUpdateCategory, string> = {

@@ -1,4 +1,17 @@
-import type { PolicyUpdate, PolicyUpdateLink, PolicyUpdateTable } from "@/lib/policy-updates";
+import type {
+  PolicyUpdate,
+  PolicyUpdateImage,
+  PolicyUpdateLink,
+  PolicyUpdateSection,
+  PolicyUpdateTable,
+} from "@/lib/policy-updates";
+import { policyUpdateImageHref } from "@/lib/policy-update-images";
+import {
+  isPolicyUpdateSocialPostSection,
+  normalizePolicyUpdateSectionLayout,
+  policyUpdateSectionHeadingLink,
+  splitPolicyUpdateSocialPostHeading,
+} from "@/lib/policy-update-sections";
 import { getUserGreetingName } from "@/lib/user-display-name";
 import {
   brandedEmailColors as colors,
@@ -34,6 +47,18 @@ const trackingOpenPixel = (baseUrl: string, trackingId: string) =>
 
 const trackedHref = (baseUrl: string, href: string, tracking?: PolicyUpdateEmailTracking) =>
   tracking?.trackLinks && tracking.trackingId ? trackedClickUrl(baseUrl, tracking.trackingId, href) : href;
+
+const absoluteUrl = (baseUrl: string, href: string) => {
+  if (/^https?:\/\//i.test(href)) return href;
+  return `${baseUrl}${href.startsWith("/") ? "" : "/"}${href}`;
+};
+
+const emailImageSrc = (src: string) => {
+  const clean = src.split("?")[0] || src;
+  const match = clean.match(/^\/api\/policy-updates\/([^/]+)\/assets\/([^/]+)$/i);
+  if (!match) return src;
+  return `/api/policy-updates/${match[1]}/email-assets/${match[2]}`;
+};
 
 const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
   const matches = links
@@ -97,6 +122,23 @@ const renderBullets = (items: string[]) =>
     .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
     .join("")}</ul>`;
 
+function policyUpdateEmailIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
+  const summary = update.summary.replace(/\s+/g, " ").trim();
+  if (!summary) {
+    return update.category === "weekly"
+      ? "This week's PGPZ Coalition policy memo is now available."
+      : "This PGPZ Coalition update is now available.";
+  }
+
+  if (/[.!?]$/.test(summary)) return summary;
+
+  const prefix =
+    update.category === "weekly"
+      ? "This week's PGPZ Coalition policy memo covers"
+      : "This PGPZ Coalition update covers";
+  return `${prefix} ${summary}.`;
+}
+
 const renderTable = (table: PolicyUpdateTable) =>
   `<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid ${colors.line};border-radius:12px;overflow:hidden;margin:4px 0 18px;background:#ffffff;">
     <thead>
@@ -130,6 +172,123 @@ const renderTableText = (table: PolicyUpdateTable) => [
   "",
 ];
 
+const renderImageHtml = ({
+  image,
+  baseUrl,
+  tracking,
+  imageHrefFallback,
+  isSocial,
+}: {
+  image: PolicyUpdateImage;
+  baseUrl: string;
+  tracking?: PolicyUpdateEmailTracking;
+  imageHrefFallback?: string | null;
+  isSocial: boolean;
+}) => {
+  const href = policyUpdateImageHref(image, imageHrefFallback);
+  const trackedImageHref = href ? trackedHref(baseUrl, href, tracking) : null;
+  const imageSrc = absoluteUrl(baseUrl, emailImageSrc(image.src));
+  const width = Number.isFinite(Number(image.width)) && Number(image.width) > 0 ? Number(image.width) : 640;
+  const height = Number.isFinite(Number(image.height)) && Number(image.height) > 0 ? Number(image.height) : undefined;
+  const maxWidth = isSocial ? 640 : width <= 500 && height && height <= 500 ? 240 : 640;
+  const img = `<img src="${escapeHtml(imageSrc)}" width="${Math.min(width, maxWidth)}"${height ? ` height="${height}"` : ""} alt="${escapeHtml(image.alt)}" style="display:block;width:100%;max-width:${maxWidth}px;height:auto;border:1px solid ${colors.line};border-radius:12px;background:#ffffff;" />`;
+
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:14px 0 18px;border:1px solid rgba(245,168,0,0.28);border-radius:16px;background:${isSocial ? "#ffffff" : "#FFFDF5"};">
+    <tr>
+      <td align="center" style="padding:12px;">
+        ${trackedImageHref ? `<a href="${escapeHtml(trackedImageHref)}" style="display:inline-block;text-decoration:none;">${img}</a>` : img}
+        ${image.caption ? `<div style="margin-top:10px;color:${colors.slate};font-size:12px;line-height:1.55;text-align:left;">${escapeHtml(image.caption)}</div>` : ""}
+      </td>
+    </tr>
+  </table>`;
+};
+
+const renderSectionImages = ({
+  section,
+  baseUrl,
+  tracking,
+  imageHrefFallback,
+  isSocial,
+}: {
+  section: PolicyUpdateSection;
+  baseUrl: string;
+  tracking?: PolicyUpdateEmailTracking;
+  imageHrefFallback?: string | null;
+  isSocial: boolean;
+}) =>
+  (section.images || [])
+    .map((image) =>
+      renderImageHtml({
+        image,
+        baseUrl,
+        tracking,
+        imageHrefFallback,
+        isSocial,
+      }),
+    )
+    .join("");
+
+const renderSectionImageText = (section: PolicyUpdateSection) =>
+  (section.images || []).flatMap((image) => {
+    const href = policyUpdateImageHref(image, section.links?.[0]?.href || null);
+    return [
+      `[Image: ${image.alt}]${href ? ` ${href}` : ""}`,
+      ...(image.caption ? [image.caption] : []),
+    ];
+  });
+
+const renderHeadingText = (text: string, href: string | null, baseUrl: string, tracking?: PolicyUpdateEmailTracking) => {
+  if (!href) return escapeHtml(text);
+
+  return `<a href="${escapeHtml(trackedHref(baseUrl, href, tracking))}" style="color:${colors.ink};font-weight:800;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:4px;">${escapeHtml(text)}</a>`;
+};
+
+const renderSectionHeading = (
+  section: PolicyUpdate["sections"][number],
+  baseUrl: string,
+  tracking?: PolicyUpdateEmailTracking,
+) => {
+  const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
+  const headingLink = policyUpdateSectionHeadingLink(section);
+  if (!socialHeading) {
+    return `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${renderHeadingText(section.heading, headingLink?.href || null, baseUrl, tracking)}</h2>`;
+  }
+
+  return `<div style="margin:0 0 8px;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">${escapeHtml(socialHeading.label)}</div>
+                ${socialHeading.title ? `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:19px;line-height:1.32;">${renderHeadingText(socialHeading.title, headingLink?.href || null, baseUrl, tracking)}</h2>` : ""}`;
+};
+
+const renderSectionHtml = (
+  section: PolicyUpdateSection,
+  baseUrl: string,
+  tracking: PolicyUpdateEmailTracking | undefined,
+) => {
+  const isSocial = isPolicyUpdateSocialPostSection(section);
+  const headingLink = policyUpdateSectionHeadingLink(section);
+  const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
+  const imagesHtml = renderSectionImages({
+    section,
+    baseUrl,
+    tracking,
+    imageHrefFallback,
+    isSocial,
+  });
+
+  return `<tr>
+              <td style="padding:0 30px 22px;">
+                <div style="border-top:1px solid rgba(245,168,0,0.34);padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
+                  ${renderSectionHeading(section, baseUrl, tracking)}
+                  ${isSocial ? imagesHtml : ""}
+                  ${renderParagraphs(section.body, section.links, baseUrl, tracking)}
+                  ${!isSocial ? imagesHtml : ""}
+                  ${section.table ? renderTable(section.table) : ""}
+                  ${section.bullets?.length ? renderBullets(section.bullets) : ""}
+                  ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking) : ""}
+                </div>
+              </td>
+            </tr>`;
+};
+
 export function buildPolicyUpdateEmail(
   update: PolicyUpdate,
   recipient: PolicyUpdateEmailRecipient,
@@ -137,6 +296,7 @@ export function buildPolicyUpdateEmail(
   tracking?: PolicyUpdateEmailTracking,
 ) {
   const base = normalizeBaseUrl(baseUrl);
+  const sections = normalizePolicyUpdateSectionLayout(update.sections);
   const portalUrl = buildPolicyUpdatePortalUrl(update, base);
   const archiveUrl = `${base}/updates`;
   const portalLinkHref = trackedHref(base, portalUrl, tracking);
@@ -150,6 +310,7 @@ export function buildPolicyUpdateEmail(
     tracking?.includeOpenPixel && tracking.trackingId ? trackingOpenPixel(base, tracking.trackingId) : "";
   const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
+  const intro = policyUpdateEmailIntro(update);
   const unsubscribeHtml = unsubscribeUrl
     ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
     : undefined;
@@ -177,7 +338,7 @@ export function buildPolicyUpdateEmail(
             <tr>
               <td style="padding:28px 30px 8px;">
                 <p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">Hi ${escapeHtml(name)},</p>
-                <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(update.summary)}</p>
+                <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(intro)}</p>
                 <div style="margin:22px 0;padding:18px;border:1px solid ${colors.line};border-radius:14px;background:#FFFDF5;">
                   <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;color:${colors.goldDeep};">Key takeaways</div>
                   <div style="margin-top:12px;">${renderBullets(update.keyTakeaways)}</div>
@@ -199,19 +360,7 @@ export function buildPolicyUpdateEmail(
                 </table>
               </td>
             </tr>
-            ${update.sections
-              .map(
-                (section) => `<tr>
-              <td style="padding:0 30px 22px;">
-                <h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(section.heading)}</h2>
-                ${renderParagraphs(section.body, section.links, base, tracking)}
-                ${section.table ? renderTable(section.table) : ""}
-                ${section.bullets?.length ? renderBullets(section.bullets) : ""}
-                ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, base, tracking) : ""}
-              </td>
-            </tr>`,
-              )
-              .join("")}
+            ${sections.map((section) => renderSectionHtml(section, base, tracking)).join("")}
             <tr>
               <td style="padding:0 30px 26px;">
                 ${renderForwardedEmailCoalitionCta({ portalUrl: base, href: coalitionLinkHref })}
@@ -236,7 +385,7 @@ export function buildPolicyUpdateEmail(
     "",
     `Hi ${name},`,
     "",
-    update.summary,
+    intro,
     "",
     "Key takeaways:",
     ...update.keyTakeaways.map((item) => `- ${item}`),
@@ -247,8 +396,9 @@ export function buildPolicyUpdateEmail(
     `View on member portal: ${portalUrl}`,
     `View archive: ${archiveUrl}`,
     "",
-    ...update.sections.flatMap((section) => [
+    ...sections.flatMap((section) => [
       section.heading,
+      ...renderSectionImageText(section),
       ...section.body.map((paragraph) => renderLinkedText(paragraph, section.links)),
       ...(section.table ? renderTableText(section.table) : []),
       ...(section.bullets || []).map((item) => `- ${item}`),

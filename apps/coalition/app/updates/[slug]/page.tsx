@@ -1,14 +1,31 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getUploadedPolicyUpdate } from "@/lib/admin/policy-update-uploads";
+import {
+  getUploadedPolicyUpdateRecord,
+  uploadedPolicyUpdateToPolicyUpdate,
+} from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
-import { getPolicyUpdate, policyUpdates, type PolicyUpdateLink, type PolicyUpdateSection } from "@/lib/policy-updates";
+import { policyUpdateImageHref } from "@/lib/policy-update-images";
+import {
+  isPolicyUpdateSocialPostSection,
+  policyUpdateSectionHeadingLink,
+  splitPolicyUpdateSocialPostHeading,
+} from "@/lib/policy-update-sections";
+import {
+  getPolicyUpdate,
+  policyUpdates,
+  type PolicyUpdateImage,
+  type PolicyUpdateLink,
+  type PolicyUpdateSection,
+} from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
+
+/* eslint-disable @next/next/no-img-element */
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -20,7 +37,9 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
+  const staticUpdate = getPolicyUpdate(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
   if (!update) return {};
   return {
     title: `${update.shortTitle} | PGPZ Coalition`,
@@ -89,61 +108,176 @@ function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
   return nodes;
 }
 
+function PolicyUpdateSectionImages({
+  images,
+  imageHrefFallback,
+  variant = "default",
+}: {
+  images: PolicyUpdateImage[];
+  imageHrefFallback?: string | null;
+  variant?: "default" | "social";
+}) {
+  const isSocial = variant === "social";
+
+  return (
+    <div className={isSocial ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
+      {images.map((image) => {
+        const href = policyUpdateImageHref(image, imageHrefFallback);
+        const isCompact =
+          typeof image.width === "number" &&
+          typeof image.height === "number" &&
+          image.width <= 500 &&
+          image.height <= 500;
+        return (
+          <figure
+            key={image.src}
+            className={[
+              "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] p-3",
+              isSocial ? "mx-auto max-w-[44rem] bg-white" : "bg-[var(--brand-ice)]",
+              !isSocial && isCompact ? "max-w-xs" : "",
+              !isSocial && !isCompact ? "sm:col-span-2" : "",
+            ].join(" ")}
+          >
+            {href ? (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+                <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+              </a>
+            ) : (
+              <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+            )}
+            {image.caption ? (
+              <figcaption className="mt-3 text-xs leading-5 text-slate-600">{image.caption}</figcaption>
+            ) : null}
+          </figure>
+        );
+      })}
+    </div>
+  );
+}
+
+function PolicyUpdateImageElement({
+  image,
+  isCompact,
+  isSocial,
+}: {
+  image: PolicyUpdateImage;
+  isCompact: boolean;
+  isSocial: boolean;
+}) {
+  return (
+    <img
+      src={image.src}
+      alt={image.alt}
+      width={image.width}
+      height={image.height}
+      className={[
+        "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
+        isSocial ? "max-h-[38rem]" : isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
+      ].join(" ")}
+      loading="lazy"
+    />
+  );
+}
+
+function PolicyUpdateSectionHeading({
+  section,
+  children,
+  className,
+}: {
+  section: PolicyUpdateSection;
+  children: ReactNode;
+  className: string;
+}) {
+  const headingLink = policyUpdateSectionHeadingLink(section);
+
+  return (
+    <h2 className={className}>
+      {headingLink ? (
+        <a
+          href={headingLink.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--brand-ink)] underline decoration-[var(--zcash-gold)] decoration-2 underline-offset-4 hover:text-[var(--brand-denim)]"
+        >
+          {children}
+        </a>
+      ) : (
+        children
+      )}
+    </h2>
+  );
+}
+
 function PolicyUpdateSectionBlock({
   section,
 }: {
   section: PolicyUpdateSection;
 }) {
+  const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
+  const isSocialPostSection = isPolicyUpdateSocialPostSection(section);
+  const heading = socialHeading?.title || (socialHeading ? "" : section.heading);
+  const headingLink = policyUpdateSectionHeadingLink(section);
+  const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
+
+  if (isSocialPostSection) {
+    return (
+      <section className="space-y-5 border-l-4 border-[var(--zcash-gold)] bg-[var(--brand-ice)] px-5 py-5">
+        <p className="section-eyebrow text-[var(--brand-denim)]">{socialHeading?.label || "Source post"}</p>
+        {section.images?.length ? (
+          <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} variant="social" />
+        ) : null}
+        {heading || section.body.length ? (
+          <div className="space-y-4">
+            {heading ? (
+              <PolicyUpdateSectionHeading
+                section={section}
+                className="text-xl font-semibold leading-snug text-[var(--brand-ink)] lg:text-2xl"
+              >
+                {heading}
+              </PolicyUpdateSectionHeading>
+            ) : null}
+          <div className="space-y-4 text-sm leading-7 text-slate-700">
+            {section.body.map((paragraph) => (
+              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+            ))}
+          </div>
+          </div>
+        ) : null}
+        {section.table ? (
+          <PolicyUpdateTable table={section.table} />
+        ) : null}
+        {section.bullets?.length ? (
+          <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
+            {section.bullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+        {section.bodyAfterBullets?.length ? (
+          <div className="space-y-4 text-sm leading-7 text-slate-700">
+            {section.bodyAfterBullets.map((paragraph) => (
+              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
+      <PolicyUpdateSectionHeading section={section} className="text-2xl font-semibold text-[var(--brand-ink)]">
+        {section.heading}
+      </PolicyUpdateSectionHeading>
       <div className="space-y-4 text-sm leading-7 text-slate-700">
         {section.body.map((paragraph) => (
           <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
         ))}
       </div>
-      {section.table ? (
-        <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
-          <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
-            <colgroup>
-              <col style={{ width: "29%" }} />
-              <col style={{ width: "33%" }} />
-              <col style={{ width: "38%" }} />
-            </colgroup>
-            <thead className="bg-[var(--brand-ink)] text-white">
-              <tr>
-                {section.table.columns.map((column) => (
-                  <th
-                    key={column}
-                    scope="col"
-                    className="break-words border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0"
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {section.table.rows.map((row) => (
-                <tr key={row.join("|")} className="border-t border-slate-200">
-                  {row.map((cell, index) => (
-                    <td
-                      key={`${row[0]}-${index}`}
-                      className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
-                    >
-                      {index === 0 ? (
-                        <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
-                      ) : (
-                        cell
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {section.images?.length ? (
+        <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} />
       ) : null}
+      {section.table ? <PolicyUpdateTable table={section.table} /> : null}
       {section.bullets?.length ? (
         <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
           {section.bullets.map((item) => (
@@ -162,17 +296,69 @@ function PolicyUpdateSectionBlock({
   );
 }
 
+function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["table"]> }) {
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
+      <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
+        <colgroup>
+          <col style={{ width: "29%" }} />
+          <col style={{ width: "33%" }} />
+          <col style={{ width: "38%" }} />
+        </colgroup>
+        <thead className="bg-[var(--brand-ink)] text-white">
+          <tr>
+            {table.columns.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className="break-words border-r border-white/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0"
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row) => (
+            <tr key={row.join("|")} className="border-t border-slate-200">
+              {row.map((cell, index) => (
+                <td
+                  key={`${row[0]}-${index}`}
+                  className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                >
+                  {index === 0 ? (
+                    <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
+                  ) : (
+                    cell
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default async function UpdateDetailPage({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
+  const staticUpdate = getPolicyUpdate(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
   if (!update) notFound();
 
   const access = await getMemberAccess();
+  const isAdmin = access.user?.isAdmin === true;
   if (!access.authenticated) {
     redirect(`/signin?callbackUrl=${encodeURIComponent(update.portalPath)}`);
   }
 
-  if (!access.isMember) {
+  if (uploadedRecord?.visibilityStatus !== "published" && !isAdmin) {
+    notFound();
+  }
+
+  if (!access.isMember && !isAdmin) {
     return <MembershipRequired />;
   }
 
@@ -186,6 +372,16 @@ export default async function UpdateDetailPage({ params }: Props) {
           </Link>
         </Button>
       </div>
+
+      {uploadedRecord && uploadedRecord.visibilityStatus !== "published" && isAdmin ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
+          <span className="font-semibold">
+            {uploadedRecord.visibilityStatus === "draft" ? "Draft preview" : "Unpublished preview"}:
+          </span>{" "}
+          only admins can view this page and its PDF until the update is published from the admin update
+          distribution screen.
+        </div>
+      ) : null}
 
       <article className="overflow-hidden rounded-[1.5rem] border border-[rgba(245,168,0,0.28)] bg-white shadow-[0_26px_46px_-30px_rgba(30,30,30,0.38)]">
         <header className="grid gap-6 bg-[linear-gradient(135deg,var(--brand-ink),#2A2111)] p-6 text-white lg:grid-cols-[1fr_0.36fr] lg:p-8">
@@ -227,7 +423,12 @@ export default async function UpdateDetailPage({ params }: Props) {
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
             {update.sections.map((section, index) => (
-              <PolicyUpdateSectionBlock key={`${section.heading}-${index}`} section={section} />
+              <Fragment key={`${section.heading}-${index}`}>
+                {index > 0 ? (
+                  <hr className="border-0 border-t border-[rgba(245,168,0,0.34)]" aria-hidden="true" />
+                ) : null}
+                <PolicyUpdateSectionBlock section={section} />
+              </Fragment>
             ))}
           </div>
 

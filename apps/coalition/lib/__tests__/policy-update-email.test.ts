@@ -59,6 +59,26 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("Hi there,");
   });
 
+  it("turns terse topic-list summaries into a proper email intro", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        summary: "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements",
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      "This week&#39;s PGPZ Coalition policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+    expect(built.text).toContain(
+      "This week's PGPZ Coalition policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+  });
+
   it("renders policy update tables in HTML and text email bodies", () => {
     if (!specialUpdate) throw new Error("Missing special update fixture");
 
@@ -93,6 +113,43 @@ describe("buildPolicyUpdateEmail", () => {
       "EU correction post (https://x.com/paulbrigner/status/2060327543387857190?s=20)",
     );
     expect(built.text).toContain("The record stays open for written submissions through June 23.");
+  });
+
+  it("renders policy update section images through unauthenticated email asset URLs", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "X Post of the Week",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/x-josh-swihart.png",
+                alt: "Josh Swihart X post screenshot",
+                caption: "Embedded X post screenshot from the source memo.",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png"',
+    );
+    expect(built.html).not.toContain("cid:");
+    expect(built.html).not.toContain(
+      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/assets/x-josh-swihart.png"',
+    );
+    expect(built.text).toContain("[Image: Josh Swihart X post screenshot]");
   });
 
   it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
