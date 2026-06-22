@@ -52,8 +52,8 @@ type ViewportRect = {
 
 type PdfMatrix = [number, number, number, number, number, number];
 
-const MAX_PDF_TEXT_CHARS = 60000;
-const MAX_TABLES_FOR_PROMPT = 10;
+const MAX_METADATA_TEXT_CHARS = 18000;
+const MAX_METADATA_MODEL_TOKENS = 1800;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
 const MAX_FALLBACK_PARAGRAPHS = 6;
 const MAX_EXTRACTED_IMAGES = 8;
@@ -120,9 +120,9 @@ function sourceTextForGeneration(value: string) {
   );
 }
 
-function truncatePromptText(value: string) {
-  if (value.length <= MAX_PDF_TEXT_CHARS) return value;
-  return `${value.slice(0, MAX_PDF_TEXT_CHARS)}\n\n[Source text truncated for generation.]`;
+function truncateMetadataPromptText(value: string) {
+  if (value.length <= MAX_METADATA_TEXT_CHARS) return value;
+  return `${value.slice(0, MAX_METADATA_TEXT_CHARS)}\n\n[Source text truncated for metadata generation.]`;
 }
 
 function sentenceCase(value: string) {
@@ -512,18 +512,6 @@ function responseContentText(payload: any) {
   return "";
 }
 
-function fallbackFromRecord(record: UploadedPolicyUpdateRecord) {
-  return {
-    shortTitle: record.shortTitle,
-    summary: record.summary,
-    emailSubject: record.emailSubject,
-    emailPreheader: record.emailPreheader,
-    keyTakeaways: record.keyTakeaways,
-    actionItems: record.actionItems,
-    sections: record.sections,
-  };
-}
-
 function ensurePdfRuntimePolyfills() {
   const scope = globalThis as any;
 
@@ -689,14 +677,6 @@ function uniquePdfLinks(links: ExtractedPolicyUpdatePdf["links"]) {
     seen.add(key);
     return true;
   });
-}
-
-function formatDetectedLinks(links: ExtractedPolicyUpdatePdf["links"]) {
-  if (!links.length) return "";
-
-  return links
-    .map((link) => `- Page ${link.page}: ${link.text} -> ${link.href}`)
-    .join("\n");
 }
 
 function assetObjectKey(pdfObjectKey: string, asset: string) {
@@ -1135,16 +1115,6 @@ async function extractPageImageAssets({
   return extracted;
 }
 
-function formatDetectedImages(images: ExtractedPolicyUpdateImage[]) {
-  if (!images.length) return "No embeddable image assets were extracted.";
-  return images
-    .map((image) => {
-      const link = image.href ? `, href: ${image.href}` : "";
-      return `- Page ${image.page}: ${image.src} (${image.alt}${link})`;
-    })
-    .join("\n");
-}
-
 function contentHasImage(sections: GeneratedPolicyUpdateContent["sections"], src: string) {
   return sections.some((section) => section.images?.some((image) => image.src === src));
 }
@@ -1157,6 +1127,20 @@ function appendImageToFirstMatchingSection(
   const section = sections.find((candidate) =>
     pattern.test(`${candidate.heading} ${candidate.body.join(" ")}`),
   );
+  if (!section) return false;
+  section.images = [...(section.images || []), image];
+  return true;
+}
+
+function appendImageToNextMatchingSection(
+  sections: GeneratedPolicyUpdateContent["sections"],
+  image: ExtractedPolicyUpdateImage,
+  pattern: RegExp,
+) {
+  const candidates = sections.filter((candidate) =>
+    pattern.test(`${candidate.heading} ${candidate.body.join(" ")}`),
+  );
+  const section = candidates.find((candidate) => !(candidate.images || []).length) || candidates[0];
   if (!section) return false;
   section.images = [...(section.images || []), image];
   return true;
@@ -1186,17 +1170,23 @@ function mergeExtractedImagesIntoContent(
     }
 
     if (image.role === "x-post-of-the-week") {
-      sections.push({ heading: "X Post of the Week", body: [], images: [image] });
+      if (!appendImageToNextMatchingSection(sections, image, /^X Post of the Week\b/i)) {
+        sections.push({ heading: "X Post of the Week", body: [], images: [image] });
+      }
       continue;
     }
 
     if (image.role === "notable-post") {
-      sections.push({ heading: "Notable Post", body: [], images: [image] });
+      if (!appendImageToNextMatchingSection(sections, image, /^Notable Post\b/i)) {
+        sections.push({ heading: "Notable Post", body: [], images: [image] });
+      }
       continue;
     }
 
     if (image.role === "notable-posts") {
-      notablePosts.push(image);
+      if (!appendImageToNextMatchingSection(sections, image, /^Notable Posts\b/i)) {
+        notablePosts.push(image);
+      }
       continue;
     }
 
@@ -1204,89 +1194,18 @@ function mergeExtractedImagesIntoContent(
   }
 
   if (notablePosts.length) {
-    sections.push({ heading: "Notable Posts", body: [], images: notablePosts });
+    const notablePostsSection = sections.find((section) => /^Notable Posts\b/i.test(section.heading));
+    if (notablePostsSection) {
+      notablePostsSection.images = [...(notablePostsSection.images || []), ...notablePosts];
+    } else {
+      sections.push({ heading: "Notable Posts", body: [], images: notablePosts });
+    }
   }
 
   return {
     ...content,
     sections,
   };
-}
-
-function promptForPolicyUpdate(record: UploadedPolicyUpdateRecord, extracted: ExtractedPolicyUpdatePdf) {
-  const tables = extracted.tables.length
-    ? JSON.stringify(extracted.tables.slice(0, MAX_TABLES_FOR_PROMPT), null, 2)
-    : "No structured tables were detected by the PDF parser. If the extracted text clearly contains tabular content, recreate it as a table.";
-
-  return `Convert the uploaded PDF source into faithful, well-structured PGPZ Community page content.
-
-Your job is document conversion, not article writing. The generated page should closely track the source document while fitting the existing PGPZ Community page/email design. The website will apply the visual palette and typography; you supply clean structured content.
-
-Return strict JSON only. Do not wrap the response in markdown.
-
-Required JSON shape:
-{
-  "shortTitle": "Concise archive/card title",
-  "summary": "One short paragraph for the page hero and email intro",
-  "emailSubject": "PGPZ subject line",
-  "emailPreheader": "Short email preview text",
-  "keyTakeaways": ["2-7 concise takeaways"],
-  "actionItems": ["1-6 concrete actions for PGPZ Community members"],
-  "sections": [
-    {
-      "heading": "Section heading",
-      "body": ["Paragraph text"],
-      "table": { "columns": ["Column"], "rows": [["Cell"]] },
-      "bullets": ["Optional bullet"],
-      "bodyAfterBullets": ["Optional paragraph after bullets"],
-      "images": [{ "src": "/api/policy-updates/example/assets/image.png", "alt": "Descriptive alt text", "caption": "Optional caption", "href": "Optional source URL for the image itself", "width": 1198, "height": 794 }],
-      "links": [{ "text": "Visible link text that appears in body", "href": "https://example.com" }]
-    }
-  ]
-}
-
-Rules:
-- Treat the PDF source text as authoritative. Use only facts, claims, dates, links, and framing present in the source text or metadata.
-- Preserve the source document's order, section hierarchy, and emphasis as closely as the JSON schema allows.
-- Use the source's actual headings where possible. Do not collapse the document into one generic "Policy Update" section.
-- For source social-post blocks labeled "X Post of the Week:", "Notable Post:", or "Notable Posts:", preserve them as their own section in the same source order, with heading exactly "X Post of the Week", "Notable Post", or "Notable Posts". These sections may have an empty body when the source block is only a label plus social screenshot.
-- Put embedded X/social screenshot asset paths in the closest matching social-post section's images array, not in an unrelated policy update section. If the PDF annotations include a link for the social image, set that URL as the image object's "href".
-- Convert each meaningful source section into its own section object. For recurring source headings such as "Why this matters for Zcash" or "Action Item", keep them attached to the relevant nearby development rather than moving them to an unrelated section.
-- Keep the source's analytical tone and Zcash policy lens. Lightly clean extraction artifacts, but do not rewrite into marketing copy.
-- Copy the source key takeaways and action items into the sidebar arrays when the source contains those lists. Do not invent new takeaways or actions.
-- Weekly updates should not include an "Executive Summary" section unless the source document explicitly has that section. Put the overview in "summary" instead.
-- Special/featured updates may include "Executive Summary" only when the source document supports it.
-- Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
-- Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
-- If image asset paths are already present in existing metadata or source content, place them in the closest relevant section's images array. Do not invent image URLs.
-- Use every detected image asset listed below unless it is clearly generic PGPZ signup/member boilerplate. Put each image's exact src in an images array. Keep X/social screenshots in standalone "X Post of the Week", "Notable Post", or "Notable Posts" sections.
-- Never include generic PGPZ Community signup/member QR images, "Not a PGPZ member?" QR images, or QR images whose purpose is joining the PGPZ Community itself. Signal chat QR images are allowed when they are part of the source document content.
-- Ignore repeated PDF chrome such as PGPZ Community headers, footers, page numbers, member-resource labels, QR-code captions, and community signup boilerplate unless it is part of the actual policy content.
-- Do not add filler such as "open the PDF resource", "the source PDF includes links", "this draft page can be published", or "review the source document".
-- The page content should be useful without opening the PDF: include the substantive body text, bullets, and tables from the source, not just a summary.
-- Keep paragraphs readable for the portal: usually 80-180 words each, split long source paragraphs at natural sentence boundaries, and use bullets for source bullet lists.
-- Avoid markdown formatting in strings.
-
-Metadata:
-- Category: ${record.category}
-- Category label: ${record.category === "special" ? "Featured update" : "Weekly policy memo"}
-- Title: ${record.title}
-- Short title: ${record.shortTitle}
-- Display date: ${record.displayDate}
-- Published date: ${record.publishedAt}
-- Existing admin summary: ${record.summary}
-
-Detected tables:
-${tables}
-
-Detected PDF links:
-${formatDetectedLinks(extracted.links) || "No external PDF link annotations were detected."}
-
-Detected embeddable image assets:
-${formatDetectedImages(extracted.images)}
-
-Cleaned extracted PDF text:
-${truncatePromptText(sourceTextForGeneration(extracted.text))}`;
 }
 
 async function postVeniceChat(
@@ -1414,21 +1333,81 @@ async function postVeniceChatWithRetry(
   }
 }
 
-async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extracted: ExtractedPolicyUpdatePdf) {
+function promptForPolicyUpdateMetadata(
+  record: UploadedPolicyUpdateRecord,
+  extracted: ExtractedPolicyUpdatePdf,
+  sourceContent: GeneratedPolicyUpdateContent,
+) {
+  return `Generate only the metadata and sidebar fields for a PGPZ Community policy-update page.
+
+The substantive page sections have already been converted deterministically from the uploaded PDF. Do not rewrite the document body and do not return sections. Your job is to produce concise page/email metadata from the source document.
+
+Return strict JSON only. Do not wrap the response in markdown.
+
+Required JSON shape:
+{
+  "shortTitle": "Concise archive/card title",
+  "summary": "One short paragraph for the page hero and email intro",
+  "emailSubject": "PGPZ subject line",
+  "emailPreheader": "Short email preview text",
+  "keyTakeaways": ["2-7 concise takeaways copied or closely derived from the source"],
+  "actionItems": ["1-6 concrete actions copied or closely derived from the source"]
+}
+
+Rules:
+- Treat the PDF source text as authoritative. Use only facts, claims, dates, links, and framing present in the source text or metadata.
+- Prefer the source document's own overview, key takeaways, and action items when present.
+- Weekly updates should not invent an "Executive Summary"; put the overview in "summary".
+- Do not include generic PGPZ signup/member QR boilerplate, page chrome, footers, or draft-review language.
+- Keep the same analytical policy tone and Zcash lens as the source.
+- Keep the summary under 850 characters and the preheader under 220 characters.
+
+Metadata:
+- Category: ${record.category}
+- Category label: ${record.category === "special" ? "Featured update" : "Weekly policy memo"}
+- Title: ${record.title}
+- Short title: ${record.shortTitle}
+- Display date: ${record.displayDate}
+- Published date: ${record.publishedAt}
+- Existing admin summary: ${record.summary}
+
+Deterministic source-converted sidebar draft:
+${JSON.stringify(
+  {
+    shortTitle: sourceContent.shortTitle,
+    summary: sourceContent.summary,
+    emailSubject: sourceContent.emailSubject,
+    emailPreheader: sourceContent.emailPreheader,
+    keyTakeaways: sourceContent.keyTakeaways,
+    actionItems: sourceContent.actionItems,
+  },
+  null,
+  2,
+)}
+
+Cleaned extracted PDF text:
+${truncateMetadataPromptText(sourceTextForGeneration(extracted.text))}`;
+}
+
+async function generateJsonFromVenice(
+  record: UploadedPolicyUpdateRecord,
+  extracted: ExtractedPolicyUpdatePdf,
+  sourceContent: GeneratedPolicyUpdateContent,
+) {
   const baseUrl = POLICY_UPDATE_GENERATION_BASE_URL.toLowerCase();
   const requestBody: Record<string, unknown> = {
     model: POLICY_UPDATE_GENERATION_MODEL,
     temperature: 0.1,
-    max_tokens: POLICY_UPDATE_GENERATION_MAX_TOKENS,
+    max_tokens: Math.min(POLICY_UPDATE_GENERATION_MAX_TOKENS, MAX_METADATA_MODEL_TOKENS),
     messages: [
       {
         role: "system",
         content:
-          "You are a meticulous PGPZ Community document-conversion editor. Preserve the source document faithfully, clean PDF extraction artifacts, and output valid JSON only.",
+          "You are a meticulous PGPZ Community policy-update editor. Produce concise metadata from the source document and output valid JSON only.",
       },
       {
         role: "user",
-        content: promptForPolicyUpdate(record, extracted),
+        content: promptForPolicyUpdateMetadata(record, extracted, sourceContent),
       },
     ],
   };
@@ -1527,19 +1506,37 @@ export async function generatePolicyUpdatePageContent(
   }
 > {
   const extracted = await extractPolicyUpdatePdfContent(bytes, record);
-  let normalized: GeneratedPolicyUpdateContent;
   const generatedModel = POLICY_UPDATE_GENERATION_MODEL;
+  const sourceContent = mergeExtractedImagesIntoContent(
+    fallbackPolicyUpdateContent(record, extracted),
+    extracted.images,
+  );
 
-  const response = await generateJsonFromVenice(record, extracted);
+  const response = await generateJsonFromVenice(record, extracted, sourceContent);
   const contentText = responseContentText(response);
   if (!contentText) throw new Error("Venice response did not include generated content.");
 
   const parsed = extractJsonObject(contentText);
-  normalized = normalizeGeneratedPolicyUpdateContent(parsed, fallbackFromRecord(record));
-  normalized = mergeExtractedImagesIntoContent(normalized, extracted.images);
+  const sourceFallback = {
+    shortTitle: sourceContent.shortTitle || record.shortTitle,
+    summary: sourceContent.summary,
+    emailSubject: sourceContent.emailSubject || record.emailSubject,
+    emailPreheader: sourceContent.emailPreheader,
+    keyTakeaways: sourceContent.keyTakeaways,
+    actionItems: sourceContent.actionItems,
+    sections: sourceContent.sections,
+  };
+  const normalized = normalizeGeneratedPolicyUpdateContent(
+    {
+      ...(typeof parsed === "object" && parsed ? parsed : {}),
+      sections: sourceContent.sections,
+    },
+    sourceFallback,
+  );
 
   return {
     ...normalized,
+    sections: sourceContent.sections,
     generatedModel,
     sourceTextLength: extracted.sourceTextLength,
     sourceTextSha256: extracted.sourceTextSha256,
