@@ -1,7 +1,6 @@
 import "server-only";
 
 import { createHash } from "crypto";
-import { PDFParse } from "pdf-parse";
 import {
   POLICY_UPDATE_GENERATION_BASE_URL,
   POLICY_UPDATE_GENERATION_MAX_TOKENS,
@@ -25,6 +24,12 @@ type ExtractedPolicyUpdatePdf = {
 const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
+
+type PdfParser = {
+  getText(params?: Record<string, unknown>): Promise<{ text?: string }>;
+  getTable(): Promise<unknown>;
+  destroy(): Promise<void>;
+};
 
 function compactWhitespace(value: string) {
   return value
@@ -82,6 +87,84 @@ function fallbackFromRecord(record: UploadedPolicyUpdateRecord) {
     actionItems: record.actionItems,
     sections: record.sections,
   };
+}
+
+function ensurePdfRuntimePolyfills() {
+  const scope = globalThis as any;
+
+  if (typeof scope.DOMMatrix === "undefined") {
+    scope.DOMMatrix = class DOMMatrix {
+      a = 1;
+      b = 0;
+      c = 0;
+      d = 1;
+      e = 0;
+      f = 0;
+
+      constructor(_init?: unknown) {}
+
+      multiplySelf() {
+        return this;
+      }
+
+      preMultiplySelf() {
+        return this;
+      }
+
+      translateSelf() {
+        return this;
+      }
+
+      scaleSelf() {
+        return this;
+      }
+
+      rotateSelf() {
+        return this;
+      }
+
+      invertSelf() {
+        return this;
+      }
+
+      transformPoint(point: unknown) {
+        return point;
+      }
+    };
+  }
+
+  if (typeof scope.ImageData === "undefined") {
+    scope.ImageData = class ImageData {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+
+      constructor(dataOrWidth: Uint8ClampedArray | number, width?: number, height?: number) {
+        if (typeof dataOrWidth === "number") {
+          this.width = dataOrWidth;
+          this.height = typeof width === "number" ? width : 0;
+          this.data = new Uint8ClampedArray(this.width * this.height * 4);
+        } else {
+          this.data = dataOrWidth;
+          this.width = typeof width === "number" ? width : 0;
+          this.height = typeof height === "number" ? height : 0;
+        }
+      }
+    };
+  }
+
+  if (typeof scope.Path2D === "undefined") {
+    scope.Path2D = class Path2D {
+      constructor(_path?: unknown) {}
+      addPath() {}
+    };
+  }
+}
+
+async function createPdfParser(bytes: Buffer): Promise<PdfParser> {
+  ensurePdfRuntimePolyfills();
+  const { PDFParse } = await import("pdf-parse");
+  return new PDFParse({ data: bytes });
 }
 
 function promptForPolicyUpdate(record: UploadedPolicyUpdateRecord, extracted: ExtractedPolicyUpdatePdf) {
@@ -221,11 +304,11 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
 }
 
 export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<ExtractedPolicyUpdatePdf> {
-  const parser = new PDFParse({ data: bytes });
+  const parser = await createPdfParser(bytes);
   try {
     const textResult = await parser.getText({
-        parseHyperlinks: true,
-        pageJoiner: "\n\n--- Page page_number of total_number ---\n\n",
+      parseHyperlinks: true,
+      pageJoiner: "\n\n--- Page page_number of total_number ---\n\n",
     });
     const tableResult = await parser.getTable().catch(() => null);
     const text = compactWhitespace(textResult.text || "");
