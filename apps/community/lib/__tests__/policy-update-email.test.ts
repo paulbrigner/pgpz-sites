@@ -95,6 +95,43 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("The record stays open for written submissions through June 23.");
   });
 
+  it("renders policy update section images through unauthenticated email asset URLs", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "X Post of the Week",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/x-josh-swihart.png",
+                alt: "Josh Swihart X post screenshot",
+                caption: "Embedded X post screenshot from the source memo.",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      'src="https://community.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png"',
+    );
+    expect(built.html).not.toContain("cid:");
+    expect(built.html).not.toContain(
+      'src="https://community.pgpz.org/api/policy-updates/test-upload/assets/x-josh-swihart.png"',
+    );
+    expect(built.text).toContain("[Image: Josh Swihart X post screenshot]");
+  });
+
   it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 
