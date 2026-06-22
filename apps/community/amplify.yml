@@ -41,6 +41,8 @@ frontend:
         - env | grep -e CLOUDFRONT_DOMAIN >> .env.production || true
         - env | grep -e KEY_PAIR_ID >> .env.production || true
         - env | grep -e PRIVATE_KEY_SECRET >> .env.production || true
+        - env | grep -e POLICY_UPDATE_UPLOAD_BUCKET >> .env.production || true
+        - env | grep -e POLICY_UPDATE_UPLOAD_PREFIX >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next
