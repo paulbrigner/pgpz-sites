@@ -575,7 +575,7 @@ Required JSON shape:
       "table": { "columns": ["Column"], "rows": [["Cell"]] },
       "bullets": ["Optional bullet"],
       "bodyAfterBullets": ["Optional paragraph after bullets"],
-      "images": [{ "src": "/api/policy-updates/example/assets/image.png", "alt": "Descriptive alt text", "caption": "Optional caption", "width": 1198, "height": 794 }],
+      "images": [{ "src": "/api/policy-updates/example/assets/image.png", "alt": "Descriptive alt text", "caption": "Optional caption", "href": "Optional source URL for the image itself", "width": 1198, "height": 794 }],
       "links": [{ "text": "Visible link text that appears in body", "href": "https://example.com" }]
     }
   ]
@@ -585,7 +585,8 @@ Rules:
 - Treat the PDF source text as authoritative. Use only facts, claims, dates, links, and framing present in the source text or metadata.
 - Preserve the source document's order, section hierarchy, and emphasis as closely as the JSON schema allows.
 - Use the source's actual headings where possible. Do not collapse the document into one generic "Policy Update" section.
-- For source social-post blocks labeled "X Post of the Week:", "Notable Post:", or "Notable Posts:", keep the label and the following substantive title together in the section heading using this exact pattern: "X Post of the Week: [Title]" or "Notable Post: [Title]". Put any embedded X screenshot asset paths in that same section's images array so the portal can render the source-post image before the article text.
+- For source social-post blocks labeled "X Post of the Week:", "Notable Post:", or "Notable Posts:", preserve them as their own section in the same source order, with heading exactly "X Post of the Week", "Notable Post", or "Notable Posts". These sections may have an empty body when the source block is only a label plus social screenshot.
+- Put embedded X/social screenshot asset paths in the closest matching social-post section's images array, not in an unrelated policy update section. If the PDF annotations include a link for the social image, set that URL as the image object's "href".
 - Convert each meaningful source section into its own section object. For recurring source headings such as "Why this matters for Zcash" or "Action Item", keep them attached to the relevant nearby development rather than moving them to an unrelated section.
 - Keep the source's analytical tone and Zcash policy lens. Lightly clean extraction artifacts, but do not rewrite into marketing copy.
 - Copy the source key takeaways and action items into the sidebar arrays when the source contains those lists. Do not invent new takeaways or actions.

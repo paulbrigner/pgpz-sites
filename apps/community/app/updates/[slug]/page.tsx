@@ -9,8 +9,10 @@ import {
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
+import { policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
   isPolicyUpdateSocialPostSection,
+  policyUpdateSectionHeadingLink,
   splitPolicyUpdateSocialPostHeading,
 } from "@/lib/policy-update-sections";
 import {
@@ -108,9 +110,11 @@ function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
 
 function PolicyUpdateSectionImages({
   images,
+  imageHrefFallback,
   variant = "default",
 }: {
   images: PolicyUpdateImage[];
+  imageHrefFallback?: string | null;
   variant?: "default" | "social";
 }) {
   const isSocial = variant === "social";
@@ -118,6 +122,7 @@ function PolicyUpdateSectionImages({
   return (
     <div className={isSocial ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
       {images.map((image) => {
+        const href = policyUpdateImageHref(image, imageHrefFallback);
         const isCompact =
           typeof image.width === "number" &&
           typeof image.height === "number" &&
@@ -133,17 +138,13 @@ function PolicyUpdateSectionImages({
               !isSocial && !isCompact ? "sm:col-span-2" : "",
             ].join(" ")}
           >
-            <img
-              src={image.src}
-              alt={image.alt}
-              width={image.width}
-              height={image.height}
-              className={[
-                "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
-                isSocial ? "max-h-[38rem]" : isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
-              ].join(" ")}
-              loading="lazy"
-            />
+            {href ? (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+                <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+              </a>
+            ) : (
+              <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+            )}
             {image.caption ? (
               <figcaption className="mt-3 text-xs leading-5 text-slate-600">{image.caption}</figcaption>
             ) : null}
@@ -154,6 +155,59 @@ function PolicyUpdateSectionImages({
   );
 }
 
+function PolicyUpdateImageElement({
+  image,
+  isCompact,
+  isSocial,
+}: {
+  image: PolicyUpdateImage;
+  isCompact: boolean;
+  isSocial: boolean;
+}) {
+  return (
+    <img
+      src={image.src}
+      alt={image.alt}
+      width={image.width}
+      height={image.height}
+      className={[
+        "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
+        isSocial ? "max-h-[38rem]" : isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
+      ].join(" ")}
+      loading="lazy"
+    />
+  );
+}
+
+function PolicyUpdateSectionHeading({
+  section,
+  children,
+  className,
+}: {
+  section: PolicyUpdateSection;
+  children: ReactNode;
+  className: string;
+}) {
+  const headingLink = policyUpdateSectionHeadingLink(section);
+
+  return (
+    <h2 className={className}>
+      {headingLink ? (
+        <a
+          href={headingLink.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--brand-ink)] underline decoration-[var(--zcash-gold)] decoration-2 underline-offset-4 hover:text-[var(--brand-denim)]"
+        >
+          {children}
+        </a>
+      ) : (
+        children
+      )}
+    </h2>
+  );
+}
+
 function PolicyUpdateSectionBlock({
   section,
 }: {
@@ -161,23 +215,34 @@ function PolicyUpdateSectionBlock({
 }) {
   const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
   const isSocialPostSection = isPolicyUpdateSocialPostSection(section);
-  const heading = socialHeading?.title || section.heading;
+  const heading = socialHeading?.title || (socialHeading ? "" : section.heading);
+  const headingLink = policyUpdateSectionHeadingLink(section);
+  const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
 
   if (isSocialPostSection) {
     return (
       <section className="space-y-5 border-l-4 border-[var(--zcash-gold)] bg-[var(--brand-ice)] px-5 py-5">
         <p className="section-eyebrow text-[var(--brand-denim)]">{socialHeading?.label || "Source post"}</p>
-        {section.images?.length ? <PolicyUpdateSectionImages images={section.images} variant="social" /> : null}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold leading-snug text-[var(--brand-ink)] lg:text-2xl">
-            {heading}
-          </h2>
+        {section.images?.length ? (
+          <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} variant="social" />
+        ) : null}
+        {heading || section.body.length ? (
+          <div className="space-y-4">
+            {heading ? (
+              <PolicyUpdateSectionHeading
+                section={section}
+                className="text-xl font-semibold leading-snug text-[var(--brand-ink)] lg:text-2xl"
+              >
+                {heading}
+              </PolicyUpdateSectionHeading>
+            ) : null}
           <div className="space-y-4 text-sm leading-7 text-slate-700">
             {section.body.map((paragraph) => (
               <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
             ))}
           </div>
-        </div>
+          </div>
+        ) : null}
         {section.table ? (
           <PolicyUpdateTable table={section.table} />
         ) : null}
@@ -201,13 +266,17 @@ function PolicyUpdateSectionBlock({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">{section.heading}</h2>
+      <PolicyUpdateSectionHeading section={section} className="text-2xl font-semibold text-[var(--brand-ink)]">
+        {section.heading}
+      </PolicyUpdateSectionHeading>
       <div className="space-y-4 text-sm leading-7 text-slate-700">
         {section.body.map((paragraph) => (
           <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
         ))}
       </div>
-      {section.images?.length ? <PolicyUpdateSectionImages images={section.images} /> : null}
+      {section.images?.length ? (
+        <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} />
+      ) : null}
       {section.table ? <PolicyUpdateTable table={section.table} /> : null}
       {section.bullets?.length ? (
         <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">

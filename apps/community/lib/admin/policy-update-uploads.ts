@@ -17,6 +17,7 @@ import {
   POLICY_UPDATE_UPLOAD_PREFIX,
 } from "@/lib/config";
 import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
+import { normalizePolicyUpdateSectionLayout } from "@/lib/policy-update-sections";
 
 const POLICY_UPDATE_UPLOAD_GSI_PK = "POLICY_UPDATE_UPLOAD";
 
@@ -141,7 +142,7 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
       const record = item as Record<string, unknown>;
       const heading = textOrEmpty(record.heading).trim();
       const body = textArrayOrFallback(record.body, []);
-      if (!heading || !body.length) return null;
+      if (!heading) return null;
 
       const section: PolicyUpdateSection = { heading, body };
       const bullets = textArrayOrFallback(record.bullets, []);
@@ -156,6 +157,7 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
             const src = textOrEmpty(imageRecord.src).trim();
             const alt = textOrEmpty(imageRecord.alt).trim();
             const caption = textOrEmpty(imageRecord.caption).trim();
+            const href = textOrEmpty(imageRecord.href).trim();
             const width = Number(imageRecord.width);
             const height = Number(imageRecord.height);
             if (!src || !alt) return null;
@@ -163,6 +165,7 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
               src,
               alt,
               ...(caption ? { caption } : {}),
+              ...(href ? { href } : {}),
               ...(Number.isFinite(width) && width > 0 ? { width } : {}),
               ...(Number.isFinite(height) && height > 0 ? { height } : {}),
             };
@@ -194,6 +197,16 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
           })
           .filter((link): link is { text: string; href: string } => !!link);
         if (links.length) section.links = links;
+      }
+
+      if (
+        !body.length &&
+        !section.bullets?.length &&
+        !section.bodyAfterBullets?.length &&
+        !section.table &&
+        !section.images?.length
+      ) {
+        return null;
       }
 
       return section;
@@ -371,7 +384,7 @@ export function uploadedPolicyUpdateToPolicyUpdate(record: UploadedPolicyUpdateR
     portalPath: record.portalPath,
     keyTakeaways: record.keyTakeaways,
     actionItems: record.actionItems,
-    sections: record.sections,
+    sections: normalizePolicyUpdateSectionLayout(record.sections),
   };
 }
 

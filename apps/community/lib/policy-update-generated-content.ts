@@ -113,6 +113,7 @@ function normalizeImages(value: unknown) {
       const src = normalizeImageSrc(record.src);
       const alt = cleanText(record.alt, 180);
       const caption = cleanText(record.caption, 260);
+      const href = normalizeUrl(cleanText(record.href, 700));
       const width = Number(record.width);
       const height = Number(record.height);
       if (!src || !alt || seen.has(src)) return null;
@@ -121,6 +122,7 @@ function normalizeImages(value: unknown) {
         src,
         alt,
         ...(caption ? { caption } : {}),
+        ...(href ? { href } : {}),
         ...(Number.isFinite(width) && width > 0 ? { width } : {}),
         ...(Number.isFinite(height) && height > 0 ? { height } : {}),
       };
@@ -130,6 +132,7 @@ function normalizeImages(value: unknown) {
       src: string;
       alt: string;
       caption?: string;
+      href?: string;
       width?: number;
       height?: number;
     } => !!image)
@@ -190,7 +193,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
         textArray(record.body, MAX_SECTION_PARAGRAPHS, MAX_PARAGRAPH_CHARS),
         links,
       );
-      if (!heading || !body.length) return null;
+      if (!heading) return null;
 
       const section: PolicyUpdateSection = { heading, body };
       const table = normalizeTable(record.table);
@@ -206,6 +209,16 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
       if (images.length) section.images = images;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
       if (links.length) section.links = links;
+
+      if (
+        !body.length &&
+        !table &&
+        !bullets.length &&
+        !images.length &&
+        !bodyAfterBullets.length
+      ) {
+        return null;
+      }
 
       return section;
     })

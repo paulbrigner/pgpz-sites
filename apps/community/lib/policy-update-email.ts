@@ -1,5 +1,8 @@
 import type { PolicyUpdate, PolicyUpdateLink, PolicyUpdateTable } from "@/lib/policy-updates";
-import { splitPolicyUpdateSocialPostHeading } from "@/lib/policy-update-sections";
+import {
+  policyUpdateSectionHeadingLink,
+  splitPolicyUpdateSocialPostHeading,
+} from "@/lib/policy-update-sections";
 import { getUserGreetingName } from "@/lib/user-display-name";
 import {
   brandedEmailColors as colors,
@@ -131,14 +134,25 @@ const renderTableText = (table: PolicyUpdateTable) => [
   "",
 ];
 
-const renderSectionHeading = (heading: string) => {
-  const socialHeading = splitPolicyUpdateSocialPostHeading(heading);
+const renderHeadingText = (text: string, href: string | null, baseUrl: string, tracking?: PolicyUpdateEmailTracking) => {
+  if (!href) return escapeHtml(text);
+
+  return `<a href="${escapeHtml(trackedHref(baseUrl, href, tracking))}" style="color:${colors.ink};font-weight:800;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:4px;">${escapeHtml(text)}</a>`;
+};
+
+const renderSectionHeading = (
+  section: PolicyUpdate["sections"][number],
+  baseUrl: string,
+  tracking?: PolicyUpdateEmailTracking,
+) => {
+  const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
+  const headingLink = policyUpdateSectionHeadingLink(section);
   if (!socialHeading) {
-    return `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${escapeHtml(heading)}</h2>`;
+    return `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">${renderHeadingText(section.heading, headingLink?.href || null, baseUrl, tracking)}</h2>`;
   }
 
   return `<div style="margin:0 0 8px;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">${escapeHtml(socialHeading.label)}</div>
-                <h2 style="margin:0 0 10px;color:${colors.ink};font-size:19px;line-height:1.32;">${escapeHtml(socialHeading.title)}</h2>`;
+                ${socialHeading.title ? `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:19px;line-height:1.32;">${renderHeadingText(socialHeading.title, headingLink?.href || null, baseUrl, tracking)}</h2>` : ""}`;
 };
 
 export function buildPolicyUpdateEmail(
@@ -214,7 +228,7 @@ export function buildPolicyUpdateEmail(
               .map(
                 (section) => `<tr>
               <td style="padding:0 30px 22px;">
-                ${renderSectionHeading(section.heading)}
+                ${renderSectionHeading(section, base, tracking)}
                 ${renderParagraphs(section.body, section.links, base, tracking)}
                 ${section.table ? renderTable(section.table) : ""}
                 ${section.bullets?.length ? renderBullets(section.bullets) : ""}

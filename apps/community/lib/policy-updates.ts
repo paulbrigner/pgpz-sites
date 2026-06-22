@@ -28,6 +28,7 @@ export type PolicyUpdateImage = {
   caption?: string;
   width?: number;
   height?: number;
+  href?: string;
 };
 
 export type PolicyUpdate = {
