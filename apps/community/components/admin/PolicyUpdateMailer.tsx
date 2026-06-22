@@ -139,14 +139,16 @@ const visibilityClassName = (update: PolicyUpdateSummary) => {
   return "border-amber-200 bg-amber-50 text-amber-800";
 };
 
-const generationLabel = (update: PolicyUpdateSummary) => {
+const generationLabel = (update: PolicyUpdateSummary, isGenerating = false) => {
   if (update.source !== "uploaded") return "";
+  if (isGenerating) return "Generating";
   if (update.generationStatus === "generated") return "Generated";
   if (update.generationStatus === "failed") return "Generation failed";
   return "Needs content";
 };
 
-const generationClassName = (update: PolicyUpdateSummary) => {
+const generationClassName = (update: PolicyUpdateSummary, isGenerating = false) => {
+  if (isGenerating) return "border-sky-200 bg-sky-50 text-sky-700";
   if (update.generationStatus === "generated") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (update.generationStatus === "failed") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-amber-200 bg-amber-50 text-amber-800";
@@ -313,6 +315,9 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
   const selectedCanSendMembers = selectedVisibilityStatus === "published";
   const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
+  const selectedIsGenerating = Boolean(
+    selectedUpdate && generatingContentSlug === selectedUpdate.slug,
+  );
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
     const selected = new Set(selectedRecipientIds);
@@ -751,6 +756,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="space-y-2">
             {updates.map((update) => {
               const stats = statsBySlug[update.slug] || emptyStats;
+              const isGenerating = generatingContentSlug === update.slug;
               return (
                 <button
                   key={update.slug}
@@ -793,10 +799,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                         <span
                           className={cn(
                             "rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]",
-                            generationClassName(update),
+                            generationClassName(update, isGenerating),
                           )}
                         >
-                          {generationLabel(update)}
+                          {generationLabel(update, isGenerating)}
                         </span>
                       ) : null}
                     </span>
@@ -840,10 +846,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <div
                       className={cn(
                         "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]",
-                        generationClassName(selectedUpdate),
+                        generationClassName(selectedUpdate, selectedIsGenerating),
                       )}
                     >
-                      {generationLabel(selectedUpdate)}
+                      {generationLabel(selectedUpdate, selectedIsGenerating)}
                     </div>
                   ) : null}
                   <h3 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
@@ -896,7 +902,12 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
               </div>
 
-              {selectedUpdate.source === "uploaded" && !selectedHasGeneratedContent ? (
+              {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
+                  <span className="font-semibold">Generating page content.</span>{" "}
+                  The previous status will refresh when this run finishes.
+                </div>
+              ) : selectedUpdate.source === "uploaded" && !selectedHasGeneratedContent ? (
                 <div
                   className={cn(
                     "rounded-xl border px-4 py-3 text-sm leading-6",
