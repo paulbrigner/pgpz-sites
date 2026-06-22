@@ -106,6 +106,32 @@ const titleFromFileName = (fileName: string) =>
 
 const isPublishedDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
+const normalizeCustomSlug = (value: string) => {
+  let input = value.trim();
+  if (!input) return "";
+
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      input = new URL(input).pathname;
+    } catch {
+      // Fall back to plain text cleanup below.
+    }
+  }
+
+  input = input.split(/[?#]/)[0] || "";
+  try {
+    input = decodeURIComponent(input);
+  } catch {
+    // Keep the raw input if it is not valid URI-encoded text.
+  }
+
+  input = input.replace(/^\/+|\/+$/g, "").replace(/^updates\//i, "");
+  return input
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+};
+
 const textFromBody = (body: any, name: string) =>
   typeof body?.[name] === "string" ? body[name].trim() : "";
 
@@ -167,6 +193,41 @@ const streamToBuffer = async (body: any) => {
   return Buffer.concat(chunks);
 };
 
+async function policyUpdateSlugExists(slug: string) {
+  const normalized = slug.toLowerCase();
+  const updates = await getDistributablePolicyUpdateSummaries();
+  return updates.some((update) => update.slug.toLowerCase() === normalized);
+}
+
+async function resolvePolicyUpdateUploadSlug({
+  requestedSlug,
+  title,
+  publishedAt,
+}: {
+  requestedSlug: string;
+  title: string;
+  publishedAt: string;
+}) {
+  const rawRequestedSlug = requestedSlug.trim();
+  const customSlug = normalizeCustomSlug(rawRequestedSlug);
+  if (rawRequestedSlug && !customSlug) {
+    throw new Error("Enter a valid URL slug using letters, numbers, or hyphens.");
+  }
+
+  const slug =
+    customSlug ||
+    createPolicyUpdateUploadSlug({
+      title,
+      publishedAt,
+    });
+
+  if (await policyUpdateSlugExists(slug)) {
+    throw new Error(`The URL slug "${slug}" is already in use.`);
+  }
+
+  return slug;
+}
+
 async function preparePolicyUpdateUpload(body: any) {
   const bucket = getPolicyUpdateUploadBucket();
   if (!bucket) {
@@ -202,10 +263,19 @@ async function preparePolicyUpdateUpload(body: any) {
     emailPreheaderValue: textFromBody(body, "emailPreheader"),
     fileName,
   });
-  const slug = createPolicyUpdateUploadSlug({
-    title: metadata.title,
-    publishedAt: metadata.publishedAt,
-  });
+  let slug;
+  try {
+    slug = await resolvePolicyUpdateUploadSlug({
+      requestedSlug: textFromBody(body, "urlSlug") || textFromBody(body, "slug"),
+      title: metadata.title,
+      publishedAt: metadata.publishedAt,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Invalid policy update URL slug" },
+      { status: 400 },
+    );
+  }
   const s3Key = policyUpdateUploadObjectKey(slug);
   const uploadHeaders = {
     "Content-Type": "application/pdf",
@@ -253,6 +323,12 @@ async function completePolicyUpdateUpload(body: any, adminUserId: string | null)
   const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
   if (!slug || !s3Key || s3Key !== policyUpdateUploadObjectKey(slug)) {
     return NextResponse.json({ error: "Invalid upload completion request" }, { status: 400 });
+  }
+  if (await policyUpdateSlugExists(slug)) {
+    return NextResponse.json(
+      { error: `The URL slug "${slug}" is already in use.` },
+      { status: 400 },
+    );
   }
 
   let head;
@@ -359,10 +435,19 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
     fileName,
   });
   const uploadedAt = new Date().toISOString();
-  const slug = createPolicyUpdateUploadSlug({
-    title: metadata.title,
-    publishedAt: metadata.publishedAt,
-  });
+  let slug;
+  try {
+    slug = await resolvePolicyUpdateUploadSlug({
+      requestedSlug: formText(form, "urlSlug") || formText(form, "slug"),
+      title: metadata.title,
+      publishedAt: metadata.publishedAt,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Invalid policy update URL slug" },
+      { status: 400 },
+    );
+  }
   const s3Key = policyUpdateUploadObjectKey(slug);
 
   await s3Client.send(

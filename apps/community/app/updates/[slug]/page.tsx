@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -423,7 +423,12 @@ export default async function UpdateDetailPage({ params }: Props) {
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
           <div className="space-y-8">
             {update.sections.map((section, index) => (
-              <PolicyUpdateSectionBlock key={`${section.heading}-${index}`} section={section} />
+              <Fragment key={`${section.heading}-${index}`}>
+                {index > 0 ? (
+                  <hr className="border-0 border-t border-[rgba(245,168,0,0.34)]" aria-hidden="true" />
+                ) : null}
+                <PolicyUpdateSectionBlock section={section} />
+              </Fragment>
             ))}
           </div>
 

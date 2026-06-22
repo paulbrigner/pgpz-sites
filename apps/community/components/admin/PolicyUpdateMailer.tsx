@@ -120,6 +120,29 @@ const todayInputValue = () => new Date().toISOString().slice(0, 10);
 const titleFromFileName = (fileName: string) =>
   fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
+const previewSlugFromInput = (value: string) => {
+  let input = value.trim();
+  if (!input) return "";
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      input = new URL(input).pathname;
+    } catch {
+      // Fall back to plain text cleanup below.
+    }
+  }
+  input = input.split(/[?#]/)[0] || "";
+  try {
+    input = decodeURIComponent(input);
+  } catch {
+    // Keep the raw input if it is not valid URI-encoded text.
+  }
+  input = input.replace(/^\/+|\/+$/g, "").replace(/^updates\//i, "");
+  return input
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+};
+
 const fileHasPdfSignature = async (file: File) => {
   const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
   return String.fromCharCode(...bytes) === "%PDF-";
@@ -291,6 +314,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [draftEmail, setDraftEmail] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadSlug, setUploadSlug] = useState("");
   const [uploadCategory, setUploadCategory] = useState<"weekly" | "special">("weekly");
   const [uploadPublishedAt, setUploadPublishedAt] = useState(todayInputValue);
   const [uploadSummary, setUploadSummary] = useState("");
@@ -340,6 +364,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       : `${selectedRecipientIds.length} selected member${selectedRecipientIds.length === 1 ? "" : "s"}`;
   const audienceReady =
     audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
+  const uploadSlugPreview = useMemo(() => previewSlugFromInput(uploadSlug), [uploadSlug]);
 
   const loadState = async () => {
     setLoading(true);
@@ -416,6 +441,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
       const metadata = {
         title: uploadTitle.trim(),
+        urlSlug: uploadSlug.trim(),
         category: uploadCategory,
         publishedAt: uploadPublishedAt,
         summary: uploadSummary.trim(),
@@ -463,6 +489,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setUploadNotice(`Uploaded draft: ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
       setUploadFile(null);
       setUploadTitle("");
+      setUploadSlug("");
       setUploadSummary("");
       setUploadInputKey((current) => current + 1);
       await loadState();
@@ -716,6 +743,20 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 placeholder="Update title"
                 className="w-full rounded-md border bg-white px-3 py-2 text-sm"
               />
+              <div className="space-y-1">
+                <input
+                  type="text"
+                  value={uploadSlug}
+                  onChange={(event) => setUploadSlug(event.target.value)}
+                  placeholder="Optional URL slug"
+                  className="w-full rounded-md border bg-white px-3 py-2 text-sm"
+                />
+                <p className="text-[0.68rem] leading-5 text-slate-500">
+                  {uploadSlug.trim()
+                    ? `URL: /updates/${uploadSlugPreview || "invalid-slug"}`
+                    : "Leave blank to generate a unique URL slug from the title and date."}
+                </p>
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <select
                   value={uploadCategory}
