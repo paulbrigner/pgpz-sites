@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   POLICY_UPDATE_GENERATION_BASE_URL,
   POLICY_UPDATE_GENERATION_MAX_TOKENS,
@@ -8,11 +9,13 @@ import {
   POLICY_UPDATE_GENERATION_TIMEOUT_MS,
   VENICE_API_KEY,
 } from "@/lib/config";
+import { s3Client } from "@/lib/s3";
 import {
   normalizeGeneratedPolicyUpdateContent,
   type GeneratedPolicyUpdateContent,
 } from "@/lib/policy-update-generated-content";
 import type { UploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
+import type { PolicyUpdateImage } from "@/lib/policy-updates";
 
 type ExtractedPolicyUpdatePdf = {
   text: string;
@@ -22,14 +25,36 @@ type ExtractedPolicyUpdatePdf = {
     text: string;
     href: string;
   }>;
+  images: ExtractedPolicyUpdateImage[];
   sourceTextLength: number;
   sourceTextSha256: string;
+};
+
+type ExtractedPolicyUpdateImage = PolicyUpdateImage & {
+  page: number;
+  role: "signal-chat" | "x-post-of-the-week" | "notable-post" | "notable-posts" | "source-graphic";
+};
+
+type LinkAnnotation = {
+  page: number;
+  text: string;
+  href: string;
+  rect: number[];
+};
+
+type ViewportRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 };
 
 const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
 const MAX_FALLBACK_PARAGRAPHS = 6;
+const IMAGE_RENDER_SCALE = 3;
+const MAX_EXTRACTED_IMAGES = 8;
 const MONTH_NAME_PATTERN =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 
@@ -384,11 +409,11 @@ function fallbackFromRecord(record: UploadedPolicyUpdateRecord) {
   };
 }
 
-function ensurePdfRuntimePolyfills() {
+function ensurePdfRuntimePolyfills(canvasRuntime?: any) {
   const scope = globalThis as any;
 
   if (typeof scope.DOMMatrix === "undefined") {
-    scope.DOMMatrix = class DOMMatrix {
+    scope.DOMMatrix = canvasRuntime?.DOMMatrix || class DOMMatrix {
       a = 1;
       b = 0;
       c = 0;
@@ -429,7 +454,7 @@ function ensurePdfRuntimePolyfills() {
   }
 
   if (typeof scope.ImageData === "undefined") {
-    scope.ImageData = class ImageData {
+    scope.ImageData = canvasRuntime?.ImageData || class ImageData {
       data: Uint8ClampedArray;
       width: number;
       height: number;
@@ -449,15 +474,25 @@ function ensurePdfRuntimePolyfills() {
   }
 
   if (typeof scope.Path2D === "undefined") {
-    scope.Path2D = class Path2D {
+    scope.Path2D = canvasRuntime?.Path2D || class Path2D {
       constructor(_path?: unknown) {}
       addPath() {}
+      closePath() {}
+      moveTo() {}
+      lineTo() {}
+      bezierCurveTo() {}
+      quadraticCurveTo() {}
+      arc() {}
+      arcTo() {}
+      ellipse() {}
+      rect() {}
     };
   }
 }
 
 async function loadPdfJs() {
-  ensurePdfRuntimePolyfills();
+  const canvasRuntime = await import("@napi-rs/canvas").catch(() => null);
+  ensurePdfRuntimePolyfills(canvasRuntime);
   return import("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
@@ -526,9 +561,10 @@ function linksFromAnnotations(pageNumber: number, annotations: any[]) {
         page: pageNumber,
         text: linkTextFromAnnotation(annotation),
         href,
+        rect: Array.isArray(annotation?.rect) ? annotation.rect : [],
       };
     })
-    .filter((link): link is { page: number; text: string; href: string } => Boolean(link));
+    .filter((link): link is LinkAnnotation => Boolean(link?.href));
 }
 
 function uniquePdfLinks(links: ExtractedPolicyUpdatePdf["links"]) {
@@ -547,6 +583,394 @@ function formatDetectedLinks(links: ExtractedPolicyUpdatePdf["links"]) {
   return links
     .map((link) => `- Page ${link.page}: ${link.text} -> ${link.href}`)
     .join("\n");
+}
+
+function assetObjectKey(pdfObjectKey: string, asset: string) {
+  return pdfObjectKey.replace(/\.pdf$/i, `/assets/${asset}`);
+}
+
+function sanitizedAssetPart(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "source-graphic"
+  );
+}
+
+function displayNameFromXHref(href: string) {
+  try {
+    const parsed = new URL(href);
+    const username = parsed.pathname.split("/").filter(Boolean)[0] || "";
+    const normalized = username.toLowerCase();
+    if (normalized === "jswihart") return "Josh Swihart";
+    if (normalized === "warrendavidson") return "Warren Davidson";
+    if (normalized === "jbsdc") return "Justin Slaughter";
+    if (normalized === "austincampbell") return "Austin Campbell";
+    return username ? username.replace(/[-_]+/g, " ") : "X";
+  } catch {
+    return "X";
+  }
+}
+
+function xAssetName(href: string, index: number) {
+  try {
+    const parsed = new URL(href);
+    const username = parsed.pathname.split("/").filter(Boolean)[0] || `post-${index}`;
+    const normalized = username.toLowerCase();
+    if (normalized === "jswihart") return "x-josh-swihart.png";
+    if (normalized === "warrendavidson") return "x-warren-davidson.png";
+    if (normalized === "jbsdc") return "x-justin-slaughter.png";
+    if (normalized === "austincampbell") return "x-austin-campbell.png";
+    return `x-${sanitizedAssetPart(username)}-${index}.png`;
+  } catch {
+    return `x-post-${index}.png`;
+  }
+}
+
+function xImageRole({
+  href,
+  pageText,
+  documentSocialIndex,
+}: {
+  href: string;
+  pageText: string;
+  documentSocialIndex: number;
+}): ExtractedPolicyUpdateImage["role"] {
+  const text = href.toLowerCase();
+  if (/\bjswihart\b/.test(text)) return "x-post-of-the-week";
+  if (/\bwarrendavidson\b/.test(text)) return "notable-post";
+  if (/\bjbsdc\b|\baustincampbell\b/.test(text)) return "notable-posts";
+  if (/\bx post of the week\b/i.test(pageText)) return "x-post-of-the-week";
+  if (/\bnotable posts\b/i.test(pageText)) return "notable-posts";
+  if (/\bnotable post\b/i.test(pageText)) return "notable-post";
+  if (documentSocialIndex === 1) return "x-post-of-the-week";
+  if (documentSocialIndex === 2) return "notable-post";
+  return "notable-posts";
+}
+
+function annotationRectToViewportRect(annotation: LinkAnnotation, viewport: any): ViewportRect | null {
+  if (!annotation.rect.length || typeof viewport?.convertToViewportRectangle !== "function") return null;
+  const rect = viewport.convertToViewportRectangle(annotation.rect);
+  if (!Array.isArray(rect) || rect.length !== 4) return null;
+  return {
+    left: Math.min(rect[0], rect[2]),
+    top: Math.min(rect[1], rect[3]),
+    right: Math.max(rect[0], rect[2]),
+    bottom: Math.max(rect[1], rect[3]),
+  };
+}
+
+function rectArea(rect: ViewportRect) {
+  return Math.max(0, rect.right - rect.left) * Math.max(0, rect.bottom - rect.top);
+}
+
+function rectIntersectionArea(a: ViewportRect, b: ViewportRect) {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  return Math.max(0, right - left) * Math.max(0, bottom - top);
+}
+
+function bestOverlappingLink(
+  imageRect: ViewportRect,
+  annotations: LinkAnnotation[],
+  viewport: any,
+) {
+  let best: { annotation: LinkAnnotation; score: number } | null = null;
+
+  for (const annotation of annotations) {
+    const annotationRect = annotationRectToViewportRect(annotation, viewport);
+    if (!annotationRect) continue;
+    const overlap = rectIntersectionArea(imageRect, annotationRect);
+    if (!overlap) continue;
+    const score = overlap / Math.max(1, Math.min(rectArea(imageRect), rectArea(annotationRect)));
+    if (!best || score > best.score) {
+      best = { annotation, score };
+    }
+  }
+
+  return best && best.score > 0.2 ? best.annotation : null;
+}
+
+function imageMetadataFromLink({
+  href,
+  page,
+  pageText,
+  documentSocialIndex,
+  fallbackIndex,
+}: {
+  href: string;
+  page: number;
+  pageText: string;
+  documentSocialIndex: number;
+  fallbackIndex: number;
+}): Omit<ExtractedPolicyUpdateImage, "src" | "width" | "height"> & { assetName: string } | null {
+  const lowerHref = href.toLowerCase();
+  if (lowerHref.includes("community.pgpz.org") && !lowerHref.includes("signal.group")) {
+    return null;
+  }
+
+  if (lowerHref.includes("signal.group")) {
+    return {
+      page,
+      role: "signal-chat",
+      assetName: "signal-chat-qr.png",
+      alt: "PGPZ Community Signal chat QR code",
+      caption: "Scan to join the PGPZ Community Signal chat.",
+      href,
+    };
+  }
+
+  if (lowerHref.includes("x.com/") || lowerHref.includes("twitter.com/")) {
+    const displayName = displayNameFromXHref(href);
+    const role = xImageRole({ href, pageText, documentSocialIndex });
+    return {
+      page,
+      role,
+      assetName: xAssetName(href, documentSocialIndex),
+      alt: `${displayName} X post screenshot`,
+      caption: `${displayName} X post embedded in the source memo.`,
+      href,
+    };
+  }
+
+  return {
+    page,
+    role: "source-graphic",
+    assetName: `source-graphic-page-${page}-${fallbackIndex}.png`,
+    alt: `Embedded source graphic from page ${page}`,
+    caption: "Embedded graphic from the source memo.",
+    href,
+  };
+}
+
+function imageMetadataFromDimensions({
+  page,
+  sourceWidth,
+  sourceHeight,
+  fallbackIndex,
+}: {
+  page: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  fallbackIndex: number;
+}): Omit<ExtractedPolicyUpdateImage, "src" | "width" | "height" | "href"> & { assetName: string } | null {
+  if (sourceWidth < 240 || sourceHeight < 180) return null;
+  if (page === 1 && Math.abs(sourceWidth - sourceHeight) < 80) return null;
+  if (sourceWidth < 700 && sourceHeight < 400) return null;
+
+  return {
+    page,
+    role: "source-graphic",
+    assetName: `source-graphic-page-${page}-${fallbackIndex}.png`,
+    alt: `Embedded source graphic from page ${page}`,
+    caption: "Embedded graphic from the source memo.",
+  };
+}
+
+async function uploadExtractedImageAsset({
+  record,
+  assetName,
+  bytes,
+}: {
+  record: UploadedPolicyUpdateRecord;
+  assetName: string;
+  bytes: Buffer;
+}) {
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: record.s3Bucket,
+      Key: assetObjectKey(record.s3Key, assetName),
+      Body: bytes,
+      ContentType: "image/png",
+      ServerSideEncryption: "AES256",
+    }),
+  );
+
+  return `/api/policy-updates/${encodeURIComponent(record.slug)}/assets/${assetName}`;
+}
+
+async function extractPageImageAssets({
+  record,
+  page,
+  pageNumber,
+  annotations,
+  pageText,
+  imagePaintOperator,
+  socialImageCounter,
+}: {
+  record: UploadedPolicyUpdateRecord;
+  page: any;
+  pageNumber: number;
+  annotations: LinkAnnotation[];
+  pageText: string;
+  imagePaintOperator: number;
+  socialImageCounter: { count: number };
+}) {
+  const { createCanvas } = await import("@napi-rs/canvas");
+  const viewport = page.getViewport({ scale: IMAGE_RENDER_SCALE });
+  const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  const context = canvas.getContext("2d");
+  await page.render({
+    canvasContext: context,
+    viewport,
+    recordOperations: true,
+  }).promise;
+
+  const operatorList = await page.getOperatorList();
+  const bboxes = page.recordedBBoxes;
+  const extracted: ExtractedPolicyUpdateImage[] = [];
+  let imageIndex = 0;
+
+  for (let opIndex = 0; opIndex < operatorList.fnArray.length; opIndex += 1) {
+    if (operatorList.fnArray[opIndex] !== imagePaintOperator || !bboxes || bboxes.isEmpty(opIndex)) continue;
+
+    imageIndex += 1;
+    const args = operatorList.argsArray[opIndex] || [];
+    const sourceWidth = Number(args[1] || 0);
+    const sourceHeight = Number(args[2] || 0);
+    const imageRect = {
+      left: bboxes.minX(opIndex) * canvas.width,
+      top: bboxes.minY(opIndex) * canvas.height,
+      right: bboxes.maxX(opIndex) * canvas.width,
+      bottom: bboxes.maxY(opIndex) * canvas.height,
+    };
+
+    const padding = 6;
+    const left = Math.max(0, Math.floor(imageRect.left) - padding);
+    const top = Math.max(0, Math.floor(imageRect.top) - padding);
+    const right = Math.min(canvas.width, Math.ceil(imageRect.right) + padding);
+    const bottom = Math.min(canvas.height, Math.ceil(imageRect.bottom) + padding);
+    const width = right - left;
+    const height = bottom - top;
+    if (width < 120 || height < 120) continue;
+
+    const link = bestOverlappingLink(imageRect, annotations, viewport);
+    const isSocialLink = !!link && /(?:x|twitter)\.com\//i.test(link.href);
+    if (isSocialLink) socialImageCounter.count += 1;
+
+    const metadata = link
+      ? imageMetadataFromLink({
+          href: link.href,
+          page: pageNumber,
+          pageText,
+          documentSocialIndex: socialImageCounter.count,
+          fallbackIndex: imageIndex,
+        })
+      : imageMetadataFromDimensions({
+          page: pageNumber,
+          sourceWidth,
+          sourceHeight,
+          fallbackIndex: imageIndex,
+        });
+    if (!metadata) continue;
+
+    const crop = createCanvas(width, height);
+    crop.getContext("2d").drawImage(canvas, left, top, width, height, 0, 0, width, height);
+    const bytes = crop.toBuffer("image/png");
+    const src = await uploadExtractedImageAsset({
+      record,
+      assetName: metadata.assetName,
+      bytes,
+    });
+
+    const href = "href" in metadata && typeof metadata.href === "string" ? metadata.href : undefined;
+    extracted.push({
+      src,
+      alt: metadata.alt,
+      caption: metadata.caption,
+      ...(href ? { href } : {}),
+      width,
+      height,
+      page: pageNumber,
+      role: metadata.role,
+    });
+
+    if (extracted.length >= MAX_EXTRACTED_IMAGES) break;
+  }
+
+  return extracted;
+}
+
+function formatDetectedImages(images: ExtractedPolicyUpdateImage[]) {
+  if (!images.length) return "No embeddable image assets were extracted.";
+  return images
+    .map((image) => {
+      const link = image.href ? `, href: ${image.href}` : "";
+      return `- Page ${image.page}: ${image.src} (${image.alt}${link})`;
+    })
+    .join("\n");
+}
+
+function contentHasImage(sections: GeneratedPolicyUpdateContent["sections"], src: string) {
+  return sections.some((section) => section.images?.some((image) => image.src === src));
+}
+
+function appendImageToFirstMatchingSection(
+  sections: GeneratedPolicyUpdateContent["sections"],
+  image: ExtractedPolicyUpdateImage,
+  pattern: RegExp,
+) {
+  const section = sections.find((candidate) =>
+    pattern.test(`${candidate.heading} ${candidate.body.join(" ")}`),
+  );
+  if (!section) return false;
+  section.images = [...(section.images || []), image];
+  return true;
+}
+
+function mergeExtractedImagesIntoContent(
+  content: GeneratedPolicyUpdateContent,
+  images: ExtractedPolicyUpdateImage[],
+): GeneratedPolicyUpdateContent {
+  if (!images.length) return content;
+  const sections = content.sections.map((section) => ({
+    ...section,
+    body: [...section.body],
+    ...(section.images ? { images: [...section.images] } : {}),
+  }));
+
+  const notablePosts: ExtractedPolicyUpdateImage[] = [];
+
+  for (const image of images) {
+    if (contentHasImage(sections, image.src)) continue;
+
+    if (image.role === "signal-chat") {
+      if (!appendImageToFirstMatchingSection(sections, image, /\bsignal\b|\bcommunity chat\b/i)) {
+        sections.unshift({ heading: "PGPZ Community Signal Chat", body: [], images: [image] });
+      }
+      continue;
+    }
+
+    if (image.role === "x-post-of-the-week") {
+      sections.push({ heading: "X Post of the Week", body: [], images: [image] });
+      continue;
+    }
+
+    if (image.role === "notable-post") {
+      sections.push({ heading: "Notable Post", body: [], images: [image] });
+      continue;
+    }
+
+    if (image.role === "notable-posts") {
+      notablePosts.push(image);
+      continue;
+    }
+
+    appendImageToFirstMatchingSection(sections, image, /graphic|image|figure|screenshot/i);
+  }
+
+  if (notablePosts.length) {
+    sections.push({ heading: "Notable Posts", body: [], images: notablePosts });
+  }
+
+  return {
+    ...content,
+    sections,
+  };
 }
 
 function promptForPolicyUpdate(record: UploadedPolicyUpdateRecord, extracted: ExtractedPolicyUpdatePdf) {
@@ -595,6 +1019,7 @@ Rules:
 - Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
 - Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
 - If image asset paths are already present in existing metadata or source content, place them in the closest relevant section's images array. Do not invent image URLs.
+- Use every detected image asset listed below unless it is clearly generic PGPZ signup/member boilerplate. Put each image's exact src in an images array. Keep X/social screenshots in standalone "X Post of the Week", "Notable Post", or "Notable Posts" sections.
 - Never include generic PGPZ Community signup/member QR images, "Not a PGPZ member?" QR images, or QR images whose purpose is joining the PGPZ Community itself. Signal chat QR images are allowed when they are part of the source document content.
 - Ignore repeated PDF chrome such as PGPZ Community headers, footers, page numbers, member-resource labels, QR-code captions, and community signup boilerplate unless it is part of the actual policy content.
 - Do not add filler such as "open the PDF resource", "the source PDF includes links", "this draft page can be published", or "review the source document".
@@ -616,6 +1041,9 @@ ${tables}
 
 Detected PDF links:
 ${formatDetectedLinks(extracted.links) || "No external PDF link annotations were detected."}
+
+Detected embeddable image assets:
+${formatDetectedImages(extracted.images)}
 
 Cleaned extracted PDF text:
 ${truncatePromptText(sourceTextForGeneration(extracted.text))}`;
@@ -704,7 +1132,10 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
   }
 }
 
-export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<ExtractedPolicyUpdatePdf> {
+export async function extractPolicyUpdatePdfContent(
+  bytes: Buffer,
+  record?: UploadedPolicyUpdateRecord,
+): Promise<ExtractedPolicyUpdatePdf> {
   const pdfjs = await loadPdfJs();
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(bytes),
@@ -717,6 +1148,8 @@ export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<Extr
   try {
     const pageTexts: string[] = [];
     const detectedLinks: ExtractedPolicyUpdatePdf["links"] = [];
+    const extractedImages: ExtractedPolicyUpdateImage[] = [];
+    const socialImageCounter = { count: 0 };
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
@@ -728,11 +1161,24 @@ export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<Extr
           }),
           page.getAnnotations({ intent: "display" }).catch(() => []),
         ]);
+        const pageLinks = linksFromAnnotations(pageNumber, annotations);
         const pageText = textContentToPageText(content);
         if (pageText) {
           pageTexts.push(`${pageText}\n\n--- Page ${pageNumber} of ${document.numPages} ---`);
         }
-        detectedLinks.push(...linksFromAnnotations(pageNumber, annotations));
+        detectedLinks.push(...pageLinks);
+        if (record && extractedImages.length < MAX_EXTRACTED_IMAGES) {
+          const images = await extractPageImageAssets({
+            record,
+            page,
+            pageNumber,
+            annotations: pageLinks,
+            pageText,
+            imagePaintOperator: pdfjs.OPS.paintImageXObject,
+            socialImageCounter,
+          });
+          extractedImages.push(...images);
+        }
       } finally {
         page.cleanup();
       }
@@ -748,6 +1194,7 @@ export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<Extr
       text,
       tables: [],
       links,
+      images: extractedImages.slice(0, MAX_EXTRACTED_IMAGES),
       sourceTextLength: text.length,
       sourceTextSha256: createHash("sha256").update(text).digest("hex"),
     };
@@ -766,7 +1213,7 @@ export async function generatePolicyUpdatePageContent(
     sourceTextSha256: string;
   }
 > {
-  const extracted = await extractPolicyUpdatePdfContent(bytes);
+  const extracted = await extractPolicyUpdatePdfContent(bytes, record);
   let normalized: GeneratedPolicyUpdateContent;
   let generatedModel = POLICY_UPDATE_GENERATION_MODEL;
 
@@ -785,6 +1232,7 @@ export async function generatePolicyUpdatePageContent(
     );
     generatedModel = `${POLICY_UPDATE_GENERATION_MODEL}+pdf-fallback`;
   }
+  normalized = mergeExtractedImagesIntoContent(normalized, extracted.images);
 
   return {
     ...normalized,
