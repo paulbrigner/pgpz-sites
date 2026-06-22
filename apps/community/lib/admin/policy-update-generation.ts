@@ -61,14 +61,14 @@ function compactWhitespace(value: string) {
 
 function stripPdfChrome(value: string) {
   return value
-    .replace(/PGPZ Community\s+Member Policy Resource/gi, " ")
-    .replace(/community\.pgpz\.org\s*\|\s*PGPZ Community\s*\|\s*Page\s+\d+/gi, " ")
-    .replace(/--- Page \d+ of \d+ ---/gi, " ")
-    .replace(/https:\/\/community\.pgpz\.org\/updates\/[^\s]+/gi, " ")
-    .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, " ")
+    .replace(/PGPZ Community\s+Member Policy Resource/gi, "")
+    .replace(/community\.pgpz\.org\s*\|\s*PGPZ Community\s*\|\s*Page\s+\d+/gi, "")
+    .replace(/\n?\s*--- Page \d+ of \d+ ---\s*\n?/gi, "\n")
+    .replace(/https:\/\/community\.pgpz\.org\/updates\/[^\s]+/gi, "")
+    .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, "")
     .replace(
       /We are excited to announce the launch of the PGPZ Community Signal chat[\s\S]*?scan the QR code to get started!?/gi,
-      " ",
+      "",
     );
 }
 
@@ -76,7 +76,7 @@ function sourceTextForExactConversion(value: string) {
   return compactWhitespace(
     stripPdfChrome(value)
       .replace(/\s+(Key Takeaways)\b/gi, "\n\n$1\n")
-      .replace(/\s+(Action Items?)\b/gi, "\n\n$1\n")
+      .replace(/\s+(Action Items?:?)/gi, "\n\n$1\n")
       .replace(/\s+(X Post of the Week:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Notable Posts?:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Why this matters for Zcash:?)/gi, "\n\n$1")
@@ -239,9 +239,14 @@ function inlineArticleHeading(line: string) {
 
 function articleHeadingAt(lines: string[], index: number) {
   const headingLines: string[] = [];
+  let sawHeadingText = false;
 
-  for (let offset = 0; offset < 4 && index + offset < lines.length; offset += 1) {
+  for (let offset = 0; offset < 6 && index + offset < lines.length; offset += 1) {
     const line = lines[index + offset];
+    if (!line) {
+      if (sawHeadingText) continue;
+      return null;
+    }
     if (isArticleBodyStart(line)) {
       return headingLines.length
         ? {
@@ -259,6 +264,7 @@ function articleHeadingAt(lines: string[], index: number) {
       return null;
     }
     headingLines.push(line);
+    sawHeadingText = true;
   }
 
   return null;
@@ -578,9 +584,10 @@ function textContentToPageText(content: any) {
     if (!item || typeof item.str !== "string") continue;
 
     const { y } = textItemPosition(item);
-    const movedToNewLine = lastY !== null && Math.abs(y - lastY) > 3.5;
+    const yDelta = lastY === null ? 0 : Math.abs(y - lastY);
+    const movedToNewLine = lastY !== null && yDelta > 3.5;
     if (movedToNewLine && output.length && output[output.length - 1] !== "\n") {
-      output.push("\n");
+      output.push(yDelta > 20 ? "\n\n" : "\n");
     }
 
     if (item.str) {
