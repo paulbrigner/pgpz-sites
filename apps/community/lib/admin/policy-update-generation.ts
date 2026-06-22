@@ -60,6 +60,7 @@ const MAX_EXTRACTED_IMAGES = 8;
 const PDF_IMAGE_OBJECT_TIMEOUT_MS = 5000;
 const MONTH_NAME_PATTERN =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+const ARTICLE_BODY_START_PATTERN = `On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}(?:,\\s+\\d{4})?\\b`;
 
 class VeniceTimeoutError extends Error {
   constructor() {
@@ -99,8 +100,8 @@ function sourceTextForGeneration(value: string) {
     stripPdfChrome(value)
       .replace(/\s+(Key Takeaways)\b/gi, "\n\n$1\n")
       .replace(/\s+(Action Items?)\b/gi, "\n\n$1\n")
-      .replace(/\s+(X Post of the Week:)/gi, "\n\n$1")
-      .replace(/\s+(Notable Posts?:)/gi, "\n\n$1")
+      .replace(/\s+(X Post of the Week:)\s*/gi, "\n\n$1\n")
+      .replace(/\s+(Notable Posts?:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Why this matters for Zcash:?)/gi, "\n\n$1")
       .replace(/\s+(Policy Developments?:)/gi, "\n\n$1")
       .replace(/\s+(Regulatory Developments?:)/gi, "\n\n$1")
@@ -129,6 +130,7 @@ function splitSourceLines(value: string) {
     .filter((line) => !/^PGPZ Community$/i.test(line))
     .filter((line) => !/^Member Policy Resource$/i.test(line))
     .filter((line) => !/^community\.pgpz\.org\b/i.test(line))
+    .filter((line) => !/^[:;]+$/.test(line))
     .filter((line) => !/^\d+$/.test(line));
 }
 
@@ -147,6 +149,17 @@ function sentenceItemsFromText(value: string, maxItems: number) {
     .map((sentence) => sentenceCase(sentence.replace(/^[-*•l]\s*/i, "").trim()))
     .filter((sentence) => sentence.length > 40)
     .slice(0, maxItems);
+}
+
+function isBoilerplateGeneratedSummary(value: string) {
+  const clean = value.replace(/\s+/g, " ").trim().toLowerCase();
+  return (
+    !clean ||
+    /pgpz community signal chat/.test(clean) ||
+    /not a pgpz member/.test(clean) ||
+    /scan (?:the )?qr code/.test(clean) ||
+    /join here/.test(clean)
+  );
 }
 
 function linesBetweenHeadings(lines: string[], startPattern: RegExp, endPatterns: RegExp[] = []) {
@@ -230,7 +243,26 @@ function socialMarkerHeading(line: string) {
 }
 
 function isArticleBodyStart(line: string) {
-  return new RegExp(`^On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2},\\s+\\d{4}\\b`, "i").test(line);
+  return new RegExp(`^${ARTICLE_BODY_START_PATTERN}`, "i").test(line);
+}
+
+function inlineArticleHeading(line: string) {
+  const match = line
+    .replace(/\s+/g, " ")
+    .trim()
+    .match(new RegExp(`^(.*?)\\s+(${ARTICLE_BODY_START_PATTERN}.*)$`, "i"));
+  if (!match) return null;
+
+  const heading = match[1].replace(/\s+/g, " ").trim();
+  const body = match[2].replace(/\s+/g, " ").trim();
+  if (!heading || !body) return null;
+  if (heading.length < 24 || heading.length > 240) return null;
+  if (socialMarkerHeading(heading) || splitFallbackHeading(heading)) return null;
+  if (/^(Key Takeaways|Action Items?|Policy Developments?|Regulatory Developments?)$/i.test(heading)) {
+    return null;
+  }
+
+  return { heading, body };
 }
 
 function articleHeadingAt(lines: string[], index: number) {
@@ -343,6 +375,14 @@ function fallbackSectionsFromText(
       continue;
     }
 
+    const inlineArticle = inlineArticleHeading(line);
+    if (inlineArticle) {
+      flush();
+      skippingSidebar = null;
+      current = { heading: inlineArticle.heading, lines: [inlineArticle.body] };
+      continue;
+    }
+
     const articleHeading = articleHeadingAt(lines, index);
     if (articleHeading) {
       flush();
@@ -361,7 +401,7 @@ function fallbackSectionsFromText(
           lines: [],
         };
       }
-      current.lines.push(heading.heading);
+      if (!/^Action Items?$/i.test(heading.heading)) current.lines.push(heading.heading);
       if (heading.remainder) current.lines.push(heading.remainder);
       continue;
     }
@@ -386,9 +426,11 @@ function fallbackPolicyUpdateContent(
 ): GeneratedPolicyUpdateContent {
   const lines = splitSourceLines(extracted.text);
   const paragraphs = splitParagraphsFromText(extracted.text);
+  const recordSummary = isBoilerplateGeneratedSummary(record.summary) ? "" : record.summary.trim();
   const summary =
-    record.summary ||
-    paragraphs.find((paragraph) => !paragraph.includes(record.title) && paragraph.length <= 850) ||
+    recordSummary ||
+    record.emailPreheader ||
+    paragraphs.find((paragraph) => !isBoilerplateGeneratedSummary(paragraph) && !paragraph.includes(record.title) && paragraph.length <= 850) ||
     extracted.text.slice(0, 850);
 
   const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [

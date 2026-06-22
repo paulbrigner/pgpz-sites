@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -165,6 +165,7 @@ const visibilityClassName = (update: PolicyUpdateSummary) => {
 const generationLabel = (update: PolicyUpdateSummary, isGenerating = false) => {
   if (update.source !== "uploaded") return "";
   if (isGenerating) return "Generating";
+  if (update.generationStatus === "generated" && generationUsedFallback(update)) return "Fallback used";
   if (update.generationStatus === "generated") return "Generated";
   if (update.generationStatus === "failed") return "Generation failed";
   return "Needs content";
@@ -172,10 +173,21 @@ const generationLabel = (update: PolicyUpdateSummary, isGenerating = false) => {
 
 const generationClassName = (update: PolicyUpdateSummary, isGenerating = false) => {
   if (isGenerating) return "border-sky-200 bg-sky-50 text-sky-700";
+  if (update.generationStatus === "generated" && generationUsedFallback(update)) {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
   if (update.generationStatus === "generated") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (update.generationStatus === "failed") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-amber-200 bg-amber-50 text-amber-800";
 };
+
+const generationUsedFallback = (update: PolicyUpdateSummary) =>
+  update.source === "uploaded" && /\+pdf-fallback\b/i.test(update.generatedModel || "");
+
+const generationModelName = (update: PolicyUpdateSummary) =>
+  (update.generatedModel || "")
+    .replace(/\+pdf-fallback\b/i, "")
+    .trim();
 
 function PolicyUpdateSendHistoryCard({
   send,
@@ -968,6 +980,22 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                       Until then, the draft preview uses the basic upload metadata and fallback page copy.
                     </>
                   )}
+                </div>
+              ) : selectedUpdate.source === "uploaded" && generationUsedFallback(selectedUpdate) ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <span className="font-semibold">Fallback used.</span>{" "}
+                      The AI conversion did not finish before the configured timeout, so this page content was
+                      generated with the deterministic PDF parser. Review the portal page before publishing or sending.
+                      {generationModelName(selectedUpdate) ? (
+                        <span className="mt-1 block text-xs uppercase tracking-[0.16em] text-amber-800">
+                          Requested model: {generationModelName(selectedUpdate)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
