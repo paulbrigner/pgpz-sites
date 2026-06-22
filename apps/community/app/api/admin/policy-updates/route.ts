@@ -22,7 +22,7 @@ import {
   findUserProfileByEmail,
   getUserProfileDisplayName,
 } from "@/lib/admin/user-profile";
-import { EMAIL_FROM, POLICY_UPDATE_GENERATION_MODEL, SITE_URL } from "@/lib/config";
+import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import {
   createPolicyUpdateUploadSlug,
   formatPolicyUpdateDisplayDate,
@@ -531,7 +531,7 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       slug: record.slug,
       error: message,
       generatedBy: adminUserId,
-      generatedModel: POLICY_UPDATE_GENERATION_MODEL,
+      generatedModel: "pdf-source-exact",
     }).catch(() => null);
 
     return NextResponse.json(
