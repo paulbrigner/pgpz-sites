@@ -65,9 +65,35 @@ type SendResult = {
   failures?: Array<{ email: string; error: string }>;
 };
 
+type UploadPrepareResponse = {
+  ok?: boolean;
+  error?: string;
+  upload?: {
+    slug: string;
+    s3Key: string;
+    uploadUrl: string;
+    headers?: Record<string, string>;
+  };
+  metadata?: {
+    category: "weekly" | "special";
+    publishedAt: string;
+    title: string;
+    shortTitle: string;
+    displayDate: string;
+    summary: string;
+    emailSubject: string;
+    emailPreheader: string;
+    fileName: string;
+    fileSize: number;
+    contentType: string;
+  };
+};
+
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
 };
+
+const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 const emptyStats: PolicyUpdateEmailStats = {
   sent: 0,
@@ -93,6 +119,11 @@ const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 const titleFromFileName = (fileName: string) =>
   fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+
+const fileHasPdfSignature = async (file: File) => {
+  const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+  return String.fromCharCode(...bytes) === "%PDF-";
+};
 
 function PolicyUpdateSendHistoryCard({
   send,
@@ -237,6 +268,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
@@ -312,6 +344,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const handleUploadFileChange = (file: File | null) => {
     setUploadFile(file);
     setUploadNotice(null);
+    setUploadError(null);
     if (file && !uploadTitle.trim()) {
       setUploadTitle(titleFromFileName(file.name));
     }
@@ -319,13 +352,17 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
   const uploadPolicyUpdate = async () => {
     if (!uploadFile) {
-      setError("Choose a PDF file to upload.");
+      setUploadError("Choose a PDF file to upload.");
       return;
     }
     const looksLikePdf =
       uploadFile.type === "application/pdf" || uploadFile.name.toLowerCase().endsWith(".pdf");
     if (!looksLikePdf) {
-      setError("Only PDF uploads are allowed.");
+      setUploadError("Only PDF uploads are allowed.");
+      return;
+    }
+    if (uploadFile.size > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
+      setUploadError("PDF upload must be 25 MB or smaller.");
       return;
     }
 
@@ -333,20 +370,56 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     setError(null);
     setResult(null);
     setUploadNotice(null);
+    setUploadError(null);
     try {
-      const form = new FormData();
-      form.append("file", uploadFile);
-      form.append("title", uploadTitle.trim());
-      form.append("category", uploadCategory);
-      form.append("publishedAt", uploadPublishedAt);
-      form.append("summary", uploadSummary.trim());
+      if (!(await fileHasPdfSignature(uploadFile))) {
+        throw new Error("Uploaded file is not a valid PDF.");
+      }
 
-      const res = await fetch("/api/admin/policy-updates", {
+      const metadata = {
+        title: uploadTitle.trim(),
+        category: uploadCategory,
+        publishedAt: uploadPublishedAt,
+        summary: uploadSummary.trim(),
+        fileName: uploadFile.name,
+        fileSize: uploadFile.size,
+        contentType: uploadFile.type || "application/pdf",
+      };
+
+      const prepareRes = await fetch("/api/admin/policy-updates", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "prepareUpload",
+          ...metadata,
+        }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Failed to upload policy update PDF");
+      const prepared = (await prepareRes.json().catch(() => ({}))) as UploadPrepareResponse;
+      if (!prepareRes.ok || !prepared.upload?.uploadUrl || !prepared.upload?.slug || !prepared.upload?.s3Key) {
+        throw new Error(prepared?.error || "Failed to prepare policy update upload.");
+      }
+
+      const uploadRes = await fetch(prepared.upload.uploadUrl, {
+        method: "PUT",
+        headers: prepared.upload.headers || { "Content-Type": "application/pdf" },
+        body: uploadFile,
+      });
+      if (!uploadRes.ok) {
+        throw new Error(`Storage upload failed with status ${uploadRes.status}.`);
+      }
+
+      const completeRes = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "completeUpload",
+          slug: prepared.upload.slug,
+          s3Key: prepared.upload.s3Key,
+          ...(prepared.metadata || metadata),
+        }),
+      });
+      const body = await completeRes.json().catch(() => ({}));
+      if (!completeRes.ok) throw new Error(body?.error || "Failed to finish policy update upload.");
 
       const uploadedSlug = body?.update?.slug || "";
       setUploadNotice(`Uploaded ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
@@ -357,7 +430,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       await loadState();
       if (uploadedSlug) setSelectedSlug(uploadedSlug);
     } catch (err: any) {
-      setError(err?.message || "Failed to upload policy update PDF");
+      setUploadError(err?.message || "Failed to upload policy update PDF");
     } finally {
       setUploading(false);
     }
@@ -562,6 +635,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 {uploading ? "Uploading..." : "Upload PDF"}
               </Button>
               {uploadNotice ? <p className="text-xs leading-5 text-emerald-700">{uploadNotice}</p> : null}
+              {uploadError ? <p className="text-xs leading-5 text-rose-700">{uploadError}</p> : null}
             </div>
           </div>
           <div className="space-y-2">

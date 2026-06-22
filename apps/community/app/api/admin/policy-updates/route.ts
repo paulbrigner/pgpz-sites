@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
@@ -93,6 +94,213 @@ const titleFromFileName = (fileName: string) =>
 
 const isPublishedDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
+const textFromBody = (body: any, name: string) =>
+  typeof body?.[name] === "string" ? body[name].trim() : "";
+
+const numberFromBody = (body: any, name: string) => {
+  const value = Number(body?.[name]);
+  return Number.isFinite(value) ? value : 0;
+};
+
+const uploadMetadataFromValues = ({
+  categoryValue,
+  publishedAtValue,
+  titleValue,
+  shortTitleValue,
+  displayDateValue,
+  summaryValue,
+  emailSubjectValue,
+  emailPreheaderValue,
+  fileName,
+}: {
+  categoryValue: unknown;
+  publishedAtValue: string;
+  titleValue: string;
+  shortTitleValue: string;
+  displayDateValue: string;
+  summaryValue: string;
+  emailSubjectValue: string;
+  emailPreheaderValue: string;
+  fileName: string;
+}) => {
+  const category = normalizePolicyUpdateCategory(categoryValue);
+  const publishedAt = isPublishedDate(publishedAtValue)
+    ? publishedAtValue
+    : new Date().toISOString().slice(0, 10);
+  const title = titleValue || titleFromFileName(fileName) || "Policy Update";
+  const shortTitle = shortTitleValue || title;
+  const displayDate = displayDateValue || formatPolicyUpdateDisplayDate(category, publishedAt);
+  return {
+    category,
+    publishedAt,
+    title,
+    shortTitle,
+    displayDate,
+    summary: summaryValue,
+    emailSubject: emailSubjectValue,
+    emailPreheader: emailPreheaderValue,
+  };
+};
+
+const streamToBuffer = async (body: any) => {
+  if (!body) return Buffer.alloc(0);
+  if (typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+};
+
+async function preparePolicyUpdateUpload(body: any) {
+  const bucket = getPolicyUpdateUploadBucket();
+  if (!bucket) {
+    return NextResponse.json(
+      { error: "Policy update upload bucket is not configured" },
+      { status: 500 },
+    );
+  }
+
+  const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
+  const contentType = textFromBody(body, "contentType") || "application/pdf";
+  const fileSize = numberFromBody(body, "fileSize");
+  const fileLooksLikePdf =
+    fileName.toLowerCase().endsWith(".pdf") || contentType === "application/pdf";
+  if (!fileLooksLikePdf) {
+    return NextResponse.json({ error: "Only PDF uploads are allowed" }, { status: 400 });
+  }
+  if (!fileSize || fileSize > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "PDF upload must be 25 MB or smaller" },
+      { status: 400 },
+    );
+  }
+
+  const metadata = uploadMetadataFromValues({
+    categoryValue: body?.category,
+    publishedAtValue: textFromBody(body, "publishedAt"),
+    titleValue: textFromBody(body, "title"),
+    shortTitleValue: textFromBody(body, "shortTitle"),
+    displayDateValue: textFromBody(body, "displayDate"),
+    summaryValue: textFromBody(body, "summary"),
+    emailSubjectValue: textFromBody(body, "emailSubject"),
+    emailPreheaderValue: textFromBody(body, "emailPreheader"),
+    fileName,
+  });
+  const slug = createPolicyUpdateUploadSlug({
+    title: metadata.title,
+    publishedAt: metadata.publishedAt,
+  });
+  const s3Key = policyUpdateUploadObjectKey(slug);
+  const uploadHeaders = {
+    "Content-Type": "application/pdf",
+    "x-amz-server-side-encryption": "AES256",
+  };
+  const uploadUrl = await getSignedUrl(
+    s3Client,
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: s3Key,
+      ContentType: "application/pdf",
+      ServerSideEncryption: "AES256",
+    }),
+    { expiresIn: 600 },
+  );
+
+  return NextResponse.json({
+    ok: true,
+    upload: {
+      slug,
+      s3Key,
+      uploadUrl,
+      headers: uploadHeaders,
+    },
+    metadata: {
+      ...metadata,
+      fileName,
+      fileSize,
+      contentType: "application/pdf",
+    },
+  });
+}
+
+async function completePolicyUpdateUpload(body: any) {
+  const bucket = getPolicyUpdateUploadBucket();
+  if (!bucket) {
+    return NextResponse.json(
+      { error: "Policy update upload bucket is not configured" },
+      { status: 500 },
+    );
+  }
+
+  const slug = textFromBody(body, "slug");
+  const s3Key = textFromBody(body, "s3Key");
+  const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
+  if (!slug || !s3Key || s3Key !== policyUpdateUploadObjectKey(slug)) {
+    return NextResponse.json({ error: "Invalid upload completion request" }, { status: 400 });
+  }
+
+  let head;
+  try {
+    head = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
+  } catch {
+    return NextResponse.json({ error: "Uploaded PDF was not found in storage" }, { status: 400 });
+  }
+
+  const fileSize = Number(head.ContentLength || 0);
+  if (!fileSize || fileSize > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "PDF upload must be 25 MB or smaller" },
+      { status: 400 },
+    );
+  }
+
+  const objectStart = await s3Client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: s3Key,
+      Range: "bytes=0-4",
+    }),
+  );
+  const signature = await streamToBuffer(objectStart.Body);
+  if (signature.toString("ascii") !== "%PDF-") {
+    return NextResponse.json({ error: "Uploaded file is not a valid PDF" }, { status: 400 });
+  }
+
+  const metadata = uploadMetadataFromValues({
+    categoryValue: body?.category,
+    publishedAtValue: textFromBody(body, "publishedAt"),
+    titleValue: textFromBody(body, "title"),
+    shortTitleValue: textFromBody(body, "shortTitle"),
+    displayDateValue: textFromBody(body, "displayDate"),
+    summaryValue: textFromBody(body, "summary"),
+    emailSubjectValue: textFromBody(body, "emailSubject"),
+    emailPreheaderValue: textFromBody(body, "emailPreheader"),
+    fileName,
+  });
+  const uploadedAt = new Date().toISOString();
+  const upload = await saveUploadedPolicyUpdate({
+    slug,
+    ...metadata,
+    fileName,
+    fileSize,
+    contentType: "application/pdf",
+    s3Bucket: bucket,
+    s3Key,
+    uploadedAt,
+    uploadedBy: null,
+  });
+
+  const update = await getDistributablePolicyUpdate(upload.slug);
+  return NextResponse.json({
+    ok: true,
+    update: update ? policyUpdateToSummary(update, "uploaded", upload) : null,
+  });
+}
+
 async function handlePolicyUpdateUpload(request: NextRequest) {
   const bucket = getPolicyUpdateUploadBucket();
   if (!bucket) {
@@ -127,17 +335,22 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
   }
 
   const category = normalizePolicyUpdateCategory(formText(form, "category"));
-  const publishedAt = isPublishedDate(formText(form, "publishedAt"))
-    ? formText(form, "publishedAt")
-    : new Date().toISOString().slice(0, 10);
-  const title = formText(form, "title") || titleFromFileName(fileName) || "Policy Update";
-  const shortTitle = formText(form, "shortTitle") || title;
-  const displayDate = formText(form, "displayDate") || formatPolicyUpdateDisplayDate(category, publishedAt);
-  const summary = formText(form, "summary");
-  const emailSubject = formText(form, "emailSubject");
-  const emailPreheader = formText(form, "emailPreheader");
+  const metadata = uploadMetadataFromValues({
+    categoryValue: category,
+    publishedAtValue: formText(form, "publishedAt"),
+    titleValue: formText(form, "title"),
+    shortTitleValue: formText(form, "shortTitle"),
+    displayDateValue: formText(form, "displayDate"),
+    summaryValue: formText(form, "summary"),
+    emailSubjectValue: formText(form, "emailSubject"),
+    emailPreheaderValue: formText(form, "emailPreheader"),
+    fileName,
+  });
   const uploadedAt = new Date().toISOString();
-  const slug = createPolicyUpdateUploadSlug({ title, publishedAt });
+  const slug = createPolicyUpdateUploadSlug({
+    title: metadata.title,
+    publishedAt: metadata.publishedAt,
+  });
   const s3Key = policyUpdateUploadObjectKey(slug);
 
   await s3Client.send(
@@ -152,14 +365,7 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
 
   const upload = await saveUploadedPolicyUpdate({
     slug,
-    category,
-    title,
-    shortTitle,
-    publishedAt,
-    displayDate,
-    summary,
-    emailSubject,
-    emailPreheader,
+    ...metadata,
     fileName,
     fileSize: bytes.length,
     contentType: "application/pdf",
@@ -226,16 +432,23 @@ export async function POST(request: NextRequest) {
     return handlePolicyUpdateUpload(request);
   }
 
-  const transportConfig = buildEmailServerConfig();
-  if (!transportConfig || !EMAIL_FROM) {
-    return NextResponse.json({ error: "Email provider not configured" }, { status: 500 });
-  }
-
   let body: any = null;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (body?.action === "prepareUpload") {
+    return preparePolicyUpdateUpload(body);
+  }
+  if (body?.action === "completeUpload") {
+    return completePolicyUpdateUpload(body);
+  }
+
+  const transportConfig = buildEmailServerConfig();
+  if (!transportConfig || !EMAIL_FROM) {
+    return NextResponse.json({ error: "Email provider not configured" }, { status: 500 });
   }
 
   const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
