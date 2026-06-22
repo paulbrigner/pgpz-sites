@@ -7,6 +7,7 @@ import {
   policyUpdates,
   type PolicyUpdate,
   type PolicyUpdateCategory,
+  type PolicyUpdateGenerationStatus,
   type PolicyUpdateSection,
   type PolicyUpdateSummary,
   type PolicyUpdateVisibilityStatus,
@@ -44,6 +45,13 @@ export type UploadedPolicyUpdateRecord = {
   keyTakeaways: string[];
   actionItems: string[];
   sections: PolicyUpdateSection[];
+  generationStatus: PolicyUpdateGenerationStatus;
+  generatedAt: string | null;
+  generatedBy: string | null;
+  generatedModel: string | null;
+  generationError: string | null;
+  generationSourceTextLength: number | null;
+  generationSourceTextSha256: string | null;
   uploadedAt: string;
   uploadedBy: string | null;
 };
@@ -61,6 +69,13 @@ export type SaveUploadedPolicyUpdateInput = Omit<
   | "keyTakeaways"
   | "actionItems"
   | "sections"
+  | "generationStatus"
+  | "generatedAt"
+  | "generatedBy"
+  | "generatedModel"
+  | "generationError"
+  | "generationSourceTextLength"
+  | "generationSourceTextSha256"
 > &
   Partial<
     Pick<
@@ -73,14 +88,40 @@ export type SaveUploadedPolicyUpdateInput = Omit<
       | "keyTakeaways"
       | "actionItems"
       | "sections"
+      | "generationStatus"
+      | "generatedAt"
+      | "generatedBy"
+      | "generatedModel"
+      | "generationError"
+      | "generationSourceTextLength"
+      | "generationSourceTextSha256"
     >
   >;
+
+export type SaveGeneratedPolicyUpdateContentInput = {
+  slug: string;
+  shortTitle?: string;
+  summary: string;
+  emailSubject?: string;
+  emailPreheader: string;
+  keyTakeaways: string[];
+  actionItems: string[];
+  sections: PolicyUpdateSection[];
+  generatedBy: string | null;
+  generatedModel: string;
+  sourceTextLength: number;
+  sourceTextSha256: string;
+};
 
 const textOrEmpty = (value: unknown) => (typeof value === "string" ? value : "");
 const textOrNull = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
 
 function normalizeVisibilityStatus(value: unknown): PolicyUpdateVisibilityStatus {
   return value === "published" || value === "unpublished" ? value : "draft";
+}
+
+function normalizeGenerationStatus(value: unknown): PolicyUpdateGenerationStatus {
+  return value === "generated" || value === "failed" ? value : "not_started";
 }
 
 const textArrayOrFallback = (value: unknown, fallback: string[]) => {
@@ -274,6 +315,15 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
     keyTakeaways: textArrayOrFallback(item.keyTakeaways, defaultContent.keyTakeaways),
     actionItems: textArrayOrFallback(item.actionItems, defaultContent.actionItems),
     sections: sectionArrayOrFallback(item.sections, defaultContent.sections),
+    generationStatus: normalizeGenerationStatus(item.generationStatus),
+    generatedAt: textOrNull(item.generatedAt),
+    generatedBy: textOrNull(item.generatedBy),
+    generatedModel: textOrNull(item.generatedModel),
+    generationError: textOrNull(item.generationError),
+    generationSourceTextLength: Number.isFinite(Number(item.generationSourceTextLength))
+      ? Number(item.generationSourceTextLength)
+      : null,
+    generationSourceTextSha256: textOrNull(item.generationSourceTextSha256),
     uploadedAt: textOrEmpty(item.uploadedAt),
     uploadedBy: textOrNull(item.uploadedBy),
   };
@@ -313,6 +363,13 @@ export function policyUpdateToSummary(
     | "publishedBy"
     | "unpublishedOn"
     | "unpublishedBy"
+    | "generationStatus"
+    | "generatedAt"
+    | "generatedBy"
+    | "generatedModel"
+    | "generationError"
+    | "generationSourceTextLength"
+    | "generationSourceTextSha256"
   >,
 ): PolicyUpdateSummary {
   return {
@@ -337,6 +394,17 @@ export function policyUpdateToSummary(
     unpublishedBy: source === "uploaded" ? upload?.unpublishedBy || null : null,
     uploadedAt: upload?.uploadedAt || null,
     fileName: upload?.fileName || null,
+    generationStatus: source === "uploaded" ? upload?.generationStatus || "not_started" : null,
+    generatedAt: source === "uploaded" ? upload?.generatedAt || null : null,
+    generatedBy: source === "uploaded" ? upload?.generatedBy || null : null,
+    generatedModel: source === "uploaded" ? upload?.generatedModel || null : null,
+    generationError: source === "uploaded" ? upload?.generationError || null : null,
+    generationSourceTextLength:
+      source === "uploaded" && typeof upload?.generationSourceTextLength === "number"
+        ? upload.generationSourceTextLength
+        : null,
+    generationSourceTextSha256:
+      source === "uploaded" ? upload?.generationSourceTextSha256 || null : null,
   };
 }
 
@@ -370,6 +438,13 @@ export async function saveUploadedPolicyUpdate(
     keyTakeaways: input.keyTakeaways?.length ? input.keyTakeaways : defaultContent.keyTakeaways,
     actionItems: input.actionItems?.length ? input.actionItems : defaultContent.actionItems,
     sections: input.sections?.length ? input.sections : defaultContent.sections,
+    generationStatus: input.generationStatus || "not_started",
+    generatedAt: input.generatedAt || null,
+    generatedBy: input.generatedBy || null,
+    generatedModel: input.generatedModel || null,
+    generationError: input.generationError || null,
+    generationSourceTextLength: input.generationSourceTextLength || null,
+    generationSourceTextSha256: input.generationSourceTextSha256 || null,
   };
 
   await documentClient.put({
@@ -385,6 +460,122 @@ export async function saveUploadedPolicyUpdate(
   });
 
   return record;
+}
+
+export async function saveGeneratedPolicyUpdateContent(
+  input: SaveGeneratedPolicyUpdateContentInput,
+) {
+  const slug = input.slug.trim();
+  if (!slug) return null;
+
+  const existing = await getUploadedPolicyUpdateRecord(slug);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const shortTitle = input.shortTitle?.trim() || existing.shortTitle;
+  const emailSubject = input.emailSubject?.trim() || existing.emailSubject;
+
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: {
+      pk: `POLICY_UPDATE_UPLOAD#${slug}`,
+      sk: `POLICY_UPDATE_UPLOAD#${slug}`,
+    },
+    UpdateExpression: [
+      "SET #shortTitle = :shortTitle",
+      "#summary = :summary",
+      "#emailSubject = :emailSubject",
+      "#emailPreheader = :emailPreheader",
+      "#keyTakeaways = :keyTakeaways",
+      "#actionItems = :actionItems",
+      "#sections = :sections",
+      "#generationStatus = :generationStatus",
+      "#generatedAt = :generatedAt",
+      "#generatedBy = :generatedBy",
+      "#generatedModel = :generatedModel",
+      "#generationError = :generationError",
+      "#generationSourceTextLength = :generationSourceTextLength",
+      "#generationSourceTextSha256 = :generationSourceTextSha256",
+    ].join(", "),
+    ExpressionAttributeNames: {
+      "#shortTitle": "shortTitle",
+      "#summary": "summary",
+      "#emailSubject": "emailSubject",
+      "#emailPreheader": "emailPreheader",
+      "#keyTakeaways": "keyTakeaways",
+      "#actionItems": "actionItems",
+      "#sections": "sections",
+      "#generationStatus": "generationStatus",
+      "#generatedAt": "generatedAt",
+      "#generatedBy": "generatedBy",
+      "#generatedModel": "generatedModel",
+      "#generationError": "generationError",
+      "#generationSourceTextLength": "generationSourceTextLength",
+      "#generationSourceTextSha256": "generationSourceTextSha256",
+    },
+    ExpressionAttributeValues: {
+      ":shortTitle": shortTitle,
+      ":summary": input.summary,
+      ":emailSubject": emailSubject,
+      ":emailPreheader": input.emailPreheader,
+      ":keyTakeaways": input.keyTakeaways,
+      ":actionItems": input.actionItems,
+      ":sections": input.sections,
+      ":generationStatus": "generated",
+      ":generatedAt": now,
+      ":generatedBy": input.generatedBy,
+      ":generatedModel": input.generatedModel,
+      ":generationError": null,
+      ":generationSourceTextLength": input.sourceTextLength,
+      ":generationSourceTextSha256": input.sourceTextSha256,
+    },
+  });
+
+  return getUploadedPolicyUpdateRecord(slug);
+}
+
+export async function savePolicyUpdateGenerationFailure({
+  slug,
+  error,
+  generatedBy,
+  generatedModel,
+}: {
+  slug: string;
+  error: string;
+  generatedBy: string | null;
+  generatedModel: string;
+}) {
+  const cleanSlug = slug.trim();
+  if (!cleanSlug) return null;
+
+  const existing = await getUploadedPolicyUpdateRecord(cleanSlug);
+  if (!existing) return null;
+
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: {
+      pk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
+      sk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
+    },
+    UpdateExpression:
+      "SET #generationStatus = :generationStatus, #generatedAt = :generatedAt, #generatedBy = :generatedBy, #generatedModel = :generatedModel, #generationError = :generationError",
+    ExpressionAttributeNames: {
+      "#generationStatus": "generationStatus",
+      "#generatedAt": "generatedAt",
+      "#generatedBy": "generatedBy",
+      "#generatedModel": "generatedModel",
+      "#generationError": "generationError",
+    },
+    ExpressionAttributeValues: {
+      ":generationStatus": "failed",
+      ":generatedAt": new Date().toISOString(),
+      ":generatedBy": generatedBy,
+      ":generatedModel": generatedModel,
+      ":generationError": error.slice(0, 1000),
+    },
+  });
+
+  return getUploadedPolicyUpdateRecord(cleanSlug);
 }
 
 export async function getUploadedPolicyUpdateRecord(slug: string) {

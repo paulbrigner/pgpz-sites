@@ -22,7 +22,7 @@ import {
   findUserProfileByEmail,
   getUserProfileDisplayName,
 } from "@/lib/admin/user-profile";
-import { EMAIL_FROM, SITE_URL } from "@/lib/config";
+import { EMAIL_FROM, POLICY_UPDATE_GENERATION_MODEL, SITE_URL } from "@/lib/config";
 import {
   createPolicyUpdateUploadSlug,
   formatPolicyUpdateDisplayDate,
@@ -34,10 +34,13 @@ import {
   policyUpdateToSummary,
   policyUpdateUploadObjectKey,
   publishUploadedPolicyUpdate,
+  saveGeneratedPolicyUpdateContent,
+  savePolicyUpdateGenerationFailure,
   saveUploadedPolicyUpdate,
   unpublishUploadedPolicyUpdate,
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
+import { generatePolicyUpdatePageContent } from "@/lib/admin/policy-update-generation";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
 import { s3Client } from "@/lib/s3";
 
@@ -391,6 +394,73 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
   });
 }
 
+async function generateUploadedPolicyUpdateContent(body: any, adminUserId: string | null) {
+  const slug = textFromBody(body, "slug");
+  if (!slug) {
+    return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
+  }
+
+  const record = await getUploadedPolicyUpdateRecord(slug);
+  if (!record) {
+    return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+  }
+
+  try {
+    const object = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: record.s3Bucket,
+        Key: record.s3Key,
+      }),
+    );
+    const bytes = await streamToBuffer(object.Body);
+    if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw new Error("Stored upload is not a valid PDF.");
+    }
+
+    const generated = await generatePolicyUpdatePageContent(record, bytes);
+    const updated = await saveGeneratedPolicyUpdateContent({
+      slug: record.slug,
+      shortTitle: generated.shortTitle,
+      summary: generated.summary,
+      emailSubject: generated.emailSubject,
+      emailPreheader: generated.emailPreheader,
+      keyTakeaways: generated.keyTakeaways,
+      actionItems: generated.actionItems,
+      sections: generated.sections,
+      generatedBy: adminUserId,
+      generatedModel: generated.generatedModel,
+      sourceTextLength: generated.sourceTextLength,
+      sourceTextSha256: generated.sourceTextSha256,
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      update: policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(updated), "uploaded", updated),
+    });
+  } catch (err: any) {
+    const message = typeof err?.message === "string" ? err.message : "Failed to generate policy update content.";
+    const failed = await savePolicyUpdateGenerationFailure({
+      slug: record.slug,
+      error: message,
+      generatedBy: adminUserId,
+      generatedModel: POLICY_UPDATE_GENERATION_MODEL,
+    }).catch(() => null);
+
+    return NextResponse.json(
+      {
+        error: message,
+        update: failed
+          ? policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(failed), "uploaded", failed)
+          : null,
+      },
+      { status: 500 },
+    );
+  }
+}
+
 async function resolvePolicyUpdateAudience(body: any) {
   const audienceMode: PolicyUpdateAudienceMode =
     body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
@@ -454,6 +524,9 @@ export async function POST(request: NextRequest) {
   }
   if (body?.action === "completeUpload") {
     return completePolicyUpdateUpload(body, adminUserId);
+  }
+  if (body?.action === "generateContent") {
+    return generateUploadedPolicyUpdateContent(body, adminUserId);
   }
   if (body?.action === "publishUpdate" || body?.action === "unpublishUpdate") {
     const slug = textFromBody(body, "slug");

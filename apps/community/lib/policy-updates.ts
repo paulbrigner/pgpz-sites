@@ -1,5 +1,6 @@
 export type PolicyUpdateCategory = "weekly" | "special";
 export type PolicyUpdateVisibilityStatus = "draft" | "published" | "unpublished";
+export type PolicyUpdateGenerationStatus = "not_started" | "generated" | "failed";
 
 export type PolicyUpdateSection = {
   heading: string;
@@ -63,6 +64,13 @@ export type PolicyUpdateSummary = Pick<
   unpublishedBy?: string | null;
   uploadedAt?: string | null;
   fileName?: string | null;
+  generationStatus?: PolicyUpdateGenerationStatus | null;
+  generatedAt?: string | null;
+  generatedBy?: string | null;
+  generatedModel?: string | null;
+  generationError?: string | null;
+  generationSourceTextLength?: number | null;
+  generationSourceTextSha256?: string | null;
 };
 
 export const policyUpdateCategoryLabels: Record<PolicyUpdateCategory, string> = {
@@ -363,6 +371,13 @@ export const getPolicyUpdateSummaries = (): PolicyUpdateSummary[] =>
       unpublishedBy: null,
       uploadedAt: null,
       fileName: null,
+      generationStatus: null,
+      generatedAt: null,
+      generatedBy: null,
+      generatedModel: null,
+      generationError: null,
+      generationSourceTextLength: null,
+      generationSourceTextSha256: null,
     }),
   );
 

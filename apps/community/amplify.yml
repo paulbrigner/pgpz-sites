@@ -43,6 +43,11 @@ frontend:
         - env | grep -e PRIVATE_KEY_SECRET >> .env.production || true
         - env | grep -e POLICY_UPDATE_UPLOAD_BUCKET >> .env.production || true
         - env | grep -e POLICY_UPDATE_UPLOAD_PREFIX >> .env.production || true
+        - env | grep -e VENICE_API_KEY >> .env.production || true
+        - env | grep -e POLICY_UPDATE_GENERATION_BASE_URL >> .env.production || true
+        - env | grep -e POLICY_UPDATE_GENERATION_MODEL >> .env.production || true
+        - env | grep -e POLICY_UPDATE_GENERATION_TIMEOUT_MS >> .env.production || true
+        - env | grep -e POLICY_UPDATE_GENERATION_MAX_TOKENS >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next

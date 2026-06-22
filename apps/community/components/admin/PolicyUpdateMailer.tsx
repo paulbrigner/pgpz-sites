@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, UploadCloud, UsersRound } from "lucide-react";
+import { BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -136,6 +136,19 @@ const visibilityClassName = (update: PolicyUpdateSummary) => {
   const status = update.source === "uploaded" ? update.visibilityStatus || "draft" : "published";
   if (status === "published") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "unpublished") return "border-slate-200 bg-slate-50 text-slate-600";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+};
+
+const generationLabel = (update: PolicyUpdateSummary) => {
+  if (update.source !== "uploaded") return "";
+  if (update.generationStatus === "generated") return "Generated";
+  if (update.generationStatus === "failed") return "Generation failed";
+  return "Needs content";
+};
+
+const generationClassName = (update: PolicyUpdateSummary) => {
+  if (update.generationStatus === "generated") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (update.generationStatus === "failed") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-amber-200 bg-amber-50 text-amber-800";
 };
 
@@ -287,6 +300,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
+  const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -298,6 +312,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const selectedVisibilityStatus =
     selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
   const selectedCanSendMembers = selectedVisibilityStatus === "published";
+  const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
     const selected = new Set(selectedRecipientIds);
@@ -487,6 +502,42 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || `Failed to ${verb} policy update`);
     } finally {
       setVisibilityUpdatingSlug(null);
+    }
+  };
+
+  const generateSelectedContent = async () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded") return;
+    if (
+      selectedUpdate.generationStatus === "generated" &&
+      !window.confirm(`Regenerate page content for "${selectedUpdate.shortTitle || selectedUpdate.title}"?`)
+    ) {
+      return;
+    }
+
+    setGeneratingContentSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generateContent",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to generate policy update content");
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+      setUploadNotice(`Generated page content for ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate policy update content");
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+    } finally {
+      setGeneratingContentSlug(null);
     }
   };
 
@@ -738,6 +789,16 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                       >
                         {visibilityLabel(update)}
                       </span>
+                      {update.source === "uploaded" ? (
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]",
+                            generationClassName(update),
+                          )}
+                        >
+                          {generationLabel(update)}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="mt-1 block text-sm font-semibold text-[var(--brand-ink)]">
                       {update.shortTitle}
@@ -775,12 +836,37 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   >
                     {visibilityLabel(selectedUpdate)}
                   </div>
+                  {selectedUpdate.source === "uploaded" ? (
+                    <div
+                      className={cn(
+                        "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]",
+                        generationClassName(selectedUpdate),
+                      )}
+                    >
+                      {generationLabel(selectedUpdate)}
+                    </div>
+                  ) : null}
                   <h3 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
                     {selectedUpdate.title}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{selectedUpdate.summary}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
+                  {selectedUpdate.source === "uploaded" ? (
+                    <Button
+                      type="button"
+                      variant={selectedHasGeneratedContent ? "outline" : "default"}
+                      onClick={generateSelectedContent}
+                      disabled={generatingContentSlug === selectedUpdate.slug}
+                    >
+                      <Sparkles className={cn("h-4 w-4", generatingContentSlug === selectedUpdate.slug && "animate-pulse")} />
+                      {generatingContentSlug === selectedUpdate.slug
+                        ? "Generating..."
+                        : selectedHasGeneratedContent
+                          ? "Regenerate"
+                          : "Generate content"}
+                    </Button>
+                  ) : null}
                   <Button variant="outline" asChild>
                     <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
                       Portal view
@@ -809,6 +895,29 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   ) : null}
                 </div>
               </div>
+
+              {selectedUpdate.source === "uploaded" && !selectedHasGeneratedContent ? (
+                <div
+                  className={cn(
+                    "rounded-xl border px-4 py-3 text-sm leading-6",
+                    selectedUpdate.generationStatus === "failed"
+                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                      : "border-amber-200 bg-amber-50 text-amber-950",
+                  )}
+                >
+                  {selectedUpdate.generationStatus === "failed" ? (
+                    <>
+                      <span className="font-semibold">Generation failed.</span>{" "}
+                      {selectedUpdate.generationError || "Review the upload and try again."}
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">Generate page content before publishing.</span>{" "}
+                      Until then, the draft preview uses the basic upload metadata and fallback page copy.
+                    </>
+                  )}
+                </div>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border bg-slate-50 p-4">
