@@ -29,6 +29,18 @@ type ExtractedPolicyUpdatePdf = {
 const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
+const MAX_FALLBACK_PARAGRAPHS = 6;
+
+class VeniceTimeoutError extends Error {
+  constructor() {
+    super("Venice generation timed out.");
+    this.name = "VeniceTimeoutError";
+  }
+}
+
+function isVeniceTimeoutError(err: unknown) {
+  return err instanceof VeniceTimeoutError || (err as any)?.message === "Venice generation timed out.";
+}
 
 function compactWhitespace(value: string) {
   return value
@@ -42,6 +54,132 @@ function compactWhitespace(value: string) {
 function truncatePromptText(value: string) {
   if (value.length <= MAX_PDF_TEXT_CHARS) return value;
   return `${value.slice(0, MAX_PDF_TEXT_CHARS)}\n\n[Source text truncated for generation.]`;
+}
+
+function sentenceCase(value: string) {
+  const clean = value.trim();
+  return clean ? `${clean.charAt(0).toUpperCase()}${clean.slice(1)}` : "";
+}
+
+function splitSourceLines(value: string) {
+  return value
+    .split(/\n+/g)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .filter((line) => !/^--- Page \d+ of \d+ ---$/i.test(line))
+    .filter((line) => !/^PGPZ Community$/i.test(line))
+    .filter((line) => !/^Member Policy Resource$/i.test(line))
+    .filter((line) => !/^community\.pgpz\.org\b/i.test(line))
+    .filter((line) => !/^\d+$/.test(line));
+}
+
+function splitParagraphsFromText(value: string) {
+  return compactWhitespace(value)
+    .split(/\n{2,}/g)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter((paragraph) => paragraph.length > 80)
+    .filter((paragraph) => !/^--- Page \d+ of \d+ ---$/i.test(paragraph));
+}
+
+function sentenceItemsFromText(value: string, maxItems: number) {
+  return value
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/g)
+    .map((sentence) => sentenceCase(sentence.replace(/^[-*•l]\s*/i, "").trim()))
+    .filter((sentence) => sentence.length > 40)
+    .slice(0, maxItems);
+}
+
+function linesBetweenHeadings(lines: string[], startPattern: RegExp, endPatterns: RegExp[] = []) {
+  const start = lines.findIndex((line) => startPattern.test(line));
+  if (start < 0) return [];
+
+  const selected: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (endPatterns.some((pattern) => pattern.test(line))) break;
+    selected.push(line);
+  }
+
+  return selected;
+}
+
+function listItemsFromLines(lines: string[], maxItems: number) {
+  const joined = lines.join("\n");
+  const bulletSegments = joined
+    .split(/(?:^|\n)\s*(?:[-*•]|\bl\b|\d+\.)\s+/g)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter((item) => item.length > 25);
+
+  const source = bulletSegments.length > 1 ? bulletSegments : lines;
+  return source
+    .map((item) => sentenceCase(item.replace(/^[-*•l]\s*/i, "").trim()))
+    .filter((item) => item.length > 25)
+    .slice(0, maxItems);
+}
+
+function fallbackPolicyUpdateContent(
+  record: UploadedPolicyUpdateRecord,
+  extracted: ExtractedPolicyUpdatePdf,
+): GeneratedPolicyUpdateContent {
+  const lines = splitSourceLines(extracted.text);
+  const paragraphs = splitParagraphsFromText(extracted.text);
+  const summary =
+    paragraphs.find((paragraph) => !paragraph.includes(record.title) && paragraph.length <= 850) ||
+    record.summary;
+
+  const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [
+    /^Action Items$/i,
+    /^Policy Developments?/i,
+    /^Implications?/i,
+  ]);
+  const actionItemLines = linesBetweenHeadings(lines, /^Action Items$/i, [
+    /^Policy Developments?/i,
+    /^Implications?/i,
+    /^Additional/i,
+  ]);
+
+  const keyTakeaways = listItemsFromLines(keyTakeawayLines, 5);
+  const actionItems = listItemsFromLines(actionItemLines, 5);
+  const overviewParagraphs = paragraphs
+    .filter((paragraph) => !/^Detected PDF links:/i.test(paragraph))
+    .slice(0, MAX_FALLBACK_PARAGRAPHS);
+  const linksParagraph =
+    extracted.links.length > 0
+      ? `The source PDF includes ${extracted.links.length} embedded reference link${
+          extracted.links.length === 1 ? "" : "s"
+        } that should be preserved during admin review.`
+      : "";
+
+  return {
+    shortTitle: record.shortTitle,
+    summary,
+    emailSubject: record.emailSubject,
+    emailPreheader: record.emailPreheader || summary.slice(0, 220),
+    keyTakeaways: keyTakeaways.length ? keyTakeaways : sentenceItemsFromText(summary, 3),
+    actionItems: actionItems.length ? actionItems : record.actionItems,
+    sections: [
+      {
+        heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
+        body: overviewParagraphs.length ? overviewParagraphs : [summary],
+        links: extracted.links.slice(0, 8).map((link) => ({
+          text: link.text,
+          href: link.href,
+        })),
+      },
+      ...(linksParagraph
+        ? [
+            {
+              heading: "Source Links",
+              body: [linksParagraph],
+              links: extracted.links.slice(0, 8).map((link) => ({
+                text: link.text,
+                href: link.href,
+              })),
+            },
+          ]
+        : []),
+    ],
+  };
 }
 
 function extractJsonObject(value: string) {
@@ -348,7 +486,7 @@ async function postVeniceChat(requestBody: Record<string, unknown>, useJsonMode 
     return payload;
   } catch (err: any) {
     if (err?.name === "AbortError") {
-      throw new Error("Venice generation timed out.");
+      throw new VeniceTimeoutError();
     }
     throw err;
   } finally {
@@ -382,10 +520,12 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
     };
   }
 
+  const useJsonMode = !baseUrl.includes("venice.ai");
+
   try {
-    return await postVeniceChat(requestBody, true);
+    return await postVeniceChat(requestBody, useJsonMode);
   } catch (err: any) {
-    if (err?.status === 400 || err?.status === 422) {
+    if (useJsonMode && (err?.status === 400 || err?.status === 422)) {
       return postVeniceChat(requestBody, false);
     }
     throw err;
@@ -455,15 +595,28 @@ export async function generatePolicyUpdatePageContent(
   }
 > {
   const extracted = await extractPolicyUpdatePdfContent(bytes);
-  const response = await generateJsonFromVenice(record, extracted);
-  const contentText = responseContentText(response);
-  if (!contentText) throw new Error("Venice response did not include generated content.");
+  let normalized: GeneratedPolicyUpdateContent;
+  let generatedModel = POLICY_UPDATE_GENERATION_MODEL;
 
-  const parsed = extractJsonObject(contentText);
-  const normalized = normalizeGeneratedPolicyUpdateContent(parsed, fallbackFromRecord(record));
+  try {
+    const response = await generateJsonFromVenice(record, extracted);
+    const contentText = responseContentText(response);
+    if (!contentText) throw new Error("Venice response did not include generated content.");
+
+    const parsed = extractJsonObject(contentText);
+    normalized = normalizeGeneratedPolicyUpdateContent(parsed, fallbackFromRecord(record));
+  } catch (err) {
+    if (!isVeniceTimeoutError(err)) throw err;
+    normalized = normalizeGeneratedPolicyUpdateContent(
+      fallbackPolicyUpdateContent(record, extracted),
+      fallbackFromRecord(record),
+    );
+    generatedModel = `${POLICY_UPDATE_GENERATION_MODEL}+pdf-fallback`;
+  }
+
   return {
     ...normalized,
-    generatedModel: POLICY_UPDATE_GENERATION_MODEL,
+    generatedModel,
     sourceTextLength: extracted.sourceTextLength,
     sourceTextSha256: extracted.sourceTextSha256,
   };

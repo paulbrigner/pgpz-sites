@@ -39,11 +39,11 @@ export const POLICY_UPDATE_GENERATION_BASE_URL = trimBaseUrl(
   "https://api.venice.ai/api/v1",
 );
 export const POLICY_UPDATE_GENERATION_MODEL =
-  process.env.POLICY_UPDATE_GENERATION_MODEL || "openai-gpt-55-pro";
+  process.env.POLICY_UPDATE_GENERATION_MODEL || "openai-gpt-55";
 export const POLICY_UPDATE_GENERATION_TIMEOUT_MS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_TIMEOUT_MS) || 180000;
+  parseNumber(process.env.POLICY_UPDATE_GENERATION_TIMEOUT_MS) || 90000;
 export const POLICY_UPDATE_GENERATION_MAX_TOKENS =
-  parseNumber(process.env.POLICY_UPDATE_GENERATION_MAX_TOKENS) || 4000;
+  parseNumber(process.env.POLICY_UPDATE_GENERATION_MAX_TOKENS) || 2500;
 
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
