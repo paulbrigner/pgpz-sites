@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getUploadedPolicyUpdate } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
 import { getPolicyUpdate, policyUpdates, type PolicyUpdateLink, type PolicyUpdateSection } from "@/lib/policy-updates";
 
@@ -19,7 +20,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug);
+  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
   if (!update) return {};
   return {
     title: `${update.shortTitle} | PGPZ Community`,
@@ -163,7 +164,7 @@ function PolicyUpdateSectionBlock({
 
 export default async function UpdateDetailPage({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug);
+  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
   if (!update) notFound();
 
   const access = await getMemberAccess();

@@ -27,6 +27,12 @@ export const EMAIL_SERVER_SECURE = process.env.EMAIL_SERVER_SECURE as string | u
 export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;
 export const KEY_PAIR_ID = process.env.KEY_PAIR_ID as string;
 export const PRIVATE_KEY_SECRET = (process.env.PRIVATE_KEY_SECRET || "").replace(/\\n/g, "\n") as string;
+export const POLICY_UPDATE_UPLOAD_BUCKET =
+  (process.env.POLICY_UPDATE_UPLOAD_BUCKET ||
+    process.env.CONTENT_UPLOAD_BUCKET ||
+    process.env.PGPZ_CONTENT_BUCKET) as string | undefined;
+export const POLICY_UPDATE_UPLOAD_PREFIX =
+  (process.env.POLICY_UPDATE_UPLOAD_PREFIX || "policy-updates/uploads").replace(/^\/+|\/+$/g, "");
 
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||

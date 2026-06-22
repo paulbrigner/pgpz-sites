@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, FileText, MailCheck, RefreshCcw, Search, Send, UsersRound } from "lucide-react";
+import { BarChart3, FileText, MailCheck, RefreshCcw, Search, Send, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,11 @@ const formatDateTime = (value: string | null) => {
     minute: "2-digit",
   });
 };
+
+const todayInputValue = () => new Date().toISOString().slice(0, 10);
+
+const titleFromFileName = (fileName: string) =>
+  fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
 function PolicyUpdateSendHistoryCard({
   send,
@@ -224,6 +229,14 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [audienceQuery, setAudienceQuery] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
   const [draftEmail, setDraftEmail] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadCategory, setUploadCategory] = useState<"weekly" | "special">("weekly");
+  const [uploadPublishedAt, setUploadPublishedAt] = useState(todayInputValue);
+  const [uploadSummary, setUploadSummary] = useState("");
+  const [uploadInputKey, setUploadInputKey] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
@@ -270,7 +283,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setAudienceRecipients(body.recipients || []);
       setStatsBySlug(body.statsBySlug || {});
       setSendHistory(body.sendHistory || []);
-      if (!selectedSlug && body.updates?.[0]?.slug) setSelectedSlug(body.updates[0].slug);
+      if (body.updates?.length) {
+        setSelectedSlug((current) =>
+          current && body.updates?.some((update) => update.slug === current)
+            ? current
+            : body.updates?.[0]?.slug || "",
+        );
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to load policy update sender");
     } finally {
@@ -289,6 +308,60 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       return current.filter((id) => validIds.has(id));
     });
   }, [audienceRecipients]);
+
+  const handleUploadFileChange = (file: File | null) => {
+    setUploadFile(file);
+    setUploadNotice(null);
+    if (file && !uploadTitle.trim()) {
+      setUploadTitle(titleFromFileName(file.name));
+    }
+  };
+
+  const uploadPolicyUpdate = async () => {
+    if (!uploadFile) {
+      setError("Choose a PDF file to upload.");
+      return;
+    }
+    const looksLikePdf =
+      uploadFile.type === "application/pdf" || uploadFile.name.toLowerCase().endsWith(".pdf");
+    if (!looksLikePdf) {
+      setError("Only PDF uploads are allowed.");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      form.append("title", uploadTitle.trim());
+      form.append("category", uploadCategory);
+      form.append("publishedAt", uploadPublishedAt);
+      form.append("summary", uploadSummary.trim());
+
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        body: form,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to upload policy update PDF");
+
+      const uploadedSlug = body?.update?.slug || "";
+      setUploadNotice(`Uploaded ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadSummary("");
+      setUploadInputKey((current) => current + 1);
+      await loadState();
+      if (uploadedSlug) setSelectedSlug(uploadedSlug);
+    } catch (err: any) {
+      setError(err?.message || "Failed to upload policy update PDF");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const sendUpdate = async () => {
     if (!selectedUpdate || !confirmSend || !audienceReady) return;
@@ -435,6 +508,62 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             Available updates
           </div>
+          <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--brand-denim)]">
+              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              Upload update PDF
+            </div>
+            <div className="mt-3 space-y-3">
+              <input
+                key={uploadInputKey}
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={(event) => handleUploadFileChange(event.target.files?.[0] || null)}
+                className="w-full rounded-md border bg-white px-3 py-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-[var(--brand-ink)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--zcash-gold)]"
+              />
+              <input
+                type="text"
+                value={uploadTitle}
+                onChange={(event) => setUploadTitle(event.target.value)}
+                placeholder="Update title"
+                className="w-full rounded-md border bg-white px-3 py-2 text-sm"
+              />
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <select
+                  value={uploadCategory}
+                  onChange={(event) => setUploadCategory(event.target.value === "special" ? "special" : "weekly")}
+                  className="rounded-md border bg-white px-3 py-2 text-sm"
+                >
+                  <option value="weekly">Weekly memo</option>
+                  <option value="special">Featured update</option>
+                </select>
+                <input
+                  type="date"
+                  value={uploadPublishedAt}
+                  onChange={(event) => setUploadPublishedAt(event.target.value)}
+                  className="rounded-md border bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              <textarea
+                value={uploadSummary}
+                onChange={(event) => setUploadSummary(event.target.value)}
+                placeholder="Optional email and page summary"
+                rows={3}
+                className="w-full resize-y rounded-md border bg-white px-3 py-2 text-sm"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={uploading || !uploadFile}
+                onClick={uploadPolicyUpdate}
+              >
+                <UploadCloud className={cn("h-4 w-4", uploading && "animate-pulse")} />
+                {uploading ? "Uploading..." : "Upload PDF"}
+              </Button>
+              {uploadNotice ? <p className="text-xs leading-5 text-emerald-700">{uploadNotice}</p> : null}
+            </div>
+          </div>
           <div className="space-y-2">
             {updates.map((update) => {
               const stats = statsBySlug[update.slug] || emptyStats;
@@ -459,13 +588,23 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <FileText className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span>
-                    <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">
-                      {update.categoryLabel}
+                    <span className="flex flex-wrap gap-1.5">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">
+                        {update.categoryLabel}
+                      </span>
+                      {update.source === "uploaded" ? (
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                          Uploaded
+                        </span>
+                      ) : null}
                     </span>
                     <span className="mt-1 block text-sm font-semibold text-[var(--brand-ink)]">
                       {update.shortTitle}
                     </span>
                     <span className="mt-1 block text-xs text-slate-500">{update.displayDate}</span>
+                    {update.source === "uploaded" && update.fileName ? (
+                      <span className="mt-1 block truncate text-xs text-slate-500">{update.fileName}</span>
+                    ) : null}
                     <span className="mt-2 flex flex-wrap gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
                       <span>Sent {stats.sent}</span>
                       <span>Drafts {stats.draftSent}</span>
