@@ -3,8 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, FileText, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getPublishedPolicyUpdates } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
-import { getPolicyUpdatesByCategory, policyUpdates } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
 
@@ -46,9 +46,10 @@ export default async function UpdatesPage() {
     return <MembershipRequired />;
   }
 
-  const weekly = getPolicyUpdatesByCategory("weekly");
-  const special = getPolicyUpdatesByCategory("special");
-  const latest = policyUpdates[0];
+  const publishedUpdates = await getPublishedPolicyUpdates();
+  const weekly = publishedUpdates.filter((update) => update.category === "weekly");
+  const special = publishedUpdates.filter((update) => update.category === "special");
+  const latest = publishedUpdates[0];
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-14">

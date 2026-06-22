@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, FileText, MailCheck, RefreshCcw, Search, Send, UploadCloud, UsersRound } from "lucide-react";
+import { BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -123,6 +123,20 @@ const titleFromFileName = (fileName: string) =>
 const fileHasPdfSignature = async (file: File) => {
   const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
   return String.fromCharCode(...bytes) === "%PDF-";
+};
+
+const visibilityLabel = (update: PolicyUpdateSummary) => {
+  if (update.source !== "uploaded") return "Published";
+  if (update.visibilityStatus === "published") return "Published";
+  if (update.visibilityStatus === "unpublished") return "Unpublished";
+  return "Draft";
+};
+
+const visibilityClassName = (update: PolicyUpdateSummary) => {
+  const status = update.source === "uploaded" ? update.visibilityStatus || "draft" : "published";
+  if (status === "published") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "unpublished") return "border-slate-200 bg-slate-50 text-slate-600";
+  return "border-amber-200 bg-amber-50 text-amber-800";
 };
 
 function PolicyUpdateSendHistoryCard({
@@ -272,6 +286,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
+  const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -280,6 +295,9 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     () => updates.find((update) => update.slug === selectedSlug) || updates[0] || null,
     [selectedSlug, updates],
   );
+  const selectedVisibilityStatus =
+    selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
+  const selectedCanSendMembers = selectedVisibilityStatus === "published";
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
     const selected = new Set(selectedRecipientIds);
@@ -422,7 +440,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!completeRes.ok) throw new Error(body?.error || "Failed to finish policy update upload.");
 
       const uploadedSlug = body?.update?.slug || "";
-      setUploadNotice(`Uploaded ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
+      setUploadNotice(`Uploaded draft: ${body?.update?.shortTitle || uploadTitle || uploadFile.name}.`);
       setUploadFile(null);
       setUploadTitle("");
       setUploadSummary("");
@@ -436,8 +454,49 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     }
   };
 
+  const changeSelectedVisibility = async (action: "publishUpdate" | "unpublishUpdate") => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded") return;
+    const verb = action === "publishUpdate" ? "publish" : "unpublish";
+    if (!window.confirm(`${verb === "publish" ? "Publish" : "Unpublish"} "${selectedUpdate.shortTitle || selectedUpdate.title}"?`)) {
+      return;
+    }
+
+    setVisibilityUpdatingSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || `Failed to ${verb} policy update`);
+      await loadState();
+      setSelectedSlug(selectedUpdate.slug);
+      setConfirmSend(false);
+      setUploadNotice(
+        action === "publishUpdate"
+          ? `Published ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`
+          : `Unpublished ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`,
+      );
+    } catch (err: any) {
+      setError(err?.message || `Failed to ${verb} policy update`);
+    } finally {
+      setVisibilityUpdatingSlug(null);
+    }
+  };
+
   const sendUpdate = async () => {
     if (!selectedUpdate || !confirmSend || !audienceReady) return;
+    if (!selectedCanSendMembers) {
+      setError("Publish this update before sending it to subscribers.");
+      setConfirmSend(false);
+      return;
+    }
     setSending(true);
     setError(null);
     setResult(null);
@@ -667,10 +726,18 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                         {update.categoryLabel}
                       </span>
                       {update.source === "uploaded" ? (
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-slate-600">
                           Uploaded
                         </span>
                       ) : null}
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[0.62rem] font-semibold uppercase tracking-[0.14em]",
+                          visibilityClassName(update),
+                        )}
+                      >
+                        {visibilityLabel(update)}
+                      </span>
                     </span>
                     <span className="mt-1 block text-sm font-semibold text-[var(--brand-ink)]">
                       {update.shortTitle}
@@ -700,16 +767,47 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   <div className="inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
                     {selectedUpdate.categoryLabel}
                   </div>
+                  <div
+                    className={cn(
+                      "mt-2 inline-flex rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]",
+                      visibilityClassName(selectedUpdate),
+                    )}
+                  >
+                    {visibilityLabel(selectedUpdate)}
+                  </div>
                   <h3 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
                     {selectedUpdate.title}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{selectedUpdate.summary}</p>
                 </div>
-                <Button variant="outline" asChild>
-                  <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
-                    Portal view
-                  </Link>
-                </Button>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
+                      Portal view
+                    </Link>
+                  </Button>
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus !== "published" ? (
+                    <Button
+                      type="button"
+                      onClick={() => changeSelectedVisibility("publishUpdate")}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                    >
+                      <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
+                      Publish
+                    </Button>
+                  ) : null}
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus === "published" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => changeSelectedVisibility("unpublishUpdate")}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                    >
+                      <EyeOff className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
+                      Unpublish
+                    </Button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -887,6 +985,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   Sends only to this address. If the email matches a PGPZ Community profile, the greeting uses that profile name.
+                  {selectedCanSendMembers ? "" : " Portal and PDF links require admin access until this update is published."}
                 </p>
               </div>
 
@@ -896,18 +995,19 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   className="mt-1 h-4 w-4"
                   checked={confirmSend}
                   onChange={(event) => setConfirmSend(event.target.checked)}
-                  disabled={!audienceReady}
+                  disabled={!audienceReady || !selectedCanSendMembers}
                 />
                 <span>
-                  I understand this will send the selected update to {selectedAudienceLabel} with unsuppressed emails.
-                  I have reviewed the portal page and email subject.
+                  {selectedCanSendMembers
+                    ? `I understand this will send the selected update to ${selectedAudienceLabel} with unsuppressed emails. I have reviewed the portal page and email subject.`
+                    : "Publish this update before sending it to subscribers."}
                 </span>
               </label>
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={!confirmSend || sending || !audienceReady}
+                  disabled={!confirmSend || sending || !audienceReady || !selectedCanSendMembers}
                   onClick={sendUpdate}
                 >
                   {sending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}

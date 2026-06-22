@@ -29,10 +29,14 @@ import {
   getDistributablePolicyUpdate,
   getDistributablePolicyUpdateSummaries,
   getPolicyUpdateUploadBucket,
+  getUploadedPolicyUpdateRecord,
   normalizePolicyUpdateCategory,
   policyUpdateToSummary,
   policyUpdateUploadObjectKey,
+  publishUploadedPolicyUpdate,
   saveUploadedPolicyUpdate,
+  unpublishUploadedPolicyUpdate,
+  uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
 import { s3Client } from "@/lib/s3";
@@ -43,12 +47,17 @@ const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function requireAdminOrForbidden() {
   try {
-    await requireAdminSession();
-    return null;
+    return { session: await requireAdminSession(), response: null };
   } catch {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    return {
+      session: null,
+      response: NextResponse.json({ error: "Admin access required" }, { status: 403 }),
+    };
   }
 }
+
+const adminUserIdFromSession = (session: any) =>
+  typeof session?.user?.id === "string" ? session.user.id : null;
 
 type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
@@ -227,7 +236,7 @@ async function preparePolicyUpdateUpload(body: any) {
   });
 }
 
-async function completePolicyUpdateUpload(body: any) {
+async function completePolicyUpdateUpload(body: any, adminUserId: string | null) {
   const bucket = getPolicyUpdateUploadBucket();
   if (!bucket) {
     return NextResponse.json(
@@ -291,7 +300,7 @@ async function completePolicyUpdateUpload(body: any) {
     s3Bucket: bucket,
     s3Key,
     uploadedAt,
-    uploadedBy: null,
+    uploadedBy: adminUserId,
   });
 
   const update = await getDistributablePolicyUpdate(upload.slug);
@@ -406,8 +415,8 @@ async function resolvePolicyUpdateAudience(body: any) {
 }
 
 export async function GET() {
-  const forbidden = await requireAdminOrForbidden();
-  if (forbidden) return forbidden;
+  const admin = await requireAdminOrForbidden();
+  if (admin.response) return admin.response;
 
   const recipients = await listPolicyUpdateRecipients();
   const updates = await getDistributablePolicyUpdateSummaries();
@@ -424,8 +433,9 @@ export async function GET() {
   });
 }
 export async function POST(request: NextRequest) {
-  const forbidden = await requireAdminOrForbidden();
-  if (forbidden) return forbidden;
+  const admin = await requireAdminOrForbidden();
+  if (admin.response) return admin.response;
+  const adminUserId = adminUserIdFromSession(admin.session);
 
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
@@ -443,7 +453,25 @@ export async function POST(request: NextRequest) {
     return preparePolicyUpdateUpload(body);
   }
   if (body?.action === "completeUpload") {
-    return completePolicyUpdateUpload(body);
+    return completePolicyUpdateUpload(body, adminUserId);
+  }
+  if (body?.action === "publishUpdate" || body?.action === "unpublishUpdate") {
+    const slug = textFromBody(body, "slug");
+    if (!slug) {
+      return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
+    }
+    const upload =
+      body.action === "publishUpdate"
+        ? await publishUploadedPolicyUpdate(slug, adminUserId)
+        : await unpublishUploadedPolicyUpdate(slug, adminUserId);
+    if (!upload) {
+      return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+    }
+    const update = uploadedPolicyUpdateToPolicyUpdate(upload);
+    return NextResponse.json({
+      ok: true,
+      update: policyUpdateToSummary(update, "uploaded", upload),
+    });
   }
 
   const transportConfig = buildEmailServerConfig();
@@ -467,6 +495,13 @@ export async function POST(request: NextRequest) {
   }
 
   const draftMode = !!draftRecipientEmail;
+  const uploadedRecord = await getUploadedPolicyUpdateRecord(slug);
+  if (!draftMode && uploadedRecord && uploadedRecord.visibilityStatus !== "published") {
+    return NextResponse.json(
+      { error: "Publish this update before sending it to subscribers." },
+      { status: 400 },
+    );
+  }
   let audienceMode: PolicyUpdateAudienceMode = "all_active_members";
   let activeRecipientCount = 0;
   let recipients: PolicyUpdateSendRecipient[];

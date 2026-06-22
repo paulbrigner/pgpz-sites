@@ -16,7 +16,7 @@ function contentDispositionFileName(fileName: string) {
 async function hasPolicyUpdatePdfAccess(request: NextRequest) {
   const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
   const userId = typeof token?.sub === "string" ? token.sub : "";
-  if (!userId) return false;
+  if (!userId) return { allowed: false, isAdmin: false };
 
   const user = await documentClient.get({
     TableName: TABLE_NAME,
@@ -24,20 +24,28 @@ async function hasPolicyUpdatePdfAccess(request: NextRequest) {
     ProjectionExpression: "membershipStatus, isAdmin",
   });
 
-  return user.Item?.membershipStatus === "active" || user.Item?.isAdmin === true;
+  const isAdmin = user.Item?.isAdmin === true;
+  return {
+    allowed: user.Item?.membershipStatus === "active" || isAdmin,
+    isAdmin,
+  };
 }
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
-  if (!(await hasPolicyUpdatePdfAccess(request))) {
+  const access = await hasPolicyUpdatePdfAccess(request);
+  if (!access.allowed) {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
   }
 
   const { slug } = await params;
   const upload = await getUploadedPolicyUpdateRecord(slug);
   if (!upload) {
+    return NextResponse.json({ error: "Unknown policy update PDF" }, { status: 404 });
+  }
+  if (upload.visibilityStatus !== "published" && !access.isAdmin) {
     return NextResponse.json({ error: "Unknown policy update PDF" }, { status: 404 });
   }
 

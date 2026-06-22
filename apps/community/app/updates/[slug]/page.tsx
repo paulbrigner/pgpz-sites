@@ -4,9 +4,17 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getUploadedPolicyUpdate } from "@/lib/admin/policy-update-uploads";
+import {
+  getUploadedPolicyUpdateRecord,
+  uploadedPolicyUpdateToPolicyUpdate,
+} from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
-import { getPolicyUpdate, policyUpdates, type PolicyUpdateLink, type PolicyUpdateSection } from "@/lib/policy-updates";
+import {
+  getPolicyUpdate,
+  policyUpdates,
+  type PolicyUpdateLink,
+  type PolicyUpdateSection,
+} from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +28,9 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
+  const staticUpdate = getPolicyUpdate(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
   if (!update) return {};
   return {
     title: `${update.shortTitle} | PGPZ Community`,
@@ -164,15 +174,22 @@ function PolicyUpdateSectionBlock({
 
 export default async function UpdateDetailPage({ params }: Props) {
   const { slug } = await params;
-  const update = getPolicyUpdate(slug) || (await getUploadedPolicyUpdate(slug));
+  const staticUpdate = getPolicyUpdate(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
   if (!update) notFound();
 
   const access = await getMemberAccess();
+  const isAdmin = access.user?.isAdmin === true;
   if (!access.authenticated) {
     redirect(`/signin?callbackUrl=${encodeURIComponent(update.portalPath)}`);
   }
 
-  if (!access.isMember) {
+  if (uploadedRecord?.visibilityStatus !== "published" && !isAdmin) {
+    notFound();
+  }
+
+  if (!access.isMember && !isAdmin) {
     return <MembershipRequired />;
   }
 
@@ -186,6 +203,16 @@ export default async function UpdateDetailPage({ params }: Props) {
           </Link>
         </Button>
       </div>
+
+      {uploadedRecord && uploadedRecord.visibilityStatus !== "published" && isAdmin ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
+          <span className="font-semibold">
+            {uploadedRecord.visibilityStatus === "draft" ? "Draft preview" : "Unpublished preview"}:
+          </span>{" "}
+          only admins can view this page and its PDF until the update is published from the admin update
+          distribution screen.
+        </div>
+      ) : null}
 
       <article className="overflow-hidden rounded-[1.5rem] border border-[rgba(245,168,0,0.28)] bg-white shadow-[0_26px_46px_-30px_rgba(30,30,30,0.38)]">
         <header className="grid gap-6 bg-[linear-gradient(135deg,var(--brand-ink),#2A2111)] p-6 text-white lg:grid-cols-[1fr_0.36fr] lg:p-8">

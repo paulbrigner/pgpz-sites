@@ -1,4 +1,5 @@
 export type PolicyUpdateCategory = "weekly" | "special";
+export type PolicyUpdateVisibilityStatus = "draft" | "published" | "unpublished";
 
 export type PolicyUpdateSection = {
   heading: string;
@@ -55,6 +56,11 @@ export type PolicyUpdateSummary = Pick<
   | "portalPath"
 > & {
   source?: "static" | "uploaded";
+  visibilityStatus?: PolicyUpdateVisibilityStatus;
+  publishedOn?: string | null;
+  publishedBy?: string | null;
+  unpublishedOn?: string | null;
+  unpublishedBy?: string | null;
   uploadedAt?: string | null;
   fileName?: string | null;
 };
@@ -350,6 +356,11 @@ export const getPolicyUpdateSummaries = (): PolicyUpdateSummary[] =>
       pdfHref,
       portalPath,
       source: "static",
+      visibilityStatus: "published",
+      publishedOn: publishedAt,
+      publishedBy: null,
+      unpublishedOn: null,
+      unpublishedBy: null,
       uploadedAt: null,
       fileName: null,
     }),
