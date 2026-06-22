@@ -12,11 +12,14 @@ import { getMemberAccess } from "@/lib/member-access";
 import {
   getPolicyUpdate,
   policyUpdates,
+  type PolicyUpdateImage,
   type PolicyUpdateLink,
   type PolicyUpdateSection,
 } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
+
+/* eslint-disable @next/next/no-img-element */
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -99,6 +102,44 @@ function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
   return nodes;
 }
 
+function PolicyUpdateSectionImages({ images }: { images: PolicyUpdateImage[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {images.map((image) => {
+        const isCompact =
+          typeof image.width === "number" &&
+          typeof image.height === "number" &&
+          image.width <= 500 &&
+          image.height <= 500;
+        return (
+          <figure
+            key={image.src}
+            className={[
+              "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] bg-[var(--brand-ice)] p-3",
+              isCompact ? "max-w-xs" : "sm:col-span-2",
+            ].join(" ")}
+          >
+            <img
+              src={image.src}
+              alt={image.alt}
+              width={image.width}
+              height={image.height}
+              className={[
+                "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
+                isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
+              ].join(" ")}
+              loading="lazy"
+            />
+            {image.caption ? (
+              <figcaption className="mt-3 text-xs leading-5 text-slate-600">{image.caption}</figcaption>
+            ) : null}
+          </figure>
+        );
+      })}
+    </div>
+  );
+}
+
 function PolicyUpdateSectionBlock({
   section,
 }: {
@@ -112,6 +153,7 @@ function PolicyUpdateSectionBlock({
           <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
         ))}
       </div>
+      {section.images?.length ? <PolicyUpdateSectionImages images={section.images} /> : null}
       {section.table ? (
         <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
           <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">

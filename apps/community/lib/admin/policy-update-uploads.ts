@@ -147,6 +147,28 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
       const bodyAfterBullets = textArrayOrFallback(record.bodyAfterBullets, []);
       if (bullets.length) section.bullets = bullets;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
+      if (Array.isArray(record.images)) {
+        const images = record.images
+          .map((image) => {
+            if (!image || typeof image !== "object") return null;
+            const imageRecord = image as Record<string, unknown>;
+            const src = textOrEmpty(imageRecord.src).trim();
+            const alt = textOrEmpty(imageRecord.alt).trim();
+            const caption = textOrEmpty(imageRecord.caption).trim();
+            const width = Number(imageRecord.width);
+            const height = Number(imageRecord.height);
+            if (!src || !alt) return null;
+            return {
+              src,
+              alt,
+              ...(caption ? { caption } : {}),
+              ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+              ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+            };
+          })
+          .filter((image): image is NonNullable<typeof image> => !!image);
+        if (images.length) section.images = images;
+      }
 
       if (record.table && typeof record.table === "object") {
         const tableRecord = record.table as Record<string, unknown>;

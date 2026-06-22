@@ -9,6 +9,7 @@ export type PolicyUpdateSection = {
   bullets?: string[];
   bodyAfterBullets?: string[];
   links?: PolicyUpdateLink[];
+  images?: PolicyUpdateImage[];
 };
 
 export type PolicyUpdateTable = {
@@ -19,6 +20,14 @@ export type PolicyUpdateTable = {
 export type PolicyUpdateLink = {
   text: string;
   href: string;
+};
+
+export type PolicyUpdateImage = {
+  src: string;
+  alt: string;
+  caption?: string;
+  width?: number;
+  height?: number;
 };
 
 export type PolicyUpdate = {

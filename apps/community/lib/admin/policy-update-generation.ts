@@ -144,6 +144,29 @@ function listItemsFromLines(lines: string[], maxItems: number) {
     .slice(0, maxItems);
 }
 
+function splitReadableParagraphs(value: string, maxLength = 760) {
+  const sentences = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/g)
+    .filter(Boolean);
+  const paragraphs: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (current && next.length > maxLength) {
+      paragraphs.push(current);
+      current = sentence;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) paragraphs.push(current);
+  return paragraphs.length ? paragraphs : value.trim() ? [value.replace(/\s+/g, " ").trim()] : [];
+}
+
 function splitFallbackHeading(line: string) {
   const clean = line.replace(/\s+/g, " ").trim();
   const datedBodyPattern = new RegExp(`\\s+(On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2},\\s+\\d{4}\\b.*)$`, "i");
@@ -179,7 +202,7 @@ function splitFallbackHeading(line: string) {
 }
 
 function fallbackBodyFromLines(lines: string[]) {
-  const body: string[] = [];
+  const bodyLines: string[] = [];
   const bullets: string[] = [];
 
   for (const line of lines) {
@@ -188,11 +211,14 @@ function fallbackBodyFromLines(lines: string[]) {
     if (/^[-*•]\s+/.test(clean)) {
       bullets.push(sentenceCase(clean.replace(/^[-*•]\s+/, "")));
     } else {
-      body.push(sentenceCase(clean));
+      bodyLines.push(clean);
     }
   }
 
-  return { body, bullets };
+  return {
+    body: splitReadableParagraphs(sentenceCase(bodyLines.join(" "))),
+    bullets: bullets.map((item) => splitReadableParagraphs(item, 520).join(" ")),
+  };
 }
 
 function fallbackSectionsFromText(
@@ -549,6 +575,7 @@ Required JSON shape:
       "table": { "columns": ["Column"], "rows": [["Cell"]] },
       "bullets": ["Optional bullet"],
       "bodyAfterBullets": ["Optional paragraph after bullets"],
+      "images": [{ "src": "/api/policy-updates/example/assets/image.png", "alt": "Descriptive alt text", "caption": "Optional caption", "width": 1198, "height": 794 }],
       "links": [{ "text": "Visible link text that appears in body", "href": "https://example.com" }]
     }
   ]
@@ -565,6 +592,7 @@ Rules:
 - Special/featured updates may include "Executive Summary" only when the source document supports it.
 - Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
 - Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
+- If image asset paths are already present in existing metadata or source content, place them in the closest relevant section's images array. Do not invent image URLs.
 - Ignore repeated PDF chrome such as PGPZ Community headers, footers, page numbers, member-resource labels, QR-code captions, and community signup boilerplate unless it is part of the actual policy content.
 - Do not add filler such as "open the PDF resource", "the source PDF includes links", "this draft page can be published", or "review the source document".
 - The page content should be useful without opening the PDF: include the substantive body text, bullets, and tables from the source, not just a summary.

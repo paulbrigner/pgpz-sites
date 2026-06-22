@@ -34,6 +34,7 @@ const MAX_LINKS_PER_SECTION = 8;
 const MAX_TABLE_COLUMNS = 5;
 const MAX_TABLE_ROWS = 24;
 const MAX_TABLE_CELL_CHARS = 520;
+const MAX_IMAGES_PER_SECTION = 4;
 
 const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi;
 
@@ -92,6 +93,45 @@ function normalizeLinks(value: unknown) {
     })
     .filter((link): link is { text: string; href: string } => !!link)
     .slice(0, MAX_LINKS_PER_SECTION);
+}
+
+function normalizeImageSrc(value: unknown) {
+  const src = cleanText(value, 700);
+  if (!src) return "";
+  if (src.startsWith("/")) return src;
+  return normalizeUrl(src);
+}
+
+function normalizeImages(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const src = normalizeImageSrc(record.src);
+      const alt = cleanText(record.alt, 180);
+      const caption = cleanText(record.caption, 260);
+      const width = Number(record.width);
+      const height = Number(record.height);
+      if (!src || !alt || seen.has(src)) return null;
+      seen.add(src);
+      return {
+        src,
+        alt,
+        ...(caption ? { caption } : {}),
+        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+      };
+    })
+    .filter((image): image is {
+      src: string;
+      alt: string;
+      caption?: string;
+      width?: number;
+      height?: number;
+    } => !!image)
+    .slice(0, MAX_IMAGES_PER_SECTION);
 }
 
 function stripMarkdownLinks(
@@ -153,6 +193,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
       const section: PolicyUpdateSection = { heading, body };
       const table = normalizeTable(record.table);
       const bullets = textArray(record.bullets, MAX_SECTION_BULLETS, MAX_ITEM_CHARS);
+      const images = normalizeImages(record.images);
       const bodyAfterBullets = stripMarkdownLinks(
         textArray(record.bodyAfterBullets, MAX_SECTION_PARAGRAPHS, MAX_PARAGRAPH_CHARS),
         links,
@@ -160,6 +201,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
 
       if (table) section.table = table;
       if (bullets.length) section.bullets = bullets;
+      if (images.length) section.images = images;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
       if (links.length) section.links = links;
 
