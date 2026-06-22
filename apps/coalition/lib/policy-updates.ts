@@ -53,7 +53,11 @@ export type PolicyUpdateSummary = Pick<
   | "coverImage"
   | "pdfHref"
   | "portalPath"
->;
+> & {
+  source?: "static" | "uploaded";
+  uploadedAt?: string | null;
+  fileName?: string | null;
+};
 
 export const policyUpdateCategoryLabels: Record<PolicyUpdateCategory, string> = {
   weekly: "Weekly Policy Memo",
@@ -345,6 +349,9 @@ export const getPolicyUpdateSummaries = (): PolicyUpdateSummary[] =>
       coverImage,
       pdfHref,
       portalPath,
+      source: "static",
+      uploadedAt: null,
+      fileName: null,
     }),
   );
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
@@ -21,10 +22,23 @@ import {
   getUserProfileDisplayName,
 } from "@/lib/admin/user-profile";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
+import {
+  createPolicyUpdateUploadSlug,
+  formatPolicyUpdateDisplayDate,
+  getDistributablePolicyUpdate,
+  getDistributablePolicyUpdateSummaries,
+  getPolicyUpdateUploadBucket,
+  normalizePolicyUpdateCategory,
+  policyUpdateToSummary,
+  policyUpdateUploadObjectKey,
+  saveUploadedPolicyUpdate,
+} from "@/lib/admin/policy-update-uploads";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
-import { getPolicyUpdate, getPolicyUpdateSummaries } from "@/lib/policy-updates";
+import { s3Client } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
+
+const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function requireAdminOrForbidden() {
   try {
@@ -63,6 +77,105 @@ function normalizeRecipientIds(value: unknown) {
   );
 }
 
+const formText = (form: FormData, name: string) => {
+  const value = form.get(name);
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const isUploadFile = (value: FormDataEntryValue | null): value is File =>
+  !!value &&
+  typeof value === "object" &&
+  typeof (value as File).arrayBuffer === "function" &&
+  typeof (value as File).name === "string";
+
+const titleFromFileName = (fileName: string) =>
+  fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+
+const isPublishedDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+async function handlePolicyUpdateUpload(request: NextRequest) {
+  const bucket = getPolicyUpdateUploadBucket();
+  if (!bucket) {
+    return NextResponse.json(
+      { error: "Policy update upload bucket is not configured" },
+      { status: 500 },
+    );
+  }
+
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!isUploadFile(file)) {
+    return NextResponse.json({ error: "Choose a PDF file to upload" }, { status: 400 });
+  }
+
+  const fileName = file.name || "policy-update.pdf";
+  const fileLooksLikePdf =
+    fileName.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+  if (!fileLooksLikePdf) {
+    return NextResponse.json({ error: "Only PDF uploads are allowed" }, { status: 400 });
+  }
+  if (file.size > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: "PDF upload must be 25 MB or smaller" },
+      { status: 400 },
+    );
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+    return NextResponse.json({ error: "Uploaded file is not a valid PDF" }, { status: 400 });
+  }
+
+  const category = normalizePolicyUpdateCategory(formText(form, "category"));
+  const publishedAt = isPublishedDate(formText(form, "publishedAt"))
+    ? formText(form, "publishedAt")
+    : new Date().toISOString().slice(0, 10);
+  const title = formText(form, "title") || titleFromFileName(fileName) || "Policy Update";
+  const shortTitle = formText(form, "shortTitle") || title;
+  const displayDate = formText(form, "displayDate") || formatPolicyUpdateDisplayDate(category, publishedAt);
+  const summary = formText(form, "summary");
+  const emailSubject = formText(form, "emailSubject");
+  const emailPreheader = formText(form, "emailPreheader");
+  const uploadedAt = new Date().toISOString();
+  const slug = createPolicyUpdateUploadSlug({ title, publishedAt });
+  const s3Key = policyUpdateUploadObjectKey(slug);
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: s3Key,
+      Body: bytes,
+      ContentType: "application/pdf",
+      ServerSideEncryption: "AES256",
+    }),
+  );
+
+  const upload = await saveUploadedPolicyUpdate({
+    slug,
+    category,
+    title,
+    shortTitle,
+    publishedAt,
+    displayDate,
+    summary,
+    emailSubject,
+    emailPreheader,
+    fileName,
+    fileSize: bytes.length,
+    contentType: "application/pdf",
+    s3Bucket: bucket,
+    s3Key,
+    uploadedAt,
+    uploadedBy: null,
+  });
+
+  const update = await getDistributablePolicyUpdate(upload.slug);
+  return NextResponse.json({
+    ok: true,
+    update: update ? policyUpdateToSummary(update, "uploaded", upload) : null,
+  });
+}
+
 async function resolvePolicyUpdateAudience(body: any) {
   const audienceMode: PolicyUpdateAudienceMode =
     body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
@@ -91,7 +204,7 @@ export async function GET() {
   if (forbidden) return forbidden;
 
   const recipients = await listPolicyUpdateRecipients();
-  const updates = getPolicyUpdateSummaries();
+  const updates = await getDistributablePolicyUpdateSummaries();
   const [statsBySlug, sendHistory] = await Promise.all([
     summarizePolicyUpdateEmailStats(updates.map((update) => update.slug)),
     listPolicyUpdateSendHistory(updates),
@@ -107,6 +220,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const forbidden = await requireAdminOrForbidden();
   if (forbidden) return forbidden;
+
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    return handlePolicyUpdateUpload(request);
+  }
 
   const transportConfig = buildEmailServerConfig();
   if (!transportConfig || !EMAIL_FROM) {
@@ -130,7 +248,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Enter a valid draft recipient email" }, { status: 400 });
   }
 
-  const update = getPolicyUpdate(slug);
+  const update = await getDistributablePolicyUpdate(slug);
   if (!update) {
     return NextResponse.json({ error: "Unknown policy update" }, { status: 404 });
   }
