@@ -17,6 +17,11 @@ import type { UploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploa
 type ExtractedPolicyUpdatePdf = {
   text: string;
   tables: unknown[];
+  links: Array<{
+    page: number;
+    text: string;
+    href: string;
+  }>;
   sourceTextLength: number;
   sourceTextSha256: string;
 };
@@ -24,12 +29,6 @@ type ExtractedPolicyUpdatePdf = {
 const MAX_PDF_TEXT_CHARS = 60000;
 const MAX_TABLES_FOR_PROMPT = 10;
 const MIN_EXTRACTED_TEXT_CHARS = 200;
-
-type PdfParser = {
-  getText(params?: Record<string, unknown>): Promise<{ text?: string }>;
-  getTable(): Promise<unknown>;
-  destroy(): Promise<void>;
-};
 
 function compactWhitespace(value: string) {
   return value
@@ -161,10 +160,97 @@ function ensurePdfRuntimePolyfills() {
   }
 }
 
-async function createPdfParser(bytes: Buffer): Promise<PdfParser> {
+async function loadPdfJs() {
   ensurePdfRuntimePolyfills();
-  const { PDFParse } = await import("pdf-parse");
-  return new PDFParse({ data: bytes });
+  return import("pdfjs-dist/legacy/build/pdf.mjs");
+}
+
+function textItemPosition(item: any) {
+  const transform = Array.isArray(item?.transform) ? item.transform : [];
+  return {
+    x: typeof transform[4] === "number" ? transform[4] : 0,
+    y: typeof transform[5] === "number" ? transform[5] : 0,
+  };
+}
+
+function textContentToPageText(content: any) {
+  const output: string[] = [];
+  let lastY: number | null = null;
+
+  for (const item of Array.isArray(content?.items) ? content.items : []) {
+    if (!item || typeof item.str !== "string") continue;
+
+    const { y } = textItemPosition(item);
+    const movedToNewLine = lastY !== null && Math.abs(y - lastY) > 3.5;
+    if (movedToNewLine && output.length && output[output.length - 1] !== "\n") {
+      output.push("\n");
+    }
+
+    if (item.str) {
+      output.push(item.str);
+      if (item.hasEOL && output[output.length - 1] !== "\n") {
+        output.push("\n");
+      }
+    }
+
+    lastY = y;
+  }
+
+  return compactWhitespace(output.join(""));
+}
+
+function linkTextFromAnnotation(annotation: any) {
+  const candidates = [
+    annotation?.overlaidText,
+    annotation?.contentsObj?.str,
+    annotation?.titleObj?.str,
+    annotation?.url,
+    annotation?.unsafeUrl,
+  ];
+  return (
+    candidates
+      .find((candidate) => typeof candidate === "string" && candidate.trim())
+      ?.trim()
+      .replace(/\s+/g, " ") || "PDF link"
+  );
+}
+
+function linksFromAnnotations(pageNumber: number, annotations: any[]) {
+  return annotations
+    .map((annotation) => {
+      const href =
+        typeof annotation?.url === "string" && annotation.url.trim()
+          ? annotation.url.trim()
+          : typeof annotation?.unsafeUrl === "string" && annotation.unsafeUrl.trim()
+            ? annotation.unsafeUrl.trim()
+            : "";
+      if (!href) return null;
+
+      return {
+        page: pageNumber,
+        text: linkTextFromAnnotation(annotation),
+        href,
+      };
+    })
+    .filter((link): link is { page: number; text: string; href: string } => Boolean(link));
+}
+
+function uniquePdfLinks(links: ExtractedPolicyUpdatePdf["links"]) {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = `${link.page}\n${link.text}\n${link.href}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function formatDetectedLinks(links: ExtractedPolicyUpdatePdf["links"]) {
+  if (!links.length) return "";
+
+  return links
+    .map((link) => `- Page ${link.page}: ${link.text} -> ${link.href}`)
+    .join("\n");
 }
 
 function promptForPolicyUpdate(record: UploadedPolicyUpdateRecord, extracted: ExtractedPolicyUpdatePdf) {
@@ -202,7 +288,7 @@ Rules:
 - Weekly updates should not include an "Executive Summary" section unless the source document explicitly has that section. Put the overview in "summary" instead.
 - Special/featured updates may include "Executive Summary" only when the source document supports it.
 - Reproduce meaningful source tables as JSON table objects in the relevant section. Do not simply refer to "the table" if the table content is available.
-- Preserve embedded source links. If source text uses Markdown links like [label](https://example.com), put the readable label in body text and add a matching links entry.
+- Preserve embedded source links. If source text uses Markdown links like [label](https://example.com) or the detected PDF links list includes a matching label/URL, put the readable label in body text and add a matching links entry.
 - Avoid markdown formatting in strings.
 - The generated page should be useful without opening the PDF, while the PDF remains the complete source resource.
 
@@ -217,6 +303,9 @@ Metadata:
 
 Detected tables:
 ${tables}
+
+Detected PDF links:
+${formatDetectedLinks(extracted.links) || "No external PDF link annotations were detected."}
 
 Extracted PDF text:
 ${truncatePromptText(extracted.text)}`;
@@ -304,38 +393,54 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
 }
 
 export async function extractPolicyUpdatePdfContent(bytes: Buffer): Promise<ExtractedPolicyUpdatePdf> {
-  const parser = await createPdfParser(bytes);
+  const pdfjs = await loadPdfJs();
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(bytes),
+    disableWorker: true,
+    isEvalSupported: false,
+    useWorkerFetch: false,
+  } as any);
+  const document = await loadingTask.promise;
+
   try {
-    const textResult = await parser.getText({
-      parseHyperlinks: true,
-      pageJoiner: "\n\n--- Page page_number of total_number ---\n\n",
-    });
-    const tableResult = await parser.getTable().catch(() => null);
-    const text = compactWhitespace(textResult.text || "");
+    const pageTexts: string[] = [];
+    const detectedLinks: ExtractedPolicyUpdatePdf["links"] = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      try {
+        const [content, annotations] = await Promise.all([
+          page.getTextContent({
+            includeMarkedContent: false,
+            disableNormalization: false,
+          }),
+          page.getAnnotations({ intent: "display" }).catch(() => []),
+        ]);
+        const pageText = textContentToPageText(content);
+        if (pageText) {
+          pageTexts.push(`${pageText}\n\n--- Page ${pageNumber} of ${document.numPages} ---`);
+        }
+        detectedLinks.push(...linksFromAnnotations(pageNumber, annotations));
+      } finally {
+        page.cleanup();
+      }
+    }
+
+    const links = uniquePdfLinks(detectedLinks);
+    const text = compactWhitespace(pageTexts.join("\n\n"));
     if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
       throw new Error("Could not extract enough text from the PDF to generate page content.");
     }
 
-    const tablePages = Array.isArray((tableResult as any)?.pages) ? (tableResult as any).pages : [];
-    const tables = tablePages
-      .flatMap((page: any) =>
-        Array.isArray(page?.tables)
-          ? page.tables.map((table: unknown) => ({
-              page: page.num,
-              table,
-            }))
-          : [],
-      )
-      .filter((table: any) => Array.isArray(table.table) && table.table.length);
-
     return {
       text,
-      tables,
+      tables: [],
+      links,
       sourceTextLength: text.length,
       sourceTextSha256: createHash("sha256").update(text).digest("hex"),
     };
   } finally {
-    await parser.destroy();
+    await document.destroy();
   }
 }
 
