@@ -63,14 +63,23 @@ const MONTH_NAME_PATTERN =
 const ARTICLE_BODY_START_PATTERN = `On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}(?:,\\s+\\d{4})?\\b`;
 
 class VeniceTimeoutError extends Error {
-  constructor() {
-    super("Venice generation timed out.");
+  timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`Venice generation timed out after ${timeoutMs}ms.`);
     this.name = "VeniceTimeoutError";
+    this.timeoutMs = timeoutMs;
   }
 }
 
 function isVeniceTimeoutError(err: unknown) {
-  return err instanceof VeniceTimeoutError || (err as any)?.message === "Venice generation timed out.";
+  return err instanceof VeniceTimeoutError || /Venice generation timed out/i.test((err as any)?.message || "");
+}
+
+function isAbortLikeError(err: unknown) {
+  const name = typeof (err as any)?.name === "string" ? (err as any).name : "";
+  const message = typeof (err as any)?.message === "string" ? (err as any).message : "";
+  return name === "AbortError" || /aborted/i.test(message);
 }
 
 function compactWhitespace(value: string) {
@@ -420,7 +429,7 @@ function fallbackSectionsFromText(
   return sections.length ? sections.slice(0, 10) : undefined;
 }
 
-function fallbackPolicyUpdateContent(
+export function fallbackPolicyUpdateContent(
   record: UploadedPolicyUpdateRecord,
   extracted: ExtractedPolicyUpdatePdf,
 ): GeneratedPolicyUpdateContent {
@@ -1280,17 +1289,27 @@ Cleaned extracted PDF text:
 ${truncatePromptText(sourceTextForGeneration(extracted.text))}`;
 }
 
-async function postVeniceChat(requestBody: Record<string, unknown>, useJsonMode = true) {
+async function postVeniceChat(
+  requestBody: Record<string, unknown>,
+  {
+    useJsonMode = true,
+    timeoutMs = POLICY_UPDATE_GENERATION_TIMEOUT_MS,
+  }: {
+    useJsonMode?: boolean;
+    timeoutMs?: number;
+  } = {},
+) {
   if (!VENICE_API_KEY?.trim()) {
     throw new Error("Venice API key is not configured.");
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), POLICY_UPDATE_GENERATION_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const body = {
     ...requestBody,
     ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
   };
+  const startedAt = Date.now();
 
   try {
     const res = await fetch(`${POLICY_UPDATE_GENERATION_BASE_URL}/chat/completions`, {
@@ -1298,30 +1317,100 @@ async function postVeniceChat(requestBody: Record<string, unknown>, useJsonMode 
       headers: {
         authorization: `Bearer ${VENICE_API_KEY}`,
         "content-type": "application/json",
+        "user-agent": "pgpz-policy-update-generator/1.0",
       },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
 
-    const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      let payload: any = {};
+      try {
+        payload = bodyText ? JSON.parse(bodyText) : {};
+      } catch {
+        payload = {};
+      }
       const message =
         typeof payload?.error?.message === "string"
           ? payload.error.message
-          : `Venice generation failed with status ${res.status}.`;
-      const error = new Error(message) as Error & { status?: number };
+          : `Venice generation failed with status ${res.status}${bodyText ? `: ${bodyText.trim().slice(0, 240)}` : ""}.`;
+      const error = new Error(message) as Error & { status?: number; retryable?: boolean };
       error.status = res.status;
+      error.retryable = res.status >= 500 || res.status === 429;
       throw error;
     }
 
+    const payload = await res.json().catch(() => ({}));
+    console.log(
+      JSON.stringify({
+        event: "policy_update_generation_model_call",
+        model: requestBody.model,
+        latency_ms: Date.now() - startedAt,
+        usage: payload?.usage || null,
+      }),
+    );
     return payload;
   } catch (err: any) {
-    if (err?.name === "AbortError") {
-      throw new VeniceTimeoutError();
+    if (isAbortLikeError(err)) {
+      throw new VeniceTimeoutError(timeoutMs);
     }
     throw err;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function postVeniceChatWithJsonFallback(
+  requestBody: Record<string, unknown>,
+  useJsonMode: boolean,
+  timeoutMs: number,
+) {
+  try {
+    return await postVeniceChat(requestBody, { useJsonMode, timeoutMs });
+  } catch (err: any) {
+    if (useJsonMode && (err?.status === 400 || err?.status === 422)) {
+      return postVeniceChat(requestBody, { useJsonMode: false, timeoutMs });
+    }
+    throw err;
+  }
+}
+
+async function postVeniceChatWithRetry(
+  requestBody: Record<string, unknown>,
+  useJsonMode: boolean,
+) {
+  const initialTimeoutMs = POLICY_UPDATE_GENERATION_TIMEOUT_MS;
+  try {
+    return await postVeniceChatWithJsonFallback(requestBody, useJsonMode, initialTimeoutMs);
+  } catch (err) {
+    if (!isVeniceTimeoutError(err)) throw err;
+
+    const configuredMaxTokens = Number(requestBody.max_tokens || POLICY_UPDATE_GENERATION_MAX_TOKENS);
+    const retryTimeoutMs = Math.max(30000, Math.floor(initialTimeoutMs * 0.5));
+    const retryMaxTokens = Number.isFinite(configuredMaxTokens)
+      ? Math.max(1200, Math.floor(configuredMaxTokens * 0.6))
+      : 3000;
+    console.log(
+      JSON.stringify({
+        event: "policy_update_generation_model_retry",
+        reason: "timeout_abort",
+        model: requestBody.model,
+        initial_timeout_ms: initialTimeoutMs,
+        retry_timeout_ms: retryTimeoutMs,
+        configured_max_tokens: configuredMaxTokens,
+        retry_max_tokens: retryMaxTokens,
+      }),
+    );
+
+    return postVeniceChatWithJsonFallback(
+      {
+        ...requestBody,
+        max_tokens: retryMaxTokens,
+      },
+      useJsonMode,
+      retryTimeoutMs,
+    );
   }
 }
 
@@ -1353,14 +1442,7 @@ async function generateJsonFromVenice(record: UploadedPolicyUpdateRecord, extrac
 
   const useJsonMode = !baseUrl.includes("venice.ai");
 
-  try {
-    return await postVeniceChat(requestBody, useJsonMode);
-  } catch (err: any) {
-    if (useJsonMode && (err?.status === 400 || err?.status === 422)) {
-      return postVeniceChat(requestBody, false);
-    }
-    throw err;
-  }
+  return postVeniceChatWithRetry(requestBody, useJsonMode);
 }
 
 export async function extractPolicyUpdatePdfContent(
@@ -1446,23 +1528,14 @@ export async function generatePolicyUpdatePageContent(
 > {
   const extracted = await extractPolicyUpdatePdfContent(bytes, record);
   let normalized: GeneratedPolicyUpdateContent;
-  let generatedModel = POLICY_UPDATE_GENERATION_MODEL;
+  const generatedModel = POLICY_UPDATE_GENERATION_MODEL;
 
-  try {
-    const response = await generateJsonFromVenice(record, extracted);
-    const contentText = responseContentText(response);
-    if (!contentText) throw new Error("Venice response did not include generated content.");
+  const response = await generateJsonFromVenice(record, extracted);
+  const contentText = responseContentText(response);
+  if (!contentText) throw new Error("Venice response did not include generated content.");
 
-    const parsed = extractJsonObject(contentText);
-    normalized = normalizeGeneratedPolicyUpdateContent(parsed, fallbackFromRecord(record));
-  } catch (err) {
-    if (!isVeniceTimeoutError(err)) throw err;
-    normalized = normalizeGeneratedPolicyUpdateContent(
-      fallbackPolicyUpdateContent(record, extracted),
-      fallbackFromRecord(record),
-    );
-    generatedModel = `${POLICY_UPDATE_GENERATION_MODEL}+pdf-fallback`;
-  }
+  const parsed = extractJsonObject(contentText);
+  normalized = normalizeGeneratedPolicyUpdateContent(parsed, fallbackFromRecord(record));
   normalized = mergeExtractedImagesIntoContent(normalized, extracted.images);
 
   return {
