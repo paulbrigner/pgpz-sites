@@ -62,6 +62,7 @@ export async function PATCH(request: NextRequest) {
         userId,
         adminUserId,
         profile: {
+          email: typeof body.profile.email === "string" ? body.profile.email : "",
           firstName: typeof body.profile.firstName === "string" ? body.profile.firstName : "",
           lastName: typeof body.profile.lastName === "string" ? body.profile.lastName : "",
           xHandle: typeof body.profile.xHandle === "string" ? body.profile.xHandle : "",

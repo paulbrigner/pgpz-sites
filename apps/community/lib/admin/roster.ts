@@ -1,4 +1,5 @@
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 
 type RawUser = {
@@ -92,6 +93,7 @@ export type PolicyUpdateRecipient = {
 };
 
 export type AdminMemberProfileInput = {
+  email: string;
   firstName: string;
   lastName: string;
   xHandle?: string | null;
@@ -147,6 +149,18 @@ const normalizeLinkedinUrl = (value: unknown) => {
 const userKey = (userId: string) => ({ pk: `USER#${userId}`, sk: `USER#${userId}` });
 
 const confirmationTarget = (user: RawUser) => textOrNull(user.email) || textOrNull(user.id) || "";
+
+async function findUserByEmail(email: string) {
+  const res = await documentClient.query({
+    TableName: TABLE_NAME,
+    IndexName: "GSI1",
+    KeyConditionExpression: "#gsi1pk = :pk AND #gsi1sk = :sk",
+    ExpressionAttributeNames: { "#gsi1pk": "GSI1PK", "#gsi1sk": "GSI1SK" },
+    ExpressionAttributeValues: { ":pk": `USER#${email}`, ":sk": `USER#${email}` },
+    Limit: 1,
+  });
+  return (res.Items?.[0] as RawUser | undefined) || null;
+}
 
 const assertConfirmation = (confirmation: unknown, expected: string) => {
   if (typeof confirmation !== "string" || confirmation.trim() !== expected) {
@@ -266,24 +280,42 @@ export async function updateAdminMemberProfile({
   const trimmedUserId = userId.trim();
   if (!trimmedUserId) throw new Error("User ID is required.");
 
+  const user = await getUserForAdminAction(trimmedUserId);
+  const email = normalizeEmail(profile.email);
+  if (!email || !isValidEmail(email)) throw new Error("Invalid email address.");
+  const emailChanged = normalizeEmail(user.email) !== email;
+  if (emailChanged && adminUserId && user.id === adminUserId) {
+    throw new AdminMemberActionError("Use Profile Settings to change your own admin email.", 409);
+  }
+  const existingEmailUser = await findUserByEmail(email);
+  if (existingEmailUser?.id && existingEmailUser.id !== trimmedUserId) {
+    throw new AdminMemberActionError("That email is already in use.", 409);
+  }
+
   const firstName = requireProfileText(profile.firstName, "First name");
   const lastName = requireProfileText(profile.lastName, "Last name");
   const xHandle = normalizeCommunityXHandle(profile.xHandle);
   const linkedinUrl = normalizeLinkedinUrl(profile.linkedinUrl);
   const name = `${firstName} ${lastName}`.trim();
   const now = new Date().toISOString();
+  const emailAuditExpression = emailChanged
+    ? ", adminEmailUpdatedAt = :now, adminEmailUpdatedBy = :adminUserId, previousEmail = :previousEmail"
+    : "";
 
   await documentClient.update({
     TableName: TABLE_NAME,
     Key: { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` },
     UpdateExpression:
-      "SET firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId",
+      `SET email = :email, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk, firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId${emailAuditExpression}`,
     ConditionExpression: "attribute_exists(#pk)",
     ExpressionAttributeNames: {
       "#pk": "pk",
       "#name": "name",
     },
     ExpressionAttributeValues: {
+      ":email": email,
+      ":gsi1pk": `USER#${email}`,
+      ":gsi1sk": `USER#${email}`,
       ":firstName": firstName,
       ":lastName": lastName,
       ":name": name,
@@ -291,12 +323,14 @@ export async function updateAdminMemberProfile({
       ":linkedinUrl": linkedinUrl || null,
       ":now": now,
       ":adminUserId": adminUserId,
+      ...(emailChanged ? { ":previousEmail": textOrNull(user.email) } : {}),
     },
   });
 
   return {
     ok: true,
     userId: trimmedUserId,
+    email,
     name,
     firstName,
     lastName,
@@ -304,6 +338,13 @@ export async function updateAdminMemberProfile({
     linkedinUrl: linkedinUrl || null,
     adminProfileUpdatedAt: now,
     adminProfileUpdatedBy: adminUserId,
+    ...(emailChanged
+      ? {
+          adminEmailUpdatedAt: now,
+          adminEmailUpdatedBy: adminUserId,
+          previousEmail: textOrNull(user.email),
+        }
+      : {}),
   };
 }
 
