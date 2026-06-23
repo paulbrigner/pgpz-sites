@@ -45,6 +45,12 @@ export async function POST(request: NextRequest) {
     if (!to) {
       return NextResponse.json({ error: "Target email is required" }, { status: 400 });
     }
+    if (user?.accountStatus === "deactivated" || user?.deactivatedAt) {
+      return NextResponse.json({ error: "This user is deactivated." }, { status: 409 });
+    }
+    if (user?.emailSuppressed) {
+      return NextResponse.json({ error: "Email is turned off for this user." }, { status: 409 });
+    }
 
     let subject: string | undefined;
     let html: string | undefined;

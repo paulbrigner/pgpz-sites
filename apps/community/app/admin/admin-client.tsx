@@ -4,20 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BadgeCheck,
+  Ban,
   ChevronDown,
   ChevronRight,
   MailCheck,
   MailPlus,
+  PowerOff,
   RefreshCcw,
   Save,
   Search,
   ShieldCheck,
   StickyNote,
+  Trash2,
   UserCheck,
 } from "lucide-react";
-import {
-  SensitiveDataText,
-} from "@/components/admin/sensitive-data";
+import { SensitiveDataText, useAdminSensitiveData } from "@/components/admin/sensitive-data";
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,40 @@ type Props = {
 
 type SortKey = "firstName" | "lastName" | "joinedAt";
 type SortDirection = "asc" | "desc";
+type ProfileDraft = {
+  firstName: string;
+  lastName: string;
+  xHandle: string;
+  linkedinUrl: string;
+};
+
+const profileInputClass =
+  "w-full rounded-md border bg-white px-3 py-2 text-sm leading-5 text-slate-800 outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(31,76,111,0.18)]";
+
+const profileDraftFromMember = (member: AdminMember): ProfileDraft => ({
+  firstName: member.firstName || "",
+  lastName: member.lastName || "",
+  xHandle: member.xHandle || "",
+  linkedinUrl: member.linkedinUrl || "",
+});
+
+const normalizeProfileDraft = (draft: ProfileDraft): ProfileDraft => ({
+  firstName: draft.firstName.trim(),
+  lastName: draft.lastName.trim(),
+  xHandle: draft.xHandle.trim(),
+  linkedinUrl: draft.linkedinUrl.trim(),
+});
+
+const profileDraftChanged = (draft: ProfileDraft, member: AdminMember) => {
+  const normalized = normalizeProfileDraft(draft);
+  const current = profileDraftFromMember(member);
+  return (
+    normalized.firstName !== current.firstName ||
+    normalized.lastName !== current.lastName ||
+    normalized.xHandle !== current.xHandle ||
+    normalized.linkedinUrl !== current.linkedinUrl
+  );
+};
 
 const formatDate = (value: string | null) => {
   if (!value) return "—";
@@ -57,7 +92,16 @@ const formatDateTime = (value: string | null) => {
 const displayName = (member: AdminMember) =>
   member.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email || "Unnamed member";
 
+const memberActionTarget = (member: AdminMember) => member.email || member.id;
+
+const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "DELETE") => {
+  const phrase = `${verb} ${memberActionTarget(member)}`;
+  const entered = window.prompt(`Type ${phrase} to continue.`);
+  return entered === phrase ? phrase : null;
+};
+
 const memberNeedsAction = (member: AdminMember) => {
+  if (member.accountStatus === "deactivated") return false;
   const active = member.membershipStatus === "active";
   return (member.manualApprovalStatus === "pending" && !active) ||
     (active && !member.welcomeEmailSentAt && !!member.email && !member.emailSuppressed);
@@ -85,6 +129,7 @@ const compareJoinedAt = (a: string | null, b: string | null, direction: SortDire
 };
 
 export default function AdminClient({ initialRoster, currentAdminId }: Props) {
+  const { sensitiveDataVisible } = useAdminSensitiveData();
   const [roster, setRoster] = useState<AdminRoster | null>(initialRoster);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "none" | "manual">("all");
@@ -93,6 +138,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [emailSending, setEmailSending] = useState<Record<string, boolean>>({});
   const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({});
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const [profileDrafts, setProfileDrafts] = useState<Record<string, ProfileDraft>>({});
+  const [profileSaving, setProfileSaving] = useState<Record<string, boolean>>({});
+  const [memberActionLoading, setMemberActionLoading] = useState<Record<string, boolean>>({});
   const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
   const [notesSaving, setNotesSaving] = useState<Record<string, boolean>>({});
   const [sortKey, setSortKey] = useState<SortKey>("lastName");
@@ -132,6 +180,16 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     });
   }, [roster]);
 
+  useEffect(() => {
+    setProfileDrafts((current) => {
+      const next: Record<string, ProfileDraft> = {};
+      for (const member of roster?.members || []) {
+        next[member.id] = current[member.id] ?? profileDraftFromMember(member);
+      }
+      return next;
+    });
+  }, [roster]);
+
   const filteredMembers = useMemo(() => {
     let members = (roster?.members || []).filter((member) => member.id !== currentAdminId);
     const normalized = query.trim().toLowerCase();
@@ -147,6 +205,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           member.membershipProofPostUrl,
           member.membershipProvider,
           member.manualApprovalStatus,
+          member.accountStatus,
+          member.emailSuppressedReason,
+          member.emailBounceReason,
           member.adminNotes,
         ]
           .filter(Boolean)
@@ -256,6 +317,131 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       setError(err?.message || "Failed to save admin notes");
     } finally {
       setNotesSaving((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
+  const saveMemberProfile = async (member: AdminMember) => {
+    const draft = profileDrafts[member.id] ?? profileDraftFromMember(member);
+    const normalized = normalizeProfileDraft(draft);
+    setProfileSaving((current) => ({ ...current, [member.id]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: member.id,
+          profile: normalized,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to save member profile");
+      setNotice(`Profile saved for ${member.email || displayName(member)}.`);
+      const savedDraft = {
+        firstName: body.firstName || "",
+        lastName: body.lastName || "",
+        xHandle: body.xHandle || "",
+        linkedinUrl: body.linkedinUrl || "",
+      };
+      setProfileDrafts((current) => ({ ...current, [member.id]: savedDraft }));
+      setRoster((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          members: current.members.map((item) =>
+            item.id === member.id
+              ? {
+                  ...item,
+                  name: body.name ?? `${savedDraft.firstName} ${savedDraft.lastName}`.trim(),
+                  firstName: body.firstName ?? null,
+                  lastName: body.lastName ?? null,
+                  xHandle: body.xHandle ?? null,
+                  linkedinUrl: body.linkedinUrl ?? null,
+                }
+              : item,
+          ),
+        };
+      });
+    } catch (err: any) {
+      setError(err?.message || "Failed to save member profile");
+    } finally {
+      setProfileSaving((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
+  const optOutMemberEmail = async (member: AdminMember) => {
+    const confirmation = promptForMemberAction(member, "OPT OUT");
+    if (!confirmation) return;
+
+    const actionKey = `${member.id}:email_opt_out`;
+    setMemberActionLoading((current) => ({ ...current, [actionKey]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id, action: "email_opt_out", confirmation }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to turn off email");
+      setNotice(`Email turned off for ${member.email || displayName(member)}.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to turn off email");
+    } finally {
+      setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
+    }
+  };
+
+  const deactivateMember = async (member: AdminMember) => {
+    const confirmation = promptForMemberAction(member, "DEACTIVATE");
+    if (!confirmation) return;
+
+    const actionKey = `${member.id}:deactivate`;
+    setMemberActionLoading((current) => ({ ...current, [actionKey]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id, action: "deactivate", confirmation }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to deactivate user");
+      setNotice(`User deactivated for ${member.email || displayName(member)}.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to deactivate user");
+    } finally {
+      setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
+    }
+  };
+
+  const deleteMember = async (member: AdminMember) => {
+    const confirmation = promptForMemberAction(member, "DELETE");
+    if (!confirmation) return;
+
+    const actionKey = `${member.id}:delete`;
+    setMemberActionLoading((current) => ({ ...current, [actionKey]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id, confirmation }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to delete user");
+      setNotice(`Deleted ${member.email || displayName(member)}.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete user");
+    } finally {
+      setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
     }
   };
 
@@ -375,11 +561,14 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         ) : filteredMembers.length ? (
           <div className="divide-y">
             {filteredMembers.map((member) => {
+              const deactivated = member.accountStatus === "deactivated";
               const active = member.membershipStatus === "active";
               const welcomeSent = !!member.welcomeEmailSentAt;
-              const manualPending = member.manualApprovalStatus === "pending" && !active;
+              const manualPending = member.manualApprovalStatus === "pending" && !active && !deactivated;
               const manualApproved = member.membershipProvider === "manual" || member.manualApprovalStatus === "approved";
               const expanded = !!expandedRows[member.id];
+              const profileDraft = profileDrafts[member.id] ?? profileDraftFromMember(member);
+              const profileChanged = profileDraftChanged(profileDraft, member);
               const notesDraft = notesDrafts[member.id] ?? member.adminNotes ?? "";
               const notesChanged = notesDraft.trim() !== (member.adminNotes || "");
               return (
@@ -404,12 +593,18 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     <div>
                       <span className={cn(
                         "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
-                        active ? "bg-teal-50 text-[var(--brand-teal)]" : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
+                        deactivated
+                          ? "bg-slate-100 text-slate-600"
+                          : active
+                            ? "bg-teal-50 text-[var(--brand-teal)]"
+                            : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
                       )}>
-                        {active ? <BadgeCheck className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                        {active ? "Active" : "Unverified"}
+                        {active && !deactivated ? <BadgeCheck className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                        {deactivated ? "Deactivated" : active ? "Active" : "Unverified"}
                       </span>
-                      <div className="mt-2 text-xs text-slate-500">{formatDate(member.membershipVerifiedAt)}</div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        {deactivated ? formatDate(member.deactivatedAt) : formatDate(member.membershipVerifiedAt)}
+                      </div>
                       {manualPending ? (
                         <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
                           <UserCheck className="h-3.5 w-3.5" />
@@ -454,7 +649,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={emailSending[member.id] || !member.email}
+                          disabled={emailSending[member.id] || !member.email || deactivated}
                           isLoading={!!emailSending[member.id]}
                           onClick={() => sendWelcome(member)}
                         >
@@ -470,7 +665,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       {!active ? (
                         <Button
                           size="sm"
-                          disabled={approvalLoading[member.id]}
+                          disabled={approvalLoading[member.id] || deactivated}
                           isLoading={!!approvalLoading[member.id]}
                           onClick={() => approveManual(member)}
                         >
@@ -491,45 +686,89 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                   </div>
                   {expanded ? (
                     <div className="border-t bg-slate-50/70 px-4 py-4">
-                      <div className="grid gap-5 lg:grid-cols-[1fr_1fr_1.35fr]">
+                      <div className="grid gap-5 lg:grid-cols-[1fr_1fr_1fr_1.35fr]">
                         <div className="space-y-3">
                           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Profile details
                           </div>
-                          <dl className="space-y-2 text-xs text-slate-600">
-                            <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">First name</dt>
-                              <dd className="text-right text-slate-800">
-                                <SensitiveDataText value={member.firstName || "—"} kind="name" />
-                              </dd>
+                          <div className="grid gap-3">
+                            <label className="space-y-1 text-xs text-slate-600">
+                              <span className="font-medium text-slate-500">First name</span>
+                              <input
+                                value={profileDraft.firstName}
+                                onChange={(event) =>
+                                  setProfileDrafts((current) => ({
+                                    ...current,
+                                    [member.id]: { ...profileDraft, firstName: event.target.value },
+                                  }))
+                                }
+                                className={cn(profileInputClass, !sensitiveDataVisible && "blur-[0.12rem]")}
+                              />
+                            </label>
+                            <label className="space-y-1 text-xs text-slate-600">
+                              <span className="font-medium text-slate-500">Last name</span>
+                              <input
+                                value={profileDraft.lastName}
+                                onChange={(event) =>
+                                  setProfileDrafts((current) => ({
+                                    ...current,
+                                    [member.id]: { ...profileDraft, lastName: event.target.value },
+                                  }))
+                                }
+                                className={cn(profileInputClass, !sensitiveDataVisible && "blur-[0.12rem]")}
+                              />
+                            </label>
+                            <label className="space-y-1 text-xs text-slate-600">
+                              <span className="font-medium text-slate-500">X handle</span>
+                              <input
+                                value={profileDraft.xHandle}
+                                onChange={(event) =>
+                                  setProfileDrafts((current) => ({
+                                    ...current,
+                                    [member.id]: { ...profileDraft, xHandle: event.target.value },
+                                  }))
+                                }
+                                placeholder="@handle"
+                                className={profileInputClass}
+                              />
+                            </label>
+                            <label className="space-y-1 text-xs text-slate-600">
+                              <span className="font-medium text-slate-500">LinkedIn URL</span>
+                              <input
+                                value={profileDraft.linkedinUrl}
+                                onChange={(event) =>
+                                  setProfileDrafts((current) => ({
+                                    ...current,
+                                    [member.id]: { ...profileDraft, linkedinUrl: event.target.value },
+                                  }))
+                                }
+                                placeholder="https://www.linkedin.com/in/username"
+                                className={profileInputClass}
+                              />
+                            </label>
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!profileChanged || profileSaving[member.id]}
+                                isLoading={!!profileSaving[member.id]}
+                                onClick={() => saveMemberProfile(member)}
+                              >
+                                <Save className="h-4 w-4" />
+                                Save profile
+                              </Button>
                             </div>
-                            <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">Last name</dt>
-                              <dd className="text-right text-slate-800">
-                                <SensitiveDataText value={member.lastName || "—"} kind="name" />
-                              </dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">X handle</dt>
-                              <dd className="text-right text-slate-800">{member.xHandle || "—"}</dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">LinkedIn</dt>
-                              <dd className="max-w-[14rem] truncate text-right">
-                                {member.linkedinUrl ? (
-                                  <Link className="text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
-                                    Open profile
-                                  </Link>
-                                ) : "—"}
-                              </dd>
-                            </div>
-                          </dl>
+                          </div>
                         </div>
                         <div className="space-y-3">
                           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                             Membership evidence
                           </div>
                           <dl className="space-y-2 text-xs text-slate-600">
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Account</dt>
+                              <dd className="text-right text-slate-800">{deactivated ? "Deactivated" : "Active"}</dd>
+                            </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Provider</dt>
                               <dd className="text-right text-slate-800">{member.membershipProvider || "—"}</dd>
@@ -550,13 +789,83 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <dt className="font-medium text-slate-500">Manual approved</dt>
                               <dd className="text-right text-slate-800">{formatDate(member.manualApprovalApprovedAt)}</dd>
                             </div>
+                          </dl>
+                          <div className="rounded-md border border-rose-200 bg-white p-3">
+                            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
+                              Account controls
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={deactivated || member.isAdmin || memberActionLoading[`${member.id}:deactivate`]}
+                                isLoading={!!memberActionLoading[`${member.id}:deactivate`]}
+                                onClick={() => deactivateMember(member)}
+                              >
+                                <PowerOff className="h-4 w-4" />
+                                Deactivate
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!deactivated || member.isAdmin || memberActionLoading[`${member.id}:delete`]}
+                                isLoading={!!memberActionLoading[`${member.id}:delete`]}
+                                onClick={() => deleteMember(member)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete user
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Email delivery
+                          </div>
+                          <dl className="space-y-2 text-xs text-slate-600">
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Status</dt>
+                              <dd className="text-right text-slate-800">
+                                {member.emailSuppressed ? "Opted out" : "Enabled"}
+                              </dd>
+                            </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Last email</dt>
                               <dd className="text-right text-slate-800">
                                 {member.lastEmailType ? `${member.lastEmailType} · ${formatDate(member.lastEmailSentAt)}` : "—"}
                               </dd>
                             </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Welcome</dt>
+                              <dd className="text-right text-slate-800">{formatDate(member.welcomeEmailSentAt)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Bounce</dt>
+                              <dd className="max-w-[14rem] truncate text-right text-slate-800">{member.emailBounceReason || "—"}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Opt-out date</dt>
+                              <dd className="text-right text-slate-800">{formatDate(member.emailSuppressedAt)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Opt-out reason</dt>
+                              <dd className="max-w-[14rem] truncate text-right text-slate-800">{member.emailSuppressedReason || "—"}</dd>
+                            </div>
                           </dl>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              !!member.emailSuppressed ||
+                              !member.email ||
+                              memberActionLoading[`${member.id}:email_opt_out`]
+                            }
+                            isLoading={!!memberActionLoading[`${member.id}:email_opt_out`]}
+                            onClick={() => optOutMemberEmail(member)}
+                          >
+                            <Ban className="h-4 w-4" />
+                            Turn off email
+                          </Button>
                         </div>
                         <div className="space-y-3">
                           <div className="flex items-center justify-between gap-3">

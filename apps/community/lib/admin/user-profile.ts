@@ -7,6 +7,9 @@ export type UserProfile = {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
+  emailSuppressed: boolean | null;
+  accountStatus: "active" | "deactivated";
+  deactivatedAt: string | null;
 };
 
 const coerceUserProfile = (data: any): UserProfile | null => {
@@ -17,6 +20,9 @@ const coerceUserProfile = (data: any): UserProfile | null => {
     email: textOrNull(data.email),
     firstName: textOrNull(data.firstName),
     lastName: textOrNull(data.lastName),
+    emailSuppressed: typeof data.emailSuppressed === "boolean" ? data.emailSuppressed : null,
+    accountStatus: data.accountStatus === "deactivated" || !!data.deactivatedAt ? "deactivated" : "active",
+    deactivatedAt: textOrNull(data.deactivatedAt),
   };
 };
 
