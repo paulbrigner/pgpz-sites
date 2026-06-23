@@ -52,6 +52,7 @@ type InvitationTemplateState = {
 type SortKey = "firstName" | "lastName" | "company" | "joinedAt";
 type SortDirection = "asc" | "desc";
 type ProfileDraft = {
+  email: string;
   firstName: string;
   lastName: string;
   company: string;
@@ -77,6 +78,7 @@ const emptyCreateForm: CreateMemberForm = {
 };
 
 const profileDraftFromMember = (member: AdminMember): ProfileDraft => ({
+  email: member.email || "",
   firstName: member.firstName || "",
   lastName: member.lastName || "",
   company: member.company || "",
@@ -87,6 +89,7 @@ const profileDraftFromMember = (member: AdminMember): ProfileDraft => ({
 });
 
 const normalizeProfileDraft = (draft: ProfileDraft): ProfileDraft => ({
+  email: draft.email.trim(),
   firstName: draft.firstName.trim(),
   lastName: draft.lastName.trim(),
   company: draft.company.trim(),
@@ -100,6 +103,7 @@ const profileDraftChanged = (draft: ProfileDraft, member: AdminMember) => {
   const normalized = normalizeProfileDraft(draft);
   const current = profileDraftFromMember(member);
   return (
+    normalized.email !== current.email ||
     normalized.firstName !== current.firstName ||
     normalized.lastName !== current.lastName ||
     normalized.company !== current.company ||
@@ -476,8 +480,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to save member profile");
-      setNotice(`Profile saved for ${member.email || displayName(member)}.`);
+      setNotice(`Profile saved for ${body.email || member.email || displayName(member)}.`);
       const savedDraft = {
+        email: body.email || "",
         firstName: body.firstName || "",
         lastName: body.lastName || "",
         company: body.company || "",
@@ -496,6 +501,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               ? {
                   ...item,
                   name: body.name ?? `${savedDraft.firstName} ${savedDraft.lastName}`.trim(),
+                  email: body.email ?? null,
                   firstName: body.firstName ?? null,
                   lastName: body.lastName ?? null,
                   company: body.company ?? null,
@@ -1179,6 +1185,20 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                             Profile details
                           </div>
                           <div className="grid gap-3">
+                            <label className="space-y-1 text-xs text-slate-600">
+                              <span className="font-medium text-slate-500">Email</span>
+                              <input
+                                type="email"
+                                value={profileDraft.email}
+                                onChange={(event) =>
+                                  setProfileDrafts((current) => ({
+                                    ...current,
+                                    [member.id]: { ...profileDraft, email: event.target.value },
+                                  }))
+                                }
+                                className={cn(profileInputClass, !sensitiveDataVisible && "blur-[0.12rem]")}
+                              />
+                            </label>
                             <label className="space-y-1 text-xs text-slate-600">
                               <span className="font-medium text-slate-500">First name</span>
                               <input
