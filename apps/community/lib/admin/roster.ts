@@ -154,6 +154,13 @@ const assertConfirmation = (confirmation: unknown, expected: string) => {
   }
 };
 
+const assertAnyConfirmation = (confirmation: unknown, expected: string[]) => {
+  const entered = typeof confirmation === "string" ? confirmation.trim() : "";
+  if (!expected.includes(entered)) {
+    throw new AdminMemberActionError(`Type ${expected[0]} to confirm.`, 400);
+  }
+};
+
 async function getUserForAdminAction(userId: string) {
   const trimmedUserId = userId.trim();
   if (!trimmedUserId) throw new AdminMemberActionError("User ID is required.", 400);
@@ -351,7 +358,7 @@ export async function deactivateAdminMember({
   assertNonAdminDestructiveTarget(user, adminUserId);
   const target = confirmationTarget(user);
   if (!target) throw new AdminMemberActionError("User not found.", 404);
-  assertConfirmation(confirmation, `DEACTIVATE ${target}`);
+  assertAnyConfirmation(confirmation, ["DEACTIVATE", `DEACTIVATE ${target}`]);
 
   const now = new Date().toISOString();
   await documentClient.update({

@@ -94,8 +94,11 @@ const displayName = (member: AdminMember) =>
 
 const memberActionTarget = (member: AdminMember) => member.email || member.id;
 
+const memberActionConfirmationPhrase = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "DELETE") =>
+  verb === "DEACTIVATE" ? "DEACTIVATE" : `${verb} ${memberActionTarget(member)}`;
+
 const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "DELETE") => {
-  const phrase = `${verb} ${memberActionTarget(member)}`;
+  const phrase = memberActionConfirmationPhrase(member, verb);
   const entered = window.prompt(`Type ${phrase} to continue.`);
   return entered === phrase ? phrase : null;
 };
