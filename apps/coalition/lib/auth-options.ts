@@ -57,7 +57,7 @@ const emailServerConfig = (() => {
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
-async function userExistsByEmail(email: string) {
+async function findUserByEmail(email: string) {
   const res = await documentClient.query({
     TableName: TABLE_NAME,
     IndexName: "GSI1",
@@ -66,7 +66,7 @@ async function userExistsByEmail(email: string) {
     ExpressionAttributeValues: { ":pk": `USER#${email}`, ":sk": `USER#${email}` },
     Limit: 1,
   });
-  return !!res.Items?.[0]?.id;
+  return (res.Items?.[0] as any) || null;
 }
 
 const signupProfileKey = (email: string, signupProfileId: string) => ({
@@ -95,7 +95,11 @@ function signupProfileIdFromMagicLink(url: string) {
 
 async function assertLegalAcceptanceForAccountEmail(identifier: string, url: string) {
   const email = normalizeEmail(identifier);
-  if (await userExistsByEmail(email)) return;
+  const existingUser = await findUserByEmail(email);
+  if (existingUser?.accountStatus === "deactivated" || existingUser?.deactivatedAt) {
+    throw new Error("This account is deactivated. Contact admin@pgpz.org for help.");
+  }
+  if (existingUser?.id) return;
 
   const signupProfileId = signupProfileIdFromMagicLink(url);
   if (!signupProfileId) {

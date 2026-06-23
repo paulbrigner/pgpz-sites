@@ -29,6 +29,9 @@ type UserRecord = {
   firstName: string | null;
   lastName: string | null;
   membershipStatus: "active" | "invited" | "none";
+  emailSuppressed: boolean | null;
+  accountStatus: "active" | "deactivated";
+  deactivatedAt: string | null;
 };
 
 type EmailType = "welcome" | "custom" | "invitation";
@@ -47,6 +50,9 @@ const coerceUser = (data: any): UserRecord | null => {
         : data.membershipStatus === "invited"
           ? "invited"
           : "none",
+    emailSuppressed: typeof data.emailSuppressed === "boolean" ? data.emailSuppressed : null,
+    accountStatus: data.accountStatus === "deactivated" || !!data.deactivatedAt ? "deactivated" : "active",
+    deactivatedAt: typeof data.deactivatedAt === "string" ? data.deactivatedAt : null,
   };
 };
 
@@ -103,6 +109,12 @@ export async function POST(request: NextRequest) {
     const to = normalizedEmail || user?.email || "";
     if (!to) {
       return NextResponse.json({ error: "Target email is required" }, { status: 400 });
+    }
+    if (user?.accountStatus === "deactivated" || user?.deactivatedAt) {
+      return NextResponse.json({ error: "This user is deactivated." }, { status: 409 });
+    }
+    if (user?.emailSuppressed) {
+      return NextResponse.json({ error: "Email is turned off for this user." }, { status: 409 });
     }
 
     let built: { subject: string; html?: string; text: string };

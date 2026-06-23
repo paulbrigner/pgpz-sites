@@ -1,5 +1,6 @@
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
+import { normalizeXHandle } from "@/lib/x-handle";
 
 export type MemberStatus = "active" | "invited" | "none";
 export type ManualApprovalStatus = "none" | "pending" | "approved";
@@ -24,6 +25,12 @@ type RawUser = {
   lastEmailType?: string | null;
   emailBounceReason?: string | null;
   emailSuppressed?: boolean | null;
+  emailSuppressedAt?: string | null;
+  emailSuppressedReason?: string | null;
+  emailSuppressedBy?: string | null;
+  accountStatus?: "active" | "deactivated" | null;
+  deactivatedAt?: string | null;
+  deactivatedBy?: string | null;
   membershipStatus?: MemberStatus | null;
   membershipProvider?: string | null;
   membershipVerifiedAt?: string | null;
@@ -67,6 +74,12 @@ export type AdminMember = {
   lastEmailType: string | null;
   emailBounceReason: string | null;
   emailSuppressed: boolean | null;
+  emailSuppressedAt: string | null;
+  emailSuppressedReason: string | null;
+  emailSuppressedBy: string | null;
+  accountStatus: "active" | "deactivated";
+  deactivatedAt: string | null;
+  deactivatedBy: string | null;
 };
 
 export type AdminRoster = {
@@ -89,6 +102,16 @@ export type PolicyUpdateRecipient = {
   lastName: string | null;
 };
 
+export type AdminMemberProfileInput = {
+  firstName: string;
+  lastName: string;
+  company: string;
+  jobTitle: string;
+  linkedinUrl?: string | null;
+  xHandle?: string | null;
+  memberDirectoryOptIn?: boolean;
+};
+
 export type MemberDirectoryEntry = {
   id: string;
   name: string;
@@ -105,6 +128,73 @@ export type BuildAdminRosterOptions = {
   statusFilter?: "all" | "active" | "invited" | "none" | "manual";
 };
 
+export class AdminMemberActionError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "AdminMemberActionError";
+    this.status = status;
+  }
+}
+
+const normalizeText = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const requireProfileText = (value: unknown, field: string) => {
+  const trimmed = normalizeText(value);
+  if (!trimmed) throw new Error(`${field} is required.`);
+  if (trimmed.length > 180) throw new Error(`${field} must be 180 characters or fewer.`);
+  return trimmed;
+};
+
+const normalizeLinkedinUrl = (value: unknown) => {
+  const trimmed = normalizeText(value);
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (!/^https?:$/.test(url.protocol)) throw new Error();
+  } catch {
+    throw new Error("LinkedIn URL must be http(s).");
+  }
+
+  return trimmed;
+};
+
+const userKey = (userId: string) => ({ pk: `USER#${userId}`, sk: `USER#${userId}` });
+
+const confirmationTarget = (user: RawUser) => textOrNull(user.email) || textOrNull(user.id) || "";
+
+const assertConfirmation = (confirmation: unknown, expected: string) => {
+  if (typeof confirmation !== "string" || confirmation.trim() !== expected) {
+    throw new AdminMemberActionError(`Type ${expected} to confirm.`, 400);
+  }
+};
+
+async function getUserForAdminAction(userId: string) {
+  const trimmedUserId = userId.trim();
+  if (!trimmedUserId) throw new AdminMemberActionError("User ID is required.", 400);
+
+  const res = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: userKey(trimmedUserId),
+  });
+
+  const user = res.Item as RawUser | undefined;
+  if (!user?.id) throw new AdminMemberActionError("User not found.", 404);
+  return user;
+}
+
+function assertNonAdminDestructiveTarget(user: RawUser, adminUserId: string | null) {
+  if (user.id && adminUserId && user.id === adminUserId) {
+    throw new AdminMemberActionError("You cannot perform this action on your own admin account.", 409);
+  }
+  if (user.isAdmin) {
+    throw new AdminMemberActionError("Remove admin access before deactivating or deleting this user.", 409);
+  }
+}
+
 async function scanUsers(): Promise<RawUser[]> {
   const items: RawUser[] = [];
   let ExclusiveStartKey: Record<string, any> | undefined;
@@ -114,7 +204,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -141,6 +231,7 @@ function normalizeManualApprovalStatus(value: unknown): ManualApprovalStatus {
 
 function toAdminMember(user: RawUser): AdminMember | null {
   if (!user.id) return null;
+  const accountStatus = user.accountStatus === "deactivated" || !!user.deactivatedAt ? "deactivated" : "active";
 
   return {
     id: user.id,
@@ -173,6 +264,210 @@ function toAdminMember(user: RawUser): AdminMember | null {
     lastEmailType: textOrNull(user.lastEmailType),
     emailBounceReason: textOrNull(user.emailBounceReason),
     emailSuppressed: typeof user.emailSuppressed === "boolean" ? user.emailSuppressed : null,
+    emailSuppressedAt: textOrNull(user.emailSuppressedAt),
+    emailSuppressedReason: textOrNull(user.emailSuppressedReason),
+    emailSuppressedBy: textOrNull(user.emailSuppressedBy),
+    accountStatus,
+    deactivatedAt: textOrNull(user.deactivatedAt),
+    deactivatedBy: textOrNull(user.deactivatedBy),
+  };
+}
+
+export async function updateAdminMemberProfile({
+  userId,
+  adminUserId,
+  profile,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  profile: AdminMemberProfileInput;
+}) {
+  const trimmedUserId = userId.trim();
+  if (!trimmedUserId) throw new Error("User ID is required.");
+
+  const firstName = requireProfileText(profile.firstName, "First name");
+  const lastName = requireProfileText(profile.lastName, "Last name");
+  const company = requireProfileText(profile.company, "Corporate affiliation");
+  const jobTitle = requireProfileText(profile.jobTitle, "Job title");
+  const linkedinUrl = normalizeLinkedinUrl(profile.linkedinUrl);
+  const xHandle = normalizeXHandle(profile.xHandle);
+  const memberDirectoryOptIn = profile.memberDirectoryOptIn === true;
+  const name = `${firstName} ${lastName}`.trim();
+  const now = new Date().toISOString();
+
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` },
+    UpdateExpression:
+      "SET firstName = :firstName, lastName = :lastName, company = :company, jobTitle = :jobTitle, #name = :name, linkedinUrl = :linkedinUrl, xHandle = :xHandle, memberDirectoryOptIn = :memberDirectoryOptIn, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId",
+    ConditionExpression: "attribute_exists(#pk)",
+    ExpressionAttributeNames: {
+      "#pk": "pk",
+      "#name": "name",
+    },
+    ExpressionAttributeValues: {
+      ":firstName": firstName,
+      ":lastName": lastName,
+      ":company": company,
+      ":jobTitle": jobTitle,
+      ":name": name,
+      ":linkedinUrl": linkedinUrl || null,
+      ":xHandle": xHandle || null,
+      ":memberDirectoryOptIn": memberDirectoryOptIn,
+      ":now": now,
+      ":adminUserId": adminUserId,
+    },
+  });
+
+  return {
+    ok: true,
+    userId: trimmedUserId,
+    name,
+    firstName,
+    lastName,
+    company,
+    jobTitle,
+    linkedinUrl: linkedinUrl || null,
+    xHandle: xHandle || null,
+    memberDirectoryOptIn,
+    adminProfileUpdatedAt: now,
+    adminProfileUpdatedBy: adminUserId,
+  };
+}
+
+export async function optOutAdminMemberEmail({
+  userId,
+  adminUserId,
+  confirmation,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  confirmation: string;
+}) {
+  const user = await getUserForAdminAction(userId);
+  const target = confirmationTarget(user);
+  if (!target) throw new AdminMemberActionError("User not found.", 404);
+  assertConfirmation(confirmation, `OPT OUT ${target}`);
+
+  const now = new Date().toISOString();
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: userKey(user.id!),
+    UpdateExpression:
+      "SET emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now",
+    ExpressionAttributeValues: {
+      ":suppressed": true,
+      ":now": now,
+      ":reason": "admin_opt_out",
+      ":adminUserId": adminUserId,
+    },
+  });
+
+  return {
+    ok: true,
+    userId: user.id!,
+    emailSuppressed: true,
+    emailSuppressedAt: now,
+    emailSuppressedReason: "admin_opt_out",
+    emailSuppressedBy: adminUserId,
+  };
+}
+
+export async function deactivateAdminMember({
+  userId,
+  adminUserId,
+  confirmation,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  confirmation: string;
+}) {
+  const user = await getUserForAdminAction(userId);
+  assertNonAdminDestructiveTarget(user, adminUserId);
+  const target = confirmationTarget(user);
+  if (!target) throw new AdminMemberActionError("User not found.", 404);
+  assertConfirmation(confirmation, `DEACTIVATE ${target}`);
+
+  const now = new Date().toISOString();
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: userKey(user.id!),
+    UpdateExpression:
+      "SET accountStatus = :accountStatus, deactivatedAt = :now, deactivatedBy = :adminUserId, membershipStatus = :membershipStatus, emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now",
+    ExpressionAttributeValues: {
+      ":accountStatus": "deactivated",
+      ":now": now,
+      ":adminUserId": adminUserId,
+      ":membershipStatus": "none",
+      ":suppressed": true,
+      ":reason": "account_deactivated",
+    },
+  });
+
+  return {
+    ok: true,
+    userId: user.id!,
+    accountStatus: "deactivated" as const,
+    deactivatedAt: now,
+    deactivatedBy: adminUserId,
+    membershipStatus: "none" as const,
+    emailSuppressed: true,
+    emailSuppressedAt: now,
+    emailSuppressedReason: "account_deactivated",
+    emailSuppressedBy: adminUserId,
+  };
+}
+
+export async function deleteDeactivatedAdminMember({
+  userId,
+  adminUserId,
+  confirmation,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  confirmation: string;
+}) {
+  const user = await getUserForAdminAction(userId);
+  assertNonAdminDestructiveTarget(user, adminUserId);
+  const target = confirmationTarget(user);
+  if (!target) throw new AdminMemberActionError("User not found.", 404);
+  assertConfirmation(confirmation, `DELETE ${target}`);
+  if (user.accountStatus !== "deactivated" && !user.deactivatedAt) {
+    throw new AdminMemberActionError("Deactivate this user before deleting them.", 409);
+  }
+
+  const items: Array<{ pk: string; sk: string }> = [];
+  let ExclusiveStartKey: Record<string, any> | undefined;
+  do {
+    const res = await documentClient.query({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeNames: { "#pk": "pk" },
+      ExpressionAttributeValues: { ":pk": `USER#${user.id}` },
+      ExclusiveStartKey,
+    });
+    for (const item of res.Items || []) {
+      if (typeof item.pk === "string" && typeof item.sk === "string") {
+        items.push({ pk: item.pk, sk: item.sk });
+      }
+    }
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey);
+
+  for (let index = 0; index < items.length; index += 25) {
+    await documentClient.batchWrite({
+      RequestItems: {
+        [TABLE_NAME]: items.slice(index, index + 25).map((key) => ({
+          DeleteRequest: { Key: key },
+        })),
+      },
+    });
+  }
+
+  return {
+    ok: true,
+    userId: user.id!,
+    deletedItemCount: items.length,
   };
 }
 
@@ -233,9 +528,13 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
     .filter((member) => {
       if (statusFilter === "all") return true;
       if (statusFilter === "manual") {
-        return member.manualApprovalStatus === "pending" && member.membershipStatus !== "active";
+        return (
+          member.accountStatus !== "deactivated" &&
+          member.manualApprovalStatus === "pending" &&
+          member.membershipStatus !== "active"
+        );
       }
-      return member.membershipStatus === statusFilter;
+      return member.accountStatus !== "deactivated" && member.membershipStatus === statusFilter;
     })
     .sort((a, b) => {
       if (statusFilter === "manual") {
@@ -253,11 +552,20 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
     members,
     meta: {
       total: members.length,
-      active: allMembers.filter((member) => member.membershipStatus === "active").length,
-      invited: allMembers.filter((member) => member.membershipStatus === "invited").length,
-      none: allMembers.filter((member) => member.membershipStatus === "none").length,
+      active: allMembers.filter(
+        (member) => member.accountStatus !== "deactivated" && member.membershipStatus === "active"
+      ).length,
+      invited: allMembers.filter(
+        (member) => member.accountStatus !== "deactivated" && member.membershipStatus === "invited"
+      ).length,
+      none: allMembers.filter(
+        (member) => member.accountStatus !== "deactivated" && member.membershipStatus === "none"
+      ).length,
       manualPending: allMembers.filter(
-        (member) => member.manualApprovalStatus === "pending" && member.membershipStatus !== "active",
+        (member) =>
+          member.accountStatus !== "deactivated" &&
+          member.manualApprovalStatus === "pending" &&
+          member.membershipStatus !== "active",
       ).length,
       admins: allMembers.filter((member) => member.isAdmin).length,
     },
@@ -269,7 +577,13 @@ export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipien
   return rawUsers
     .map(toAdminMember)
     .filter((member): member is AdminMember => !!member)
-    .filter((member) => member.membershipStatus === "active" && !!member.email && !member.emailSuppressed)
+    .filter(
+      (member) =>
+        member.accountStatus !== "deactivated" &&
+        member.membershipStatus === "active" &&
+        !!member.email &&
+        !member.emailSuppressed
+    )
     .map((member) => ({
       id: member.id,
       email: member.email as string,
@@ -287,6 +601,7 @@ export async function listActiveMemberDirectory(): Promise<MemberDirectoryEntry[
     .filter((member): member is AdminMember => !!member)
     .filter(
       (member) =>
+        member.accountStatus !== "deactivated" &&
         member.membershipStatus === "active" &&
         member.memberDirectoryOptIn &&
         !!member.email,
