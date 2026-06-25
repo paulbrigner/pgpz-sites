@@ -78,6 +78,19 @@ class LayoutFrame:
         return (p1[0], p1[1], p2[0], p2[1])
 
 
+@dataclass(frozen=True)
+class CardCopy:
+    category: str
+    pill_label: str
+    headline: str
+    display_label: str
+    summary: str
+    document_title: str
+    document_label: str
+    url: str
+    footer: str
+
+
 def load_fonts(scale: float) -> dict[str, ImageFont.FreeTypeFont]:
     arial = "/System/Library/Fonts/Supplemental/Arial.ttf"
     arial_bold = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
@@ -94,6 +107,77 @@ def load_fonts(scale: float) -> dict[str, ImageFont.FreeTypeFont]:
         "doc_title": font(arial_bold, scaled(29)),
         "doc_label": font(arial_bold, scaled(23)),
     }
+
+
+def text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
+
+
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        words = raw_line.split()
+        if not words:
+            lines.append("")
+            continue
+
+        current = words[0]
+        for word in words[1:]:
+            trial = f"{current} {word}"
+            if text_width(draw, trial, font) <= max_width:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    return lines
+
+
+def draw_lines(
+    draw: ImageDraw.ImageDraw,
+    frame: LayoutFrame,
+    lines: list[str],
+    *,
+    x: float,
+    y: float,
+    line_height: float,
+    font: ImageFont.FreeTypeFont,
+    fill: tuple[int, int, int],
+) -> float:
+    for line in lines:
+        draw.text(frame.p(x, y), line, font=font, fill=fill)
+        y += line_height
+    return y
+
+
+def resolve_copy(args: argparse.Namespace) -> CardCopy:
+    display_label = args.display_label or args.week_label
+    if args.category == "weekly":
+        if not display_label:
+            raise ValueError("--week-label is required for weekly cards unless --display-label is provided.")
+        pill_label = args.pill_label or "Weekly Update"
+        headline = args.headline or "Weekly Policy\nMemo"
+        document_title = args.document_title or f"Weekly Policy Memo\n{display_label}"
+        document_label = args.document_label or "WEEKLY MEMO"
+    else:
+        display_label = display_label or "Special Report"
+        pill_label = args.pill_label or "Special Update"
+        headline = args.headline or "Special Report"
+        document_title = args.document_title or headline
+        document_label = args.document_label or "SPECIAL REPORT"
+
+    return CardCopy(
+        category=args.category,
+        pill_label=pill_label,
+        headline=headline,
+        display_label=display_label,
+        summary=args.summary,
+        document_title=document_title,
+        document_label=document_label,
+        url=args.url,
+        footer=args.footer,
+    )
 
 
 def draw_background(draw: ImageDraw.ImageDraw, frame: LayoutFrame) -> None:
@@ -157,34 +241,47 @@ def paste_reference_badge(image: Image.Image, frame: LayoutFrame) -> None:
     image.paste(logo, (center[0] - frame.n(48), center[1] - frame.n(48)), mask)
 
 
-def draw_header(draw: ImageDraw.ImageDraw, fonts: dict[str, ImageFont.FreeTypeFont], frame: LayoutFrame) -> None:
+def draw_header(
+    draw: ImageDraw.ImageDraw,
+    fonts: dict[str, ImageFont.FreeTypeFont],
+    frame: LayoutFrame,
+    *,
+    pill_label: str,
+) -> None:
     draw.text(frame.p(252, 90), "P G P Z   C O M M U N I T Y", font=fonts["brand"], fill=GOLD_SOFT)
-    draw.rounded_rectangle(frame.b(252, 138, 490, 184), radius=frame.n(23), fill=GOLD)
-    draw.text(frame.p(272, 151), "Weekly Update", font=fonts["pill"], fill=(16, 20, 24))
+    pill_origin = frame.p(252, 138)
+    pill_width = max(frame.n(238), text_width(draw, pill_label, fonts["pill"]) + frame.n(40))
+    draw.rounded_rectangle(
+        (pill_origin[0], pill_origin[1], pill_origin[0] + pill_width, pill_origin[1] + frame.n(46)),
+        radius=frame.n(23),
+        fill=GOLD,
+    )
+    draw.text((pill_origin[0] + frame.n(20), pill_origin[1] + frame.n(13)), pill_label, font=fonts["pill"], fill=(16, 20, 24))
 
 
 def draw_main_copy(
     draw: ImageDraw.ImageDraw,
     fonts: dict[str, ImageFont.FreeTypeFont],
     *,
-    summary: str,
-    week_label: str,
+    copy: CardCopy,
     frame: LayoutFrame,
 ) -> None:
-    draw.text(frame.p(104, 244), "Weekly Policy", font=fonts["title"], fill=WHITE)
-    draw.text(frame.p(104, 324), "Memo", font=fonts["title"], fill=WHITE)
+    headline_lines = wrap_text(draw, copy.headline, fonts["title"], frame.n(880))[:3]
+    draw_lines(draw, frame, headline_lines, x=104, y=244, line_height=80, font=fonts["title"], fill=WHITE)
 
-    y = 410
-    for line in textwrap.wrap(summary, width=58)[:2]:
+    y = 410 if len(headline_lines) <= 2 else 244 + len(headline_lines) * 80 + 10
+    for line in textwrap.wrap(copy.summary, width=58)[:2]:
         draw.text(frame.p(108, y), line, font=fonts["subtitle"], fill=(244, 244, 242))
         y += 42
 
+    label_width = text_width(draw, copy.display_label, fonts["date"]) / frame.scale
+    separator_x = min(max(548, 184 + label_width + 38), 676)
     draw.rounded_rectangle(frame.b(104, 508, 1040, 578), radius=frame.n(22), fill=CREAM)
     draw.ellipse(frame.b(128, 527, 162, 561), fill=TEAL)
-    draw.text(frame.p(184, 529), week_label, font=fonts["date"], fill=BLACK)
-    draw.line((*frame.p(548, 522), *frame.p(548, 564)), fill=(223, 196, 125), width=max(1, frame.n(2)))
-    draw.text(frame.p(576, 531), "community.pgpz.org/updates", font=fonts["url"], fill=GOLD_DEEP)
-    draw.text(frame.p(104, 584), "Policy updates and implications for the Zcash ecosystem", font=fonts["footer"], fill=CREAM)
+    draw.text(frame.p(184, 529), copy.display_label, font=fonts["date"], fill=BLACK)
+    draw.line((*frame.p(separator_x, 522), *frame.p(separator_x, 564)), fill=(223, 196, 125), width=max(1, frame.n(2)))
+    draw.text(frame.p(separator_x + 28, 531), copy.url, font=fonts["url"], fill=GOLD_DEEP)
+    draw.text(frame.p(104, 584), copy.footer, font=fonts["footer"], fill=CREAM)
 
 
 def draw_document(
@@ -192,7 +289,7 @@ def draw_document(
     draw: ImageDraw.ImageDraw,
     fonts: dict[str, ImageFont.FreeTypeFont],
     *,
-    week_label: str,
+    copy: CardCopy,
     frame: LayoutFrame,
 ) -> None:
     shadow = Image.new("RGBA", (frame.n(430), frame.n(500)), (0, 0, 0, 0))
@@ -205,31 +302,36 @@ def draw_document(
     shadow = shadow.filter(ImageFilter.GaussianBlur(frame.n(16)))
     image.paste(shadow, frame.p(1086, 54), shadow)
 
-    x, y, w, h = 1118, 88, 350, 453
+    x, y, w, h = (1118, 88, 380, 453) if copy.category == "special" else (1118, 88, 350, 453)
     draw.rounded_rectangle(frame.b(x, y, x + w, y + h), radius=frame.n(18), fill=(250, 250, 250), outline=GOLD, width=1)
     draw.rounded_rectangle(frame.b(x, y, x + w, y + 88), radius=frame.n(18), fill=(31, 31, 31))
     draw.rectangle(frame.b(x, y + 70, x + w, y + 88), fill=(31, 31, 31))
     draw.text(frame.p(x + 30, y + 29), "PGPZ COMMUNITY", font=fonts["doc_brand"], fill=GOLD_SOFT)
     draw.rectangle(frame.b(x, y + 78, x + w, y + 88), fill=TEAL)
 
-    draw.text(frame.p(x + 30, y + 126), "Weekly Policy Memo", font=fonts["doc_title"], fill=BLACK)
-    draw.text(frame.p(x + 30, y + 162), week_label, font=fonts["doc_title"], fill=BLACK)
+    title_width = 334 if copy.category == "special" else 292
+    title_lines = wrap_text(draw, copy.document_title, fonts["doc_title"], frame.n(title_width))[:4]
+    draw_lines(draw, frame, title_lines, x=x + 30, y=y + 126, line_height=36, font=fonts["doc_title"], fill=BLACK)
 
+    body_top = max(y + 210, y + 126 + len(title_lines) * 36 + 18)
     for i, line_width in enumerate([258, 232, 268, 214]):
-        yy = y + 210 + i * 24
+        yy = body_top + i * 24
         draw.rounded_rectangle(frame.b(x + 30, yy, x + 30 + line_width, yy + 11), radius=frame.n(5), fill=LINE)
 
+    table_top = max(y + 318, body_top + 108)
     for i in range(3):
         x0 = x + 30 + i * 96
-        draw.rectangle(frame.b(x0, y + 318, x0 + 92, y + 352), fill=(34, 34, 34))
-        draw.rectangle(frame.b(x0, y + 362, x0 + 92, y + 386), fill=(242, 245, 249), outline=(221, 226, 234))
-        draw.rectangle(frame.b(x0, y + 398, x0 + 92, y + 422), fill=(242, 245, 249), outline=(221, 226, 234))
+        draw.rectangle(frame.b(x0, table_top, x0 + 92, table_top + 34), fill=(34, 34, 34))
+        draw.rectangle(frame.b(x0, table_top + 44, x0 + 92, table_top + 68), fill=(242, 245, 249), outline=(221, 226, 234))
+        draw.rectangle(frame.b(x0, table_top + 80, x0 + 92, table_top + 104), fill=(242, 245, 249), outline=(221, 226, 234))
 
-    draw.text(frame.p(x + 30, y + 408), "WEEKLY MEMO", font=fonts["doc_label"], fill=GOLD_DEEP)
+    label_y = min(table_top + 90, y + h - 30)
+    draw.text(frame.p(x + 30, label_y), copy.document_label, font=fonts["doc_label"], fill=GOLD_DEEP)
 
 
 def render_card(args: argparse.Namespace) -> Path:
     platform = PLATFORMS[args.platform]
+    copy = resolve_copy(args)
     frame = LayoutFrame.for_canvas(
         platform["width"],
         platform["height"],
@@ -241,9 +343,9 @@ def render_card(args: argparse.Namespace) -> Path:
 
     draw_background(draw, frame)
     paste_reference_badge(image, frame)
-    draw_header(draw, fonts, frame)
-    draw_main_copy(draw, fonts, summary=args.summary, week_label=args.week_label, frame=frame)
-    draw_document(image, draw, fonts, week_label=args.week_label, frame=frame)
+    draw_header(draw, fonts, frame, pill_label=copy.pill_label)
+    draw_main_copy(draw, fonts, copy=copy, frame=frame)
+    draw_document(image, draw, fonts, copy=copy, frame=frame)
 
     output = Path(args.output)
     if not output.is_absolute():
@@ -254,17 +356,38 @@ def render_card(args: argparse.Namespace) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate a PGPZ weekly policy social card.")
+    parser = argparse.ArgumentParser(description="Generate a PGPZ policy update social card.")
+    parser.add_argument(
+        "--category",
+        choices=("weekly", "special"),
+        default="weekly",
+        help="Policy update category. Defaults to weekly.",
+    )
     parser.add_argument(
         "--platform",
         choices=sorted(PLATFORMS),
         default="x",
         help="Output platform/size. x = 1600x640. linkedin = 1200x627.",
     )
-    parser.add_argument("--week-label", required=True, help='Date label, for example "Week of June 19, 2026".')
+    parser.add_argument("--week-label", help='Weekly date label, for example "Week of June 19, 2026".')
+    parser.add_argument("--display-label", help="Label shown in the cream date/report strip.")
+    parser.add_argument("--pill-label", help='Gold pill label. Defaults to "Weekly Update" or "Special Update".')
+    parser.add_argument("--headline", help="Main card headline. Supports explicit line breaks.")
+    parser.add_argument("--document-title", help="Mini document title. Supports explicit line breaks.")
+    parser.add_argument("--document-label", help='Mini document footer label. Defaults to "WEEKLY MEMO" or "SPECIAL REPORT".')
     parser.add_argument("--summary", required=True, help="One-sentence summary for the card subtitle.")
+    parser.add_argument("--url", default="community.pgpz.org/updates", help="URL shown in the cream strip.")
+    parser.add_argument(
+        "--footer",
+        default="Policy updates and implications for the Zcash ecosystem",
+        help="Small footer line shown at the bottom of the card.",
+    )
     parser.add_argument("--output", required=True, help="Output PNG path.")
-    output = render_card(parser.parse_args())
+    args = parser.parse_args()
+    try:
+        output = render_card(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     print(output)
 
 

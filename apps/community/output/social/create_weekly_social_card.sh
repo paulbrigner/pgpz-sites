@@ -39,6 +39,8 @@ Example:
 Notes:
   - This wrapper keeps the weekly image format consistent and delegates rendering
     to output/social/generate_weekly_social_card.py.
+  - For special reports, use output/social/create_policy_update_social_card.sh
+    with --category special.
   - Run with --help or -h to show this message.
 EOF
 }
