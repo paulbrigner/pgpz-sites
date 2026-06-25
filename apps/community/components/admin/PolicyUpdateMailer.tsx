@@ -352,6 +352,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
   const [deletingDraftSlug, setDeletingDraftSlug] = useState<string | null>(null);
+  const [confirmingDeleteSlug, setConfirmingDeleteSlug] = useState<string | null>(null);
   const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
   const [exportingMarkdownSlug, setExportingMarkdownSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
@@ -368,6 +369,9 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
   const selectedIsGenerating = Boolean(
     selectedUpdate && generatingContentSlug === selectedUpdate.slug,
+  );
+  const selectedIsConfirmingDelete = Boolean(
+    selectedUpdate && confirmingDeleteSlug === selectedUpdate.slug,
   );
   const selectedIsExportingMarkdown = Boolean(
     selectedUpdate && exportingMarkdownSlug === selectedUpdate.slug,
@@ -442,6 +446,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       return current.filter((id) => validIds.has(id));
     });
   }, [audienceRecipients]);
+
+  useEffect(() => {
+    setConfirmingDeleteSlug(null);
+  }, [selectedSlug]);
 
   const handleUploadFileChange = (file: File | null) => {
     setUploadFile(file);
@@ -574,13 +582,18 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     }
   };
 
+  const requestDeleteSelectedDraft = () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded" || selectedVisibilityStatus !== "draft") return;
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    setConfirmingDeleteSlug(selectedUpdate.slug);
+  };
+
   const deleteSelectedDraft = async () => {
     if (!selectedUpdate || selectedUpdate.source !== "uploaded" || selectedVisibilityStatus !== "draft") return;
-    if (
-      !window.confirm(
-        `Delete draft "${selectedUpdate.shortTitle || selectedUpdate.title}"? This removes the uploaded PDF, generated assets, and draft page.`,
-      )
-    ) {
+    if (confirmingDeleteSlug !== selectedUpdate.slug) {
+      requestDeleteSelectedDraft();
       return;
     }
 
@@ -601,8 +614,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to delete draft update");
       setConfirmSend(false);
+      setConfirmingDeleteSlug(null);
       await loadState({ selectedSlugOverride: nextSelection });
-      setUploadNotice(`Deleted draft: ${body?.title || selectedUpdate.shortTitle}.`);
+      setUploadNotice(
+        body?.cleanupWarning
+          ? `Deleted draft: ${body?.title || selectedUpdate.shortTitle}. Storage cleanup warning: ${body.cleanupWarning}`
+          : `Deleted draft: ${body?.title || selectedUpdate.shortTitle}.`,
+      );
     } catch (err: any) {
       setError(err?.message || "Failed to delete draft update");
     } finally {
@@ -1077,17 +1095,54 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   {selectedUpdate.source === "uploaded" && selectedVisibilityStatus === "draft" ? (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={selectedIsConfirmingDelete ? "destructive" : "outline"}
                       size="sm"
-                      onClick={deleteSelectedDraft}
+                      onClick={selectedIsConfirmingDelete ? deleteSelectedDraft : requestDeleteSelectedDraft}
                       disabled={deletingDraftSlug === selectedUpdate.slug || visibilityUpdatingSlug === selectedUpdate.slug}
-                      className="w-full justify-center border-rose-200 px-3 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      className={cn(
+                        "w-full justify-center px-3",
+                        !selectedIsConfirmingDelete &&
+                          "border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800",
+                      )}
                     >
                       <Trash2 className={cn("h-4 w-4", deletingDraftSlug === selectedUpdate.slug && "animate-pulse")} />
-                      {deletingDraftSlug === selectedUpdate.slug ? "Deleting..." : "Delete draft"}
+                      {deletingDraftSlug === selectedUpdate.slug
+                        ? "Deleting..."
+                        : selectedIsConfirmingDelete
+                          ? "Confirm delete"
+                          : "Delete draft"}
+                    </Button>
+                  ) : null}
+                  {selectedIsConfirmingDelete ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmingDeleteSlug(null)}
+                      disabled={deletingDraftSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
+                    >
+                      Cancel
                     </Button>
                   ) : null}
                 </div>
+                {selectedIsConfirmingDelete ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
+                    <span className="font-semibold">Confirm permanent draft deletion.</span>{" "}
+                    This removes the uploaded draft from the admin list and attempts to clean up its PDF and generated
+                    assets.
+                  </div>
+                ) : null}
+                {uploadNotice ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
+                    {uploadNotice}
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
+                    {error}
+                  </div>
+                ) : null}
               </div>
 
               {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (

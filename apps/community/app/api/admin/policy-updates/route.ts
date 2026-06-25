@@ -611,7 +611,6 @@ async function deleteDraftPolicyUpdate(body: any) {
 
   let deleted;
   try {
-    await deletePolicyUpdateUploadObjects(record);
     deleted = await deleteDraftUploadedPolicyUpdateRecord(record.slug);
   } catch (err: any) {
     return NextResponse.json(
@@ -623,10 +622,24 @@ async function deleteDraftPolicyUpdate(body: any) {
     return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
   }
 
+  let cleanupWarning: string | null = null;
+  try {
+    await deletePolicyUpdateUploadObjects(record);
+  } catch (err: any) {
+    cleanupWarning = err?.message || "Draft record was deleted, but uploaded file cleanup failed.";
+    console.warn("Policy update draft storage cleanup failed", {
+      slug: record.slug,
+      bucket: record.s3Bucket,
+      key: record.s3Key,
+      error: cleanupWarning,
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     slug: deleted.slug,
     title: deleted.title,
+    cleanupWarning,
   });
 }
 
