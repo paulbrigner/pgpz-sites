@@ -1,6 +1,7 @@
 import "server-only";
 
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
 
 export type ManualApprovalStatus = "none" | "pending" | "approved";
 
@@ -133,6 +134,11 @@ export async function approveManualApproval({
     throw err;
   }
 
+  const communitySync = await syncCoalitionMemberToCommunityById({
+    userId,
+    triggeredBy: "manual_approval",
+  });
+
   return {
     ok: true,
     userId,
@@ -142,5 +148,6 @@ export async function approveManualApproval({
     membershipVerifiedAt: now,
     manualApprovalStatus: "approved" as const,
     manualApprovalApprovedAt: now,
+    communitySync,
   };
 }

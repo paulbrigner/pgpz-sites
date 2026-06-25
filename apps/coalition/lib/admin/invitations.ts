@@ -5,6 +5,7 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { SITE_URL } from "@/lib/config";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { normalizeXHandle } from "@/lib/x-handle";
+import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
 
 export type CreateInvitedMemberInput = {
   email: string;
@@ -288,10 +289,16 @@ export async function activateInvitation(token: string) {
     Key: invitationKey(tokenHash),
   });
 
+  const communitySync = await syncCoalitionMemberToCommunityById({
+    userId: String(item.userId),
+    triggeredBy: "invitation_activation",
+  });
+
   return {
     ok: true,
     userId: String(item.userId),
     email: typeof item.email === "string" ? item.email : null,
     activatedAt: now,
+    communitySync,
   };
 }

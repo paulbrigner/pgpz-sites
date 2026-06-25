@@ -39,6 +39,12 @@ type RawUser = {
   manualApprovalRequestedAt?: string | null;
   manualApprovalApprovedAt?: string | null;
   manualApprovalApprovedBy?: string | null;
+  communitySyncStatus?: string | null;
+  communitySyncAttemptedAt?: string | null;
+  communitySyncedAt?: string | null;
+  communitySyncMessage?: string | null;
+  communitySyncError?: string | null;
+  communityUserId?: string | null;
   adminNotes?: string | null;
   adminNotesUpdatedAt?: string | null;
   adminNotesUpdatedBy?: string | null;
@@ -66,6 +72,12 @@ export type AdminMember = {
   manualApprovalRequestedAt: string | null;
   manualApprovalApprovedAt: string | null;
   manualApprovalApprovedBy: string | null;
+  communitySyncStatus: string | null;
+  communitySyncAttemptedAt: string | null;
+  communitySyncedAt: string | null;
+  communitySyncMessage: string | null;
+  communitySyncError: string | null;
+  communityUserId: string | null;
   adminNotes: string | null;
   adminNotesUpdatedAt: string | null;
   adminNotesUpdatedBy: string | null;
@@ -225,7 +237,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -276,6 +288,12 @@ function toAdminMember(user: RawUser): AdminMember | null {
     manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),
     manualApprovalApprovedAt: textOrNull(user.manualApprovalApprovedAt),
     manualApprovalApprovedBy: textOrNull(user.manualApprovalApprovedBy),
+    communitySyncStatus: textOrNull(user.communitySyncStatus),
+    communitySyncAttemptedAt: textOrNull(user.communitySyncAttemptedAt),
+    communitySyncedAt: textOrNull(user.communitySyncedAt),
+    communitySyncMessage: textOrNull(user.communitySyncMessage),
+    communitySyncError: textOrNull(user.communitySyncError),
+    communityUserId: textOrNull(user.communityUserId),
     adminNotes: textOrNull(user.adminNotes),
     adminNotesUpdatedAt: textOrNull(user.adminNotesUpdatedAt),
     adminNotesUpdatedBy: textOrNull(user.adminNotesUpdatedBy),

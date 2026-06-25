@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "serve": "serve out",
+    "community:sync": "npm exec -- tsx scripts/sync-coalition-members-to-community.ts",
     "test": "vitest run --passWithNoTests",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

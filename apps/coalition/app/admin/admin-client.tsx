@@ -159,6 +159,19 @@ const statusLabel = (member: AdminMember) => {
   return "Unapproved";
 };
 
+const communitySyncLabel = (status: string | null) => {
+  if (status === "created") return "Community created";
+  if (status === "updated") return "Community updated";
+  if (status === "already_active") return "Community synced";
+  if (status === "conflict") return "Community conflict";
+  if (status === "failed") return "Community failed";
+  if (status === "skipped") return "Community skipped";
+  return "Community pending";
+};
+
+const communitySyncIsHealthy = (status: string | null) =>
+  status === "created" || status === "updated" || status === "already_active";
+
 const memberNeedsAction = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return false;
   const active = member.membershipStatus === "active";
@@ -1084,6 +1097,22 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           Manual requested
                         </div>
                       ) : null}
+                      {active ? (
+                        <div
+                          className={cn(
+                            "mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold",
+                            communitySyncIsHealthy(member.communitySyncStatus)
+                              ? "bg-emerald-50 text-emerald-800"
+                              : member.communitySyncStatus
+                                ? "bg-rose-50 text-rose-700"
+                                : "bg-slate-100 text-slate-600",
+                          )}
+                          title={member.communitySyncMessage || member.communitySyncError || undefined}
+                        >
+                          <RefreshCcw className="h-3.5 w-3.5" />
+                          {communitySyncLabel(member.communitySyncStatus)}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="space-y-1">
                       <div className="font-medium text-[var(--brand-ink)]">{member.company || "—"}</div>
@@ -1340,6 +1369,24 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <dt className="font-medium text-slate-500">Invitation accepted</dt>
                               <dd className="text-right text-slate-800">{formatDate(member.invitationAcceptedAt)}</dd>
                             </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Community sync</dt>
+                              <dd className="text-right text-slate-800">{communitySyncLabel(member.communitySyncStatus)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Community synced</dt>
+                              <dd className="text-right text-slate-800">{formatDateTime(member.communitySyncedAt)}</dd>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <dt className="font-medium text-slate-500">Community user</dt>
+                              <dd className="max-w-[14rem] truncate text-right text-slate-800">{member.communityUserId || "—"}</dd>
+                            </div>
+                            {member.communitySyncError ? (
+                              <div className="flex justify-between gap-3">
+                                <dt className="font-medium text-slate-500">Sync error</dt>
+                                <dd className="max-w-[14rem] truncate text-right text-rose-700">{member.communitySyncError}</dd>
+                              </div>
+                            ) : null}
                           </dl>
                           <div className="rounded-md border border-rose-200 bg-white p-3">
                             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
