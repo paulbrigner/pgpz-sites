@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, Trash2, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -346,6 +346,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
+  const [deletingDraftSlug, setDeletingDraftSlug] = useState<string | null>(null);
   const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
   const [exportingMarkdownSlug, setExportingMarkdownSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
@@ -560,6 +561,43 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || `Failed to ${verb} policy update`);
     } finally {
       setVisibilityUpdatingSlug(null);
+    }
+  };
+
+  const deleteSelectedDraft = async () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded" || selectedVisibilityStatus !== "draft") return;
+    if (
+      !window.confirm(
+        `Delete draft "${selectedUpdate.shortTitle || selectedUpdate.title}"? This removes the uploaded PDF, generated assets, and draft page.`,
+      )
+    ) {
+      return;
+    }
+
+    const nextSelection = updates.find((update) => update.slug !== selectedUpdate.slug)?.slug || "";
+    setDeletingDraftSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deleteDraftUpdate",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to delete draft update");
+      setSelectedSlug(nextSelection);
+      setConfirmSend(false);
+      await loadState();
+      setUploadNotice(`Deleted draft: ${body?.title || selectedUpdate.shortTitle}.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete draft update");
+    } finally {
+      setDeletingDraftSlug(null);
     }
   };
 
@@ -1004,7 +1042,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <Button
                       type="button"
                       onClick={() => changeSelectedVisibility("publishUpdate")}
-                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug || deletingDraftSlug === selectedUpdate.slug}
                     >
                       <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Publish
@@ -1019,6 +1057,18 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     >
                       <EyeOff className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Unpublish
+                    </Button>
+                  ) : null}
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus === "draft" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={deleteSelectedDraft}
+                      disabled={deletingDraftSlug === selectedUpdate.slug || visibilityUpdatingSlug === selectedUpdate.slug}
+                      className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    >
+                      <Trash2 className={cn("h-4 w-4", deletingDraftSlug === selectedUpdate.slug && "animate-pulse")} />
+                      {deletingDraftSlug === selectedUpdate.slug ? "Deleting..." : "Delete draft"}
                     </Button>
                   ) : null}
                 </div>

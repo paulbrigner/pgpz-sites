@@ -2,7 +2,9 @@ import type { PolicyUpdateSection } from "@/lib/policy-updates";
 import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
 
 export type GeneratedPolicyUpdateContent = {
+  title?: string;
   shortTitle?: string;
+  coverImage?: string;
   summary: string;
   emailSubject?: string;
   emailPreheader: string;

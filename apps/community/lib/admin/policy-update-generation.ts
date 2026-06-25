@@ -10,7 +10,7 @@ import type { PolicyUpdateImage } from "@/lib/policy-updates";
 
 type ExtractedPolicyUpdatePdf = {
   text: string;
-  tables: unknown[];
+  tables: ExtractedPolicyUpdateTable[];
   links: Array<{
     page: number;
     text: string;
@@ -19,6 +19,11 @@ type ExtractedPolicyUpdatePdf = {
   images: ExtractedPolicyUpdateImage[];
   sourceTextLength: number;
   sourceTextSha256: string;
+};
+
+type ExtractedPolicyUpdateTable = {
+  columns: string[];
+  rows: string[][];
 };
 
 type ExtractedPolicyUpdateImage = PolicyUpdateImage & {
@@ -41,6 +46,19 @@ type ViewportRect = {
 };
 
 type PdfMatrix = [number, number, number, number, number, number];
+
+type PositionedTextItem = {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type PositionedTextLine = {
+  y: number;
+  items: PositionedTextItem[];
+};
 
 const MIN_EXTRACTED_TEXT_CHARS = 200;
 const MAX_EXTRACTED_IMAGES = 8;
@@ -182,6 +200,159 @@ function exactItemsFromLines(lines: string[]) {
   if (items.length) return items;
 
   return exactParagraphsFromLines(looseLines);
+}
+
+function exactNumberedItemsFromLines(lines: string[]) {
+  const items: string[] = [];
+  let current = "";
+
+  const flushCurrent = () => {
+    const clean = current.trim();
+    if (clean) items.push(clean);
+    current = "";
+  };
+
+  for (const line of lines) {
+    if (!line) {
+      flushCurrent();
+      continue;
+    }
+
+    const numbered = line.match(/^\d+\.\s+(.*)$/);
+    if (numbered) {
+      flushCurrent();
+      current = numbered[1].trim();
+      continue;
+    }
+
+    if (current) current = appendWrappedLine(current, line);
+  }
+
+  flushCurrent();
+  return items;
+}
+
+function firstIndexMatching(lines: string[], pattern: RegExp, fromIndex = 0) {
+  return lines.findIndex((line, index) => index >= fromIndex && pattern.test(line));
+}
+
+function linesBetweenIndexes(lines: string[], startIndex: number, endIndex: number) {
+  if (startIndex < 0) return [];
+  const end = endIndex >= 0 ? endIndex : lines.length;
+  return lines.slice(startIndex + 1, end);
+}
+
+function isCategoryDateLine(line: string) {
+  return /^(?:Special Update|Weekly Policy Memo)\s*\|/i.test(line);
+}
+
+function meaningfulTitleFromLines(lines: string[], record: UploadedPolicyUpdateRecord) {
+  const introIndex = lines.findIndex(isArticleBodyStart);
+  const titleLines = lines
+    .slice(0, introIndex >= 0 ? introIndex : Math.min(lines.length, 6))
+    .filter((line) => line && !isCategoryDateLine(line))
+    .filter((line) => !/^https?:\/\//i.test(line))
+    .filter((line) => !/^Key Takeaways$/i.test(line))
+    .filter((line) => !/^Action Items?$/i.test(line));
+
+  const title = titleLines.join(" ").replace(/\s+/g, " ").trim();
+  if (!title) return record.title;
+  return title.slice(0, 180);
+}
+
+function openingSummaryFromLines(lines: string[], fallback: string) {
+  const introIndex = lines.findIndex(isArticleBodyStart);
+  if (introIndex < 0) return fallback;
+
+  const endCandidates = [
+    firstIndexMatching(lines, /^Key Takeaways$/i, introIndex + 1),
+    firstIndexMatching(lines, /^Executive Summary$/i, introIndex + 1),
+    firstIndexMatching(lines, /^Key Themes$/i, introIndex + 1),
+  ].filter((index) => index >= 0);
+  const endIndex = endCandidates.length ? Math.min(...endCandidates) : lines.length;
+  const summary = exactParagraphsFromLines(lines.slice(introIndex, endIndex))[0] || "";
+  return summary || fallback;
+}
+
+function buildStructuredSectionsFromSource(
+  extracted: ExtractedPolicyUpdatePdf,
+  linesWithBlanks: string[],
+) {
+  const sections: GeneratedPolicyUpdateContent["sections"] = [];
+
+  const executiveIndex = firstIndexMatching(linesWithBlanks, /^Executive Summary$/i);
+  const keyThemesIndex = firstIndexMatching(linesWithBlanks, /^Key Themes$/i);
+  const recommendationsIndex = firstIndexMatching(
+    linesWithBlanks,
+    /^Actionable Recommendations for Zcash Stakeholders$/i,
+  );
+  const commentsIndex = firstIndexMatching(linesWithBlanks, /^Summary of Comments$/i);
+
+  if (executiveIndex >= 0) {
+    const end = [keyThemesIndex, recommendationsIndex, commentsIndex]
+      .filter((index) => index > executiveIndex)
+      .sort((a, b) => a - b)[0] ?? linesWithBlanks.length;
+    const body = exactParagraphsFromLines(linesBetweenIndexes(linesWithBlanks, executiveIndex, end));
+    if (body.length) sections.push({ heading: "Executive Summary", body });
+  }
+
+  if (keyThemesIndex >= 0) {
+    const end = [recommendationsIndex, commentsIndex]
+      .filter((index) => index > keyThemesIndex)
+      .sort((a, b) => a - b)[0] ?? linesWithBlanks.length;
+    const keyThemeLines = linesBetweenIndexes(linesWithBlanks, keyThemesIndex, end);
+    const firstBullet = keyThemeLines.findIndex(isBulletLine);
+    const body =
+      firstBullet > 0 ? exactParagraphsFromLines(keyThemeLines.slice(0, firstBullet)) : [];
+    const bullets = exactItemsFromLines(firstBullet >= 0 ? keyThemeLines.slice(firstBullet) : keyThemeLines);
+    if (body.length || bullets.length) {
+      sections.push({
+        heading: "Key Themes",
+        body,
+        ...(bullets.length ? { bullets } : {}),
+      });
+    }
+  }
+
+  if (recommendationsIndex >= 0) {
+    const end = commentsIndex > recommendationsIndex ? commentsIndex : linesWithBlanks.length;
+    const recommendationLines = linesBetweenIndexes(linesWithBlanks, recommendationsIndex, end);
+    const firstNumbered = recommendationLines.findIndex((line) => /^\d+\.\s+/.test(line));
+    const body =
+      firstNumbered > 0
+        ? exactParagraphsFromLines(recommendationLines.slice(0, firstNumbered))
+        : [];
+    const bullets = exactNumberedItemsFromLines(
+      firstNumbered >= 0 ? recommendationLines.slice(firstNumbered) : recommendationLines,
+    );
+    if (body.length || bullets.length) {
+      sections.push({
+        heading: "Actionable Recommendations for Zcash Stakeholders",
+        body,
+        ...(bullets.length ? { bullets } : {}),
+      });
+    }
+  }
+
+  if (commentsIndex >= 0) {
+    const commentLines = linesBetweenIndexes(linesWithBlanks, commentsIndex, linesWithBlanks.length);
+    const firstTableHeader = commentLines.findIndex((line) =>
+      /^Commenter\s*\/\s*Organization\b/i.test(line),
+    );
+    const body = exactParagraphsFromLines(
+      firstTableHeader >= 0 ? commentLines.slice(0, firstTableHeader) : commentLines,
+    );
+    const table = extracted.tables[0];
+    if (body.length || table) {
+      sections.push({
+        heading: "Summary of Comments",
+        body,
+        ...(table ? { table } : {}),
+      });
+    }
+  }
+
+  return sections;
 }
 
 function splitFallbackHeading(line: string) {
@@ -434,8 +605,12 @@ export function sourcePolicyUpdateContent(
   extracted: ExtractedPolicyUpdatePdf,
 ): GeneratedPolicyUpdateContent {
   const lines = splitSourceLines(extracted.text);
+  const linesWithBlanks = splitSourceLines(extracted.text, { keepBlank: true });
+  const title = meaningfulTitleFromLines(lines, record);
   const recordSummary = isBoilerplateGeneratedSummary(record.summary) ? "" : record.summary.trim();
+  const sourceIntroSummary = openingSummaryFromLines(linesWithBlanks, "");
   const summary =
+    sourceIntroSummary ||
     recordSummary ||
     record.emailPreheader ||
     exactParagraphsFromLines(lines)
@@ -444,12 +619,20 @@ export function sourcePolicyUpdateContent(
 
   const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [
     /^Action Items$/i,
+    /^Executive Summary$/i,
+    /^Key Themes$/i,
+    /^Actionable Recommendations/i,
+    /^Summary of Comments$/i,
     /^Policy Developments?/i,
     /^Implications?/i,
     /^X Post of the Week:?$/i,
     /^Notable Posts?:?$/i,
   ]);
   const actionItemLines = linesBetweenHeadings(lines, /^Action Items$/i, [
+    /^Executive Summary$/i,
+    /^Key Themes$/i,
+    /^Actionable Recommendations/i,
+    /^Summary of Comments$/i,
     /^Policy Developments?/i,
     /^Implications?/i,
     /^Additional/i,
@@ -460,12 +643,17 @@ export function sourcePolicyUpdateContent(
 
   const keyTakeaways = exactItemsFromLines(keyTakeawayLines);
   const actionItems = exactItemsFromLines(actionItemLines);
-  const sections = fallbackSectionsFromText(record, extracted);
+  const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
+  const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
+  const emailSubject = record.emailSubject.includes(record.title)
+    ? `PGPZ ${record.category === "weekly" ? "Weekly Policy Memo" : "Special Update"}: ${title}`
+    : record.emailSubject;
 
   return {
-    shortTitle: record.shortTitle,
+    title,
+    shortTitle: title.slice(0, 96),
     summary,
-    emailSubject: record.emailSubject,
+    emailSubject,
     emailPreheader: record.emailPreheader || summary.slice(0, 220),
     keyTakeaways: keyTakeaways.length ? keyTakeaways : record.keyTakeaways,
     actionItems: actionItems.length ? actionItems : record.actionItems,
@@ -601,6 +789,155 @@ function textContentToPageText(content: any) {
   }
 
   return compactWhitespace(output.join(""));
+}
+
+function positionedLinesFromTextContent(content: any) {
+  const items: PositionedTextItem[] = (Array.isArray(content?.items) ? content.items : [])
+    .map((item: any) => {
+      if (!item || typeof item.str !== "string" || !item.str.trim()) return null;
+      const transform = Array.isArray(item.transform) ? item.transform : [];
+      return {
+        str: item.str,
+        x: typeof transform[4] === "number" ? transform[4] : 0,
+        y: typeof transform[5] === "number" ? transform[5] : 0,
+        width: typeof item.width === "number" ? item.width : 0,
+        height: typeof item.height === "number" ? item.height : 0,
+      };
+    })
+    .filter((item: PositionedTextItem | null): item is PositionedTextItem => !!item)
+    .sort((a: PositionedTextItem, b: PositionedTextItem) => b.y - a.y || a.x - b.x);
+
+  const lines: PositionedTextLine[] = [];
+  for (const item of items) {
+    const line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 2);
+    if (line) {
+      line.items.push(item);
+      line.items.sort((a, b) => a.x - b.x);
+      continue;
+    }
+    lines.push({ y: item.y, items: [item] });
+  }
+
+  return lines;
+}
+
+function appendTableCellLine(current: string, line: string) {
+  const next = line
+    .replace(/\s+/g, " ")
+    .replace(/\s*-\s*/g, "-")
+    .trim();
+  if (!next) return current.trim();
+  if (!current) return next;
+  if (/-$/.test(current)) return `${current}${next}`.replace(/\s+/g, " ").trim();
+  return `${current} ${next}`.replace(/\s+/g, " ").trim();
+}
+
+function cleanTableCell(value: string) {
+  return value
+    .replace(/\s+-\s*/g, "-")
+    .replace(/\s*-\s+/g, "-")
+    .replace(/\b([A-Za-z]+-[A-Za-z]{1,3})\s+([a-z]{3,})\b/g, "$1$2")
+    .replace(/\bC\s+orp\./g, "Corp.")
+    .replace(/\bI\s+ndemnification\b/g, "Indemnification")
+    .replace(/\bo\s+verbroad\b/g, "overbroad")
+    .replace(/\boverbro\s+ad\b/g, "overbroad")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isWrappedOrganizationContinuation(organization: string, previousOrganization: string) {
+  const clean = organization.trim();
+  if (!clean || !previousOrganization.trim()) return false;
+  if (/,$/.test(previousOrganization.trim())) return true;
+  if (/^\([^)]+\)$/.test(clean)) return true;
+  if (/^(?:Inc\.?|Corp\.?|LLC|Ltd\.?)$/i.test(clean)) return true;
+  if (/^International\b/i.test(clean)) return true;
+  return false;
+}
+
+function normalizeSummaryCommentsTableRows(table: ExtractedPolicyUpdateTable) {
+  const rows: string[][] = [];
+
+  for (const row of table.rows) {
+    const previous = rows[rows.length - 1];
+    if (previous && isWrappedOrganizationContinuation(row[0], previous[0])) {
+      previous[0] = appendTableCellLine(previous[0], row[0]);
+      previous[1] = appendTableCellLine(previous[1], row[1]);
+      previous[2] = appendTableCellLine(previous[2], row[2]);
+      continue;
+    }
+
+    rows.push(row.map(cleanTableCell));
+  }
+
+  for (const row of rows) {
+    row[0] = cleanTableCell(row[0]);
+    row[1] = cleanTableCell(row[1]);
+    row[2] = cleanTableCell(row[2]);
+  }
+
+  table.rows = rows;
+  return table;
+}
+
+function extractSummaryCommentsTableFromPage({
+  content,
+  pageWidth,
+  pageHeight,
+  table,
+}: {
+  content: any;
+  pageWidth: number;
+  pageHeight: number;
+  table: ExtractedPolicyUpdateTable;
+}) {
+  if (pageWidth <= pageHeight) return;
+
+  const lines = positionedLinesFromTextContent(content)
+    .filter((line) => line.y < pageHeight - 56 && line.y > 52)
+    .map((line) => {
+      const col1Start = pageWidth * 0.25;
+      const col2Start = pageWidth * 0.48;
+      const cells = ["", "", ""];
+
+      for (const item of line.items) {
+        const text = item.str.replace(/\s+/g, " ").trim();
+        if (!text) continue;
+        const column = item.x >= col2Start ? 2 : item.x >= col1Start ? 1 : 0;
+        cells[column] = appendTableCellLine(cells[column], text);
+      }
+
+      const combined = cells.filter(Boolean).join(" ");
+      return { y: line.y, cells, combined };
+    })
+    .filter((line) => line.combined);
+
+  if (!lines.some((line) => /Commenter\s*\/\s*Organization/i.test(line.combined))) return;
+
+  for (const line of lines) {
+    if (/Commenter\s*\/\s*Organization/i.test(line.combined)) continue;
+    if (/^Summary of Comments$/i.test(line.combined)) continue;
+    if (/^The table below summarizes/i.test(line.combined)) continue;
+
+    let [organization, topics] = line.cells;
+    const position = line.cells[2];
+    const inlineTopic = organization.match(/^(.*?)\s+[•l]\s+(.*)$/);
+    if (inlineTopic) {
+      organization = inlineTopic[1].trim();
+      topics = appendTableCellLine(`• ${inlineTopic[2].trim()}`, topics);
+    }
+
+    const hasOrganization = !!organization.trim();
+    const currentRow = table.rows[table.rows.length - 1];
+    if (hasOrganization) {
+      table.rows.push([organization.trim(), topics.trim(), position.trim()]);
+      continue;
+    }
+
+    if (!currentRow) continue;
+    if (topics) currentRow[1] = appendTableCellLine(currentRow[1], topics);
+    if (position) currentRow[2] = appendTableCellLine(currentRow[2], position);
+  }
 }
 
 function linkTextFromAnnotation(annotation: any) {
@@ -895,6 +1232,95 @@ async function uploadExtractedImageAsset({
       Key: assetObjectKey(record.s3Key, assetName),
       Body: bytes,
       ContentType: "image/png",
+      ServerSideEncryption: "AES256",
+    }),
+  );
+
+  return `/api/policy-updates/${encodeURIComponent(record.slug)}/assets/${assetName}`;
+}
+
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function wrapSvgText(value: string, maxChars: number, maxLines: number) {
+  const words = value.replace(/\s+/g, " ").trim().split(/\s+/g).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+    if (lines.length >= maxLines) break;
+  }
+
+  if (current && lines.length < maxLines) lines.push(current);
+  return lines;
+}
+
+function generatedCoverSvg({
+  record,
+  title,
+  summary,
+}: {
+  record: UploadedPolicyUpdateRecord;
+  title: string;
+  summary: string;
+}) {
+  const titleLines = wrapSvgText(title, 28, 4);
+  const summaryLines = wrapSvgText(summary, 38, 4);
+  const titleTspans = titleLines
+    .map((line, index) => `<tspan x="42" dy="${index === 0 ? 0 : 34}">${escapeSvgText(line)}</tspan>`)
+    .join("");
+  const summaryTspans = summaryLines
+    .map((line, index) => `<tspan x="42" dy="${index === 0 ? 0 : 22}">${escapeSvgText(line)}</tspan>`)
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="840" viewBox="0 0 640 840" role="img" aria-label="${escapeSvgText(title)} cover preview">
+  <rect width="640" height="840" rx="28" fill="#fafafa"/>
+  <rect x="0" y="0" width="640" height="104" rx="28" fill="#1c180f"/>
+  <rect x="0" y="78" width="640" height="26" fill="#1c180f"/>
+  <rect x="0" y="104" width="640" height="12" fill="#1f7870"/>
+  <text x="42" y="61" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="2" fill="#ffe7a6">PGPZ COMMUNITY</text>
+  <text x="42" y="184" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" fill="#222222">${titleTspans}</text>
+  <text x="42" y="358" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" letter-spacing="2" fill="#7a5007">${escapeSvgText(record.category === "weekly" ? "WEEKLY MEMO" : "FEATURED UPDATE")}</text>
+  <text x="42" y="404" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#334155">${summaryTspans}</text>
+  <rect x="42" y="548" width="556" height="38" rx="10" fill="#1c180f"/>
+  <rect x="42" y="610" width="156" height="38" rx="6" fill="#f2f5f9" stroke="#dde2ea"/>
+  <rect x="222" y="610" width="156" height="38" rx="6" fill="#f2f5f9" stroke="#dde2ea"/>
+  <rect x="402" y="610" width="156" height="38" rx="6" fill="#f2f5f9" stroke="#dde2ea"/>
+  <rect x="42" y="674" width="516" height="18" rx="9" fill="#e3e8ef"/>
+  <rect x="42" y="712" width="438" height="18" rx="9" fill="#e3e8ef"/>
+  <rect x="42" y="750" width="478" height="18" rx="9" fill="#e3e8ef"/>
+</svg>`;
+}
+
+async function uploadGeneratedCoverAsset({
+  record,
+  title,
+  summary,
+}: {
+  record: UploadedPolicyUpdateRecord;
+  title: string;
+  summary: string;
+}) {
+  const assetName = "cover.svg";
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: record.s3Bucket,
+      Key: assetObjectKey(record.s3Key, assetName),
+      Body: Buffer.from(generatedCoverSvg({ record, title, summary }), "utf8"),
+      ContentType: "image/svg+xml; charset=utf-8",
       ServerSideEncryption: "AES256",
     }),
   );
@@ -1197,6 +1623,14 @@ export async function extractPolicyUpdatePdfContent(
     const detectedLinks: ExtractedPolicyUpdatePdf["links"] = [];
     const extractedImages: ExtractedPolicyUpdateImage[] = [];
     const socialImageCounter = { count: 0 };
+    const summaryCommentsTable: ExtractedPolicyUpdateTable = {
+      columns: [
+        "Commenter / Organization",
+        "Relevant Topics/Issue Areas",
+        "Position Summary and Relevance to the Zcash Ecosystem",
+      ],
+      rows: [],
+    };
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
@@ -1213,6 +1647,12 @@ export async function extractPolicyUpdatePdfContent(
         if (pageText) {
           pageTexts.push(`${pageText}\n\n--- Page ${pageNumber} of ${document.numPages} ---`);
         }
+        extractSummaryCommentsTableFromPage({
+          content,
+          pageWidth: Number(page.view?.[2] || 0),
+          pageHeight: Number(page.view?.[3] || 0),
+          table: summaryCommentsTable,
+        });
         detectedLinks.push(...pageLinks);
         if (record && extractedImages.length < MAX_EXTRACTED_IMAGES) {
           const images = await extractPageImageAssets({
@@ -1239,7 +1679,7 @@ export async function extractPolicyUpdatePdfContent(
 
     return {
       text,
-      tables: [],
+      tables: summaryCommentsTable.rows.length ? [normalizeSummaryCommentsTableRows(summaryCommentsTable)] : [],
       links,
       images: extractedImages.slice(0, MAX_EXTRACTED_IMAGES),
       sourceTextLength: text.length,
@@ -1265,9 +1705,15 @@ export async function generatePolicyUpdatePageContent(
     sourcePolicyUpdateContent(record, extracted),
     extracted.images,
   );
+  const coverImage = await uploadGeneratedCoverAsset({
+    record,
+    title: sourceContent.title || record.title,
+    summary: sourceContent.summary,
+  });
 
   return {
     ...sourceContent,
+    coverImage,
     generatedModel: SOURCE_EXACT_GENERATION_MODEL,
     sourceTextLength: extracted.sourceTextLength,
     sourceTextSha256: extracted.sourceTextSha256,

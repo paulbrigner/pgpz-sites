@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, type ReactNode } from "react";
@@ -409,13 +408,10 @@ export default async function UpdateDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="relative min-h-[18rem] overflow-hidden rounded-2xl border border-white/20 bg-white/95">
-            <Image
+            <img
               src={update.coverImage}
               alt={`${update.shortTitle} cover`}
-              fill
-              sizes="(min-width: 1024px) 300px, 100vw"
-              className="object-contain p-4"
-              priority
+              className="h-full min-h-[18rem] w-full object-contain p-4"
             />
           </div>
         </header>

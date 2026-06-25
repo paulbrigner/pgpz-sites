@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
@@ -25,6 +31,7 @@ import {
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import {
   createPolicyUpdateUploadSlug,
+  deleteDraftUploadedPolicyUpdateRecord,
   formatPolicyUpdateDisplayDate,
   getDistributablePolicyUpdate,
   getDistributablePolicyUpdateSummaries,
@@ -509,7 +516,9 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
     const generated = await generatePolicyUpdatePageContent(record, bytes);
     const updated = await saveGeneratedPolicyUpdateContent({
       slug: record.slug,
+      title: generated.title,
       shortTitle: generated.shortTitle,
+      coverImage: generated.coverImage,
       summary: generated.summary,
       emailSubject: generated.emailSubject,
       emailPreheader: generated.emailPreheader,
@@ -548,6 +557,69 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       { status: 500 },
     );
   }
+}
+
+function policyUpdateAssetPrefix(s3Key: string) {
+  return s3Key.replace(/\.pdf$/i, "/assets/");
+}
+
+async function deletePolicyUpdateUploadObjects(record: NonNullable<Awaited<ReturnType<typeof getUploadedPolicyUpdateRecord>>>) {
+  const keys = new Set<string>([record.s3Key]);
+  const prefix = policyUpdateAssetPrefix(record.s3Key);
+  let ContinuationToken: string | undefined;
+
+  do {
+    const listed = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: record.s3Bucket,
+        Prefix: prefix,
+        ContinuationToken,
+      }),
+    );
+    for (const item of listed.Contents || []) {
+      if (item.Key) keys.add(item.Key);
+    }
+    ContinuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (ContinuationToken);
+
+  for (const key of keys) {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: record.s3Bucket,
+        Key: key,
+      }),
+    );
+  }
+}
+
+async function deleteDraftPolicyUpdate(body: any) {
+  const slug = textFromBody(body, "slug");
+  if (!slug) {
+    return NextResponse.json({ error: "Choose a draft update to delete" }, { status: 400 });
+  }
+
+  const record = await getUploadedPolicyUpdateRecord(slug);
+  if (!record) {
+    return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+  }
+  if (record.visibilityStatus !== "draft") {
+    return NextResponse.json(
+      { error: "Only draft updates can be deleted before publishing." },
+      { status: 400 },
+    );
+  }
+
+  await deletePolicyUpdateUploadObjects(record);
+  const deleted = await deleteDraftUploadedPolicyUpdateRecord(record.slug);
+  if (!deleted) {
+    return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    slug: deleted.slug,
+    title: deleted.title,
+  });
 }
 
 async function resolvePolicyUpdateAudience(body: any) {
@@ -644,6 +716,9 @@ export async function POST(request: NextRequest) {
   }
   if (body?.action === "exportMarkdown") {
     return exportPolicyUpdateMarkdown(body);
+  }
+  if (body?.action === "deleteDraftUpdate") {
+    return deleteDraftPolicyUpdate(body);
   }
   if (body?.action === "publishUpdate" || body?.action === "unpublishUpdate") {
     const slug = textFromBody(body, "slug");
