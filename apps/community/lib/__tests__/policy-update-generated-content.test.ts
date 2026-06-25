@@ -32,7 +32,7 @@ describe("normalizeGeneratedPolicyUpdateContent", () => {
             ],
             table: {
               columns: ["Development", "Status", "Zcash relevance"],
-              rows: [["Hearing", "Held June 9", "Tax-friction implications"]],
+              rows: [["Hearing", "Held June 9\nWritten comments due later", "Tax-friction implications"]],
             },
           },
         ],
@@ -48,7 +48,7 @@ describe("normalizeGeneratedPolicyUpdateContent", () => {
     ]);
     expect(normalized.sections[0].table).toEqual({
       columns: ["Development", "Status", "Zcash relevance"],
-      rows: [["Hearing", "Held June 9", "Tax-friction implications"]],
+      rows: [["Hearing", "Held June 9\nWritten comments due later", "Tax-friction implications"]],
     });
   });
 

@@ -94,6 +94,31 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("SEC closure of the Zcash Foundation inquiry");
   });
 
+  it("preserves line breaks inside policy update table cells", () => {
+    if (!specialUpdate) throw new Error("Missing special update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...specialUpdate,
+        sections: [
+          {
+            heading: "Summary of Comments",
+            body: ["The table below summarizes the comments discussed in this memo."],
+            table: {
+              columns: ["Commenter", "Relevant Topics/Issue Areas", "Position"],
+              rows: [["Midnight Foundation", "• Privacy-preserving chains\n• Viewing keys", "Relevant to Zcash."]],
+            },
+          },
+        ],
+      },
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain("• Privacy-preserving chains<br />• Viewing keys");
+    expect(built.text).toContain("Midnight Foundation | • Privacy-preserving chains; • Viewing keys | Relevant to Zcash.");
+  });
+
   it("preserves embedded policy update links in HTML and text email bodies", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 

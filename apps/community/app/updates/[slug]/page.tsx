@@ -323,7 +323,7 @@ function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["
               {row.map((cell, index) => (
                 <td
                   key={`${row[0]}-${index}`}
-                  className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                  className="whitespace-pre-line break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
                 >
                   {index === 0 ? (
                     <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>

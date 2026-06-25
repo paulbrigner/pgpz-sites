@@ -79,7 +79,7 @@ function linkifyText(text: string, links: PolicyUpdateLink[] = []) {
 }
 
 function tableCell(value: string) {
-  return normalizeSpaces(value).replace(/\|/g, "\\|");
+  return normalizeSpaces(value).replace(/\|/g, "\\|").replace(/\n+/g, "<br>");
 }
 
 function renderTable(table: PolicyUpdateTable) {

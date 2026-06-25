@@ -74,4 +74,27 @@ describe("buildPolicyUpdateForumMarkdown", () => {
     expect(markdown).not.toContain("cid:");
     expect(markdown).not.toContain("/assets/x-josh-swihart.png");
   });
+
+  it("preserves table cell line breaks as markdown-safe breaks", () => {
+    const markdown = buildPolicyUpdateForumMarkdown(
+      {
+        ...update,
+        sections: [
+          {
+            heading: "Summary of Comments",
+            body: ["The table below summarizes the comments discussed in this memo."],
+            table: {
+              columns: ["Commenter", "Relevant Topics/Issue Areas", "Position"],
+              rows: [["Midnight Foundation", "• Privacy-preserving chains\n• Viewing keys", "Relevant to Zcash."]],
+            },
+          },
+        ],
+      },
+      {
+        siteUrl: "https://community.pgpz.org",
+      },
+    );
+
+    expect(markdown).toContain("• Privacy-preserving chains<br>• Viewing keys");
+  });
 });

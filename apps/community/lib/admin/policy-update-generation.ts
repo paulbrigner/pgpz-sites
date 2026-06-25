@@ -832,7 +832,24 @@ function appendTableCellLine(current: string, line: string) {
   return `${current} ${next}`.replace(/\s+/g, " ").trim();
 }
 
-function cleanTableCell(value: string) {
+function appendTableTopicLine(current: string, line: string) {
+  let next = line
+    .replace(/\s+/g, " ")
+    .replace(/\s*-\s*/g, "-")
+    .trim();
+  if (!next) return current.trim();
+
+  next = next.replace(/^[•l]\s+/, "• ");
+  if (!current) return next;
+  if (/^•\s+/.test(next)) return `${current.trim()}\n${next}`.trim();
+
+  const lines = current.split("\n");
+  const lastLine = lines.pop() || "";
+  lines.push(appendTableCellLine(lastLine, next));
+  return lines.join("\n").trim();
+}
+
+function cleanTableCellLine(value: string) {
   return value
     .replace(/\s+-\s*/g, "-")
     .replace(/\s*-\s+/g, "-")
@@ -842,6 +859,17 @@ function cleanTableCell(value: string) {
     .replace(/\bo\s+verbroad\b/g, "overbroad")
     .replace(/\boverbro\s+ad\b/g, "overbroad")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanTableCell(value: string, { preserveLineBreaks = false } = {}) {
+  if (!preserveLineBreaks) return cleanTableCellLine(value);
+  return value
+    .replace(/[ \t]+[•]\s+/g, "\n• ")
+    .split(/\n+/)
+    .map(cleanTableCellLine)
+    .filter(Boolean)
+    .join("\n")
     .trim();
 }
 
@@ -862,17 +890,17 @@ function normalizeSummaryCommentsTableRows(table: ExtractedPolicyUpdateTable) {
     const previous = rows[rows.length - 1];
     if (previous && isWrappedOrganizationContinuation(row[0], previous[0])) {
       previous[0] = appendTableCellLine(previous[0], row[0]);
-      previous[1] = appendTableCellLine(previous[1], row[1]);
+      previous[1] = appendTableTopicLine(previous[1], row[1]);
       previous[2] = appendTableCellLine(previous[2], row[2]);
       continue;
     }
 
-    rows.push(row.map(cleanTableCell));
+    rows.push(row.map((cell, index) => cleanTableCell(cell, { preserveLineBreaks: index === 1 })));
   }
 
   for (const row of rows) {
     row[0] = cleanTableCell(row[0]);
-    row[1] = cleanTableCell(row[1]);
+    row[1] = cleanTableCell(row[1], { preserveLineBreaks: true });
     row[2] = cleanTableCell(row[2]);
   }
 
@@ -924,7 +952,7 @@ function extractSummaryCommentsTableFromPage({
     const inlineTopic = organization.match(/^(.*?)\s+[•l]\s+(.*)$/);
     if (inlineTopic) {
       organization = inlineTopic[1].trim();
-      topics = appendTableCellLine(`• ${inlineTopic[2].trim()}`, topics);
+      topics = appendTableTopicLine(`• ${inlineTopic[2].trim()}`, topics);
     }
 
     const hasOrganization = !!organization.trim();
@@ -935,7 +963,7 @@ function extractSummaryCommentsTableFromPage({
     }
 
     if (!currentRow) continue;
-    if (topics) currentRow[1] = appendTableCellLine(currentRow[1], topics);
+    if (topics) currentRow[1] = appendTableTopicLine(currentRow[1], topics);
     if (position) currentRow[2] = appendTableCellLine(currentRow[2], position);
   }
 }
