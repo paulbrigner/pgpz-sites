@@ -139,6 +139,9 @@ function policyUpdateEmailIntro(update: Pick<PolicyUpdate, "category" | "summary
   return `${prefix} ${summary}.`;
 }
 
+const renderTableCellHtml = (cell: string) => escapeHtml(cell).replace(/\n+/g, "<br />");
+const renderTableCellText = (cell: string) => cell.replace(/\n+/g, "; ");
+
 const renderTable = (table: PolicyUpdateTable) =>
   `<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid ${colors.line};border-radius:12px;overflow:hidden;margin:4px 0 18px;background:#ffffff;">
     <thead>
@@ -158,7 +161,7 @@ const renderTable = (table: PolicyUpdateTable) =>
             `<tr>${row
               .map(
                 (cell, index) =>
-                  `<td style="border-top:1px solid ${colors.line};border-right:1px solid ${colors.line};padding:12px 10px;vertical-align:top;color:${index === 0 ? colors.ink : colors.slate};font-size:13px;line-height:1.55;font-weight:${index === 0 ? "700" : "400"};">${escapeHtml(cell)}</td>`,
+                  `<td style="border-top:1px solid ${colors.line};border-right:1px solid ${colors.line};padding:12px 10px;vertical-align:top;color:${index === 0 ? colors.ink : colors.slate};font-size:13px;line-height:1.55;font-weight:${index === 0 ? "700" : "400"};">${renderTableCellHtml(cell)}</td>`,
               )
               .join("")}</tr>`,
         )
@@ -168,7 +171,7 @@ const renderTable = (table: PolicyUpdateTable) =>
 
 const renderTableText = (table: PolicyUpdateTable) => [
   table.columns.join(" | "),
-  ...table.rows.map((row) => row.join(" | ")),
+  ...table.rows.map((row) => row.map(renderTableCellText).join(" | ")),
   "",
 ];
 

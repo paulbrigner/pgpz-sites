@@ -102,7 +102,9 @@ export type SaveUploadedPolicyUpdateInput = Omit<
 
 export type SaveGeneratedPolicyUpdateContentInput = {
   slug: string;
+  title?: string;
   shortTitle?: string;
+  coverImage?: string;
   summary: string;
   emailSubject?: string;
   emailPreheader: string;
@@ -509,8 +511,10 @@ export async function saveGeneratedPolicyUpdateContent(
   if (!existing) return null;
 
   const now = new Date().toISOString();
+  const title = input.title?.trim() || existing.title;
   const shortTitle = input.shortTitle?.trim() || existing.shortTitle;
   const emailSubject = input.emailSubject?.trim() || existing.emailSubject;
+  const coverImage = input.coverImage?.trim() || existing.coverImage;
 
   await documentClient.update({
     TableName: TABLE_NAME,
@@ -519,10 +523,12 @@ export async function saveGeneratedPolicyUpdateContent(
       sk: `POLICY_UPDATE_UPLOAD#${slug}`,
     },
     UpdateExpression: [
-      "SET #shortTitle = :shortTitle",
+      "SET #title = :title",
+      "#shortTitle = :shortTitle",
       "#summary = :summary",
       "#emailSubject = :emailSubject",
       "#emailPreheader = :emailPreheader",
+      "#coverImage = :coverImage",
       "#keyTakeaways = :keyTakeaways",
       "#actionItems = :actionItems",
       "#sections = :sections",
@@ -535,10 +541,12 @@ export async function saveGeneratedPolicyUpdateContent(
       "#generationSourceTextSha256 = :generationSourceTextSha256",
     ].join(", "),
     ExpressionAttributeNames: {
+      "#title": "title",
       "#shortTitle": "shortTitle",
       "#summary": "summary",
       "#emailSubject": "emailSubject",
       "#emailPreheader": "emailPreheader",
+      "#coverImage": "coverImage",
       "#keyTakeaways": "keyTakeaways",
       "#actionItems": "actionItems",
       "#sections": "sections",
@@ -551,10 +559,12 @@ export async function saveGeneratedPolicyUpdateContent(
       "#generationSourceTextSha256": "generationSourceTextSha256",
     },
     ExpressionAttributeValues: {
+      ":title": title,
       ":shortTitle": shortTitle,
       ":summary": input.summary,
       ":emailSubject": emailSubject,
       ":emailPreheader": input.emailPreheader,
+      ":coverImage": coverImage,
       ":keyTakeaways": input.keyTakeaways,
       ":actionItems": input.actionItems,
       ":sections": input.sections,
@@ -713,6 +723,24 @@ export async function unpublishUploadedPolicyUpdate(slug: string, adminUserId: s
   });
 
   return getUploadedPolicyUpdateRecord(record.slug);
+}
+
+export async function deleteDraftUploadedPolicyUpdateRecord(slug: string) {
+  const record = await getUploadedPolicyUpdateRecord(slug);
+  if (!record) return null;
+  if (record.visibilityStatus !== "draft") {
+    throw new Error("Only draft updates can be deleted before publishing.");
+  }
+
+  await documentClient.delete({
+    TableName: TABLE_NAME,
+    Key: {
+      pk: `POLICY_UPDATE_UPLOAD#${record.slug}`,
+      sk: `POLICY_UPDATE_UPLOAD#${record.slug}`,
+    },
+  });
+
+  return record;
 }
 
 export async function getDistributablePolicyUpdate(slug: string) {

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, type ReactNode } from "react";
@@ -324,7 +323,7 @@ function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["
               {row.map((cell, index) => (
                 <td
                   key={`${row[0]}-${index}`}
-                  className="break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
+                  className="whitespace-pre-line break-words align-top border-r border-slate-200 px-4 py-4 text-slate-700 last:border-r-0"
                 >
                   {index === 0 ? (
                     <span className="font-semibold text-[var(--brand-ink)]">{cell}</span>
@@ -409,13 +408,10 @@ export default async function UpdateDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="relative min-h-[18rem] overflow-hidden rounded-2xl border border-white/20 bg-white/95">
-            <Image
+            <img
               src={update.coverImage}
               alt={`${update.shortTitle} cover`}
-              fill
-              sizes="(min-width: 1024px) 300px, 100vw"
-              className="object-contain p-4"
-              priority
+              className="h-full min-h-[18rem] w-full object-contain p-4"
             />
           </div>
         </header>

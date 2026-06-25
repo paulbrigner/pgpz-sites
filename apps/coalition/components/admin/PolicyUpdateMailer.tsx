@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, BarChart3, CheckCircle2, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, UploadCloud, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, Trash2, UploadCloud, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -89,8 +89,21 @@ type UploadPrepareResponse = {
   };
 };
 
+type MarkdownExportResponse = {
+  ok?: boolean;
+  error?: string;
+  title?: string;
+  fileName?: string;
+  markdown?: string;
+};
+
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
+};
+
+type LoadStateOptions = {
+  selectFirst?: boolean;
+  selectedSlugOverride?: string;
 };
 
 const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -338,7 +351,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [sending, setSending] = useState(false);
   const [sendingPrevious, setSendingPrevious] = useState<Record<string, boolean>>({});
   const [visibilityUpdatingSlug, setVisibilityUpdatingSlug] = useState<string | null>(null);
+  const [deletingDraftSlug, setDeletingDraftSlug] = useState<string | null>(null);
+  const [confirmingDeleteSlug, setConfirmingDeleteSlug] = useState<string | null>(null);
   const [generatingContentSlug, setGeneratingContentSlug] = useState<string | null>(null);
+  const [exportingMarkdownSlug, setExportingMarkdownSlug] = useState<string | null>(null);
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -354,6 +370,14 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const selectedIsGenerating = Boolean(
     selectedUpdate && generatingContentSlug === selectedUpdate.slug,
   );
+  const selectedIsConfirmingDelete = Boolean(
+    selectedUpdate && confirmingDeleteSlug === selectedUpdate.slug,
+  );
+  const selectedIsExportingMarkdown = Boolean(
+    selectedUpdate && exportingMarkdownSlug === selectedUpdate.slug,
+  );
+  const selectedCanExportMarkdown =
+    !!selectedUpdate && (selectedUpdate.source !== "uploaded" || selectedHasGeneratedContent);
   const selectedStats = selectedUpdate ? statsBySlug[selectedUpdate.slug] || emptyStats : emptyStats;
   const selectedRecipients = useMemo(() => {
     const selected = new Set(selectedRecipientIds);
@@ -378,24 +402,31 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
   const uploadSlugPreview = useMemo(() => previewSlugFromInput(uploadSlug), [uploadSlug]);
 
-  const loadState = async () => {
+  const loadState = async (options: LoadStateOptions = {}) => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/admin/policy-updates", { cache: "no-store" });
       const body = (await res.json().catch(() => ({}))) as Partial<ApiState> & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to load policy update sender");
-      setUpdates(body.updates || []);
+      const nextUpdates = body.updates || [];
+      setUpdates(nextUpdates);
       setRecipientCount(typeof body.recipientCount === "number" ? body.recipientCount : 0);
       setAudienceRecipients(body.recipients || []);
       setStatsBySlug(body.statsBySlug || {});
       setSendHistory(body.sendHistory || []);
-      if (body.updates?.length) {
+      if (nextUpdates.length) {
         setSelectedSlug((current) =>
-          current && body.updates?.some((update) => update.slug === current)
-            ? current
-            : body.updates?.[0]?.slug || "",
+          options.selectFirst
+            ? nextUpdates[0]?.slug || ""
+            : options.selectedSlugOverride && nextUpdates.some((update) => update.slug === options.selectedSlugOverride)
+              ? options.selectedSlugOverride
+              : current && nextUpdates.some((update) => update.slug === current)
+                ? current
+                : nextUpdates[0]?.slug || "",
         );
+      } else {
+        setSelectedSlug("");
       }
     } catch (err: any) {
       setError(err?.message || "Failed to load policy update sender");
@@ -405,7 +436,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   };
 
   useEffect(() => {
-    void loadState();
+    void loadState({ selectFirst: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -415,6 +446,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       return current.filter((id) => validIds.has(id));
     });
   }, [audienceRecipients]);
+
+  useEffect(() => {
+    setConfirmingDeleteSlug(null);
+  }, [selectedSlug]);
 
   const handleUploadFileChange = (file: File | null) => {
     setUploadFile(file);
@@ -504,8 +539,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setUploadSlug("");
       setUploadSummary("");
       setUploadInputKey((current) => current + 1);
-      await loadState();
-      if (uploadedSlug) setSelectedSlug(uploadedSlug);
+      await loadState({ selectedSlugOverride: uploadedSlug });
     } catch (err: any) {
       setUploadError(err?.message || "Failed to upload policy update PDF");
     } finally {
@@ -534,8 +568,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || `Failed to ${verb} policy update`);
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
       setConfirmSend(false);
       setUploadNotice(
         action === "publishUpdate"
@@ -546,6 +579,52 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || `Failed to ${verb} policy update`);
     } finally {
       setVisibilityUpdatingSlug(null);
+    }
+  };
+
+  const requestDeleteSelectedDraft = () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded" || selectedVisibilityStatus !== "draft") return;
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    setConfirmingDeleteSlug(selectedUpdate.slug);
+  };
+
+  const deleteSelectedDraft = async () => {
+    if (!selectedUpdate || selectedUpdate.source !== "uploaded" || selectedVisibilityStatus !== "draft") return;
+    if (confirmingDeleteSlug !== selectedUpdate.slug) {
+      requestDeleteSelectedDraft();
+      return;
+    }
+
+    const nextSelection = updates.find((update) => update.slug !== selectedUpdate.slug)?.slug || "";
+    setDeletingDraftSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deleteDraftUpdate",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to delete draft update");
+      setConfirmSend(false);
+      setConfirmingDeleteSlug(null);
+      await loadState({ selectedSlugOverride: nextSelection });
+      setUploadNotice(
+        body?.cleanupWarning
+          ? `Deleted draft: ${body?.title || selectedUpdate.shortTitle}. Storage cleanup warning: ${body.cleanupWarning}`
+          : `Deleted draft: ${body?.title || selectedUpdate.shortTitle}.`,
+      );
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete draft update");
+    } finally {
+      setDeletingDraftSlug(null);
     }
   };
 
@@ -573,15 +652,54 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to generate policy update content");
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
       setUploadNotice(`Generated page content for ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`);
     } catch (err: any) {
       setError(err?.message || "Failed to generate policy update content");
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
     } finally {
       setGeneratingContentSlug(null);
+    }
+  };
+
+  const exportSelectedMarkdown = async () => {
+    if (!selectedUpdate) return;
+
+    setExportingMarkdownSlug(selectedUpdate.slug);
+    setError(null);
+    setResult(null);
+    setUploadNotice(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "exportMarkdown",
+          slug: selectedUpdate.slug,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as MarkdownExportResponse;
+      if (!res.ok || !body.markdown) throw new Error(body?.error || "Failed to export Markdown");
+
+      const fileName = body.fileName || `${selectedUpdate.slug}.md`;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(body.markdown).catch(() => undefined);
+      }
+
+      const blob = new Blob([body.markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setUploadNotice(`Exported Markdown for ${body.title || selectedUpdate.shortTitle}.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to export Markdown");
+    } finally {
+      setExportingMarkdownSlug(null);
     }
   };
 
@@ -610,7 +728,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!res.ok) throw new Error(body?.error || "Failed to send policy update");
       setResult(body);
       setConfirmSend(false);
-      await loadState();
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
     } catch (err: any) {
       setError(err?.message || "Failed to send policy update");
     } finally {
@@ -723,7 +841,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)]">
             {recipientCount === null ? "Loading recipients" : `${recipientCount} recipients`}
           </div>
-          <Button type="button" variant="outline" onClick={loadState} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => loadState()} disabled={loading}>
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
           </Button>
@@ -882,8 +1000,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         <div className="rounded-2xl border bg-white/90 p-5">
           {selectedUpdate ? (
             <div className="space-y-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+              <div className="space-y-4">
+                <div className="min-w-0">
                   <div className="inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
                     {selectedUpdate.categoryLabel}
                   </div>
@@ -910,13 +1028,15 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{selectedUpdate.summary}</p>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                   {selectedUpdate.source === "uploaded" ? (
                     <Button
                       type="button"
+                      size="sm"
                       variant={selectedHasGeneratedContent ? "outline" : "default"}
                       onClick={generateSelectedContent}
                       disabled={generatingContentSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <Sparkles className={cn("h-4 w-4", generatingContentSlug === selectedUpdate.slug && "animate-pulse")} />
                       {generatingContentSlug === selectedUpdate.slug
@@ -926,16 +1046,34 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                           : "Generate content"}
                     </Button>
                   ) : null}
-                  <Button variant="outline" asChild>
+                  <Button variant="outline" size="sm" asChild className="w-full justify-center px-3">
                     <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
                       Portal view
                     </Link>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={exportSelectedMarkdown}
+                    disabled={!selectedCanExportMarkdown || selectedIsExportingMarkdown}
+                    className="w-full justify-center px-3"
+                    title={
+                      selectedCanExportMarkdown
+                        ? "Copy and download a clean Markdown version"
+                        : "Generate page content before exporting Markdown"
+                    }
+                  >
+                    <Download className={cn("h-4 w-4", selectedIsExportingMarkdown && "animate-pulse")} />
+                    {selectedIsExportingMarkdown ? "Exporting..." : "Markdown"}
+                  </Button>
                   {selectedUpdate.source === "uploaded" && selectedVisibilityStatus !== "published" ? (
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => changeSelectedVisibility("publishUpdate")}
-                      disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                      disabled={visibilityUpdatingSlug === selectedUpdate.slug || deletingDraftSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Publish
@@ -945,14 +1083,66 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => changeSelectedVisibility("unpublishUpdate")}
                       disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <EyeOff className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Unpublish
                     </Button>
                   ) : null}
+                  {selectedUpdate.source === "uploaded" && selectedVisibilityStatus === "draft" ? (
+                    <Button
+                      type="button"
+                      variant={selectedIsConfirmingDelete ? "destructive" : "outline"}
+                      size="sm"
+                      onClick={selectedIsConfirmingDelete ? deleteSelectedDraft : requestDeleteSelectedDraft}
+                      disabled={deletingDraftSlug === selectedUpdate.slug || visibilityUpdatingSlug === selectedUpdate.slug}
+                      className={cn(
+                        "w-full justify-center px-3",
+                        !selectedIsConfirmingDelete &&
+                          "border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800",
+                      )}
+                    >
+                      <Trash2 className={cn("h-4 w-4", deletingDraftSlug === selectedUpdate.slug && "animate-pulse")} />
+                      {deletingDraftSlug === selectedUpdate.slug
+                        ? "Deleting..."
+                        : selectedIsConfirmingDelete
+                          ? "Confirm delete"
+                          : "Delete draft"}
+                    </Button>
+                  ) : null}
+                  {selectedIsConfirmingDelete ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmingDeleteSlug(null)}
+                      disabled={deletingDraftSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
                 </div>
+                {selectedIsConfirmingDelete ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
+                    <span className="font-semibold">Confirm permanent draft deletion.</span>{" "}
+                    This removes the uploaded draft from the admin list and attempts to clean up its PDF and generated
+                    assets.
+                  </div>
+                ) : null}
+                {uploadNotice ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900">
+                    {uploadNotice}
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
+                    {error}
+                  </div>
+                ) : null}
               </div>
 
               {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (
@@ -1229,7 +1419,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
               {sendHistory.length} send{sendHistory.length === 1 ? "" : "s"}
             </span>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={loadState} disabled={loading}>
+          <Button type="button" size="sm" variant="outline" onClick={() => loadState()} disabled={loading}>
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh stats
           </Button>

@@ -7,12 +7,13 @@ import { s3Client } from "@/lib/s3";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const assetNamePattern = /^[a-z0-9][a-z0-9._-]+\.(?:png|jpe?g|webp)$/i;
+const assetNamePattern = /^[a-z0-9][a-z0-9._-]+\.(?:png|jpe?g|webp|svg)$/i;
 
 function contentTypeForAsset(asset: string) {
   const lower = asset.toLowerCase();
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
   return "image/png";
 }
 
