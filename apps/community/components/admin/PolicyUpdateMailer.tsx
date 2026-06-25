@@ -101,6 +101,11 @@ type Props = {
   initialUpdates: PolicyUpdateSummary[];
 };
 
+type LoadStateOptions = {
+  selectFirst?: boolean;
+  selectedSlugOverride?: string;
+};
+
 const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 const emptyStats: PolicyUpdateEmailStats = {
@@ -393,24 +398,31 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
   const uploadSlugPreview = useMemo(() => previewSlugFromInput(uploadSlug), [uploadSlug]);
 
-  const loadState = async () => {
+  const loadState = async (options: LoadStateOptions = {}) => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/admin/policy-updates", { cache: "no-store" });
       const body = (await res.json().catch(() => ({}))) as Partial<ApiState> & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to load policy update sender");
-      setUpdates(body.updates || []);
+      const nextUpdates = body.updates || [];
+      setUpdates(nextUpdates);
       setRecipientCount(typeof body.recipientCount === "number" ? body.recipientCount : 0);
       setAudienceRecipients(body.recipients || []);
       setStatsBySlug(body.statsBySlug || {});
       setSendHistory(body.sendHistory || []);
-      if (body.updates?.length) {
+      if (nextUpdates.length) {
         setSelectedSlug((current) =>
-          current && body.updates?.some((update) => update.slug === current)
-            ? current
-            : body.updates?.[0]?.slug || "",
+          options.selectFirst
+            ? nextUpdates[0]?.slug || ""
+            : options.selectedSlugOverride && nextUpdates.some((update) => update.slug === options.selectedSlugOverride)
+              ? options.selectedSlugOverride
+              : current && nextUpdates.some((update) => update.slug === current)
+                ? current
+                : nextUpdates[0]?.slug || "",
         );
+      } else {
+        setSelectedSlug("");
       }
     } catch (err: any) {
       setError(err?.message || "Failed to load policy update sender");
@@ -420,7 +432,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   };
 
   useEffect(() => {
-    void loadState();
+    void loadState({ selectFirst: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -519,8 +531,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setUploadSlug("");
       setUploadSummary("");
       setUploadInputKey((current) => current + 1);
-      await loadState();
-      if (uploadedSlug) setSelectedSlug(uploadedSlug);
+      await loadState({ selectedSlugOverride: uploadedSlug });
     } catch (err: any) {
       setUploadError(err?.message || "Failed to upload policy update PDF");
     } finally {
@@ -549,8 +560,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || `Failed to ${verb} policy update`);
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
       setConfirmSend(false);
       setUploadNotice(
         action === "publishUpdate"
@@ -590,9 +600,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to delete draft update");
-      setSelectedSlug(nextSelection);
       setConfirmSend(false);
-      await loadState();
+      await loadState({ selectedSlugOverride: nextSelection });
       setUploadNotice(`Deleted draft: ${body?.title || selectedUpdate.shortTitle}.`);
     } catch (err: any) {
       setError(err?.message || "Failed to delete draft update");
@@ -625,13 +634,11 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to generate policy update content");
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
       setUploadNotice(`Generated page content for ${body?.update?.shortTitle || selectedUpdate.shortTitle}.`);
     } catch (err: any) {
       setError(err?.message || "Failed to generate policy update content");
-      await loadState();
-      setSelectedSlug(selectedUpdate.slug);
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
     } finally {
       setGeneratingContentSlug(null);
     }
@@ -703,7 +710,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       if (!res.ok) throw new Error(body?.error || "Failed to send policy update");
       setResult(body);
       setConfirmSend(false);
-      await loadState();
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
     } catch (err: any) {
       setError(err?.message || "Failed to send policy update");
     } finally {
@@ -816,7 +823,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)]">
             {recipientCount === null ? "Loading recipients" : `${recipientCount} recipients`}
           </div>
-          <Button type="button" variant="outline" onClick={loadState} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => loadState()} disabled={loading}>
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
           </Button>
@@ -975,8 +982,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         <div className="rounded-2xl border bg-white/90 p-5">
           {selectedUpdate ? (
             <div className="space-y-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+              <div className="space-y-4">
+                <div className="min-w-0">
                   <div className="inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
                     {selectedUpdate.categoryLabel}
                   </div>
@@ -1003,13 +1010,15 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{selectedUpdate.summary}</p>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                   {selectedUpdate.source === "uploaded" ? (
                     <Button
                       type="button"
+                      size="sm"
                       variant={selectedHasGeneratedContent ? "outline" : "default"}
                       onClick={generateSelectedContent}
                       disabled={generatingContentSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <Sparkles className={cn("h-4 w-4", generatingContentSlug === selectedUpdate.slug && "animate-pulse")} />
                       {generatingContentSlug === selectedUpdate.slug
@@ -1019,7 +1028,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                           : "Generate content"}
                     </Button>
                   ) : null}
-                  <Button variant="outline" asChild>
+                  <Button variant="outline" size="sm" asChild className="w-full justify-center px-3">
                     <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
                       Portal view
                     </Link>
@@ -1027,8 +1036,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={exportSelectedMarkdown}
                     disabled={!selectedCanExportMarkdown || selectedIsExportingMarkdown}
+                    className="w-full justify-center px-3"
                     title={
                       selectedCanExportMarkdown
                         ? "Copy and download a clean Markdown version"
@@ -1041,8 +1052,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   {selectedUpdate.source === "uploaded" && selectedVisibilityStatus !== "published" ? (
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => changeSelectedVisibility("publishUpdate")}
                       disabled={visibilityUpdatingSlug === selectedUpdate.slug || deletingDraftSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Publish
@@ -1052,8 +1065,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => changeSelectedVisibility("unpublishUpdate")}
                       disabled={visibilityUpdatingSlug === selectedUpdate.slug}
+                      className="w-full justify-center px-3"
                     >
                       <EyeOff className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Unpublish
@@ -1063,9 +1078,10 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={deleteSelectedDraft}
                       disabled={deletingDraftSlug === selectedUpdate.slug || visibilityUpdatingSlug === selectedUpdate.slug}
-                      className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      className="w-full justify-center border-rose-200 px-3 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
                     >
                       <Trash2 className={cn("h-4 w-4", deletingDraftSlug === selectedUpdate.slug && "animate-pulse")} />
                       {deletingDraftSlug === selectedUpdate.slug ? "Deleting..." : "Delete draft"}
@@ -1348,7 +1364,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
               {sendHistory.length} send{sendHistory.length === 1 ? "" : "s"}
             </span>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={loadState} disabled={loading}>
+          <Button type="button" size="sm" variant="outline" onClick={() => loadState()} disabled={loading}>
             <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh stats
           </Button>

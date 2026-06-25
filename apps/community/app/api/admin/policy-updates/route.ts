@@ -609,8 +609,16 @@ async function deleteDraftPolicyUpdate(body: any) {
     );
   }
 
-  await deletePolicyUpdateUploadObjects(record);
-  const deleted = await deleteDraftUploadedPolicyUpdateRecord(record.slug);
+  let deleted;
+  try {
+    await deletePolicyUpdateUploadObjects(record);
+    deleted = await deleteDraftUploadedPolicyUpdateRecord(record.slug);
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Failed to delete draft update" },
+      { status: 500 },
+    );
+  }
   if (!deleted) {
     return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
   }
