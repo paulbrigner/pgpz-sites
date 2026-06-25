@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SOCIAL_DIR = ROOT / "output" / "social"
 REFERENCE_CARD = SOCIAL_DIR / "pgpz-x-article-weekly-policy-memo-2026-06-08.png"
 LOGO_FALLBACK = ROOT / "public" / "pgp_profile_image.png"
+ARIAL = "/System/Library/Fonts/Supplemental/Arial.ttf"
+ARIAL_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 
 BASE_WIDTH = 1600
 BASE_HEIGHT = 640
@@ -92,26 +94,35 @@ class CardCopy:
 
 
 def load_fonts(scale: float) -> dict[str, ImageFont.FreeTypeFont]:
-    arial = "/System/Library/Fonts/Supplemental/Arial.ttf"
-    arial_bold = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
     scaled = lambda size: max(10, round(size * scale))
     return {
-        "brand": font(arial_bold, scaled(24)),
-        "pill": font(arial_bold, scaled(28)),
-        "title": font(arial_bold, scaled(76)),
-        "subtitle": font(arial, scaled(31)),
-        "date": font(arial_bold, scaled(32)),
-        "url": font(arial, scaled(26)),
-        "footer": font(arial, scaled(25)),
-        "doc_brand": font(arial_bold, scaled(24)),
-        "doc_title": font(arial_bold, scaled(29)),
-        "doc_label": font(arial_bold, scaled(23)),
+        "brand": font(ARIAL_BOLD, scaled(24)),
+        "pill": font(ARIAL_BOLD, scaled(28)),
+        "title": font(ARIAL_BOLD, scaled(76)),
+        "subtitle": font(ARIAL, scaled(31)),
+        "date": font(ARIAL_BOLD, scaled(32)),
+        "url": font(ARIAL, scaled(26)),
+        "footer": font(ARIAL, scaled(25)),
+        "doc_brand": font(ARIAL_BOLD, scaled(24)),
+        "doc_title": font(ARIAL_BOLD, scaled(29)),
+        "doc_label": font(ARIAL_BOLD, scaled(23)),
     }
 
 
 def text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont) -> int:
     bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[2] - bbox[0]
+
+
+def ellipsize_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
+    if text_width(draw, text, font) <= max_width:
+        return text
+
+    suffix = "..."
+    trimmed = text.rstrip()
+    while trimmed and text_width(draw, f"{trimmed}{suffix}", font) > max_width:
+        trimmed = trimmed[:-1].rstrip()
+    return f"{trimmed}{suffix}" if trimmed else suffix
 
 
 def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
@@ -134,6 +145,46 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont
     return lines
 
 
+def fit_single_line_font(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_path: str,
+    *,
+    max_size: int,
+    min_size: int,
+    max_width: int,
+) -> ImageFont.FreeTypeFont:
+    for size in range(max_size, min_size - 1, -2):
+        candidate = font(font_path, size)
+        if text_width(draw, text, candidate) <= max_width:
+            return candidate
+    return font(font_path, min_size)
+
+
+def fit_wrapped_font(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font_path: str,
+    *,
+    max_size: int,
+    min_size: int,
+    max_width: int,
+    max_lines: int,
+) -> tuple[ImageFont.FreeTypeFont, list[str]]:
+    for size in range(max_size, min_size - 1, -2):
+        candidate = font(font_path, size)
+        lines = wrap_text(draw, text, candidate, max_width)
+        if len(lines) <= max_lines:
+            return candidate, lines
+
+    fitted = font(font_path, min_size)
+    lines = wrap_text(draw, text, fitted, max_width)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = ellipsize_text(draw, lines[-1], fitted, max_width)
+    return fitted, lines
+
+
 def draw_lines(
     draw: ImageDraw.ImageDraw,
     frame: LayoutFrame,
@@ -149,6 +200,10 @@ def draw_lines(
         draw.text(frame.p(x, y), line, font=font, fill=fill)
         y += line_height
     return y
+
+
+def font_base_size(font_obj: ImageFont.FreeTypeFont, frame: LayoutFrame) -> float:
+    return float(getattr(font_obj, "size", 10)) / frame.scale
 
 
 def resolve_copy(args: argparse.Namespace) -> CardCopy:
@@ -266,21 +321,67 @@ def draw_main_copy(
     copy: CardCopy,
     frame: LayoutFrame,
 ) -> None:
-    headline_lines = wrap_text(draw, copy.headline, fonts["title"], frame.n(880))[:3]
-    draw_lines(draw, frame, headline_lines, x=104, y=244, line_height=80, font=fonts["title"], fill=WHITE)
+    if copy.category == "special":
+        title_font, headline_lines = fit_wrapped_font(
+            draw,
+            copy.headline,
+            ARIAL_BOLD,
+            max_size=frame.n(58),
+            min_size=frame.n(42),
+            max_width=frame.n(900),
+            max_lines=3,
+        )
+        title_line_height = max(54, round(font_base_size(title_font, frame) * 1.08))
+    else:
+        title_font = fonts["title"]
+        headline_lines = wrap_text(draw, copy.headline, title_font, frame.n(880))[:3]
+        title_line_height = 80
 
-    y = 410 if len(headline_lines) <= 2 else 244 + len(headline_lines) * 80 + 10
+    draw_lines(draw, frame, headline_lines, x=104, y=244, line_height=title_line_height, font=title_font, fill=WHITE)
+
+    y = 410 if copy.category == "weekly" and len(headline_lines) <= 2 else 244 + len(headline_lines) * title_line_height + 12
     for line in textwrap.wrap(copy.summary, width=58)[:2]:
         draw.text(frame.p(108, y), line, font=fonts["subtitle"], fill=(244, 244, 242))
         y += 42
 
-    label_width = text_width(draw, copy.display_label, fonts["date"]) / frame.scale
-    separator_x = min(max(548, 184 + label_width + 38), 676)
     draw.rounded_rectangle(frame.b(104, 508, 1040, 578), radius=frame.n(22), fill=CREAM)
     draw.ellipse(frame.b(128, 527, 162, 561), fill=TEAL)
-    draw.text(frame.p(184, 529), copy.display_label, font=fonts["date"], fill=BLACK)
-    draw.line((*frame.p(separator_x, 522), *frame.p(separator_x, 564)), fill=(223, 196, 125), width=max(1, frame.n(2)))
-    draw.text(frame.p(separator_x + 28, 531), copy.url, font=fonts["url"], fill=GOLD_DEEP)
+
+    label_x = frame.p(184, 0)[0]
+    label_y = frame.p(0, 531)[1]
+    strip_right = frame.p(1040, 0)[0]
+    full_label_width = strip_right - label_x - frame.n(24)
+    url_width = text_width(draw, copy.url, fonts["url"])
+    label_with_url_width = full_label_width - url_width - frame.n(72)
+    label_font = fit_single_line_font(
+        draw,
+        copy.display_label,
+        ARIAL_BOLD,
+        max_size=frame.n(32),
+        min_size=frame.n(22),
+        max_width=max(frame.n(240), label_with_url_width),
+    )
+    label_text = copy.display_label
+    show_url = text_width(draw, label_text, label_font) <= label_with_url_width
+
+    if not show_url:
+        label_font = fit_single_line_font(
+            draw,
+            label_text,
+            ARIAL_BOLD,
+            max_size=frame.n(32),
+            min_size=frame.n(20),
+            max_width=full_label_width,
+        )
+        label_text = ellipsize_text(draw, label_text, label_font, full_label_width)
+
+    draw.text((label_x, label_y), label_text, font=label_font, fill=BLACK)
+    if show_url:
+        label_width = text_width(draw, label_text, label_font)
+        separator_x = min(max(frame.p(548, 0)[0], label_x + label_width + frame.n(28)), strip_right - url_width - frame.n(48))
+        draw.line((separator_x, frame.p(0, 522)[1], separator_x, frame.p(0, 564)[1]), fill=(223, 196, 125), width=max(1, frame.n(2)))
+        draw.text((separator_x + frame.n(28), frame.p(0, 531)[1]), copy.url, font=fonts["url"], fill=GOLD_DEEP)
+
     draw.text(frame.p(104, 584), copy.footer, font=fonts["footer"], fill=CREAM)
 
 
@@ -309,23 +410,42 @@ def draw_document(
     draw.text(frame.p(x + 30, y + 29), "PGPZ COMMUNITY", font=fonts["doc_brand"], fill=GOLD_SOFT)
     draw.rectangle(frame.b(x, y + 78, x + w, y + 88), fill=TEAL)
 
-    title_width = 334 if copy.category == "special" else 292
-    title_lines = wrap_text(draw, copy.document_title, fonts["doc_title"], frame.n(title_width))[:4]
-    draw_lines(draw, frame, title_lines, x=x + 30, y=y + 126, line_height=36, font=fonts["doc_title"], fill=BLACK)
+    if copy.category == "special":
+        doc_title_font, title_lines = fit_wrapped_font(
+            draw,
+            copy.document_title,
+            ARIAL_BOLD,
+            max_size=frame.n(29),
+            min_size=frame.n(22),
+            max_width=frame.n(w - 60),
+            max_lines=3,
+        )
+        doc_line_height = max(28, round(font_base_size(doc_title_font, frame) * 1.12))
+    else:
+        doc_title_font = fonts["doc_title"]
+        title_lines = wrap_text(draw, copy.document_title, doc_title_font, frame.n(292))[:4]
+        doc_line_height = 36
 
-    body_top = max(y + 210, y + 126 + len(title_lines) * 36 + 18)
+    draw_lines(draw, frame, title_lines, x=x + 30, y=y + 126, line_height=doc_line_height, font=doc_title_font, fill=BLACK)
+
+    body_top = max(y + 210, y + 126 + len(title_lines) * doc_line_height + 18)
     for i, line_width in enumerate([258, 232, 268, 214]):
         yy = body_top + i * 24
+        if copy.category == "special" and yy > y + h - 140:
+            break
         draw.rounded_rectangle(frame.b(x + 30, yy, x + 30 + line_width, yy + 11), radius=frame.n(5), fill=LINE)
 
-    table_top = max(y + 318, body_top + 108)
+    table_top = y + h - 118 if copy.category == "special" else max(y + 318, body_top + 108)
+    col_width = 96 if copy.category == "weekly" else (w - 64) / 3
     for i in range(3):
-        x0 = x + 30 + i * 96
-        draw.rectangle(frame.b(x0, table_top, x0 + 92, table_top + 34), fill=(34, 34, 34))
-        draw.rectangle(frame.b(x0, table_top + 44, x0 + 92, table_top + 68), fill=(242, 245, 249), outline=(221, 226, 234))
-        draw.rectangle(frame.b(x0, table_top + 80, x0 + 92, table_top + 104), fill=(242, 245, 249), outline=(221, 226, 234))
+        x0 = x + 30 + i * col_width
+        x1 = x0 + col_width - 4
+        draw.rectangle(frame.b(x0, table_top, x1, table_top + 34), fill=(34, 34, 34))
+        draw.rectangle(frame.b(x0, table_top + 44, x1, table_top + 68), fill=(242, 245, 249), outline=(221, 226, 234))
+        if copy.category == "weekly":
+            draw.rectangle(frame.b(x0, table_top + 80, x1, table_top + 104), fill=(242, 245, 249), outline=(221, 226, 234))
 
-    label_y = min(table_top + 90, y + h - 30)
+    label_y = y + h - 43 if copy.category == "special" else min(table_top + 90, y + h - 30)
     draw.text(frame.p(x + 30, label_y), copy.document_label, font=fonts["doc_label"], fill=GOLD_DEEP)
 
 
