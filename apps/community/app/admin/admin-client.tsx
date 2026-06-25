@@ -110,8 +110,9 @@ const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVAT
 const memberNeedsAction = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return false;
   const active = member.membershipStatus === "active";
+  const welcomeSuppressed = !!member.welcomeEmailSuppressedAt || member.welcomeEmailSuppressedReason === "coalition_member";
   return (member.manualApprovalStatus === "pending" && !active) ||
-    (active && !member.welcomeEmailSentAt && !!member.email && !member.emailSuppressed);
+    (active && !member.welcomeEmailSentAt && !welcomeSuppressed && !!member.email && !member.emailSuppressed);
 };
 
 const compareText = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
@@ -573,6 +574,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               const deactivated = member.accountStatus === "deactivated";
               const active = member.membershipStatus === "active";
               const welcomeSent = !!member.welcomeEmailSentAt;
+              const welcomeSuppressed =
+                !!member.welcomeEmailSuppressedAt || member.welcomeEmailSuppressedReason === "coalition_member";
               const manualPending = member.manualApprovalStatus === "pending" && !active && !deactivated;
               const manualApproved = member.membershipProvider === "manual" || member.manualApprovalStatus === "approved";
               const expanded = !!expandedRows[member.id];
@@ -652,6 +655,25 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           </div>
                           <div className="text-xs text-slate-500">
                             Sent {formatDate(member.welcomeEmailSentAt)}
+                          </div>
+                        </>
+                      ) : welcomeSuppressed ? (
+                        <>
+                          <div
+                            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                            title={
+                              member.welcomeEmailSuppressedReason === "coalition_member"
+                                ? "Welcome handled through the PGPZ Coalition"
+                                : "Community welcome email suppressed"
+                            }
+                          >
+                            <MailCheck className="h-3.5 w-3.5" />
+                            Welcome handled
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {member.welcomeEmailSuppressedReason === "coalition_member"
+                              ? "Coalition member"
+                              : formatDate(member.welcomeEmailSuppressedAt)}
                           </div>
                         </>
                       ) : (
@@ -860,7 +882,15 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                             </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Welcome</dt>
-                              <dd className="text-right text-slate-800">{formatDate(member.welcomeEmailSentAt)}</dd>
+                              <dd className="text-right text-slate-800">
+                                {member.welcomeEmailSentAt
+                                  ? formatDate(member.welcomeEmailSentAt)
+                                  : member.welcomeEmailSuppressedReason === "coalition_member"
+                                    ? "Handled by Coalition"
+                                    : member.welcomeEmailSuppressedAt
+                                      ? `Suppressed ${formatDate(member.welcomeEmailSuppressedAt)}`
+                                      : "—"}
+                              </dd>
                             </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Bounce</dt>

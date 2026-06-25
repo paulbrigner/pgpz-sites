@@ -12,6 +12,9 @@ type RawUser = {
   linkedinUrl?: string | null;
   isAdmin?: boolean | null;
   welcomeEmailSentAt?: string | null;
+  welcomeEmailSuppressedAt?: string | null;
+  welcomeEmailSuppressedReason?: string | null;
+  welcomeEmailSuppressedBy?: string | null;
   lastEmailSentAt?: string | null;
   lastEmailType?: string | null;
   emailBounceReason?: string | null;
@@ -61,6 +64,9 @@ export type AdminMember = {
   adminNotesUpdatedBy: string | null;
   isAdmin: boolean;
   welcomeEmailSentAt: string | null;
+  welcomeEmailSuppressedAt: string | null;
+  welcomeEmailSuppressedReason: string | null;
+  welcomeEmailSuppressedBy: string | null;
   lastEmailSentAt: string | null;
   lastEmailType: string | null;
   emailBounceReason: string | null;
@@ -207,7 +213,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, welcomeEmailSuppressedAt, welcomeEmailSuppressedReason, welcomeEmailSuppressedBy, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -255,6 +261,9 @@ function toAdminMember(user: RawUser): AdminMember | null {
     adminNotesUpdatedBy: textOrNull(user.adminNotesUpdatedBy),
     isAdmin: !!user.isAdmin,
     welcomeEmailSentAt: textOrNull(user.welcomeEmailSentAt),
+    welcomeEmailSuppressedAt: textOrNull(user.welcomeEmailSuppressedAt),
+    welcomeEmailSuppressedReason: textOrNull(user.welcomeEmailSuppressedReason),
+    welcomeEmailSuppressedBy: textOrNull(user.welcomeEmailSuppressedBy),
     lastEmailSentAt: textOrNull(user.lastEmailSentAt),
     lastEmailType: textOrNull(user.lastEmailType),
     emailBounceReason: textOrNull(user.emailBounceReason),
