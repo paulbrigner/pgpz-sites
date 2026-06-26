@@ -67,6 +67,17 @@ const SOURCE_EXACT_GENERATION_MODEL = "pdf-source-exact";
 const MONTH_NAME_PATTERN =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 const ARTICLE_BODY_START_PATTERN = `On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}(?:,\\s+\\d{4})?\\b`;
+const PGPZ_RESOURCE_CHROME_PATTERN = /PGPZ\s+(?:Community|Coalition)\s+Member Policy Resource/gi;
+const PGPZ_UPDATE_URL_PATTERN =
+  /https:\/\/(?:community|coalition)\.pgpz\.org\/updates\/[a-z0-9]+(?:\s*-\s*[a-z0-9]+)*/gi;
+const WEEKLY_MEMO_TITLE_PATTERN = new RegExp(
+  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*(Week\\s+of\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2})\\s*,\\s*(\\d{4})\\b`,
+  "i",
+);
+const WEEKLY_MEMO_TITLE_BOUNDARY_PATTERN = new RegExp(
+  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*Week\\s+of\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}\\s*,\\s*\\d{4}`,
+  "gi",
+);
 
 function compactWhitespace(value: string) {
   return value
@@ -79,28 +90,44 @@ function compactWhitespace(value: string) {
 
 function stripPdfChrome(value: string) {
   return value
-    .replace(/PGPZ Community\s+Member Policy Resource/gi, "")
-    .replace(/community\.pgpz\.org\s*\|\s*PGPZ Community\s*\|\s*Page\s+\d+/gi, "")
+    .replace(PGPZ_RESOURCE_CHROME_PATTERN, "")
+    .replace(/(?:community|coalition)\.pgpz\.org\s*\|\s*PGPZ\s+(?:Community|Coalition)\s*\|\s*Page\s+\d+/gi, "")
     .replace(/\n?\s*--- Page \d+ of \d+ ---\s*\n?/gi, "\n")
-    .replace(/https:\/\/community\.pgpz\.org\/updates\/[^\s]+/gi, "")
+    .replace(PGPZ_UPDATE_URL_PATTERN, "")
     .replace(/\bNot a PGPZ member\?\s*Sign up here:?\b/gi, "")
     .replace(
-      /We are excited to announce the launch of the PGPZ Community Signal chat[\s\S]*?scan the QR code to get started!?/gi,
+      /We are excited to announce the launch of the PGPZ (?:Community|Coalition) Signal chat[\s\S]*?scan the QR code to get started!?/gi,
       "",
     );
 }
 
+function weeklyMemoTitleFromText(value: string) {
+  const match = value.replace(PGPZ_RESOURCE_CHROME_PATTERN, " ").match(WEEKLY_MEMO_TITLE_PATTERN);
+  if (!match) return null;
+  const week = match[1].replace(/\s+/g, " ").trim();
+  return `Weekly Policy Memo: ${week}, ${match[2]}`;
+}
+
+function normalizeWeeklyMemoTitleBoundaries(value: string) {
+  return value.replace(WEEKLY_MEMO_TITLE_BOUNDARY_PATTERN, (match) => {
+    const title = weeklyMemoTitleFromText(match);
+    return title ? `\n\n${title}\n\n` : match;
+  });
+}
+
 function sourceTextForExactConversion(value: string) {
   return compactWhitespace(
-    stripPdfChrome(value)
+    normalizeWeeklyMemoTitleBoundaries(stripPdfChrome(value))
       .replace(/\s+(Key Takeaways)\b/gi, "\n\n$1\n")
       .replace(/\s+(Action Items?:?)/gi, "\n\n$1\n")
       .replace(/\s+(X Post of the Week:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Notable Posts?:)\s*/gi, "\n\n$1\n")
+      .replace(/\s+(Relevant Posts?:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Why this matters for Zcash:?)/gi, "\n\n$1")
       .replace(/\s+(Policy Developments?:)/gi, "\n\n$1")
       .replace(/\s+(Regulatory Developments?:)/gi, "\n\n$1")
       .replace(/\s+(Executive Summary)\b/gi, "\n\n$1\n")
+      .replace(/\s+l\s+(?=[A-Z0-9])/g, "\n• ")
       .replace(/\s+[•]\s+/g, "\n• "),
   );
 }
@@ -116,9 +143,9 @@ function splitSourceLines(value: string, { keepBlank = false }: { keepBlank?: bo
     .split(/\n/g)
     .map(normalizeSourceLine)
     .filter((line) => !/^--- Page \d+ of \d+ ---$/i.test(line))
-    .filter((line) => !/^PGPZ Community$/i.test(line))
+    .filter((line) => !/^PGPZ (?:Community|Coalition)$/i.test(line))
     .filter((line) => !/^Member Policy Resource$/i.test(line))
-    .filter((line) => !/^community\.pgpz\.org\b/i.test(line))
+    .filter((line) => !/^(?:community|coalition)\.pgpz\.org\b/i.test(line))
     .filter((line) => !/^[:;]+$/.test(line))
     .filter((line) => !/^\d+$/.test(line));
 
@@ -129,7 +156,7 @@ function isBoilerplateGeneratedSummary(value: string) {
   const clean = value.replace(/\s+/g, " ").trim().toLowerCase();
   return (
     !clean ||
-    /pgpz community signal chat/.test(clean) ||
+    /pgpz (?:community|coalition) signal chat/.test(clean) ||
     /not a pgpz member/.test(clean) ||
     /scan (?:the )?qr code/.test(clean) ||
     /join here/.test(clean)
@@ -243,10 +270,13 @@ function linesBetweenIndexes(lines: string[], startIndex: number, endIndex: numb
 }
 
 function isCategoryDateLine(line: string) {
-  return /^(?:Special Update|Weekly Policy Memo)\s*\|/i.test(line);
+  return /^Special Update\s*\|/i.test(line) || /^Weekly Policy Memo\s*(?:[|:•-])/i.test(line);
 }
 
 function meaningfulTitleFromLines(lines: string[], record: UploadedPolicyUpdateRecord) {
+  const weeklyTitle = weeklyMemoTitleFromText(lines.slice(0, 10).join(" "));
+  if (weeklyTitle) return weeklyTitle;
+
   const introIndex = lines.findIndex(isArticleBodyStart);
   const titleLines = lines
     .slice(0, introIndex >= 0 ? introIndex : Math.min(lines.length, 6))
@@ -255,7 +285,12 @@ function meaningfulTitleFromLines(lines: string[], record: UploadedPolicyUpdateR
     .filter((line) => !/^Key Takeaways$/i.test(line))
     .filter((line) => !/^Action Items?$/i.test(line));
 
-  const title = titleLines.join(" ").replace(/\s+/g, " ").trim();
+  const title = titleLines
+    .join(" ")
+    .replace(PGPZ_RESOURCE_CHROME_PATTERN, "")
+    .replace(PGPZ_UPDATE_URL_PATTERN, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!title) return record.title;
   return title.slice(0, 180);
 }
@@ -441,6 +476,62 @@ function articleHeadingAt(lines: string[], index: number) {
   return null;
 }
 
+function isPotentialStandaloneArticleHeading(line: string) {
+  const clean = line.replace(/\s+/g, " ").trim();
+  if (clean.length < 32 || clean.length > 240) return false;
+  if (/[.!?]$/.test(clean)) return false;
+  if (
+    /^(?:Weekly Policy Memo|Special Update|Key Takeaways|Action Items?|Relevant Posts?|Why this matters|X Post of the Week|Notable Posts?)\b/i.test(
+      clean,
+    )
+  ) {
+    return false;
+  }
+  if (isBulletLine(clean) || isArticleBodyStart(clean)) return false;
+  const words = clean.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word));
+  if (words.length < 5) return false;
+  const titleLikeWords = words.filter((word) => {
+    const stripped = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+    return /^[A-Z0-9]/.test(stripped) || /^[A-Z]{2,}/.test(stripped);
+  });
+  return titleLikeWords.length / words.length >= 0.55;
+}
+
+function isStandaloneArticleHeadingContinuation(line: string) {
+  const clean = line.replace(/\s+/g, " ").trim();
+  if (clean.length < 6 || clean.length > 120) return false;
+  if (/[.!?]$/.test(clean)) return false;
+  if (
+    /^(?:Key Takeaways|Action Items?|Relevant Posts?|Why this matters|X Post of the Week|Notable Posts?)\b/i.test(
+      clean,
+    )
+  ) {
+    return false;
+  }
+  if (isBulletLine(clean) || isArticleBodyStart(clean)) return false;
+  return clean.split(/\s+/).length <= 8;
+}
+
+function standaloneArticleHeadingAt(lines: string[], index: number) {
+  const first = lines[index];
+  if (!first || !isPotentialStandaloneArticleHeading(first)) return null;
+
+  const headingLines = [first];
+  let endIndex = index;
+  for (let offset = 1; offset <= 3 && index + offset < lines.length; offset += 1) {
+    const next = lines[index + offset];
+    if (!next) break;
+    if (!isStandaloneArticleHeadingContinuation(next)) break;
+    headingLines.push(next);
+    endIndex = index + offset;
+  }
+
+  return {
+    heading: headingLines.join(" ").replace(/\s+/g, " ").trim(),
+    endIndex,
+  };
+}
+
 function fallbackBodyFromLines(lines: string[]) {
   const body: string[] = [];
   const bullets: string[] = [];
@@ -503,6 +594,7 @@ function fallbackSectionsFromText(
       }
     | null = null;
   let skippingSidebar: "keyTakeaways" | "actionItems" | null = null;
+  let expectStandaloneArticleHeading = false;
 
   const flush = () => {
     if (!current) return;
@@ -534,7 +626,7 @@ function fallbackSectionsFromText(
       continue;
     }
 
-    if (/^Weekly Policy Memo:/i.test(line) || /^https?:\/\/community\.pgpz\.org\b/i.test(line)) {
+    if (/^Weekly Policy Memo:/i.test(line) || /^https?:\/\/(?:community|coalition)\.pgpz\.org\b/i.test(line)) {
       continue;
     }
 
@@ -554,6 +646,33 @@ function fallbackSectionsFromText(
       flush();
       skippingSidebar = null;
       sections.push({ heading: socialHeading, body: [] });
+      expectStandaloneArticleHeading = true;
+      continue;
+    }
+
+    if (/^Relevant Posts?:$/i.test(line)) {
+      skippingSidebar = null;
+      if (!current) {
+        current = {
+          heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
+          lines: [],
+        };
+      }
+      current.lines.push(line);
+      expectStandaloneArticleHeading = true;
+      continue;
+    }
+
+    const standaloneHeading: ReturnType<typeof standaloneArticleHeadingAt> =
+      (expectStandaloneArticleHeading || (current && /^Action Items?/i.test(current.heading)))
+        ? standaloneArticleHeadingAt(lines, index)
+        : null;
+    if (standaloneHeading) {
+      flush();
+      skippingSidebar = null;
+      current = { heading: standaloneHeading.heading, lines: [] };
+      expectStandaloneArticleHeading = false;
+      index = standaloneHeading.endIndex;
       continue;
     }
 
@@ -609,14 +728,6 @@ export function sourcePolicyUpdateContent(
   const title = meaningfulTitleFromLines(lines, record);
   const recordSummary = isBoilerplateGeneratedSummary(record.summary) ? "" : record.summary.trim();
   const sourceIntroSummary = openingSummaryFromLines(linesWithBlanks, "");
-  const summary =
-    sourceIntroSummary ||
-    recordSummary ||
-    record.emailPreheader ||
-    exactParagraphsFromLines(lines)
-      .find((paragraph) => !isBoilerplateGeneratedSummary(paragraph) && !paragraph.includes(record.title) && paragraph.length <= 850) ||
-    extracted.text.replace(/\s+/g, " ").trim().slice(0, 850);
-
   const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [
     /^Action Items$/i,
     /^Executive Summary$/i,
@@ -640,9 +751,17 @@ export function sourcePolicyUpdateContent(
     /^Notable Posts?:?$/i,
     /^Why this matters for Zcash:?$/i,
   ]);
-
   const keyTakeaways = exactItemsFromLines(keyTakeawayLines);
   const actionItems = exactItemsFromLines(actionItemLines);
+  const summary =
+    sourceIntroSummary ||
+    recordSummary ||
+    record.emailPreheader ||
+    keyTakeaways.join(" ") ||
+    exactParagraphsFromLines(lines)
+      .find((paragraph) => !isBoilerplateGeneratedSummary(paragraph) && !paragraph.includes(record.title) && paragraph.length <= 850) ||
+    extracted.text.replace(/\s+/g, " ").trim().slice(0, 850);
+
   const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
   const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
   const emailSubject = record.emailSubject.includes(record.title)
@@ -1123,6 +1242,24 @@ function bestOverlappingLink(
   return best && best.score > 0.2 ? best.annotation : null;
 }
 
+function isSocialHref(href: string) {
+  return /(?:x|twitter)\.com\//i.test(href);
+}
+
+function contextualSocialLink(pageText: string, annotations: LinkAnnotation[]) {
+  if (!/\b(?:X Post of the Week|Relevant Posts?|Notable Posts?)\b/i.test(pageText)) return null;
+  const socialLinks = annotations.filter((annotation) => isSocialHref(annotation.href));
+  return socialLinks.length === 1 ? socialLinks[0] : null;
+}
+
+function contextualImageRole(pageText: string): ExtractedPolicyUpdateImage["role"] | null {
+  if (/\bX Post of the Week\b/i.test(pageText)) return "x-post-of-the-week";
+  if (/\bRelevant Posts?\b/i.test(pageText)) return "notable-posts";
+  if (/\bnotable posts\b/i.test(pageText)) return "notable-posts";
+  if (/\bnotable post\b/i.test(pageText)) return "notable-post";
+  return null;
+}
+
 const IDENTITY_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0];
 
 function multiplyPdfMatrix(current: PdfMatrix, transform: PdfMatrix): PdfMatrix {
@@ -1225,16 +1362,38 @@ function imageMetadataFromDimensions({
   page,
   sourceWidth,
   sourceHeight,
+  pageText,
   fallbackIndex,
 }: {
   page: number;
   sourceWidth: number;
   sourceHeight: number;
+  pageText: string;
   fallbackIndex: number;
 }): Omit<ExtractedPolicyUpdateImage, "src" | "width" | "height" | "href"> & { assetName: string } | null {
   if (sourceWidth < 240 || sourceHeight < 180) return null;
   if (page === 1 && Math.abs(sourceWidth - sourceHeight) < 80) return null;
   if (sourceWidth < 700 && sourceHeight < 400) return null;
+
+  const role = contextualImageRole(pageText) || "source-graphic";
+  if (role === "x-post-of-the-week") {
+    return {
+      page,
+      role,
+      assetName: `x-post-of-the-week-page-${page}-${fallbackIndex}.png`,
+      alt: "X post of the week screenshot",
+      caption: "X post screenshot embedded in the source memo.",
+    };
+  }
+  if (role === "notable-post" || role === "notable-posts") {
+    return {
+      page,
+      role,
+      assetName: `relevant-post-page-${page}-${fallbackIndex}.png`,
+      alt: `Relevant post screenshot from page ${page}`,
+      caption: "Relevant post screenshot embedded in the source memo.",
+    };
+  }
 
   return {
     page,
@@ -1485,11 +1644,13 @@ async function extractPageImageAssets({
     const imageRect = imageRectFromMatrix(currentMatrix);
     const displayWidth = Math.round(rectArea(imageRect) ? imageRect.right - imageRect.left : sourceWidth);
     const displayHeight = Math.round(rectArea(imageRect) ? imageRect.bottom - imageRect.top : sourceHeight);
-    const link = bestOverlappingLink(imageRect, annotations);
-    const isSocialLink = !!link && /(?:x|twitter)\.com\//i.test(link.href);
-    if (!isSocialLink && (displayWidth < 120 || displayHeight < 120)) continue;
+    const contextRole = contextualImageRole(pageText);
+    const link = bestOverlappingLink(imageRect, annotations) || contextualSocialLink(pageText, annotations);
+    const isSocialLink = !!link && isSocialHref(link.href);
+    const isSocialContext = isSocialLink || !!contextRole;
+    if (!isSocialContext && (displayWidth < 120 || displayHeight < 120)) continue;
     if (isSocialLink && sourceWidth < 700 && sourceHeight < 400) continue;
-    if (isSocialLink) socialImageCounter.count += 1;
+    if (isSocialContext) socialImageCounter.count += 1;
 
     const metadata = link
       ? imageMetadataFromLink({
@@ -1503,6 +1664,7 @@ async function extractPageImageAssets({
           page: pageNumber,
           sourceWidth,
           sourceHeight,
+          pageText,
           fallbackIndex: imageIndex,
         });
     if (!metadata) continue;
@@ -1609,7 +1771,7 @@ function mergeExtractedImagesIntoContent(
     }
 
     if (image.role === "notable-posts") {
-      if (!appendImageToNextMatchingSection(sections, image, /^Notable Posts\b/i)) {
+      if (!appendImageToNextMatchingSection(sections, image, /\bRelevant Posts?\b|^Notable Posts\b/i)) {
         notablePosts.push(image);
       }
       continue;
