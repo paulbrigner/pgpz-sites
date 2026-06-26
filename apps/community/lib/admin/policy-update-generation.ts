@@ -1330,7 +1330,6 @@ function imageMetadataFromLink({
       role: "signal-chat",
       assetName: "signal-chat-qr.png",
       alt: "PGPZ Community Signal chat QR code",
-      caption: "Scan to join the PGPZ Community Signal chat.",
       href,
     };
   }
@@ -1343,7 +1342,6 @@ function imageMetadataFromLink({
       role,
       assetName: xAssetName(href, documentSocialIndex),
       alt: `${displayName} X post screenshot`,
-      caption: `${displayName} X post embedded in the source memo.`,
       href,
     };
   }
@@ -1353,7 +1351,6 @@ function imageMetadataFromLink({
     role: "source-graphic",
     assetName: `source-graphic-page-${page}-${fallbackIndex}.png`,
     alt: `Embedded source graphic from page ${page}`,
-    caption: "Embedded graphic from the source memo.",
     href,
   };
 }
@@ -1382,7 +1379,6 @@ function imageMetadataFromDimensions({
       role,
       assetName: `x-post-of-the-week-page-${page}-${fallbackIndex}.png`,
       alt: "X post of the week screenshot",
-      caption: "X post screenshot embedded in the source memo.",
     };
   }
   if (role === "notable-post" || role === "notable-posts") {
@@ -1391,7 +1387,6 @@ function imageMetadataFromDimensions({
       role,
       assetName: `relevant-post-page-${page}-${fallbackIndex}.png`,
       alt: `Relevant post screenshot from page ${page}`,
-      caption: "Relevant post screenshot embedded in the source memo.",
     };
   }
 
@@ -1400,7 +1395,6 @@ function imageMetadataFromDimensions({
     role: "source-graphic",
     assetName: `source-graphic-page-${page}-${fallbackIndex}.png`,
     alt: `Embedded source graphic from page ${page}`,
-    caption: "Embedded graphic from the source memo.",
   };
 }
 
@@ -1688,7 +1682,7 @@ async function extractPageImageAssets({
     extracted.push({
       src,
       alt: metadata.alt,
-      caption: metadata.caption,
+      ...("caption" in metadata && metadata.caption ? { caption: metadata.caption } : {}),
       ...(href ? { href } : {}),
       width: encodedImage.width,
       height: encodedImage.height,

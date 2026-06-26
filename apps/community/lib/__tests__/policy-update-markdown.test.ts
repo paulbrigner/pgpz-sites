@@ -63,6 +63,7 @@ describe("buildPolicyUpdateForumMarkdown", () => {
     expect(markdown).toContain(
       "[![Josh Swihart X post screenshot](https://community.pgpz.org/api/policy-updates/2026-06-15-weekly-policy-memo/email-assets/x-josh-swihart.png)](https://x.com/jswihart/status/2066384781601132602?s=20)",
     );
+    expect(markdown).not.toContain("Josh Swihart X post embedded in the source memo.");
     expect(markdown).toContain(
       "## [House Financial Services Committee Leadership Urges FinCEN to Reorient AML Rules Toward High-Risk Threats](https://financialservices.house.gov/example.pdf)",
     );
@@ -96,5 +97,37 @@ describe("buildPolicyUpdateForumMarkdown", () => {
     );
 
     expect(markdown).toContain("• Privacy-preserving chains<br>• Viewing keys");
+  });
+
+  it("renders relevant posts as a subsection without inheriting section links", () => {
+    const markdown = buildPolicyUpdateForumMarkdown(
+      {
+        ...update,
+        sections: [
+          {
+            heading: "Policy development",
+            body: ["Relevant Posts:"],
+            links: [{ text: "Policy development", href: "https://example.com/article" }],
+            images: [
+              {
+                src: "/api/policy-updates/2026-06-15-weekly-policy-memo/assets/relevant-post-page-3-1.png",
+                alt: "Relevant post screenshot from page 3",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        siteUrl: "https://community.pgpz.org",
+      },
+    );
+
+    expect(markdown).toContain("### Relevant Posts");
+    expect(markdown).toContain(
+      "![Relevant post screenshot from page 3](https://community.pgpz.org/api/policy-updates/2026-06-15-weekly-policy-memo/email-assets/relevant-post-page-3-1.png)",
+    );
+    expect(markdown).not.toContain(
+      "[![Relevant post screenshot from page 3](https://community.pgpz.org/api/policy-updates/2026-06-15-weekly-policy-memo/email-assets/relevant-post-page-3-1.png)](https://example.com/article)",
+    );
   });
 });

@@ -170,11 +170,50 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.html).toContain(
       'src="https://community.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png"',
     );
+    expect(built.html).not.toContain("Embedded X post screenshot from the source memo.");
     expect(built.html).not.toContain("cid:");
     expect(built.html).not.toContain(
       'src="https://community.pgpz.org/api/policy-updates/test-upload/assets/x-josh-swihart.png"',
     );
     expect(built.text).toContain("[Image: Josh Swihart X post screenshot]");
+    expect(built.text).not.toContain("Embedded X post screenshot from the source memo.");
+  });
+
+  it("formats relevant post markers and does not link screenshots to section fallback links", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "Policy development",
+            body: ["Relevant Posts:"],
+            links: [{ text: "Policy development", href: "https://example.com/article" }],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/relevant-post-page-3-1.png",
+                alt: "Relevant post screenshot from page 3",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain(">Relevant Posts</div>");
+    expect(built.html).toContain("relevant-post-page-3-1.png");
+    expect(built.html).not.toContain(
+      '<a href="https://example.com/article" style="display:inline-block;text-decoration:none;">',
+    );
+    expect(built.text).toContain("Relevant Posts:");
+    expect(built.text).toContain("[Image: Relevant post screenshot from page 3]");
+    expect(built.text).not.toContain("[Image: Relevant post screenshot from page 3] https://example.com/article");
   });
 
   it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {

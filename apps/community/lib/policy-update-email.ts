@@ -5,7 +5,7 @@ import type {
   PolicyUpdateSection,
   PolicyUpdateTable,
 } from "@/lib/policy-updates";
-import { policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
@@ -104,6 +104,14 @@ const renderLinkedText = (text: string, links: PolicyUpdateLink[] = []) =>
     .map((part) => (part.link ? `${part.text} (${part.link.href})` : part.text))
     .join("");
 
+const isRelevantPostsMarker = (text: string) => /^Relevant Posts?:$/i.test(text.trim());
+
+const renderParagraphText = (text: string, links: PolicyUpdateLink[] = []) =>
+  isRelevantPostsMarker(text) ? "Relevant Posts:" : renderLinkedText(text, links);
+
+const renderRelevantPostsLabel = () =>
+  `<div style="margin:4px 0 12px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">Relevant Posts</div>`;
+
 const renderParagraphs = (
   paragraphs: string[],
   links: PolicyUpdateLink[] = [],
@@ -111,10 +119,10 @@ const renderParagraphs = (
   tracking?: PolicyUpdateEmailTracking,
 ) =>
   paragraphs
-    .map(
-      (paragraph) =>
-        `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links, baseUrl, tracking)}</p>`,
-    )
+    .map((paragraph) => {
+      if (isRelevantPostsMarker(paragraph)) return renderRelevantPostsLabel();
+      return `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links, baseUrl, tracking)}</p>`;
+    })
     .join("");
 
 const renderBullets = (items: string[]) =>
@@ -200,7 +208,6 @@ const renderImageHtml = ({
     <tr>
       <td align="center" style="padding:12px;">
         ${trackedImageHref ? `<a href="${escapeHtml(trackedImageHref)}" style="display:inline-block;text-decoration:none;">${img}</a>` : img}
-        ${image.caption ? `<div style="margin-top:10px;color:${colors.slate};font-size:12px;line-height:1.55;text-align:left;">${escapeHtml(image.caption)}</div>` : ""}
       </td>
     </tr>
   </table>`;
@@ -234,10 +241,7 @@ const renderSectionImages = ({
 const renderSectionImageText = (section: PolicyUpdateSection) =>
   (section.images || []).flatMap((image) => {
     const href = policyUpdateImageHref(image, section.links?.[0]?.href || null);
-    return [
-      `[Image: ${image.alt}]${href ? ` ${href}` : ""}`,
-      ...(image.caption ? [image.caption] : []),
-    ];
+    return [`[Image: ${image.alt}]${href ? ` ${href}` : ""}`];
   });
 
 const renderHeadingText = (text: string, href: string | null, baseUrl: string, tracking?: PolicyUpdateEmailTracking) => {
@@ -276,6 +280,11 @@ const renderSectionHtml = (
     imageHrefFallback,
     isSocial,
   });
+  const hasRelevantPostsMarker = [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+  const relevantPostsImageLabel =
+    !isSocial && !hasRelevantPostsMarker && (section.images || []).some(isPolicyUpdateRelevantPostImage)
+      ? renderRelevantPostsLabel()
+      : "";
 
   return `<tr>
               <td style="padding:0 30px 22px;">
@@ -283,7 +292,7 @@ const renderSectionHtml = (
                   ${renderSectionHeading(section, baseUrl, tracking)}
                   ${isSocial ? imagesHtml : ""}
                   ${renderParagraphs(section.body, section.links, baseUrl, tracking)}
-                  ${!isSocial ? imagesHtml : ""}
+                  ${!isSocial ? `${relevantPostsImageLabel}${imagesHtml}` : ""}
                   ${section.table ? renderTable(section.table) : ""}
                   ${section.bullets?.length ? renderBullets(section.bullets) : ""}
                   ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking) : ""}
@@ -402,10 +411,10 @@ export function buildPolicyUpdateEmail(
     ...sections.flatMap((section) => [
       section.heading,
       ...renderSectionImageText(section),
-      ...section.body.map((paragraph) => renderLinkedText(paragraph, section.links)),
+      ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
       ...(section.table ? renderTableText(section.table) : []),
       ...(section.bullets || []).map((item) => `- ${item}`),
-      ...(section.bodyAfterBullets || []).map((paragraph) => renderLinkedText(paragraph, section.links)),
+      ...(section.bodyAfterBullets || []).map((paragraph) => renderParagraphText(paragraph, section.links)),
       "",
     ]),
     renderForwardedEmailCommunityText(baseUrl),
