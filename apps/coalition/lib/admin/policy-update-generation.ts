@@ -5,6 +5,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { PNG } from "pngjs";
 import { s3Client } from "@/lib/s3";
 import type { GeneratedPolicyUpdateContent } from "@/lib/policy-update-generated-content";
+import { policyUpdateEmailSubjectForTitle } from "@/lib/policy-update-subject";
 import type { UploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
 import type { PolicyUpdateImage } from "@/lib/policy-updates";
 
@@ -765,7 +766,7 @@ export function sourcePolicyUpdateContent(
   const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
   const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
   const emailSubject = record.emailSubject.includes(record.title)
-    ? `PGPZ ${record.category === "weekly" ? "Weekly Policy Memo" : "Special Update"}: ${title}`
+    ? policyUpdateEmailSubjectForTitle(record.category, title)
     : record.emailSubject;
 
   return {
