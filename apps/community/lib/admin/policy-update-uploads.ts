@@ -18,6 +18,7 @@ import {
 } from "@/lib/config";
 import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
 import { normalizePolicyUpdateSectionLayout } from "@/lib/policy-update-sections";
+import { policyUpdateEmailSubjectForTitle } from "@/lib/policy-update-subject";
 
 const POLICY_UPDATE_UPLOAD_GSI_PK = "POLICY_UPDATE_UPLOAD";
 
@@ -333,7 +334,7 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
     publishedAt,
     displayDate,
     summary,
-    emailSubject: textOrEmpty(item.emailSubject) || `PGPZ ${categoryLabel}: ${title}`,
+    emailSubject: textOrEmpty(item.emailSubject) || policyUpdateEmailSubjectForTitle(category, title),
     emailPreheader:
       textOrEmpty(item.emailPreheader) ||
       summary.replace(/\s+/g, " ").trim().slice(0, 220) ||
@@ -461,7 +462,7 @@ export async function saveUploadedPolicyUpdate(
     category,
     summary,
     displayDate: input.displayDate || formatPolicyUpdateDisplayDate(category, input.publishedAt),
-    emailSubject: input.emailSubject.trim() || `PGPZ ${categoryLabel}: ${input.title}`,
+    emailSubject: input.emailSubject.trim() || policyUpdateEmailSubjectForTitle(category, input.title),
     emailPreheader:
       input.emailPreheader.trim() ||
       summary.replace(/\s+/g, " ").trim().slice(0, 220) ||

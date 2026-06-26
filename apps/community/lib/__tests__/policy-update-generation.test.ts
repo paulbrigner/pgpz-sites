@@ -45,6 +45,7 @@ describe("sourcePolicyUpdateContent", () => {
     });
 
     expect(content.title).toBe("Weekly Policy Memo: Week of June 22, 2026");
+    expect(content.emailSubject).toBe("PGPZ Weekly Policy Memo: Week of June 22, 2026");
     expect(content.title).not.toContain("PGPZ Community Member Policy Resource");
     expect(content.title).not.toContain("The U.S. Senate");
     expect(content.summary).not.toContain("Weekly Policy Memo");
