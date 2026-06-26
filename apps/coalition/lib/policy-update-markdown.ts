@@ -5,7 +5,7 @@ import type {
   PolicyUpdateSection,
   PolicyUpdateTable,
 } from "@/lib/policy-updates";
-import { policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
@@ -120,8 +120,19 @@ function renderImage({
   const src = policyUpdateMarkdownEmailAssetSrc(image.src, siteUrl);
   const alt = escapeMarkdownText(image.alt || image.caption || "Source image");
   const imageMarkdown = `![${alt}](${src})`;
-  const linkedImage = href ? `[${imageMarkdown}](${href})` : imageMarkdown;
-  return image.caption ? `${linkedImage}\n\n_${escapeMarkdownText(image.caption)}_` : linkedImage;
+  return href ? `[${imageMarkdown}](${href})` : imageMarkdown;
+}
+
+function isRelevantPostsMarker(text: string) {
+  return /^Relevant Posts?:$/i.test(text.trim());
+}
+
+function sectionHasRelevantPostsMarker(section: PolicyUpdateSection) {
+  return [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+}
+
+function renderParagraph(paragraph: string, links: PolicyUpdateLink[]) {
+  return isRelevantPostsMarker(paragraph) ? "### Relevant Posts" : linkifyText(paragraph, links);
 }
 
 function policyUpdateMarkdownIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
@@ -152,6 +163,8 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   const isSocial = isPolicyUpdateSocialPostSection(section);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
+  const renderRelevantPostsImageLabel =
+    !isSocial && !sectionHasRelevantPostsMarker(section) && (section.images || []).some(isPolicyUpdateRelevantPostImage);
 
   if (socialHeading) {
     lines.push(`## ${escapeMarkdownText(socialHeading.label)}`);
@@ -189,10 +202,11 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   }
 
   for (const paragraph of section.body) {
-    lines.push("", linkifyText(paragraph, section.links));
+    lines.push("", renderParagraph(paragraph, section.links || []));
   }
 
   if (!isSocial) {
+    if (renderRelevantPostsImageLabel) lines.push("", "### Relevant Posts");
     for (const image of section.images || []) {
       lines.push(
         "",
@@ -212,7 +226,7 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   }
 
   for (const paragraph of section.bodyAfterBullets || []) {
-    lines.push("", linkifyText(paragraph, section.links));
+    lines.push("", renderParagraph(paragraph, section.links || []));
   }
 
   return lines

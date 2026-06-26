@@ -8,7 +8,7 @@ import {
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
-import { policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
   isPolicyUpdateSocialPostSection,
   policyUpdateSectionHeadingLink,
@@ -107,6 +107,32 @@ function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
   return nodes;
 }
 
+function isRelevantPostsMarker(text: string) {
+  return /^Relevant Posts?:$/i.test(text.trim());
+}
+
+function PolicyUpdateParagraph({
+  paragraph,
+  links,
+}: {
+  paragraph: string;
+  links?: PolicyUpdateLink[];
+}) {
+  if (isRelevantPostsMarker(paragraph)) {
+    return <p className="section-eyebrow text-[var(--brand-denim)]">Relevant Posts</p>;
+  }
+
+  return <p>{renderLinkedText(paragraph, links)}</p>;
+}
+
+function hasRelevantPostsMarker(section: PolicyUpdateSection) {
+  return [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+}
+
+function hasRelevantPostImages(section: PolicyUpdateSection) {
+  return section.images?.some(isPolicyUpdateRelevantPostImage) || false;
+}
+
 function PolicyUpdateSectionImages({
   images,
   imageHrefFallback,
@@ -144,9 +170,6 @@ function PolicyUpdateSectionImages({
             ) : (
               <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
             )}
-            {image.caption ? (
-              <figcaption className="mt-3 text-xs leading-5 text-slate-600">{image.caption}</figcaption>
-            ) : null}
           </figure>
         );
       })}
@@ -217,6 +240,7 @@ function PolicyUpdateSectionBlock({
   const heading = socialHeading?.title || (socialHeading ? "" : section.heading);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
+  const renderRelevantPostsImageLabel = !hasRelevantPostsMarker(section) && hasRelevantPostImages(section);
 
   if (isSocialPostSection) {
     return (
@@ -235,11 +259,11 @@ function PolicyUpdateSectionBlock({
                 {heading}
               </PolicyUpdateSectionHeading>
             ) : null}
-          <div className="space-y-4 text-sm leading-7 text-slate-700">
-            {section.body.map((paragraph) => (
-              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
-            ))}
-          </div>
+            <div className="space-y-4 text-sm leading-7 text-slate-700">
+              {section.body.map((paragraph) => (
+                <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
+              ))}
+            </div>
           </div>
         ) : null}
         {section.table ? (
@@ -255,7 +279,7 @@ function PolicyUpdateSectionBlock({
         {section.bodyAfterBullets?.length ? (
           <div className="space-y-4 text-sm leading-7 text-slate-700">
             {section.bodyAfterBullets.map((paragraph) => (
-              <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+              <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
             ))}
           </div>
         ) : null}
@@ -270,9 +294,12 @@ function PolicyUpdateSectionBlock({
       </PolicyUpdateSectionHeading>
       <div className="space-y-4 text-sm leading-7 text-slate-700">
         {section.body.map((paragraph) => (
-          <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+          <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
         ))}
       </div>
+      {renderRelevantPostsImageLabel ? (
+        <p className="section-eyebrow text-[var(--brand-denim)]">Relevant Posts</p>
+      ) : null}
       {section.images?.length ? (
         <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} />
       ) : null}
@@ -287,7 +314,7 @@ function PolicyUpdateSectionBlock({
       {section.bodyAfterBullets?.length ? (
         <div className="space-y-4 text-sm leading-7 text-slate-700">
           {section.bodyAfterBullets.map((paragraph) => (
-            <p key={paragraph}>{renderLinkedText(paragraph, section.links)}</p>
+            <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
           ))}
         </div>
       ) : null}
