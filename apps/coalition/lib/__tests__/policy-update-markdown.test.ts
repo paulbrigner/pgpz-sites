@@ -122,12 +122,40 @@ describe("buildPolicyUpdateForumMarkdown", () => {
       },
     );
 
-    expect(markdown).toContain("### Relevant Posts");
+    expect(markdown).toContain("## Relevant Posts");
     expect(markdown).toContain(
       "![Relevant post screenshot from page 3](https://coalition.pgpz.org/api/policy-updates/2026-06-15-weekly-policy-memo/email-assets/relevant-post-page-3-1.png)",
     );
     expect(markdown).not.toContain(
       "[![Relevant post screenshot from page 3](https://coalition.pgpz.org/api/policy-updates/2026-06-15-weekly-policy-memo/email-assets/relevant-post-page-3-1.png)](https://example.com/article)",
+    );
+  });
+
+  it("links known June 22 relevant post screenshots in markdown exports", () => {
+    const markdown = buildPolicyUpdateForumMarkdown(
+      {
+        ...update,
+        slug: "2026-06-22-weekly-policy-memo",
+        sections: [
+          {
+            heading: "Action Items",
+            body: ["Relevant Posts:"],
+            images: [
+              {
+                src: "/api/policy-updates/2026-06-22-weekly-policy-memo/assets/relevant-post-page-5-1.png",
+                alt: "Relevant post screenshot from page 5",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        siteUrl: "https://coalition.pgpz.org",
+      },
+    );
+
+    expect(markdown).toContain(
+      "[![Relevant post screenshot from page 5](https://coalition.pgpz.org/api/policy-updates/2026-06-22-weekly-policy-memo/email-assets/relevant-post-page-5-1.png)](https://x.com/CharlesFLehman/status/2067963794836349321)",
     );
   });
 });

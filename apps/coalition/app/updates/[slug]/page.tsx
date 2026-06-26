@@ -119,7 +119,7 @@ function PolicyUpdateParagraph({
   links?: PolicyUpdateLink[];
 }) {
   if (isRelevantPostsMarker(paragraph)) {
-    return <p className="section-eyebrow text-[var(--brand-denim)]">Relevant Posts</p>;
+    return <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">Relevant Posts</h2>;
   }
 
   return <p>{renderLinkedText(paragraph, links)}</p>;
@@ -298,7 +298,7 @@ function PolicyUpdateSectionBlock({
         ))}
       </div>
       {renderRelevantPostsImageLabel ? (
-        <p className="section-eyebrow text-[var(--brand-denim)]">Relevant Posts</p>
+        <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">Relevant Posts</h2>
       ) : null}
       {section.images?.length ? (
         <PolicyUpdateSectionImages images={section.images} imageHrefFallback={imageHrefFallback} />

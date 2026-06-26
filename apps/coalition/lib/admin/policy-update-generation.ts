@@ -1644,7 +1644,7 @@ async function extractPageImageAssets({
       overlappingLink && isSocialHref(overlappingLink.href)
         ? overlappingLink
         : contextualSocialLink(pageText, annotations);
-    const link = contextRole ? socialLink : overlappingLink || socialLink;
+    const link = overlappingLink || socialLink;
     const isSocialLink = !!link && isSocialHref(link.href);
     const isSocialContext = isSocialLink || !!contextRole;
     if (!isSocialContext && (displayWidth < 120 || displayHeight < 120)) continue;
