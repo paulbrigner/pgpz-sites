@@ -110,7 +110,7 @@ const renderParagraphText = (text: string, links: PolicyUpdateLink[] = []) =>
   isRelevantPostsMarker(text) ? "Relevant Posts:" : renderLinkedText(text, links);
 
 const renderRelevantPostsLabel = () =>
-  `<div style="margin:4px 0 12px;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">Relevant Posts</div>`;
+  `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">Relevant Posts</h2>`;
 
 const renderParagraphs = (
   paragraphs: string[],

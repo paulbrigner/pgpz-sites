@@ -66,6 +66,18 @@ export function knownPolicyUpdateImageHref(image: PolicyUpdateImageLike) {
     return "https://x.com/austincampbell/status/2067219843472851198";
   }
 
+  if (/2026-06-22-weekly-policy-memo\/assets\/relevant-post-page-3-1\.png\b/.test(text)) {
+    return "https://x.com/cypherpunk/status/2069226926128955704";
+  }
+
+  if (/2026-06-22-weekly-policy-memo\/assets\/relevant-post-page-4-1\.png\b/.test(text)) {
+    return "https://x.com/SummerMersinger/status/2069562907621536034";
+  }
+
+  if (/2026-06-22-weekly-policy-memo\/assets\/relevant-post-page-5-1\.png\b/.test(text)) {
+    return "https://x.com/CharlesFLehman/status/2067963794836349321";
+  }
+
   return null;
 }
 

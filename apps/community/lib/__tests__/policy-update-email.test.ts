@@ -206,7 +206,7 @@ describe("buildPolicyUpdateEmail", () => {
       "https://community.pgpz.org",
     );
 
-    expect(built.html).toContain(">Relevant Posts</div>");
+    expect(built.html).toContain(">Relevant Posts</h2>");
     expect(built.html).toContain("relevant-post-page-3-1.png");
     expect(built.html).not.toContain(
       '<a href="https://example.com/article" style="display:inline-block;text-decoration:none;">',
@@ -214,6 +214,38 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).toContain("Relevant Posts:");
     expect(built.text).toContain("[Image: Relevant post screenshot from page 3]");
     expect(built.text).not.toContain("[Image: Relevant post screenshot from page 3] https://example.com/article");
+  });
+
+  it("links known June 22 relevant post screenshots to their source X posts", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "2026-06-22-weekly-policy-memo",
+        sections: [
+          {
+            heading: "Action Items",
+            body: ["Relevant Posts:"],
+            images: [
+              {
+                src: "/api/policy-updates/2026-06-22-weekly-policy-memo/assets/relevant-post-page-4-1.png",
+                alt: "Relevant post screenshot from page 4",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain('href="https://x.com/SummerMersinger/status/2069562907621536034"');
+    expect(built.text).toContain(
+      "[Image: Relevant post screenshot from page 4] https://x.com/SummerMersinger/status/2069562907621536034",
+    );
   });
 
   it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {

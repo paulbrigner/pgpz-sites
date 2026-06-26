@@ -132,7 +132,7 @@ function sectionHasRelevantPostsMarker(section: PolicyUpdateSection) {
 }
 
 function renderParagraph(paragraph: string, links: PolicyUpdateLink[]) {
-  return isRelevantPostsMarker(paragraph) ? "### Relevant Posts" : linkifyText(paragraph, links);
+  return isRelevantPostsMarker(paragraph) ? "## Relevant Posts" : linkifyText(paragraph, links);
 }
 
 function policyUpdateMarkdownIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
@@ -206,7 +206,7 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   }
 
   if (!isSocial) {
-    if (renderRelevantPostsImageLabel) lines.push("", "### Relevant Posts");
+    if (renderRelevantPostsImageLabel) lines.push("", "## Relevant Posts");
     for (const image of section.images || []) {
       lines.push(
         "",
