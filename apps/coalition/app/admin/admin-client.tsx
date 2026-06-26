@@ -152,10 +152,23 @@ const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVAT
   return entered === phrase ? phrase : null;
 };
 
+const memberCanBeApproved = (member: AdminMember) =>
+  member.accountStatus !== "deactivated" &&
+  member.membershipStatus !== "active" &&
+  (member.manualApprovalStatus === "pending" || member.membershipStatus === "none");
+
+const memberCanBeInvited = (member: AdminMember) =>
+  member.accountStatus !== "deactivated" &&
+  member.membershipStatus === "invited" &&
+  !!member.email &&
+  !member.emailSuppressed &&
+  member.manualApprovalStatus !== "pending";
+
 const statusLabel = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return "Deactivated";
   if (member.membershipStatus === "active") return "Active";
   if (member.membershipStatus === "invited") return "Invited";
+  if (memberCanBeApproved(member)) return "Needs approval";
   return "Unapproved";
 };
 
@@ -175,9 +188,9 @@ const communitySyncIsHealthy = (status: string | null) =>
 const memberNeedsAction = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return false;
   const active = member.membershipStatus === "active";
-  if (member.manualApprovalStatus === "pending" && !active) return true;
+  if (memberCanBeApproved(member)) return true;
   if (active && !member.welcomeEmailSentAt && !!member.email && !member.emailSuppressed) return true;
-  return !active && member.manualApprovalStatus !== "pending" && !!member.email && !member.emailSuppressed && !member.invitationEmailSentAt;
+  return memberCanBeInvited(member) && !member.invitationEmailSentAt;
 };
 
 const compareText = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
@@ -353,13 +366,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const bulkInviteableMembers = useMemo(
     () =>
       (roster?.members || []).filter(
-        (member) =>
-          member.accountStatus !== "deactivated" &&
-          member.membershipStatus !== "active" &&
-          !!member.email &&
-          !member.emailSuppressed &&
-          !member.invitationEmailSentAt &&
-          member.manualApprovalStatus !== "pending",
+        (member) => memberCanBeInvited(member) && !member.invitationEmailSentAt,
       ),
     [roster],
   );
@@ -427,11 +434,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         body: JSON.stringify({ userId: member.id }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Failed to approve manual request");
-      setNotice(`Manual approval granted for ${member.email || displayName(member)}.`);
+      if (!res.ok) throw new Error(body?.error || "Failed to approve member");
+      setNotice(`Membership approved for ${member.email || displayName(member)}.`);
       await loadRoster();
     } catch (err: any) {
-      setError(err?.message || "Failed to approve manual request");
+      setError(err?.message || "Failed to approve member");
     } finally {
       setApprovalLoading((current) => ({ ...current, [member.id]: false }));
     }
@@ -713,7 +720,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           ["Active", roster?.meta.active ?? 0],
           ["Invited", roster?.meta.invited ?? 0],
           ["Unapproved", roster?.meta.none ?? 0],
-          ["Manual pending", roster?.meta.manualPending ?? 0],
+          ["Approval ready", roster?.meta.manualPending ?? 0],
           ["Admins", roster?.meta.admins ?? 0],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border bg-white/80 p-4">
@@ -953,7 +960,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               ["active", "Active"],
               ["invited", "Invited"],
               ["none", "Unapproved"],
-              ["manual", "Manual requests"],
+              ["manual", "Approval ready"],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -1042,7 +1049,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               const invited = member.membershipStatus === "invited" && !deactivated;
               const welcomeSent = !!member.welcomeEmailSentAt;
               const inviteSent = !!member.invitationEmailSentAt;
-              const manualPending = member.manualApprovalStatus === "pending" && !active && !deactivated;
+              const approvalReady = memberCanBeApproved(member);
+              const manualPending = member.manualApprovalStatus === "pending" && approvalReady;
               const expanded = !!expandedRows[member.id];
               const profileDraft = profileDrafts[member.id] ?? profileDraftFromMember(member);
               const profileChanged = profileDraftChanged(profileDraft, member);
@@ -1097,6 +1105,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           Manual requested
                         </div>
                       ) : null}
+                      {approvalReady && !manualPending ? (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Approval ready
+                        </div>
+                      ) : null}
                       {active ? (
                         <div
                           className={cn(
@@ -1136,6 +1150,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           <MailCheck className="h-3.5 w-3.5" />
                           {welcomeSent ? "Welcome sent" : "Welcome pending"}
                         </div>
+                      ) : approvalReady ? (
+                        <div className="inline-flex items-center gap-1 rounded-full bg-[var(--zcash-gold-soft)] px-3 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Approval needed
+                        </div>
                       ) : (
                         <div
                           className={cn(
@@ -1152,6 +1171,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           ? welcomeSent
                             ? `Sent ${formatDate(member.welcomeEmailSentAt)}`
                             : "Not sent"
+                          : approvalReady
+                            ? "Approve before onboarding email"
                           : inviteSent
                             ? `Sent ${formatDate(member.invitationEmailSentAt)}`
                             : "Not sent"}
@@ -1161,7 +1182,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {manualPending ? (
+                      {approvalReady ? (
                         <Button
                           size="sm"
                           disabled={approvalLoading[member.id]}
@@ -1169,7 +1190,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           onClick={() => approveManual(member)}
                         >
                           <UserCheck className="h-4 w-4" />
-                          Approve
+                          {manualPending ? "Approve request" : "Approve member"}
                         </Button>
                       ) : null}
                       {active ? (
@@ -1183,7 +1204,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           <MailPlus className="h-4 w-4" />
                           {welcomeSent ? "Resend welcome" : "Send welcome"}
                         </Button>
-                      ) : (
+                      ) : approvalReady ? null : (
                         <Button
                           size="sm"
                           variant="outline"

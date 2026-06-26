@@ -127,6 +127,12 @@ export async function POST(request: NextRequest) {
       if (user.membershipStatus === "active") {
         return NextResponse.json({ error: "This member is already active" }, { status: 409 });
       }
+      if (user.membershipStatus !== "invited") {
+        return NextResponse.json(
+          { error: "Invitation emails are only for admin-added invitees. Approve signed-in prospects instead." },
+          { status: 409 },
+        );
+      }
       const invitation = await createInvitationActivationLink({ userId: user.id, adminUserId });
       const template = await getInvitationEmailTemplate();
       built = buildInvitationEmail({

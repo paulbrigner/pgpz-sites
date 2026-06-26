@@ -259,6 +259,7 @@ function normalizeMembershipStatus(value: unknown): MemberStatus {
 
 function normalizeManualApprovalStatus(value: unknown): ManualApprovalStatus {
   if (value === "pending" || value === "approved") return value;
+  if (value === "requested") return "pending";
   return "none";
 }
 
@@ -596,8 +597,8 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
       if (statusFilter === "manual") {
         return (
           member.accountStatus !== "deactivated" &&
-          member.manualApprovalStatus === "pending" &&
-          member.membershipStatus !== "active"
+          member.membershipStatus !== "active" &&
+          (member.manualApprovalStatus === "pending" || member.membershipStatus === "none")
         );
       }
       return member.accountStatus !== "deactivated" && member.membershipStatus === statusFilter;
@@ -630,8 +631,8 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
       manualPending: allMembers.filter(
         (member) =>
           member.accountStatus !== "deactivated" &&
-          member.manualApprovalStatus === "pending" &&
-          member.membershipStatus !== "active",
+          member.membershipStatus !== "active" &&
+          (member.manualApprovalStatus === "pending" || member.membershipStatus === "none"),
       ).length,
       admins: allMembers.filter((member) => member.isAdmin).length,
     },

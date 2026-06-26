@@ -12,7 +12,7 @@ vi.mock("@/lib/dynamodb", () => ({
   TABLE_NAME: "TestTable",
 }));
 
-import { deactivateAdminMember, updateAdminMemberProfile } from "@/lib/admin/roster";
+import { buildAdminRoster, deactivateAdminMember, updateAdminMemberProfile } from "@/lib/admin/roster";
 
 describe("admin roster account actions", () => {
   beforeEach(() => {
@@ -129,5 +129,40 @@ describe("admin roster account actions", () => {
     });
 
     expect(dynamoMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("treats signed-in unapproved prospects as approval-ready in the admin roster", async () => {
+    dynamoMocks.scan.mockResolvedValueOnce({
+      Items: [
+        {
+          id: "prospect-1",
+          email: "prospect@example.com",
+          membershipStatus: "none",
+        },
+        {
+          id: "invitee-1",
+          email: "invitee@example.com",
+          membershipStatus: "invited",
+          membershipProvider: "admin_invite",
+        },
+        {
+          id: "pending-1",
+          email: "pending@example.com",
+          membershipStatus: "invited",
+          manualApprovalStatus: "pending",
+          manualApprovalRequestedAt: "2026-06-26T12:00:00.000Z",
+        },
+        {
+          id: "active-1",
+          email: "active@example.com",
+          membershipStatus: "active",
+        },
+      ],
+    });
+
+    const roster = await buildAdminRoster({ statusFilter: "manual" });
+
+    expect(roster.meta.manualPending).toBe(2);
+    expect(roster.members.map((member) => member.id).sort()).toEqual(["pending-1", "prospect-1"]);
   });
 });

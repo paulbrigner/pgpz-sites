@@ -17,6 +17,12 @@ export class ManualApprovalError extends Error {
 
 const userKey = (userId: string) => ({ pk: `USER#${userId}`, sk: `USER#${userId}` });
 
+const normalizeManualApprovalStatus = (value: unknown): ManualApprovalStatus => {
+  if (value === "pending" || value === "approved") return value;
+  if (value === "requested") return "pending";
+  return "none";
+};
+
 export async function requestManualApproval(userId: string) {
   if (!userId) throw new ManualApprovalError("Unauthorized", 401);
 
@@ -93,15 +99,30 @@ export async function approveManualApproval({
   const user = await documentClient.get({
     TableName: TABLE_NAME,
     Key: userKey(userId),
-    ProjectionExpression: "id, email, membershipStatus, manualApprovalStatus",
+    ProjectionExpression:
+      "id, email, membershipStatus, manualApprovalStatus, manualApprovalRequestedAt, accountStatus, deactivatedAt",
   });
 
   if (!user.Item?.id) throw new ManualApprovalError("User not found", 404);
   if (user.Item.membershipStatus === "active") {
     throw new ManualApprovalError("This member is already active.", 409);
   }
-  if (user.Item.manualApprovalStatus !== "pending") {
-    throw new ManualApprovalError("This member has not requested manual approval.", 409);
+  if (user.Item.accountStatus === "deactivated" || user.Item.deactivatedAt) {
+    throw new ManualApprovalError("This user is deactivated.", 409);
+  }
+
+  const membershipStatus = user.Item.membershipStatus === "invited" ? "invited" : "none";
+  const manualApprovalStatus = normalizeManualApprovalStatus(user.Item.manualApprovalStatus);
+  const approvalEligible =
+    manualApprovalStatus === "pending" || (membershipStatus === "none" && manualApprovalStatus !== "approved");
+
+  if (!approvalEligible) {
+    throw new ManualApprovalError(
+      membershipStatus === "invited"
+        ? "This member is in the invitation flow. They must activate from the invitation email."
+        : "This member is not eligible for approval.",
+      409,
+    );
   }
 
   const now = new Date().toISOString();
@@ -112,16 +133,20 @@ export async function approveManualApproval({
       UpdateExpression:
         "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now",
       ConditionExpression:
-        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND #manualApprovalStatus = :pending",
+        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt) AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND (#manualApprovalStatus = :pending OR attribute_not_exists(#membershipStatus) OR #membershipStatus = :none)",
       ExpressionAttributeNames: {
         "#pk": "pk",
         "#membershipStatus": "membershipStatus",
         "#manualApprovalStatus": "manualApprovalStatus",
+        "#accountStatus": "accountStatus",
+        "#deactivatedAt": "deactivatedAt",
       },
       ExpressionAttributeValues: {
         ":active": "active",
         ":provider": "manual",
         ":pending": "pending",
+        ":none": "none",
+        ":deactivated": "deactivated",
         ":now": now,
         ":approved": "approved",
         ":adminUserId": adminUserId,
@@ -129,7 +154,7 @@ export async function approveManualApproval({
     });
   } catch (err: any) {
     if (err?.name === "ConditionalCheckFailedException") {
-      throw new ManualApprovalError("This manual approval request is no longer pending.", 409);
+      throw new ManualApprovalError("This member is no longer eligible for approval.", 409);
     }
     throw err;
   }

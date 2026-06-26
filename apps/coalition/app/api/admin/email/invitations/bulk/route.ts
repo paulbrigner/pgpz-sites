@@ -18,7 +18,7 @@ import { getUserDisplayName } from "@/lib/user-display-name";
 export const dynamic = "force-dynamic";
 
 const isOutstandingInviteableMember = (member: AdminMember) =>
-  member.membershipStatus !== "active" &&
+  member.membershipStatus === "invited" &&
   !!member.email &&
   !member.emailSuppressed &&
   !member.invitationEmailSentAt &&

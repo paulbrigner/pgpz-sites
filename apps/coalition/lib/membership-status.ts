@@ -32,6 +32,8 @@ export async function getUserMembershipStatus(userId: string) {
   const manualApprovalStatus =
     item.manualApprovalStatus === "pending" || item.manualApprovalStatus === "approved"
       ? item.manualApprovalStatus
+      : item.manualApprovalStatus === "requested"
+        ? "pending"
       : "none";
 
   return {
