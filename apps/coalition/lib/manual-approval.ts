@@ -131,7 +131,7 @@ export async function approveManualApproval({
       TableName: TABLE_NAME,
       Key: userKey(userId),
       UpdateExpression:
-        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now",
+        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now REMOVE invitationStatus, invitationTokenCreatedAt, invitationTokenCreatedBy",
       ConditionExpression:
         "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt) AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND (#manualApprovalStatus = :pending OR attribute_not_exists(#membershipStatus) OR #membershipStatus = :none)",
       ExpressionAttributeNames: {
