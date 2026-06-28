@@ -422,20 +422,27 @@ def draw_document(
         )
         doc_line_height = max(28, round(font_base_size(doc_title_font, frame) * 1.12))
     else:
-        doc_title_font = fonts["doc_title"]
-        title_lines = wrap_text(draw, copy.document_title, doc_title_font, frame.n(292))[:4]
+        doc_title_font, title_lines = fit_wrapped_font(
+            draw,
+            copy.document_title,
+            ARIAL_BOLD,
+            max_size=frame.n(29),
+            min_size=frame.n(23),
+            max_width=frame.n(292),
+            max_lines=2,
+        )
         doc_line_height = 36
 
     draw_lines(draw, frame, title_lines, x=x + 30, y=y + 126, line_height=doc_line_height, font=doc_title_font, fill=BLACK)
 
-    body_top = max(y + 210, y + 126 + len(title_lines) * doc_line_height + 18)
+    body_top = max(y + 210, y + 126 + len(title_lines) * doc_line_height + 18) if copy.category == "special" else y + 210
     for i, line_width in enumerate([258, 232, 268, 214]):
         yy = body_top + i * 24
         if copy.category == "special" and yy > y + h - 140:
             break
         draw.rounded_rectangle(frame.b(x + 30, yy, x + 30 + line_width, yy + 11), radius=frame.n(5), fill=LINE)
 
-    table_top = y + h - 118 if copy.category == "special" else max(y + 318, body_top + 108)
+    table_top = y + h - 118 if copy.category == "special" else y + 318
     col_width = 96 if copy.category == "weekly" else (w - 64) / 3
     for i in range(3):
         x0 = x + 30 + i * col_width
@@ -445,7 +452,7 @@ def draw_document(
         if copy.category == "weekly":
             draw.rectangle(frame.b(x0, table_top + 80, x1, table_top + 104), fill=(242, 245, 249), outline=(221, 226, 234))
 
-    label_y = y + h - 43 if copy.category == "special" else min(table_top + 90, y + h - 30)
+    label_y = y + h - 43 if copy.category == "special" else y + 408
     draw.text(frame.p(x + 30, label_y), copy.document_label, font=fonts["doc_label"], fill=GOLD_DEEP)
 
 
