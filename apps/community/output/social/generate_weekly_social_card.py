@@ -212,7 +212,7 @@ def resolve_copy(args: argparse.Namespace) -> CardCopy:
         if not display_label:
             raise ValueError("--week-label is required for weekly cards unless --display-label is provided.")
         pill_label = args.pill_label or "Weekly Update"
-        headline = args.headline or "Weekly Policy\nMemo"
+        headline = args.headline or "Weekly Policy Memo"
         document_title = args.document_title or f"Weekly Policy Memo\n{display_label}"
         document_label = args.document_label or "WEEKLY MEMO"
     else:
