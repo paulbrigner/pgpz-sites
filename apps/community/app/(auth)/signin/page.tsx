@@ -13,6 +13,7 @@ import {
   TERMS_PATH,
 } from "@/lib/legal-config";
 import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
+import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 
 const socialProofCallback = "/?next=social-proof";
 
@@ -31,15 +32,18 @@ const sanitizeCallbackUrl = (value: string | null | undefined, reason: string | 
 const buildSignInUrl = ({
   callbackUrl,
   reason,
+  referralCode,
   sent,
 }: {
   callbackUrl: string;
   reason: string | null;
+  referralCode?: string | null;
   sent?: boolean;
 }) => {
   const params = new URLSearchParams();
   params.set("callbackUrl", callbackUrl);
   if (reason) params.set("reason", reason);
+  if (referralCode) params.set(REFERRAL_QUERY_PARAM, referralCode);
   if (sent) params.set("sent", "1");
   return `/signin?${params.toString()}`;
 };
@@ -60,6 +64,7 @@ const savePendingSignupProfile = async (profile: {
   linkedinUrl: string;
   legalAccepted: boolean;
   legalDocumentVersion: string;
+  referralCode?: string | null;
 }) => {
   const res = await fetch("/api/signup/pending", {
     method: "POST",
@@ -105,6 +110,7 @@ export default function SignInPage() {
   const searchParams = useSearchParams();
   const reason = searchParams?.get("reason") || null;
   const sent = searchParams?.get("sent") === "1";
+  const referralCode = normalizeReferralCode(searchParams?.get(REFERRAL_QUERY_PARAM));
   const callbackUrl = useMemo(() => {
     return sanitizeCallbackUrl(searchParams?.get("callbackUrl"), reason);
   }, [reason, searchParams]);
@@ -113,6 +119,7 @@ export default function SignInPage() {
     <EmailSignIn
       callbackUrl={callbackUrl}
       mode={reason === "signup" ? "signup" : "signin"}
+      referralCode={referralCode}
       reason={reason}
       sent={sent}
     />
@@ -122,11 +129,13 @@ export default function SignInPage() {
 function EmailSignIn({
   callbackUrl,
   mode,
+  referralCode,
   reason,
   sent,
 }: {
   callbackUrl: string;
   mode: "signin" | "signup";
+  referralCode: string;
   reason: string | null;
   sent: boolean;
 }) {
@@ -182,6 +191,7 @@ function EmailSignIn({
           linkedinUrl: linkedinUrl.trim(),
           legalAccepted: true,
           legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
+          referralCode: referralCode || null,
         };
         const signupProfileId = await savePendingSignupProfile(pendingProfile);
         emailCallbackUrl = appendSignupProfileId(callbackUrl, signupProfileId);
@@ -200,7 +210,7 @@ function EmailSignIn({
 
       setSentVisible(true);
       setMessage("Check your email for a secure sign-in link.");
-      window.history.replaceState(null, "", buildSignInUrl({ callbackUrl: emailCallbackUrl, reason, sent: true }));
+      window.history.replaceState(null, "", buildSignInUrl({ callbackUrl: emailCallbackUrl, reason, referralCode, sent: true }));
     } catch (err: any) {
       setError(err?.message || "Failed to send sign-in email.");
     } finally {
@@ -249,134 +259,134 @@ function EmailSignIn({
               onClick={() => {
                 setMessage(null);
                 setSentVisible(false);
-                window.history.replaceState(null, "", buildSignInUrl({ callbackUrl, reason }));
+                window.history.replaceState(null, "", buildSignInUrl({ callbackUrl, reason, referralCode }));
               }}
             >
               Use another email
             </Button>
           </div>
         ) : (
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          {isSignup ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label htmlFor="firstName" className="text-sm font-medium">
-                  First name
-                </label>
-                <input
-                  id="firstName"
-                  value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="lastName" className="text-sm font-medium">
-                  Last name
-                </label>
-                <input
-                  id="lastName"
-                  value={lastName}
-                  onChange={(event) => setLastName(event.target.value)}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              required
-            />
-          </div>
-
-          {isSignup ? (
-            <>
-              <div className="space-y-2">
-                <label htmlFor="xHandle" className="text-sm font-medium">
-                  X handle
-                </label>
-                <input
-                  id="xHandle"
-                  value={xHandle}
-                  onChange={(event) => setXHandle(event.target.value)}
-                  placeholder="@handle"
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="linkedinUrl" className="text-sm font-medium">
-                  LinkedIn URL
-                </label>
-                <input
-                  id="linkedinUrl"
-                  value={linkedinUrl}
-                  onChange={(event) => setLinkedinUrl(event.target.value)}
-                  placeholder="https://www.linkedin.com/in/username"
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="rounded-lg border bg-white/70 p-4">
-                <div className="flex gap-3">
+          <form onSubmit={onSubmit} className="mt-6 space-y-4">
+            {isSignup ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="firstName" className="text-sm font-medium">
+                    First name
+                  </label>
                   <input
-                    id="legalAccepted"
-                    type="checkbox"
-                    checked={legalAccepted}
-                    onChange={(event) => setLegalAccepted(event.target.checked)}
-                    className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
+                    id="firstName"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm"
                     required
                   />
-                  <label htmlFor="legalAccepted" className="text-sm leading-6 text-slate-600">
-                    I have read and agree to the{" "}
-                    <Link
-                      className="font-medium text-[var(--brand-denim)] underline"
-                      href={TERMS_PATH}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Terms of Service
-                    </Link>
-                    ,{" "}
-                    <Link
-                      className="font-medium text-[var(--brand-denim)] underline"
-                      href={PRIVACY_PATH}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Privacy Policy
-                    </Link>
-                    , and{" "}
-                    <Link
-                      className="font-medium text-[var(--brand-denim)] underline"
-                      href={COMMUNITY_GUIDELINES_PATH}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Community Guidelines
-                    </Link>
-                    .
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="lastName" className="text-sm font-medium">
+                    Last name
                   </label>
+                  <input
+                    id="lastName"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    required
+                  />
                 </div>
               </div>
-            </>
-          ) : null}
+            ) : null}
 
-          <Button className="w-full" type="submit" disabled={submitting || (isSignup && !legalAccepted)}>
-            <Mail className="h-4 w-4" />
-            {submitting ? "Sending..." : "Send secure link"}
-          </Button>
-        </form>
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                required
+              />
+            </div>
+
+            {isSignup ? (
+              <>
+                <div className="space-y-2">
+                  <label htmlFor="xHandle" className="text-sm font-medium">
+                    X handle
+                  </label>
+                  <input
+                    id="xHandle"
+                    value={xHandle}
+                    onChange={(event) => setXHandle(event.target.value)}
+                    placeholder="@handle"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="linkedinUrl" className="text-sm font-medium">
+                    LinkedIn URL
+                  </label>
+                  <input
+                    id="linkedinUrl"
+                    value={linkedinUrl}
+                    onChange={(event) => setLinkedinUrl(event.target.value)}
+                    placeholder="https://www.linkedin.com/in/username"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="rounded-lg border bg-white/70 p-4">
+                  <div className="flex gap-3">
+                    <input
+                      id="legalAccepted"
+                      type="checkbox"
+                      checked={legalAccepted}
+                      onChange={(event) => setLegalAccepted(event.target.checked)}
+                      className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
+                      required
+                    />
+                    <label htmlFor="legalAccepted" className="text-sm leading-6 text-slate-600">
+                      I have read and agree to the{" "}
+                      <Link
+                        className="font-medium text-[var(--brand-denim)] underline"
+                        href={TERMS_PATH}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Terms of Service
+                      </Link>
+                      ,{" "}
+                      <Link
+                        className="font-medium text-[var(--brand-denim)] underline"
+                        href={PRIVACY_PATH}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Privacy Policy
+                      </Link>
+                      , and{" "}
+                      <Link
+                        className="font-medium text-[var(--brand-denim)] underline"
+                        href={COMMUNITY_GUIDELINES_PATH}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Community Guidelines
+                      </Link>
+                      .
+                    </label>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            <Button className="w-full" type="submit" disabled={submitting || (isSignup && !legalAccepted)}>
+              <Mail className="h-4 w-4" />
+              {submitting ? "Sending..." : "Send secure link"}
+            </Button>
+          </form>
         )}
 
         <div className="mt-5 text-center text-sm text-slate-600">
@@ -385,7 +395,10 @@ function EmailSignIn({
               Already have an account?
             </Link>
           ) : (
-            <Link className="font-medium text-[var(--brand-denim)] underline" href={buildSignInUrl({ callbackUrl, reason: "signup" })}>
+            <Link
+              className="font-medium text-[var(--brand-denim)] underline"
+              href={buildSignInUrl({ callbackUrl, reason: "signup", referralCode })}
+            >
               New to the community?
             </Link>
           )}

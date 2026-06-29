@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { resolveAppSession } from "@/lib/app-session";
+import { normalizeReferralCode } from "@/lib/referral-code";
+import { creditReferralSignup } from "@/lib/referrals";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -25,6 +27,7 @@ const validateProfile = (body: any) => {
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
   const xHandle = normalizeXHandle(body?.xHandle);
   const linkedinUrl = normalizeLinkedinUrl(body?.linkedinUrl);
+  const referralCode = normalizeReferralCode(body?.referralCode);
   const legalAccepted = body?.legalAccepted === true;
   const legalDocumentVersion =
     typeof body?.legalDocumentVersion === "string" ? body.legalDocumentVersion.trim() : "";
@@ -48,7 +51,7 @@ const validateProfile = (body: any) => {
     }
   }
 
-  return { email, firstName, lastName, xHandle, linkedinUrl };
+  return { email, firstName, lastName, xHandle, linkedinUrl, referralCode };
 };
 
 const pendingKey = (email: string, signupProfileId: string) => ({
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
         lastName: profile.lastName,
         xHandle: profile.xHandle || null,
         linkedinUrl: profile.linkedinUrl || null,
+        referralCode: profile.referralCode || null,
         legalAcceptedAt: now,
         legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         createdAt: now,
@@ -172,6 +176,21 @@ export async function PATCH(request: NextRequest) {
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
     });
+
+    if (item.referralCode) {
+      try {
+        await creditReferralSignup({
+          referralCode: item.referralCode,
+          referredUserId: userId,
+          referredEmail: email,
+          referredName: name,
+          signupProfileId,
+          pendingSignupCreatedAt: typeof item.createdAt === "string" ? item.createdAt : null,
+        });
+      } catch (referralErr) {
+        console.error("/api/signup/pending PATCH referral credit error:", referralErr);
+      }
+    }
 
     await documentClient.delete({ TableName: TABLE_NAME, Key: key });
 

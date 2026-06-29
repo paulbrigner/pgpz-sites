@@ -4,8 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clipboard, Gift } from "lucide-react";
 import { useAppSession } from "@/lib/use-app-session";
+
+type ReferralSummary = {
+  referralCode: string;
+  referralUrl: string;
+  creditedSignupCount: number;
+  activeRecruitCount: number;
+  recentCredits: Array<{
+    referredUserId: string;
+    referredEmail: string | null;
+    referredName: string | null;
+    membershipStatus: "active" | "none";
+    creditedAt: string;
+  }>;
+};
 
 export default function ProfileSettingsPage() {
   const { data: session, status, update } = useAppSession();
@@ -24,6 +38,10 @@ export default function ProfileSettingsPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [referralSummary, setReferralSummary] = useState<ReferralSummary | null>(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [referralCopied, setReferralCopied] = useState(false);
   const [initial, setInitial] = useState<
     { firstName: string; lastName: string; xHandle: string; linkedinUrl: string } | null
   >(null);
@@ -54,6 +72,30 @@ export default function ProfileSettingsPage() {
       // ignore prefetch errors
     }
   }, [router]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    const loadReferralSummary = async () => {
+      setReferralLoading(true);
+      setReferralError(null);
+      try {
+        const res = await fetch("/api/referrals/summary", { cache: "no-store" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error || "Failed to load referral link");
+        if (!cancelled) setReferralSummary(body);
+      } catch (err: any) {
+        if (!cancelled) setReferralError(err?.message || "Failed to load referral link");
+      } finally {
+        if (!cancelled) setReferralLoading(false);
+      }
+    };
+
+    void loadReferralSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated]);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -147,6 +189,18 @@ export default function ProfileSettingsPage() {
       if (!proceed) return;
     }
     router.push("/");
+  };
+
+  const copyReferralLink = async () => {
+    if (!referralSummary?.referralUrl) return;
+    try {
+      await navigator.clipboard.writeText(referralSummary.referralUrl);
+      setReferralCopied(true);
+      setReferralError(null);
+      window.setTimeout(() => setReferralCopied(false), 1800);
+    } catch {
+      setReferralError("Could not copy the referral link. Select the link and copy it manually.");
+    }
   };
 
   if (!ready) {
@@ -249,6 +303,90 @@ export default function ProfileSettingsPage() {
             {submitting ? "Saving..." : "Save changes"}
           </Button>
         </form>
+      </section>
+
+      <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-[var(--zcash-gold-deep)]" />
+              <h2 className="text-lg font-semibold">Member recruitment</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Share your referral link with prospective members. Sign-ups from this link are credited here.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-md border bg-white px-4 py-2">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Sign-ups</div>
+              <div className="text-xl font-semibold text-[var(--brand-ink)]">
+                {referralSummary?.creditedSignupCount ?? 0}
+              </div>
+            </div>
+            <div className="rounded-md border bg-white px-4 py-2">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Active</div>
+              <div className="text-xl font-semibold text-[var(--brand-ink)]">
+                {referralSummary?.activeRecruitCount ?? 0}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {referralError ? (
+          <Alert className="mt-4" variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Referral link unavailable</AlertTitle>
+            <AlertDescription>{referralError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="mt-5 space-y-3">
+          <label htmlFor="referralUrl" className="text-sm font-medium">
+            Referral link
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              id="referralUrl"
+              value={referralLoading ? "Loading..." : referralSummary?.referralUrl || ""}
+              readOnly
+              className="min-w-0 flex-1 rounded-md border bg-white px-3 py-2 text-sm"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={copyReferralLink}
+              disabled={!referralSummary?.referralUrl || referralLoading}
+            >
+              <Clipboard className="h-4 w-4" />
+              {referralCopied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        </div>
+
+        {referralSummary?.recentCredits.length ? (
+          <div className="mt-5 rounded-md border bg-white/70">
+            <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Recent credits
+            </div>
+            <div className="divide-y">
+              {referralSummary.recentCredits.map((credit) => (
+                <div key={`${credit.referredUserId}:${credit.creditedAt}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-[var(--brand-ink)]">
+                      {credit.referredName || credit.referredEmail || "New member"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {new Date(credit.creditedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]">
+                    {credit.membershipStatus === "active" ? "Active" : "Signed up"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border bg-white/80 p-6 shadow-sm">

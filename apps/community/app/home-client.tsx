@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
 import { getPolicyUpdate } from "@/lib/policy-updates";
+import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 import { useAppSession } from "@/lib/use-app-session";
 
 type ProofStatus = {
@@ -109,6 +110,10 @@ export default function HomeClient() {
   );
   const isSocialProofOnboarding = searchParams?.get("next") === "social-proof";
   const signupProfileId = searchParams?.get("signupProfileId") || "";
+  const referralCode = normalizeReferralCode(searchParams?.get(REFERRAL_QUERY_PARAM));
+  const signupHref = referralCode
+    ? `/signin?reason=signup&${REFERRAL_QUERY_PARAM}=${encodeURIComponent(referralCode)}`
+    : "/signin?reason=signup";
 
   const [proofStatus, setProofStatus] = useState<ProofStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -399,7 +404,7 @@ export default function HomeClient() {
                     className="bg-[var(--zcash-gold)] text-[var(--brand-ink)] hover:bg-[var(--zcash-gold-soft)]"
                     asChild
                   >
-                    <Link href="/signin?reason=signup">
+                    <Link href={signupHref}>
                       <Mail className="h-4 w-4" aria-hidden="true" />
                       Join with email
                     </Link>
