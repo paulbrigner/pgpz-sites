@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
-import { authOptions } from "@/lib/auth-options";
 import {
   EMAIL_FROM,
   EMAIL_SERVER,
@@ -13,6 +11,7 @@ import {
   EMAIL_SERVER_SECURE,
   EMAIL_SERVER_USER,
 } from "@/lib/config";
+import { resolveAppSession } from "@/lib/app-session";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import { getUserMembershipStatus } from "@/lib/membership-status";
 
@@ -64,7 +63,7 @@ const escapeHtml = (value: string) =>
 const textToHtml = (value: string) => escapeHtml(value).replace(/\n/g, "<br/>");
 
 export async function POST(request: NextRequest) {
-  const session = (await getServerSession(authOptions as any)) as any;
+  const session = await resolveAppSession(request.headers);
   const userId = session?.user?.id;
   const userEmail = typeof session?.user?.email === "string" ? session.user.email : "";
 

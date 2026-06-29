@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useAppSession } from "@/lib/use-app-session";
 
 export default function ProfileSettingsPage() {
-  const { data: session, status, update } = useSession();
+  const { data: session, status, update } = useAppSession();
   const router = useRouter();
   const ready = status !== "loading";
   const authenticated = status === "authenticated";

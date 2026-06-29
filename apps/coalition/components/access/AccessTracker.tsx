@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
+import { useAppSession } from "@/lib/use-app-session";
 
 export function AccessTracker() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
+  const { data: session, status } = useAppSession();
   const lastTracked = useRef("");
   const userId = (session?.user as any)?.id || "";
 

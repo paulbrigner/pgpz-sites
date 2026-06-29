@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,6 +13,7 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
+import { useAppSession } from "@/lib/use-app-session";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
   const path = pathname || "/";
@@ -23,7 +23,7 @@ const sanitizeAuthCallback = (pathname: string | null, query: string | null) => 
 };
 
 export function MainNav() {
-  const { data: session, status } = useSession();
+  const { data: session, status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
   const isAdmin = !!(session?.user as any)?.isAdmin;
   const pathname = usePathname();

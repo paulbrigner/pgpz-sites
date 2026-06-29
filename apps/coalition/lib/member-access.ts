@@ -1,9 +1,8 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 
 export async function getMemberAccess() {
-  const session = await getServerSession(authOptions as any);
-  const user = (session as any)?.user || null;
+  const session = await resolveAppSession();
+  const user = session?.user || null;
   const displayName =
     user?.firstName ||
     user?.name ||
@@ -13,7 +12,7 @@ export async function getMemberAccess() {
   return {
     session,
     user,
-    authenticated: !!session,
+    authenticated: !!user,
     isMember: user?.membershipStatus === "active",
     displayName,
   };

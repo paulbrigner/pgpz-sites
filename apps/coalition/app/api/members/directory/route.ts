@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 import { listActiveMemberDirectory } from "@/lib/admin/roster";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const session = await getServerSession(authOptions as any);
-  const user = (session as any)?.user || null;
+  const session = await resolveAppSession();
+  const user = session?.user || null;
   if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAppSession } from "@/lib/use-app-session";
 import {
   BadgeCheck,
   CheckCircle2,
@@ -94,7 +94,7 @@ const policyPriorities = [
 ];
 
 export default function HomeClient() {
-  const { data: session, status, update } = useSession();
+  const { data: session, status, update } = useAppSession();
   const searchParams = useSearchParams();
   const authenticated = status === "authenticated";
   const loading = status === "loading";

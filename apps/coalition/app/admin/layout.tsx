@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 import type { ReactNode } from "react";
-import type { Session } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { isAdminSession } from "@/lib/admin/auth";
 
@@ -11,7 +9,7 @@ export const metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const session = (await getServerSession(authOptions as any)) as Session | null;
+  const session = await resolveAppSession();
   if (!session) {
     redirect("/signin?callbackUrl=/admin");
   }
