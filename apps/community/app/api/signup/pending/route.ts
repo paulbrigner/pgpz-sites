@@ -1,9 +1,8 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
+import { resolveAppSession } from "@/lib/app-session";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -91,9 +90,9 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-    const userId = typeof token?.sub === "string" ? token.sub : "";
-    const email = normalizeEmail(token?.email);
+    const session = await resolveAppSession(request.headers);
+    const userId = session?.user?.id || "";
+    const email = normalizeEmail(session?.user?.email);
     if (!userId || !email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

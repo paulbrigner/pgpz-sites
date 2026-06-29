@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
 import { randomBytes } from "crypto";
 // Nodemailer types are not installed; import with explicit any for runtime only.
@@ -8,11 +7,12 @@ import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
 import {
   EMAIL_FROM,
-  NEXTAUTH_SECRET,
   NEXTAUTH_TABLE,
   NEXTAUTH_URL,
 } from "@/lib/config";
 import { documentClient } from "@/lib/dynamodb";
+import { resolveAppSession } from "@/lib/app-session";
+import { findAppUserByEmail } from "@/lib/app-users";
 import { buildEmailServerConfig } from "@/lib/admin/email-transport";
 import { buildEmailChangeConfirmationEmail } from "@/lib/system-email";
 
@@ -25,8 +25,9 @@ const isValidEmail = (value: string) => {
 
 export async function POST(request: NextRequest) {
   try {
-    const sessionToken = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-    if (!sessionToken?.sub) {
+    const session = await resolveAppSession(request.headers);
+    const userId = session?.user?.id || "";
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -40,13 +41,13 @@ export async function POST(request: NextRequest) {
       tableName: NEXTAUTH_TABLE || "NextAuth",
     });
 
-    // Prevent collisions with existing accounts
-    const existing = await adapter.getUserByEmail(normalizedEmail);
-    if (existing && existing.id !== sessionToken.sub) {
+    // Prevent collisions with existing app accounts across both auth providers.
+    const existing = await findAppUserByEmail(normalizedEmail);
+    if (existing?.id && existing.id !== userId) {
       return NextResponse.json({ error: "That email is already in use." }, { status: 409 });
     }
 
-    const identifier = `EMAIL_CHANGE#${sessionToken.sub}`;
+    const identifier = `EMAIL_CHANGE#${userId}`;
     const token = randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + EMAIL_TOKEN_TTL_MS);
     await adapter.createVerificationToken({
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       token,
       expires,
       newEmail: normalizedEmail,
-      userId: sessionToken.sub,
+      userId,
     });
 
     const host = request.headers.get("host");

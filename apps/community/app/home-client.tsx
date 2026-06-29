@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, Mail, MessageCircle, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
 import { getPolicyUpdate } from "@/lib/policy-updates";
+import { useAppSession } from "@/lib/use-app-session";
 
 type ProofStatus = {
   membershipStatus: "active" | "none";
@@ -89,7 +89,7 @@ const buildIntentUrl = (text: string) =>
   `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
 
 export default function HomeClient() {
-  const { data: session, status, update } = useSession();
+  const { data: session, status, update } = useAppSession();
   const searchParams = useSearchParams();
   const previewMember =
     process.env.NODE_ENV === "development" && searchParams?.get("preview") === "member";

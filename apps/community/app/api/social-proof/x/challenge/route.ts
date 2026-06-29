@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 import { createXChallenge, enforceSocialProofRateLimit, SocialProofError } from "@/lib/social-proof";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +16,8 @@ const clientIp = (request: NextRequest) => {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions as any);
-    const userId = (session as any)?.user?.id;
+    const session = await resolveAppSession(request.headers);
+    const userId = session?.user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await enforceSocialProofRateLimit({

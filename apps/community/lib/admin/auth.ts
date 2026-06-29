@@ -1,8 +1,6 @@
 import 'server-only';
 
-import { getServerSession } from "next-auth";
-import type { Session } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession, type AppSession } from "@/lib/app-session";
 
 export class AdminAccessError extends Error {
   constructor(message = "Admin access required") {
@@ -11,13 +9,13 @@ export class AdminAccessError extends Error {
   }
 }
 
-export async function getAdminSession(): Promise<Session | null> {
-  const session = (await getServerSession(authOptions as any)) as Session | null;
+export async function getAdminSession(): Promise<AppSession | null> {
+  const session = await resolveAppSession();
   if (!session?.user?.isAdmin) return null;
-  return session as Session;
+  return session;
 }
 
-export async function requireAdminSession(): Promise<Session> {
+export async function requireAdminSession(): Promise<AppSession> {
   const session = await getAdminSession();
   if (!session) {
     throw new AdminAccessError();
@@ -25,6 +23,6 @@ export async function requireAdminSession(): Promise<Session> {
   return session;
 }
 
-export function isAdminSession(session: Session | null | undefined): boolean {
+export function isAdminSession(session: AppSession | null | undefined): boolean {
   return !!session?.user?.isAdmin;
 }

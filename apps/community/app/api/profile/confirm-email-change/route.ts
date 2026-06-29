@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
 import { NEXTAUTH_TABLE } from "@/lib/config";
 import { documentClient } from "@/lib/dynamodb";
+import { findAppUserByEmail, getAppUserById, updateAppUserEmail } from "@/lib/app-users";
 
 const renderHtml = (title: string, message: string) =>
   new NextResponse(
@@ -43,22 +44,20 @@ export async function GET(request: NextRequest) {
     }
     const newEmail = rawNewEmail.trim().toLowerCase();
 
-    const user = await adapter.getUser(userId);
+    const user = await getAppUserById(userId);
     if (!user?.id) {
       return renderHtml("Email change failed", "Account not found.");
     }
 
-    const collision = await adapter.getUserByEmail(newEmail);
+    const collision = await findAppUserByEmail(newEmail);
     if (collision && collision.id !== user.id) {
       return renderHtml("Email change failed", "That email is already in use.");
     }
 
-    await adapter.updateUser({
-      id: user.id,
-      email: newEmail,
-      GSI1PK: `USER#${newEmail}`,
-      GSI1SK: `USER#${newEmail}`,
-    });
+    const updated = await updateAppUserEmail(user.id, newEmail);
+    if (!updated?.id) {
+      return renderHtml("Email change failed", "Account not found.");
+    }
 
     const host = request.headers.get("host");
     const baseUrl = host ? `https://${host}` : request.url;
@@ -68,6 +67,10 @@ export async function GET(request: NextRequest) {
     const expires = new Date(0).toUTCString();
     response.headers.append("Set-Cookie", `next-auth.session-token=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
     response.headers.append("Set-Cookie", `__Secure-next-auth.session-token=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
+    response.headers.append("Set-Cookie", `better-auth.session_token=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
+    response.headers.append("Set-Cookie", `__Secure-better-auth.session_token=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
+    response.headers.append("Set-Cookie", `better-auth.session_data=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
+    response.headers.append("Set-Cookie", `__Secure-better-auth.session_data=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
     return response;
   } catch (e) {
     console.error("/api/profile/confirm-email-change error:", e);

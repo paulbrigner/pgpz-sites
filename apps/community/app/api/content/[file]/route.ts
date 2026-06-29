@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSignedUrl } from "@/lib/cloudFrontSigner";
-import { getToken } from "next-auth/jwt";
-import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   CLOUDFRONT_DOMAIN,
   KEY_PAIR_ID,
-  PRIVATE_KEY_SECRET,
-  NEXTAUTH_SECRET
+  PRIVATE_KEY_SECRET
 } from "@/lib/config"; // Environment-specific constants
+import { resolveAppSession } from "@/lib/app-session";
 
 export const revalidate = 0;
 export const runtime = "nodejs";
@@ -22,18 +20,11 @@ export async function GET(
     return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
   }
 
-  // Authentication via NextAuth JWT (session token)
-  const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-  const userId = typeof token?.sub === "string" ? token.sub : "";
-  if (!userId) {
+  const session = await resolveAppSession(request.headers);
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const user = await documentClient.get({
-    TableName: TABLE_NAME,
-    Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
-    ProjectionExpression: "membershipStatus",
-  });
-  if (user.Item?.membershipStatus !== "active") {
+  if (session.user.membershipStatus !== "active") {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
   }
 

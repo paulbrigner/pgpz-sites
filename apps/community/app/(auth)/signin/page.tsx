@@ -12,6 +12,7 @@ import {
   PRIVACY_PATH,
   TERMS_PATH,
 } from "@/lib/legal-config";
+import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
 
 const socialProofCallback = "/?next=social-proof";
 
@@ -72,35 +73,31 @@ const savePendingSignupProfile = async (profile: {
   return String(body.signupProfileId);
 };
 
-const requestEmailLink = async (email: string, callbackUrl: string) => {
-  const csrfRes = await fetch("/api/auth/csrf", {
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-  });
-  const csrfBody = await csrfRes.json().catch(() => ({}));
-  const csrfToken = csrfBody?.csrfToken;
-  if (!csrfRes.ok || !csrfToken) {
-    throw new Error("Could not prepare the sign-in request.");
-  }
-
-  const body = new URLSearchParams({
-    csrfToken,
-    email,
-    callbackUrl,
-    json: "true",
-  });
-
-  const res = await fetch("/api/auth/signin/email", {
+const requestEmailLink = async ({
+  email,
+  callbackUrl,
+  name,
+}: {
+  email: string;
+  callbackUrl: string;
+  name?: string;
+}) => {
+  const res = await fetch(`${BETTER_AUTH_BASE_PATH}/sign-in/magic-link`, {
     method: "POST",
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
-    body,
+    body: JSON.stringify({
+      email,
+      name,
+      callbackURL: callbackUrl,
+      errorCallbackURL: "/signin",
+    }),
   });
   const responseBody = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(responseBody?.error || "Failed to send sign-in email.");
+    throw new Error(responseBody?.message || responseBody?.error || "Failed to send sign-in email.");
   }
 };
 
@@ -195,7 +192,11 @@ function EmailSignIn({
         }
       }
 
-      await requestEmailLink(normalizedEmail, emailCallbackUrl);
+      await requestEmailLink({
+        email: normalizedEmail,
+        callbackUrl: emailCallbackUrl,
+        name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") || undefined,
+      });
 
       setSentVisible(true);
       setMessage("Check your email for a secure sign-in link.");

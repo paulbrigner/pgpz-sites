@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 import { getAccessLogRequestMetadata, recordAccessEvent } from "@/lib/admin/access-log";
 import { getUserDisplayName } from "@/lib/user-display-name";
 
@@ -8,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions as any);
-    const user = (session as any)?.user || null;
+    const session = await resolveAppSession(request.headers);
+    const user = session?.user || null;
     const userId = typeof user?.id === "string" ? user.id : "";
     if (!userId) return new NextResponse(null, { status: 204 });
 
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest) {
       eventType: "page_view",
       userId,
       email: typeof user?.email === "string" ? user.email : null,
-      name: getUserDisplayName(user),
+      name: user ? getUserDisplayName(user) : null,
       membershipStatus: typeof user?.membershipStatus === "string" ? user.membershipStatus : null,
       path: typeof body?.path === "string" ? body.path : null,
       title: typeof body?.title === "string" ? body.title : null,

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
-import { NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { resolveAppSession } from "@/lib/app-session";
 
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ req: request as any, secret: NEXTAUTH_SECRET });
-    if (!token?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await resolveAppSession(request.headers);
+    const userId = session?.user?.id || "";
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json();
     const { firstName, lastName } = body || {};
@@ -33,21 +32,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const adapter: any = DynamoDBAdapter(documentClient as any, {
-      tableName: TABLE_NAME,
-    });
-
     const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-    const updated = await adapter.updateUser({
-      id: token.sub,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      xHandle: xHandle || null,
-      linkedinUrl: linkedinUrl || null,
-      name,
+    const updated = await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
+      UpdateExpression:
+        "SET firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now",
+      ExpressionAttributeNames: { "#name": "name" },
+      ExpressionAttributeValues: {
+        ":firstName": firstName.trim(),
+        ":lastName": lastName.trim(),
+        ":name": name,
+        ":xHandle": xHandle || null,
+        ":linkedinUrl": linkedinUrl || null,
+        ":now": new Date().toISOString(),
+      },
+      ReturnValues: "ALL_NEW",
     });
 
-    return NextResponse.json({ ok: true, user: { id: updated.id, firstName: updated.firstName, lastName: updated.lastName, xHandle: updated.xHandle, linkedinUrl: updated.linkedinUrl } });
+    const item = updated.Attributes || {};
+    return NextResponse.json({ ok: true, user: { id: item.id, firstName: item.firstName, lastName: item.lastName, xHandle: item.xHandle, linkedinUrl: item.linkedinUrl } });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : (() => { try { return JSON.stringify(e); } catch { return String(e); } })();
     console.error("/api/profile/update error:", msg);

@@ -74,13 +74,15 @@ const signupProfileKey = (email: string, signupProfileId: string) => ({
   sk: `SIGNUP_PROFILE#${signupProfileId}`,
 });
 
-function signupProfileIdFromMagicLink(url: string) {
+export function signupProfileIdFromMagicLink(url: string) {
   try {
     const magicUrl = new URL(url);
     const directId = magicUrl.searchParams.get("signupProfileId")?.trim();
     if (directId) return directId;
 
-    const callbackUrl = magicUrl.searchParams.get("callbackUrl");
+    const callbackUrl =
+      magicUrl.searchParams.get("callbackUrl") ||
+      magicUrl.searchParams.get("callbackURL");
     if (!callbackUrl) return "";
 
     const parsedCallback = new URL(
@@ -93,7 +95,7 @@ function signupProfileIdFromMagicLink(url: string) {
   }
 }
 
-async function assertLegalAcceptanceForAccountEmail(identifier: string, url: string) {
+export async function assertLegalAcceptanceForAccountEmail(identifier: string, url: string) {
   const email = normalizeEmail(identifier);
   const existingUser = await findUserByEmail(email);
   if (existingUser?.accountStatus === "deactivated" || existingUser?.deactivatedAt) {

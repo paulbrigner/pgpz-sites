@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+import { resolveAppSession } from "@/lib/app-session";
 import { getUserProofStatus, SocialProofError } from "@/lib/social-proof";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions as any);
-    const userId = (session as any)?.user?.id;
+    const session = await resolveAppSession();
+    const userId = session?.user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const status = await getUserProofStatus(userId);
