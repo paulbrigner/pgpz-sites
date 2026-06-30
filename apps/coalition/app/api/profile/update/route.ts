@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { resolveAppSession } from "@/lib/app-session";
+import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: handleError?.message || "Invalid X handle" }, { status: 400 });
     }
     const memberDirectoryOptIn = body?.memberDirectoryOptIn === true;
+    const policyInterestGroups = normalizePolicyInterestGroups(body?.policyInterestGroups);
 
     // Basic validations
     const err = (msg: string) => NextResponse.json({ error: msg }, { status: 400 });
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
       TableName: TABLE_NAME,
       Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
       UpdateExpression:
-        "SET firstName = :firstName, lastName = :lastName, #name = :name, company = :company, jobTitle = :jobTitle, linkedinUrl = :linkedinUrl, xHandle = :xHandle, memberDirectoryOptIn = :memberDirectoryOptIn, updatedAt = :now",
+        "SET firstName = :firstName, lastName = :lastName, #name = :name, company = :company, jobTitle = :jobTitle, linkedinUrl = :linkedinUrl, xHandle = :xHandle, memberDirectoryOptIn = :memberDirectoryOptIn, policyInterestGroups = :policyInterestGroups, updatedAt = :now",
       ExpressionAttributeNames: { "#name": "name" },
       ExpressionAttributeValues: {
         ":firstName": firstName.trim(),
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
         ":linkedinUrl": linkedinUrl || null,
         ":xHandle": xHandle || null,
         ":memberDirectoryOptIn": memberDirectoryOptIn,
+        ":policyInterestGroups": policyInterestGroups,
         ":now": new Date().toISOString(),
       },
       ReturnValues: "ALL_NEW",
@@ -73,6 +76,7 @@ export async function POST(request: NextRequest) {
         linkedinUrl: item.linkedinUrl,
         xHandle: item.xHandle,
         memberDirectoryOptIn: item.memberDirectoryOptIn,
+        policyInterestGroups: item.policyInterestGroups || [],
       },
     });
   } catch (e: any) {

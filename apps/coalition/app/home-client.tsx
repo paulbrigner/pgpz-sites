@@ -27,6 +27,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
+import {
+  policyInterestGroupLabel,
+  policyInterestGroupOptions,
+  policyInterestGroupPath,
+} from "@/lib/policy-interest-groups";
 
 type MembershipStatus = {
   membershipStatus: "active" | "invited" | "none";
@@ -45,6 +50,7 @@ type DirectoryMember = {
   jobTitle: string | null;
   linkedinUrl: string | null;
   xHandle: string | null;
+  policyInterestGroups: string[];
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -132,6 +138,9 @@ export default function HomeClient() {
   const invitedFromStatus = membershipStatus?.membershipStatus === "invited";
   const isMember = activeFromSession || activeFromStatus;
   const isInvited = !isMember && (invitedFromSession || invitedFromStatus);
+  const selectedPolicyInterestGroups = Array.isArray(sessionUser?.policyInterestGroups)
+    ? sessionUser.policyInterestGroups
+    : [];
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     membershipStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
@@ -652,6 +661,45 @@ export default function HomeClient() {
           </section>
 
           {isMember ? (
+            <section className="rounded-lg border bg-white/90 p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="section-eyebrow text-[var(--brand-denim)]">POLICY GROUPS</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">Topic areas</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                    Select member groups and open topic pages for focused coordination.
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link href="/groups">Manage groups</Link>
+                </Button>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {policyInterestGroupOptions.map((group) => {
+                  const selected = selectedPolicyInterestGroups.includes(group.id);
+                  return (
+                    <Link
+                      key={group.id}
+                      href={policyInterestGroupPath(group.id)}
+                      className="rounded-lg border bg-white p-4 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_18px_34px_-28px_rgba(30,30,30,0.4)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-[var(--brand-ink)]">{group.label}</h3>
+                        {selected ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-emerald-800">
+                            Selected
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{group.description}</p>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {isMember ? (
             <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
               <article className="glass-item p-6">
                 <div className="flex items-start gap-4">
@@ -742,6 +790,21 @@ export default function HomeClient() {
                               >
                                 {member.xHandle} on X
                               </Link>
+                            </div>
+                          ) : null}
+                          {member.policyInterestGroups?.length ? (
+                            <div className="sm:col-span-2">
+                              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Interests</div>
+                              <div className="mt-1 flex flex-wrap gap-1.5">
+                                {member.policyInterestGroups.map((groupId) => (
+                                  <span
+                                    key={groupId}
+                                    className="rounded-full border border-[rgba(47,111,104,0.22)] bg-white px-2 py-0.5 text-xs font-semibold text-[var(--brand-denim)]"
+                                  >
+                                    {policyInterestGroupLabel(groupId)}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           ) : null}
                         </div>

@@ -4,6 +4,7 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { resolveAppSession } from "@/lib/app-session";
+import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -22,6 +23,7 @@ const validateProfile = (body: any) => {
   const linkedinUrl = normalizeLinkedinUrl(body?.linkedinUrl);
   const xHandle = normalizeXHandle(body?.xHandle);
   const memberDirectoryOptIn = body?.memberDirectoryOptIn === true;
+  const policyInterestGroups = normalizePolicyInterestGroups(body?.policyInterestGroups);
   const legalAccepted = body?.legalAccepted === true;
   const legalDocumentVersion =
     typeof body?.legalDocumentVersion === "string" ? body.legalDocumentVersion.trim() : "";
@@ -48,7 +50,7 @@ const validateProfile = (body: any) => {
     }
   }
 
-  return { email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn };
+  return { email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups };
 };
 
 const pendingKey = (email: string, signupProfileId: string) => ({
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest) {
         linkedinUrl: profile.linkedinUrl || null,
         xHandle: profile.xHandle || null,
         memberDirectoryOptIn: profile.memberDirectoryOptIn,
+        policyInterestGroups: profile.policyInterestGroups,
         legalAcceptedAt: now,
         legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         createdAt: now,
@@ -137,6 +140,7 @@ export async function PATCH(request: NextRequest) {
     const linkedinUrl = typeof item.linkedinUrl === "string" ? item.linkedinUrl.trim() : "";
     const xHandle = typeof item.xHandle === "string" ? item.xHandle.trim() : "";
     const memberDirectoryOptIn = item.memberDirectoryOptIn === true;
+    const policyInterestGroups = normalizePolicyInterestGroups(item.policyInterestGroups);
     const legalAcceptedAt = typeof item.legalAcceptedAt === "string" ? item.legalAcceptedAt : null;
     const legalDocumentVersion =
       typeof item.legalDocumentVersion === "string" ? item.legalDocumentVersion : null;
@@ -150,6 +154,7 @@ export async function PATCH(request: NextRequest) {
       "linkedinUrl = :linkedinUrl",
       "xHandle = :xHandle",
       "memberDirectoryOptIn = :memberDirectoryOptIn",
+      "policyInterestGroups = :policyInterestGroups",
       "legalAcceptedAt = if_not_exists(legalAcceptedAt, :legalAcceptedAt)",
       "legalDocumentVersion = if_not_exists(legalDocumentVersion, :legalDocumentVersion)",
     ];
@@ -163,6 +168,7 @@ export async function PATCH(request: NextRequest) {
       ":linkedinUrl": linkedinUrl || null,
       ":xHandle": xHandle || null,
       ":memberDirectoryOptIn": memberDirectoryOptIn,
+      ":policyInterestGroups": policyInterestGroups,
       ":legalAcceptedAt": legalAcceptedAt || new Date().toISOString(),
       ":legalDocumentVersion": legalDocumentVersion || LEGAL_DOCUMENT_VERSION,
     };
@@ -180,7 +186,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       applied: true,
-      profile: { firstName, lastName, name, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn },
+      profile: { firstName, lastName, name, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups },
     });
   } catch (err) {
     console.error("/api/signup/pending PATCH error:", err);

@@ -6,6 +6,7 @@ import { SITE_URL } from "@/lib/config";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
+import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 
 export type CreateInvitedMemberInput = {
   email: string;
@@ -16,6 +17,7 @@ export type CreateInvitedMemberInput = {
   linkedinUrl?: string | null;
   xHandle?: string | null;
   memberDirectoryOptIn?: boolean;
+  policyInterestGroups?: unknown;
   adminUserId?: string | null;
 };
 
@@ -101,6 +103,7 @@ function validateInvitedMember(input: CreateInvitedMemberInput) {
     linkedinUrl,
     xHandle,
     memberDirectoryOptIn: input.memberDirectoryOptIn === true,
+    policyInterestGroups: normalizePolicyInterestGroups(input.policyInterestGroups),
   };
 }
 
@@ -130,6 +133,7 @@ export async function createInvitedMember(input: CreateInvitedMemberInput) {
     linkedinUrl: values.linkedinUrl || null,
     xHandle: values.xHandle || null,
     memberDirectoryOptIn: values.memberDirectoryOptIn,
+    policyInterestGroups: values.policyInterestGroups,
     membershipStatus: "invited",
     membershipProvider: "admin_invite",
     membershipVerifiedAt: null,

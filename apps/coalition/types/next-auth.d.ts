@@ -11,6 +11,7 @@ declare module "next-auth" {
       company?: string | null;
       jobTitle?: string | null;
       memberDirectoryOptIn?: boolean | null;
+      policyInterestGroups?: string[] | null;
       name?: string | null;
       email?: string | null;
       image?: string | null;
@@ -39,6 +40,7 @@ declare module "next-auth" {
     company?: string | null;
     jobTitle?: string | null;
     memberDirectoryOptIn?: boolean | null;
+    policyInterestGroups?: string[] | null;
     email?: string | null;
     membershipStatus?: "active" | "invited" | "none" | null;
     membershipProvider?: "manual" | "admin_invite" | string | null;
@@ -66,6 +68,7 @@ declare module "next-auth/jwt" {
     jobTitle?: string | null;
     xHandle?: string | null;
     memberDirectoryOptIn?: boolean | null;
+    policyInterestGroups?: string[] | null;
     invitationStatus?: "pending" | "accepted" | string | null;
     manualApprovalStatus?: "none" | "pending" | "approved" | string | null;
     manualApprovalRequestedAt?: string | null;

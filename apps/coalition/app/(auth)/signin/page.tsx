@@ -13,6 +13,7 @@ import {
   TERMS_PATH,
 } from "@/lib/legal-config";
 import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
+import { policyInterestGroupOptions } from "@/lib/policy-interest-groups";
 
 const membershipRequestCallback = "/?next=membership-request";
 
@@ -61,6 +62,7 @@ const savePendingSignupProfile = async (profile: {
   linkedinUrl: string;
   xHandle: string;
   memberDirectoryOptIn: boolean;
+  policyInterestGroups: string[];
   legalAccepted: boolean;
   legalDocumentVersion: string;
 }) => {
@@ -141,6 +143,7 @@ function EmailSignIn({
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [memberDirectoryOptIn, setMemberDirectoryOptIn] = useState(false);
+  const [policyInterestGroups, setPolicyInterestGroups] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +197,7 @@ function EmailSignIn({
           linkedinUrl: linkedinUrl.trim(),
           xHandle: xHandle.trim(),
           memberDirectoryOptIn,
+          policyInterestGroups,
           legalAccepted: true,
           legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
         };
@@ -398,6 +402,28 @@ function EmailSignIn({
                   placeholder="@pgpz"
                   className="w-full rounded-md border px-3 py-2 text-sm"
                 />
+              </div>
+              <div className="space-y-3 rounded-lg border bg-white/70 p-4">
+                <div className="text-sm font-medium">Policy interest groups</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {policyInterestGroupOptions.map((option) => (
+                    <label key={option.id} className="flex gap-2 text-sm leading-5 text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={policyInterestGroups.includes(option.id)}
+                        onChange={(event) =>
+                          setPolicyInterestGroups((current) =>
+                            event.target.checked
+                              ? [...current, option.id]
+                              : current.filter((id) => id !== option.id),
+                          )
+                        }
+                        className="mt-0.5 h-4 w-4 accent-[var(--zcash-gold)]"
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
               <div className="rounded-lg border bg-white/70 p-4">
                 <div className="flex gap-3">

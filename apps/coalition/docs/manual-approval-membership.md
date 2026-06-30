@@ -4,7 +4,7 @@ PGPZ Coalition membership can be activated through manual admin approval or thro
 
 ## Manual Approval Flow
 
-1. A prospective member creates a profile with name, corporate affiliation, job title, LinkedIn URL, X handle, directory preference, and legal acceptance.
+1. A prospective member creates a profile with name, corporate affiliation, job title, policy interest groups, LinkedIn URL, X handle, directory preference, and legal acceptance.
 2. The home screen prompts the user to request coalition approval.
 3. `POST /api/manual-approval/request` marks the user record as `manualApprovalStatus = pending`.
 4. The admin roster surfaces pending requests.
@@ -12,7 +12,7 @@ PGPZ Coalition membership can be activated through manual admin approval or thro
 
 ## Admin Invitation Flow
 
-1. An admin adds a member from `/admin` with email, name, corporate affiliation, job title, LinkedIn URL, X handle, and directory preference.
+1. An admin adds a member from `/admin` with email, name, corporate affiliation, job title, policy interest groups, LinkedIn URL, X handle, and directory preference.
 2. `POST /api/admin/members` creates the member with `membershipStatus = invited` and `membershipProvider = admin_invite`.
 3. The admin can edit the invitation email template from the user-management admin screen and send a draft copy before saving. The saved template controls future invitation sends and supports `[Name]`, `[First Name]`, `[Last Name]`, and `[Activation Link]` placeholders, plus safe Markdown for links, bold, italic, inline code, and simple lists.
 4. The admin can send or resend an invitation email from the roster, or bulk-send invitations to outstanding invite-able members that are non-active, unsuppressed, not manual-approval pending, and have no prior invitation email timestamp.
@@ -23,8 +23,8 @@ Invited members are not active members. They are excluded from newsletter and po
 
 ## DynamoDB Records
 
-- User records store `membershipStatus`, `membershipProvider`, `membershipVerifiedAt`, `company`, `jobTitle`, `linkedinUrl`, `xHandle`, `memberDirectoryOptIn`, invitation timestamps, and manual approval timestamps.
-- Pending profile records store first name, last name, corporate affiliation, job title, LinkedIn URL, X handle, directory preference, legal acceptance, and the signup profile id until the email magic link is completed.
+- User records store `membershipStatus`, `membershipProvider`, `membershipVerifiedAt`, `company`, `jobTitle`, `policyInterestGroups`, `linkedinUrl`, `xHandle`, `memberDirectoryOptIn`, invitation timestamps, and manual approval timestamps.
+- Pending profile records store first name, last name, corporate affiliation, job title, policy interest groups, LinkedIn URL, X handle, directory preference, legal acceptance, and the signup profile id until the email magic link is completed.
 - Invitation token records store a hashed one-time activation token with a 14-day expiry.
 - Email event, newsletter send-run, policy-update send-run, and email tracking records log delivery, open, click, unsubscribe, and failure outcomes for admin review.
 
@@ -34,7 +34,11 @@ Admins can filter the roster to manual requests, invited members, active members
 
 ## Member Directory
 
-Active members can view contact details for other active members who opted into the directory. The directory shows name, email, corporate affiliation, job title, LinkedIn URL, and X handle. Members who do not opt in are not listed.
+Active members can view contact details for other active members who opted into the directory. The directory shows name, email, corporate affiliation, job title, policy interest groups, LinkedIn URL, and X handle. Members who do not opt in are not listed.
+
+## Policy Interest Groups
+
+Active members can manage topic-group selections from `/groups`. Each topic has a dedicated member page under `/groups/<topic>`, including mining and tax. The home page also links active members to the topic pages and indicates groups already selected on the member profile.
 
 ## Required Environment
 

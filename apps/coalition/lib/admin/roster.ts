@@ -2,6 +2,7 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 import { normalizeXHandle } from "@/lib/x-handle";
+import { normalizePolicyInterestGroups, type PolicyInterestGroupId } from "@/lib/policy-interest-groups";
 
 export type MemberStatus = "active" | "invited" | "none";
 export type ManualApprovalStatus = "none" | "pending" | "approved";
@@ -17,6 +18,7 @@ type RawUser = {
   linkedinUrl?: string | null;
   xHandle?: string | null;
   memberDirectoryOptIn?: boolean | null;
+  policyInterestGroups?: unknown;
   isAdmin?: boolean | null;
   welcomeEmailSentAt?: string | null;
   invitationEmailSentAt?: string | null;
@@ -61,6 +63,7 @@ export type AdminMember = {
   linkedinUrl: string | null;
   xHandle: string | null;
   memberDirectoryOptIn: boolean;
+  policyInterestGroups: PolicyInterestGroupId[];
   membershipStatus: MemberStatus;
   membershipProvider: string | null;
   membershipVerifiedAt: string | null;
@@ -124,6 +127,7 @@ export type AdminMemberProfileInput = {
   linkedinUrl?: string | null;
   xHandle?: string | null;
   memberDirectoryOptIn?: boolean;
+  policyInterestGroups?: unknown;
 };
 
 export type MemberDirectoryEntry = {
@@ -136,6 +140,7 @@ export type MemberDirectoryEntry = {
   jobTitle: string | null;
   linkedinUrl: string | null;
   xHandle: string | null;
+  policyInterestGroups: PolicyInterestGroupId[];
 };
 
 export type BuildAdminRosterOptions = {
@@ -237,7 +242,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -278,6 +283,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
     linkedinUrl: textOrNull(user.linkedinUrl),
     xHandle: textOrNull(user.xHandle),
     memberDirectoryOptIn: user.memberDirectoryOptIn === true,
+    policyInterestGroups: normalizePolicyInterestGroups(user.policyInterestGroups),
     membershipStatus: normalizeMembershipStatus(user.membershipStatus),
     membershipProvider: textOrNull(user.membershipProvider),
     membershipVerifiedAt: textOrNull(user.membershipVerifiedAt),
@@ -344,6 +350,7 @@ export async function updateAdminMemberProfile({
   const linkedinUrl = normalizeLinkedinUrl(profile.linkedinUrl);
   const xHandle = normalizeXHandle(profile.xHandle);
   const memberDirectoryOptIn = profile.memberDirectoryOptIn === true;
+  const policyInterestGroups = normalizePolicyInterestGroups(profile.policyInterestGroups);
   const name = `${firstName} ${lastName}`.trim();
   const now = new Date().toISOString();
   const emailAuditExpression = emailChanged
@@ -354,7 +361,7 @@ export async function updateAdminMemberProfile({
     TableName: TABLE_NAME,
     Key: { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` },
     UpdateExpression:
-      `SET email = :email, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk, firstName = :firstName, lastName = :lastName, company = :company, jobTitle = :jobTitle, #name = :name, linkedinUrl = :linkedinUrl, xHandle = :xHandle, memberDirectoryOptIn = :memberDirectoryOptIn, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId${emailAuditExpression}`,
+      `SET email = :email, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk, firstName = :firstName, lastName = :lastName, company = :company, jobTitle = :jobTitle, #name = :name, linkedinUrl = :linkedinUrl, xHandle = :xHandle, memberDirectoryOptIn = :memberDirectoryOptIn, policyInterestGroups = :policyInterestGroups, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId${emailAuditExpression}`,
     ConditionExpression: "attribute_exists(#pk)",
     ExpressionAttributeNames: {
       "#pk": "pk",
@@ -372,6 +379,7 @@ export async function updateAdminMemberProfile({
       ":linkedinUrl": linkedinUrl || null,
       ":xHandle": xHandle || null,
       ":memberDirectoryOptIn": memberDirectoryOptIn,
+      ":policyInterestGroups": policyInterestGroups,
       ":now": now,
       ":adminUserId": adminUserId,
       ...(emailChanged ? { ":previousEmail": textOrNull(user.email) } : {}),
@@ -390,6 +398,7 @@ export async function updateAdminMemberProfile({
     linkedinUrl: linkedinUrl || null,
     xHandle: xHandle || null,
     memberDirectoryOptIn,
+    policyInterestGroups,
     adminProfileUpdatedAt: now,
     adminProfileUpdatedBy: adminUserId,
     ...(emailChanged
@@ -683,6 +692,7 @@ export async function listActiveMemberDirectory(): Promise<MemberDirectoryEntry[
       jobTitle: member.jobTitle,
       linkedinUrl: member.linkedinUrl,
       xHandle: member.xHandle,
+      policyInterestGroups: member.policyInterestGroups,
     }))
     .sort((a, b) => {
       const companyCompare = (a.company || "").localeCompare(b.company || "", undefined, {

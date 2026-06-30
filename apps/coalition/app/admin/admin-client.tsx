@@ -23,6 +23,7 @@ import { SensitiveDataText, useAdminSensitiveData } from "@/components/admin/sen
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { policyInterestGroupLabel, policyInterestGroupOptions } from "@/lib/policy-interest-groups";
 
 type Props = {
   initialRoster: AdminRoster | null;
@@ -38,6 +39,7 @@ type CreateMemberForm = {
   linkedinUrl: string;
   xHandle: string;
   memberDirectoryOptIn: boolean;
+  policyInterestGroups: string[];
   sendInvitation: boolean;
 };
 
@@ -60,6 +62,7 @@ type ProfileDraft = {
   linkedinUrl: string;
   xHandle: string;
   memberDirectoryOptIn: boolean;
+  policyInterestGroups: string[];
 };
 
 const profileInputClass =
@@ -74,6 +77,7 @@ const emptyCreateForm: CreateMemberForm = {
   linkedinUrl: "",
   xHandle: "",
   memberDirectoryOptIn: true,
+  policyInterestGroups: [],
   sendInvitation: true,
 };
 
@@ -86,6 +90,7 @@ const profileDraftFromMember = (member: AdminMember): ProfileDraft => ({
   linkedinUrl: member.linkedinUrl || "",
   xHandle: member.xHandle || "",
   memberDirectoryOptIn: member.memberDirectoryOptIn,
+  policyInterestGroups: member.policyInterestGroups || [],
 });
 
 const normalizeProfileDraft = (draft: ProfileDraft): ProfileDraft => ({
@@ -97,6 +102,7 @@ const normalizeProfileDraft = (draft: ProfileDraft): ProfileDraft => ({
   linkedinUrl: draft.linkedinUrl.trim(),
   xHandle: draft.xHandle.trim(),
   memberDirectoryOptIn: draft.memberDirectoryOptIn,
+  policyInterestGroups: draft.policyInterestGroups,
 });
 
 const profileDraftChanged = (draft: ProfileDraft, member: AdminMember) => {
@@ -110,7 +116,8 @@ const profileDraftChanged = (draft: ProfileDraft, member: AdminMember) => {
     normalized.jobTitle !== current.jobTitle ||
     normalized.linkedinUrl !== current.linkedinUrl ||
     normalized.xHandle !== current.xHandle ||
-    normalized.memberDirectoryOptIn !== current.memberDirectoryOptIn
+    normalized.memberDirectoryOptIn !== current.memberDirectoryOptIn ||
+    normalized.policyInterestGroups.join(",") !== current.policyInterestGroups.join(",")
   );
 };
 
@@ -328,6 +335,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           member.accountStatus,
           member.emailSuppressedReason,
           member.emailBounceReason,
+          ...(member.policyInterestGroups || []).map(policyInterestGroupLabel),
           member.adminNotes,
         ]
           .filter(Boolean)
@@ -510,6 +518,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         linkedinUrl: body.linkedinUrl || "",
         xHandle: body.xHandle || "",
         memberDirectoryOptIn: body.memberDirectoryOptIn === true,
+        policyInterestGroups: Array.isArray(body.policyInterestGroups) ? body.policyInterestGroups : [],
       };
       setProfileDrafts((current) => ({ ...current, [member.id]: savedDraft }));
       setRoster((current) => {
@@ -529,6 +538,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                   linkedinUrl: body.linkedinUrl ?? null,
                   xHandle: body.xHandle ?? null,
                   memberDirectoryOptIn: body.memberDirectoryOptIn === true,
+                  policyInterestGroups: savedDraft.policyInterestGroups,
                 }
               : item,
           ),
@@ -909,6 +919,29 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                 />
               </label>
             </div>
+            <div className="rounded-lg border bg-white/70 p-4">
+              <div className="mb-3 text-sm font-medium text-[var(--brand-ink)]">Policy interest groups</div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {policyInterestGroupOptions.map((option) => (
+                  <label key={option.id} className="flex gap-2 text-sm leading-5 text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={createForm.policyInterestGroups.includes(option.id)}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          policyInterestGroups: event.target.checked
+                            ? [...current.policyInterestGroups, option.id]
+                            : current.policyInterestGroups.filter((id) => id !== option.id),
+                        }))
+                      }
+                      className="mt-0.5 h-4 w-4 accent-[var(--zcash-gold)]"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-col gap-3 rounded-lg border bg-white/70 p-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
               <label className="flex gap-3">
                 <input
@@ -1134,6 +1167,18 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       {member.memberDirectoryOptIn ? (
                         <div className="text-xs text-[var(--brand-denim)]">Directory opt-in</div>
                       ) : null}
+                      {member.policyInterestGroups.length ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {member.policyInterestGroups.map((groupId) => (
+                            <span
+                              key={groupId}
+                              className="rounded-full border border-[rgba(47,111,104,0.22)] bg-white px-2 py-0.5 text-[0.68rem] font-semibold text-[var(--brand-denim)]"
+                            >
+                              {policyInterestGroupLabel(groupId)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="space-y-1">
                       <div className="font-medium text-[var(--brand-ink)]">{formatDateTime(member.joinedAt)}</div>
@@ -1329,6 +1374,32 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                                 className={profileInputClass}
                               />
                             </label>
+                            <div className="rounded-md border bg-white px-3 py-3">
+                              <div className="mb-2 text-xs font-medium text-slate-500">Policy interest groups</div>
+                              <div className="grid gap-2">
+                                {policyInterestGroupOptions.map((option) => (
+                                  <label key={option.id} className="flex gap-2 text-xs leading-5 text-slate-600">
+                                    <input
+                                      type="checkbox"
+                                      checked={profileDraft.policyInterestGroups.includes(option.id)}
+                                      onChange={(event) =>
+                                        setProfileDrafts((current) => ({
+                                          ...current,
+                                          [member.id]: {
+                                            ...profileDraft,
+                                            policyInterestGroups: event.target.checked
+                                              ? [...profileDraft.policyInterestGroups, option.id]
+                                              : profileDraft.policyInterestGroups.filter((id) => id !== option.id),
+                                          },
+                                        }))
+                                      }
+                                      className="mt-0.5 h-4 w-4 accent-[var(--zcash-gold)]"
+                                    />
+                                    <span>{option.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
                             <label className="flex gap-3 rounded-md border bg-white px-3 py-2 text-xs leading-5 text-slate-600">
                               <input
                                 type="checkbox"

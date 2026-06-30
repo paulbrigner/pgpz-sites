@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAppSession } from "@/lib/use-app-session";
+import { policyInterestGroupOptions } from "@/lib/policy-interest-groups";
 
 export default function ProfileSettingsPage() {
   const { data: session, status, update } = useAppSession();
@@ -20,6 +21,7 @@ export default function ProfileSettingsPage() {
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [memberDirectoryOptIn, setMemberDirectoryOptIn] = useState(false);
+  const [policyInterestGroups, setPolicyInterestGroups] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,16 @@ export default function ProfileSettingsPage() {
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [initial, setInitial] = useState<
-    { firstName: string; lastName: string; company: string; jobTitle: string; linkedinUrl: string; xHandle: string; memberDirectoryOptIn: boolean } | null
+    {
+      firstName: string;
+      lastName: string;
+      company: string;
+      jobTitle: string;
+      linkedinUrl: string;
+      xHandle: string;
+      memberDirectoryOptIn: boolean;
+      policyInterestGroups: string[];
+    } | null
   >(null);
 
   const sessionUser = session?.user as any | undefined;
@@ -44,6 +55,7 @@ export default function ProfileSettingsPage() {
       linkedinUrl: (sessionUser.linkedinUrl as string) || "",
       xHandle: (sessionUser.xHandle as string) || "",
       memberDirectoryOptIn: sessionUser.memberDirectoryOptIn === true,
+      policyInterestGroups: Array.isArray(sessionUser.policyInterestGroups) ? sessionUser.policyInterestGroups : [],
     };
     setFirstName(next.firstName);
     setLastName(next.lastName);
@@ -52,6 +64,7 @@ export default function ProfileSettingsPage() {
     setLinkedinUrl(next.linkedinUrl);
     setXHandle(next.xHandle);
     setMemberDirectoryOptIn(next.memberDirectoryOptIn);
+    setPolicyInterestGroups(next.policyInterestGroups);
     setNewEmail(currentEmail || "");
     setInitial(next);
   }, [authenticated, sessionUser, currentEmail]);
@@ -93,6 +106,7 @@ export default function ProfileSettingsPage() {
           linkedinUrl: linkedinUrl.trim(),
           xHandle: xHandle.trim(),
           memberDirectoryOptIn,
+          policyInterestGroups,
         }),
       });
       if (!res.ok) {
@@ -107,6 +121,7 @@ export default function ProfileSettingsPage() {
         linkedinUrl: linkedinUrl.trim(),
         xHandle: xHandle.trim(),
         memberDirectoryOptIn,
+        policyInterestGroups,
       };
       setMessage("Profile updated");
       setInitial(next);
@@ -127,7 +142,8 @@ export default function ProfileSettingsPage() {
       jobTitle.trim() !== initial.jobTitle ||
       linkedinUrl.trim() !== initial.linkedinUrl ||
       xHandle.trim() !== initial.xHandle ||
-      memberDirectoryOptIn !== initial.memberDirectoryOptIn
+      memberDirectoryOptIn !== initial.memberDirectoryOptIn ||
+      policyInterestGroups.join(",") !== initial.policyInterestGroups.join(",")
     );
   };
 
@@ -292,6 +308,28 @@ export default function ProfileSettingsPage() {
               placeholder="@pgpz"
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
+          </div>
+          <div className="space-y-3 rounded-lg border bg-white/70 p-4">
+            <div className="text-sm font-medium">Policy interest groups</div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {policyInterestGroupOptions.map((option) => (
+                <label key={option.id} className="flex gap-2 text-sm leading-5 text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={policyInterestGroups.includes(option.id)}
+                    onChange={(event) =>
+                      setPolicyInterestGroups((current) =>
+                        event.target.checked
+                          ? [...current, option.id]
+                          : current.filter((id) => id !== option.id),
+                      )
+                    }
+                    className="mt-0.5 h-4 w-4 accent-[var(--zcash-gold)]"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
           <div className="rounded-lg border bg-white/70 p-4">
             <div className="flex gap-3">

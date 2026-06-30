@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       linkedinUrl: typeof body?.linkedinUrl === "string" ? body.linkedinUrl : "",
       xHandle: typeof body?.xHandle === "string" ? body.xHandle : "",
       memberDirectoryOptIn: body?.memberDirectoryOptIn === true,
+      policyInterestGroups: body?.policyInterestGroups,
       adminUserId,
     });
     return NextResponse.json({ ok: true, member });
@@ -106,6 +107,7 @@ export async function PATCH(request: NextRequest) {
           linkedinUrl: typeof body.profile.linkedinUrl === "string" ? body.profile.linkedinUrl : "",
           xHandle: typeof body.profile.xHandle === "string" ? body.profile.xHandle : "",
           memberDirectoryOptIn: body.profile.memberDirectoryOptIn === true,
+          policyInterestGroups: body.profile.policyInterestGroups,
         },
       });
       return NextResponse.json(result);

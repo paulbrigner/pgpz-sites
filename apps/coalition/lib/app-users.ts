@@ -3,6 +3,7 @@ import "server-only";
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { getUserDisplayName } from "@/lib/user-display-name";
+import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 
 type RawAppUser = Record<string, any> & {
   id?: string;
@@ -153,6 +154,7 @@ export function appSessionUserFromRecord(user: RawAppUser) {
     linkedinUrl: typeof user.linkedinUrl === "string" ? user.linkedinUrl : null,
     memberDirectoryOptIn:
       typeof user.memberDirectoryOptIn === "boolean" ? user.memberDirectoryOptIn : null,
+    policyInterestGroups: normalizePolicyInterestGroups(user.policyInterestGroups),
     isAdmin: user.isAdmin === true,
     welcomeEmailSentAt: typeof user.welcomeEmailSentAt === "string" ? user.welcomeEmailSentAt : null,
     lastEmailSentAt: typeof user.lastEmailSentAt === "string" ? user.lastEmailSentAt : null,

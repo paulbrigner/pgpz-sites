@@ -65,6 +65,7 @@ export function MainNav() {
   const mobileMenuItems = authenticated
     ? [
         { key: "home", label: "Home", href: "/" },
+        { key: "groups", label: "Policy Groups", href: "/groups" },
         { key: "updates", label: "Updates", href: "/updates" },
         { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
@@ -125,6 +126,14 @@ export function MainNav() {
                 <Link href="/">Home</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
+
+            {authenticated ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={linkClasses} asChild>
+                  <Link href="/groups">Groups</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
 
             {authenticated ? (
               <NavigationMenuItem>

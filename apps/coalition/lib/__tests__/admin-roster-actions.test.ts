@@ -81,6 +81,7 @@ describe("admin roster account actions", () => {
         linkedinUrl: "https://www.linkedin.com/in/newmember",
         xHandle: "@newmember",
         memberDirectoryOptIn: true,
+        policyInterestGroups: ["tax", "not-a-topic", "mining"],
       },
     });
 
@@ -100,6 +101,7 @@ describe("admin roster account actions", () => {
           ":gsi1pk": "USER#new.member@example.com",
           ":gsi1sk": "USER#new.member@example.com",
           ":previousEmail": "member@example.com",
+          ":policyInterestGroups": ["mining", "tax"],
         }),
       })
     );
@@ -121,6 +123,7 @@ describe("admin roster account actions", () => {
           linkedinUrl: "https://www.linkedin.com/in/newmember",
           xHandle: "@newmember",
           memberDirectoryOptIn: true,
+          policyInterestGroups: ["tax"],
         },
       })
     ).rejects.toMatchObject({
@@ -164,5 +167,24 @@ describe("admin roster account actions", () => {
 
     expect(roster.meta.manualPending).toBe(2);
     expect(roster.members.map((member) => member.id).sort()).toEqual(["pending-1", "prospect-1"]);
+  });
+
+  it("normalizes policy interest groups in roster entries", async () => {
+    dynamoMocks.scan.mockResolvedValueOnce({
+      Items: [
+        {
+          id: "member-1",
+          email: "member@example.com",
+          firstName: "Policy",
+          lastName: "Member",
+          membershipStatus: "active",
+          policyInterestGroups: ["unknown", "tax", "mining"],
+        },
+      ],
+    });
+
+    const roster = await buildAdminRoster();
+
+    expect(roster.members[0]?.policyInterestGroups).toEqual(["mining", "tax"]);
   });
 });

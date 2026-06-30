@@ -20,6 +20,7 @@ import { recordAccessEvent } from "@/lib/admin/access-log";
 import { LEGAL_DOCUMENT_VERSION } from "@/lib/legal-config";
 import { buildMagicLinkEmail } from "@/lib/system-email";
 import { getUserDisplayName } from "@/lib/user-display-name";
+import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 
 if (!process.env.NEXTAUTH_URL && NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = NEXTAUTH_URL;
@@ -257,6 +258,7 @@ export const authOptions = {
               typeof (userRecord as any).memberDirectoryOptIn === "boolean"
                 ? !!(userRecord as any).memberDirectoryOptIn
                 : null;
+            (token as any).policyInterestGroups = normalizePolicyInterestGroups((userRecord as any).policyInterestGroups);
             (token as any).invitationStatus = (userRecord as any).invitationStatus ?? null;
             (token as any).manualApprovalStatus = (userRecord as any).manualApprovalStatus ?? "none";
             (token as any).manualApprovalRequestedAt = (userRecord as any).manualApprovalRequestedAt ?? null;
@@ -297,6 +299,9 @@ export const authOptions = {
             typeof (userRecord as any)?.memberDirectoryOptIn === "boolean"
               ? !!(userRecord as any).memberDirectoryOptIn
               : null;
+          (session.user as any).policyInterestGroups = normalizePolicyInterestGroups(
+            (userRecord as any)?.policyInterestGroups,
+          );
           (session.user as any).invitationStatus = (userRecord as any)?.invitationStatus ?? null;
           (session.user as any).isAdmin =
             typeof (userRecord as any)?.isAdmin === "boolean"
@@ -331,6 +336,9 @@ export const authOptions = {
           (session.user as any).jobTitle = (token as any)?.jobTitle ?? null;
           (session.user as any).xHandle = (token as any)?.xHandle ?? null;
           (session.user as any).memberDirectoryOptIn = (token as any)?.memberDirectoryOptIn ?? null;
+          (session.user as any).policyInterestGroups = normalizePolicyInterestGroups(
+            (token as any)?.policyInterestGroups,
+          );
           (session.user as any).invitationStatus = (token as any)?.invitationStatus ?? null;
           (session.user as any).manualApprovalStatus = (token as any)?.manualApprovalStatus ?? "none";
           (session.user as any).manualApprovalRequestedAt = (token as any)?.manualApprovalRequestedAt ?? null;
@@ -346,6 +354,9 @@ export const authOptions = {
         (session.user as any).jobTitle = (token as any)?.jobTitle ?? null;
         (session.user as any).xHandle = (token as any)?.xHandle ?? null;
         (session.user as any).memberDirectoryOptIn = (token as any)?.memberDirectoryOptIn ?? null;
+        (session.user as any).policyInterestGroups = normalizePolicyInterestGroups(
+          (token as any)?.policyInterestGroups,
+        );
         (session.user as any).invitationStatus = (token as any)?.invitationStatus ?? null;
         (session.user as any).manualApprovalStatus = (token as any)?.manualApprovalStatus ?? "none";
         (session.user as any).manualApprovalRequestedAt = (token as any)?.manualApprovalRequestedAt ?? null;
