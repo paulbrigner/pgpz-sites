@@ -114,6 +114,7 @@ describe("admin newsletter sends", () => {
     mocks.createTransport.mockReturnValue({ sendMail: mocks.sendMail });
     mocks.sendMail.mockResolvedValue({ messageId: "message-1" });
     mocks.getNewsletter.mockResolvedValue(newsletter);
+    mocks.saveNewsletterDraft.mockResolvedValue(newsletter);
     mocks.listPolicyUpdateRecipients.mockResolvedValue([recipient]);
     mocks.createNewsletterTrackingRecord.mockResolvedValue({ trackingId: "tracking-1" });
     mocks.recordNewsletterSendRun.mockResolvedValue({ id: "send-run-1" });
@@ -163,6 +164,52 @@ describe("admin newsletter sends", () => {
       }),
     );
     expect(mocks.recordEmailEvent.mock.calls[0][0].metadata.trackingId).toBeUndefined();
+  });
+
+  it("saves current form content before sending selected draft copies", async () => {
+    const savedNewsletter = {
+      ...newsletter,
+      id: "newsletter-2",
+      subject: "Unsaved Draft",
+      preheader: "Fresh preview",
+      body: "Fresh body",
+      previewText: "Fresh body",
+    };
+    mocks.saveNewsletterDraft.mockResolvedValueOnce(savedNewsletter);
+    mocks.getNewsletter.mockResolvedValueOnce(savedNewsletter);
+
+    const response = await postNewsletter({
+      action: "send",
+      confirmSend: true,
+      audienceMode: "selected_members",
+      recipientIds: ["user-1"],
+      draftSend: true,
+      subject: "Unsaved Draft",
+      preheader: "Fresh preview",
+      body: "Fresh body",
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      ok: true,
+      draft: true,
+      newsletter: { id: "newsletter-2", subject: "Unsaved Draft" },
+      recipientCount: 1,
+      sent: 1,
+      failed: 0,
+    });
+    expect(mocks.saveNewsletterDraft).toHaveBeenCalledWith({
+      id: null,
+      subject: "Unsaved Draft",
+      preheader: "Fresh preview",
+      body: "Fresh body",
+      adminUserId: "admin-1",
+    });
+    expect(mocks.sendMail).toHaveBeenCalledWith(expect.objectContaining({ subject: "[Draft] Unsaved Draft" }));
+    expect(mocks.createNewsletterTrackingRecord).not.toHaveBeenCalled();
+    expect(mocks.recordNewsletterSendRun).not.toHaveBeenCalled();
+    expect(mocks.recordNewsletterDraftSend).toHaveBeenCalledWith("newsletter-2");
   });
 
   it("rejects draft sends to all active members", async () => {

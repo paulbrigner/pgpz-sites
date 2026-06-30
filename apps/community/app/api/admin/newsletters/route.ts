@@ -474,19 +474,38 @@ export async function POST(request: NextRequest) {
     const newsletterId = typeof body?.id === "string" ? body.id.trim() : "";
     const confirmSend = body?.confirmSend === true;
     const draftSend = body?.draftSend === true;
+    const draftPayloadProvided =
+      typeof body?.subject === "string" || typeof body?.preheader === "string" || typeof body?.body === "string";
     if (!confirmSend) {
       return NextResponse.json({ error: "confirmSend must be true before sending a newsletter" }, { status: 400 });
     }
-    if (!newsletterId) {
+    if (!newsletterId && (!draftSend || !draftPayloadProvided)) {
       return NextResponse.json({ error: "Newsletter ID is required" }, { status: 400 });
     }
 
-    const newsletter = await getNewsletter(newsletterId);
-    if (!newsletter) {
-      return NextResponse.json({ error: "Newsletter not found" }, { status: 404 });
-    }
-    if (newsletter.status === "sent") {
-      return NextResponse.json({ error: "This newsletter has already been sent" }, { status: 409 });
+    let newsletter: NonNullable<Awaited<ReturnType<typeof getNewsletter>>>;
+    if (draftSend && draftPayloadProvided) {
+      try {
+        newsletter = await saveNewsletterDraft({
+          id: newsletterId || null,
+          subject: typeof body?.subject === "string" ? body.subject : "",
+          preheader: typeof body?.preheader === "string" ? body.preheader : "",
+          body: typeof body?.body === "string" ? body.body : "",
+          adminUserId,
+        });
+      } catch (err: any) {
+        const message = typeof err?.message === "string" ? err.message : "Failed to save newsletter draft";
+        return NextResponse.json({ error: message }, { status: message.includes("cannot be edited") ? 409 : 400 });
+      }
+    } else {
+      const existingNewsletter = await getNewsletter(newsletterId);
+      if (!existingNewsletter) {
+        return NextResponse.json({ error: "Newsletter not found" }, { status: 404 });
+      }
+      if (existingNewsletter.status === "sent") {
+        return NextResponse.json({ error: "This newsletter has already been sent" }, { status: 409 });
+      }
+      newsletter = existingNewsletter;
     }
 
     let resolvedAudience: Awaited<ReturnType<typeof resolveNewsletterAudience>>;
