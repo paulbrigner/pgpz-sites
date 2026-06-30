@@ -416,6 +416,7 @@ export function NewsletterMailer() {
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
   const [audienceQuery, setAudienceQuery] = useState("");
   const [sendFilter, setSendFilter] = useState<"all" | "all_active_members" | "selected_members">("all");
+  const [draftSend, setDraftSend] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -507,6 +508,7 @@ export function NewsletterMailer() {
 
   const startNewDraft = () => {
     setForm(emptyForm);
+    setDraftSend(false);
     setConfirmSend(false);
     setResult(null);
     setNotice(null);
@@ -520,6 +522,7 @@ export function NewsletterMailer() {
       preheader: newsletter.preheader,
       body: newsletter.body,
     });
+    setDraftSend(false);
     setConfirmSend(false);
     setResult(null);
     setNotice(null);
@@ -533,6 +536,7 @@ export function NewsletterMailer() {
       preheader: newsletter.preheader,
       body: newsletter.body,
     });
+    setDraftSend(false);
     setConfirmSend(false);
     setResult(null);
     setNotice("Loaded newsletter as a new unsaved draft.");
@@ -584,6 +588,7 @@ export function NewsletterMailer() {
           confirmSend: true,
           audienceMode,
           recipientIds: audienceMode === "selected_members" ? selectedRecipientIds : undefined,
+          draftSend,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as NewsletterResult & { error?: string };
@@ -591,9 +596,11 @@ export function NewsletterMailer() {
       setResult(body);
       setConfirmSend(false);
       setNotice(
-        `Sent newsletter to ${body.sent || 0} of ${body.recipientCount || 0} ${
-          body.audienceMode === "selected_members" ? "selected" : "active member"
-        } recipients.`,
+        body.draft
+          ? `Sent draft newsletter to ${body.sent || 0} of ${body.recipientCount || 0} selected recipients.`
+          : `Sent newsletter to ${body.sent || 0} of ${body.recipientCount || 0} ${
+              body.audienceMode === "selected_members" ? "selected" : "active member"
+            } recipients.`,
       );
       if (body.audienceMode === "all_active_members") {
         setForm(emptyForm);
@@ -613,9 +620,13 @@ export function NewsletterMailer() {
     }
     if (
       !window.confirm(
-        `Send "${sendRun.subject || "this previous newsletter"}" to ${selectedRecipientIds.length} selected subscriber${
-          selectedRecipientIds.length === 1 ? "" : "s"
-        }?`,
+        draftSend
+          ? `Send a draft copy of "${sendRun.subject || "this previous newsletter"}" to ${selectedRecipientIds.length} selected subscriber${
+              selectedRecipientIds.length === 1 ? "" : "s"
+            }? This will not create tracking or send-history records.`
+          : `Send "${sendRun.subject || "this previous newsletter"}" to ${selectedRecipientIds.length} selected subscriber${
+              selectedRecipientIds.length === 1 ? "" : "s"
+            }?`,
       )
     ) {
       return;
@@ -634,12 +645,17 @@ export function NewsletterMailer() {
           sendRunId: sendRun.id,
           confirmSend: true,
           recipientIds: selectedRecipientIds,
+          draftSend,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as NewsletterResult & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to send previous newsletter");
       setResult(body);
-      setNotice(`Sent previous newsletter to ${body.sent || 0} of ${body.recipientCount || 0} selected recipients.`);
+      setNotice(
+        body.draft
+          ? `Sent previous newsletter draft to ${body.sent || 0} of ${body.recipientCount || 0} selected recipients.`
+          : `Sent previous newsletter to ${body.sent || 0} of ${body.recipientCount || 0} selected recipients.`,
+      );
       await loadState();
     } catch (err: any) {
       setError(err?.message || "Failed to send previous newsletter");
@@ -677,7 +693,7 @@ export function NewsletterMailer() {
 
   const canSave = !!form.subject.trim() && !!form.body.trim() && !saving;
   const audienceReady =
-    audienceMode === "all_active_members" ? !!recipientCount : selectedRecipientIds.length > 0;
+    audienceMode === "all_active_members" ? !draftSend && !!recipientCount : selectedRecipientIds.length > 0;
   const canSendNewsletter = !!form.id && !dirty && confirmSend && !sending && audienceReady;
 
   const toggleRecipient = (recipientId: string) => {
@@ -831,13 +847,14 @@ export function NewsletterMailer() {
                     Selected subscribers
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-slate-500">
-                    Useful for limited sends and stats verification.
+                    Useful for limited sends, draft review, and stats verification.
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setAudienceMode("all_active_members");
+                    setDraftSend(false);
                     setConfirmSend(false);
                   }}
                   className={cn(
@@ -856,6 +873,33 @@ export function NewsletterMailer() {
                   </span>
                 </button>
               </div>
+
+              <label
+                className={cn(
+                  "mt-4 flex items-start gap-3 rounded-lg border bg-white p-3 text-sm leading-6",
+                  draftSend
+                    ? "border-[rgba(245,168,0,0.62)] text-[var(--brand-ink)]"
+                    : "border-slate-200 text-slate-600",
+                  audienceMode !== "selected_members" && "opacity-60",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={draftSend}
+                  disabled={audienceMode !== "selected_members"}
+                  onChange={(event) => {
+                    setDraftSend(event.target.checked);
+                    setConfirmSend(false);
+                  }}
+                />
+                <span>
+                  <span className="block font-semibold text-[var(--brand-ink)]">Send as draft review</span>
+                  <span className="block text-xs leading-5 text-slate-500">
+                    Sends to the selected audience without open/click tracking or a send-history entry.
+                  </span>
+                </span>
+              </label>
 
               {audienceMode === "selected_members" ? (
                 <div className="mt-4 rounded-lg border bg-white p-3">
@@ -930,16 +974,19 @@ export function NewsletterMailer() {
                 disabled={!form.id || dirty || !audienceReady}
               />
               <span>
-                I understand this will send the saved newsletter to {selectedAudienceLabel} with tracking enabled.
+                I understand this will send the saved newsletter to {selectedAudienceLabel}
+                {draftSend ? " as a draft review without tracking or send history." : " with tracking enabled."}
               </span>
             </label>
             <Button type="button" disabled={!canSendNewsletter} onClick={sendNewsletter}>
               {sending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Newspaper className="h-4 w-4" />}
               {sending
                 ? "Sending..."
-                : audienceMode === "selected_members"
-                  ? "Send to selected"
-                  : "Send to all members"}
+                : draftSend
+                  ? "Send draft to selected"
+                  : audienceMode === "selected_members"
+                    ? "Send to selected"
+                    : "Send to all members"}
             </Button>
           </div>
         </div>

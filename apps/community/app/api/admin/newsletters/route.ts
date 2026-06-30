@@ -106,6 +106,7 @@ async function sendNewsletterSnapshot({
   adminUserId,
   sourceSendRunId,
   transporter,
+  draftSend = false,
 }: {
   snapshot: NewsletterSnapshot;
   recipients: NewsletterSendRecipient[];
@@ -113,19 +114,22 @@ async function sendNewsletterSnapshot({
   adminUserId: string | null;
   sourceSendRunId?: string | null;
   transporter: ReturnType<typeof nodemailer.createTransport>;
+  draftSend?: boolean;
 }) {
   const failures: Array<{ email: string; error: string }> = [];
   const sendRunId = randomUUID();
   let sent = 0;
 
   for (const recipient of recipients) {
-    const tracking = await createNewsletterTrackingRecord({
-      newsletterId: snapshot.newsletterId,
-      sendRunId,
-      audienceMode,
-      userId: recipient.id,
-      email: recipient.email,
-    });
+    const tracking = draftSend
+      ? null
+      : await createNewsletterTrackingRecord({
+          newsletterId: snapshot.newsletterId,
+          sendRunId,
+          audienceMode,
+          userId: recipient.id,
+          email: recipient.email,
+        });
     const built = buildNewsletterEmail(
       {
         subject: snapshot.subject,
@@ -139,39 +143,44 @@ async function sendNewsletterSnapshot({
         lastName: recipient.lastName,
       },
       SITE_URL,
-      {
-        trackingId: tracking.trackingId,
-        trackLinks: true,
-        includeOpenPixel: true,
-        includeUnsubscribe: true,
-      },
+      tracking
+        ? {
+            trackingId: tracking.trackingId,
+            trackLinks: true,
+            includeOpenPixel: true,
+            includeUnsubscribe: true,
+          }
+        : undefined,
     );
     try {
       const sendResult = await transporter.sendMail({
         to: recipient.email,
         from: EMAIL_FROM,
-        subject: built.subject,
+        subject: draftSend ? `[Draft] ${built.subject}` : built.subject,
         text: built.text,
         html: built.html,
       });
-      await markNewsletterTrackingSent({
-        trackingId: tracking.trackingId,
-        providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
-      });
+      if (tracking) {
+        await markNewsletterTrackingSent({
+          trackingId: tracking.trackingId,
+          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
+        });
+      }
       sent += 1;
       await recordEmailEvent({
         userId: recipient.id,
         email: recipient.email,
-        type: "newsletter",
+        type: draftSend ? "newsletter_draft" : "newsletter",
         subject: built.subject,
         status: "sent",
         providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
         metadata: {
           newsletterId: snapshot.newsletterId,
-          trackingId: tracking.trackingId,
+          ...(tracking ? { trackingId: tracking.trackingId } : {}),
           audience: "active_members",
           audienceMode,
-          sourceSendRunId: sourceSendRunId || null,
+          ...(sourceSendRunId ? { sourceSendRunId } : {}),
+          ...(draftSend ? { draft: true } : {}),
           profileNameResolved: !!recipient.name,
         },
       });
@@ -181,20 +190,26 @@ async function sendNewsletterSnapshot({
       await recordEmailEvent({
         userId: recipient.id,
         email: recipient.email,
-        type: "newsletter",
+        type: draftSend ? "newsletter_draft" : "newsletter",
         subject: snapshot.subject,
         status: "failed",
         error,
         metadata: {
           newsletterId: snapshot.newsletterId,
-          trackingId: tracking.trackingId,
+          ...(tracking ? { trackingId: tracking.trackingId } : {}),
           audience: "active_members",
           audienceMode,
-          sourceSendRunId: sourceSendRunId || null,
+          ...(sourceSendRunId ? { sourceSendRunId } : {}),
+          ...(draftSend ? { draft: true } : {}),
           profileNameResolved: !!recipient.name,
         },
       }).catch(() => undefined);
     }
+  }
+
+  if (draftSend) {
+    if (sent > 0) await recordNewsletterDraftSend(snapshot.newsletterId);
+    return { sendRun: null, sent, failures };
   }
 
   const sendRun = await recordNewsletterSendRun({
@@ -379,6 +394,7 @@ export async function POST(request: NextRequest) {
   if (action === "sendPrevious") {
     const sourceSendRunId = typeof body?.sendRunId === "string" ? body.sendRunId.trim() : "";
     const confirmSend = body?.confirmSend === true;
+    const draftSend = body?.draftSend === true;
     if (!confirmSend) {
       return NextResponse.json({ error: "confirmSend must be true before sending a previous newsletter" }, { status: 400 });
     }
@@ -438,11 +454,13 @@ export async function POST(request: NextRequest) {
       adminUserId,
       sourceSendRunId,
       transporter,
+      draftSend,
     });
 
     return NextResponse.json({
       ok: failures.length === 0,
-      sendRun,
+      draft: draftSend,
+      sendRun: sendRun || undefined,
       audienceMode: "selected_members",
       activeRecipientCount,
       recipientCount: recipients.length,
@@ -455,6 +473,7 @@ export async function POST(request: NextRequest) {
   if (action === "send") {
     const newsletterId = typeof body?.id === "string" ? body.id.trim() : "";
     const confirmSend = body?.confirmSend === true;
+    const draftSend = body?.draftSend === true;
     if (!confirmSend) {
       return NextResponse.json({ error: "confirmSend must be true before sending a newsletter" }, { status: 400 });
     }
@@ -481,101 +500,30 @@ export async function POST(request: NextRequest) {
     }
 
     const { audienceMode, recipients, activeRecipientCount } = resolvedAudience;
+    if (draftSend && audienceMode !== "selected_members") {
+      return NextResponse.json({ error: "Draft sends must use a selected member audience." }, { status: 400 });
+    }
     if (!recipients.length) {
       return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
     }
 
     const transporter = nodemailer.createTransport(transportConfig);
-    const failures: Array<{ email: string; error: string }> = [];
-    const sendRunId = randomUUID();
-    let sent = 0;
-
-    for (const recipient of recipients) {
-      const tracking = await createNewsletterTrackingRecord({
+    const { sendRun, sent, failures } = await sendNewsletterSnapshot({
+      snapshot: {
         newsletterId: newsletter.id,
-        sendRunId,
-        audienceMode,
-        userId: recipient.id,
-        email: recipient.email,
-      });
-      const built = buildNewsletterEmail(
-        newsletter,
-        {
-          email: recipient.email,
-          name: recipient.name,
-          firstName: recipient.firstName,
-          lastName: recipient.lastName,
-        },
-        SITE_URL,
-        {
-          trackingId: tracking.trackingId,
-          trackLinks: true,
-          includeOpenPixel: true,
-          includeUnsubscribe: true,
-        },
-      );
-      try {
-        const sendResult = await transporter.sendMail({
-          to: recipient.email,
-          from: EMAIL_FROM,
-          subject: built.subject,
-          text: built.text,
-          html: built.html,
-        });
-        await markNewsletterTrackingSent({
-          trackingId: tracking.trackingId,
-          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
-        });
-        sent += 1;
-        await recordEmailEvent({
-          userId: recipient.id,
-          email: recipient.email,
-          type: "newsletter",
-          subject: built.subject,
-          status: "sent",
-          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
-          metadata: {
-            newsletterId: newsletter.id,
-            trackingId: tracking.trackingId,
-            audience: newsletter.audience,
-            audienceMode,
-            profileNameResolved: !!recipient.name,
-          },
-        });
-      } catch (err: any) {
-        const error = typeof err?.message === "string" ? err.message : "Failed to send newsletter";
-        failures.push({ email: recipient.email, error });
-        await recordEmailEvent({
-          userId: recipient.id,
-          email: recipient.email,
-          type: "newsletter",
-          subject: newsletter.subject,
-          status: "failed",
-          error,
-          metadata: {
-            newsletterId: newsletter.id,
-            trackingId: tracking.trackingId,
-            audience: newsletter.audience,
-            audienceMode,
-            profileNameResolved: !!recipient.name,
-          },
-        }).catch(() => undefined);
-      }
-    }
-
-    const sendRun = await recordNewsletterSendRun({
-      sendRunId,
-      newsletterId: newsletter.id,
-      newsletter,
+        subject: newsletter.subject,
+        preheader: newsletter.preheader,
+        body: newsletter.body,
+        previewText: newsletter.previewText,
+      },
+      recipients,
       audienceMode,
       adminUserId,
-      recipientCount: recipients.length,
-      sentCount: sent,
-      failedCount: failures.length,
-      failurePreview: failures,
+      transporter,
+      draftSend,
     });
 
-    if (audienceMode === "all_active_members") {
+    if (audienceMode === "all_active_members" && !draftSend) {
       await markNewsletterSent({
         newsletterId: newsletter.id,
         adminUserId,
@@ -589,8 +537,9 @@ export async function POST(request: NextRequest) {
     const sentNewsletter = await getNewsletter(newsletter.id);
     return NextResponse.json({
       ok: failures.length === 0,
+      draft: draftSend,
       newsletter: sentNewsletter || newsletter,
-      sendRun,
+      sendRun: sendRun || undefined,
       audienceMode,
       activeRecipientCount,
       recipientCount: recipients.length,
