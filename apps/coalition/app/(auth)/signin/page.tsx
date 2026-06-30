@@ -87,6 +87,22 @@ const requestEmailLink = async ({
   callbackUrl: string;
   name?: string;
 }) => {
+  const preflight = await fetch("/api/signin/email/preflight", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      callbackURL: callbackUrl,
+    }),
+  });
+  const preflightBody = await preflight.json().catch(() => ({}));
+  if (!preflight.ok) {
+    throw new Error(preflightBody?.message || preflightBody?.error || "Could not request a sign-in email.");
+  }
+
   const res = await fetch(`${BETTER_AUTH_BASE_PATH}/sign-in/magic-link`, {
     method: "POST",
     headers: {
@@ -102,7 +118,11 @@ const requestEmailLink = async ({
   });
   const responseBody = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(responseBody?.message || responseBody?.error || "Failed to send sign-in email.");
+    throw new Error(
+      responseBody?.message ||
+        responseBody?.error ||
+        "Failed to send sign-in email. Please try again or contact admin@pgpz.org.",
+    );
   }
 };
 
