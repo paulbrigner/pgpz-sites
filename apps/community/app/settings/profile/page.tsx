@@ -305,7 +305,7 @@ export default function ProfileSettingsPage() {
         </form>
       </section>
 
-      <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
+      <section id="member-recruitment" className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Mail } from "lucide-react";
+import { CheckCircle2, Gift, Mail } from "lucide-react";
 import {
   COMMUNITY_GUIDELINES_PATH,
   LEGAL_DOCUMENT_VERSION,
@@ -245,6 +245,16 @@ function EmailSignIn({
           <Alert className="mt-5" variant="destructive">
             <AlertTitle>Could not continue</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {isSignup && referralCode ? (
+          <Alert className="mt-5">
+            <Gift className="h-4 w-4" aria-hidden="true" />
+            <AlertTitle>Referral invitation applied</AlertTitle>
+            <AlertDescription>
+              This signup will credit the member who shared the invitation after you confirm your email.
+            </AlertDescription>
           </Alert>
         ) : null}
 

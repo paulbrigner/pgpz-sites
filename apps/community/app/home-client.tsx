@@ -8,6 +8,7 @@ import { BadgeCheck, CheckCircle2, Clipboard, ExternalLink, FileText, Loader2, M
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
+import { ReferralInviteCard } from "@/components/referrals/ReferralInviteCard";
 import { getPolicyUpdate } from "@/lib/policy-updates";
 import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 import { useAppSession } from "@/lib/use-app-session";
@@ -696,6 +697,8 @@ export default function HomeClient() {
 
           {isMember ? (
             <>
+              <ReferralInviteCard />
+
               <section className="glass-surface grid gap-6 p-6 lg:grid-cols-[1fr_220px] lg:items-center">
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
