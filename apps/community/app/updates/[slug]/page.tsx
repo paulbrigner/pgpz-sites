@@ -133,6 +133,61 @@ function hasRelevantPostImages(section: PolicyUpdateSection) {
   return section.images?.some(isPolicyUpdateRelevantPostImage) || false;
 }
 
+function isPgpzProgressSummarySection(section: PolicyUpdateSection) {
+  return /^PGPZ Progress Summary$/i.test(section.heading.trim());
+}
+
+function splitProgressSummaryItem(item: string) {
+  const [label, ...detailParts] = item.split(/:\s+/);
+  const details = detailParts
+    .join(": ")
+    .split(/;\s+/)
+    .map((detail) => detail.trim())
+    .filter(Boolean);
+  return {
+    label: label.trim(),
+    details,
+  };
+}
+
+function PgpzProgressSummaryBlock({ section }: { section: PolicyUpdateSection }) {
+  return (
+    <section className="space-y-4">
+      <PolicyUpdateSectionHeading section={section} className="text-2xl font-semibold text-[var(--brand-ink)]">
+        {section.heading}
+      </PolicyUpdateSectionHeading>
+      <div className="rounded-lg border border-[rgba(245,168,0,0.42)] bg-[#fff7df] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+        <div className="space-y-4 text-sm leading-7 text-slate-800">
+          {section.body.map((paragraph) => (
+            <p key={paragraph} className="font-semibold text-[var(--brand-ink)]">
+              {renderLinkedText(paragraph, section.links)}
+            </p>
+          ))}
+          {section.bullets?.length ? (
+            <div className="space-y-4">
+              {section.bullets.map((item) => {
+                const summary = splitProgressSummaryItem(item);
+                return (
+                  <div key={item} className="space-y-2">
+                    <p className="font-semibold text-[var(--brand-ink)]">{summary.label}</p>
+                    {summary.details.length ? (
+                      <ul className="list-disc space-y-1 pl-6">
+                        {summary.details.map((detail) => (
+                          <li key={detail}>{renderLinkedText(detail, section.links)}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PolicyUpdateSectionImages({
   images,
   imageHrefFallback,
@@ -235,6 +290,10 @@ function PolicyUpdateSectionBlock({
 }: {
   section: PolicyUpdateSection;
 }) {
+  if (isPgpzProgressSummarySection(section)) {
+    return <PgpzProgressSummaryBlock section={section} />;
+  }
+
   const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
   const isSocialPostSection = isPolicyUpdateSocialPostSection(section);
   const heading = socialHeading?.title || (socialHeading ? "" : section.heading);

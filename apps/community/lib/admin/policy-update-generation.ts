@@ -1416,6 +1416,7 @@ function xImageRole({
   if (/\bwarrendavidson\b/.test(text)) return "notable-post";
   if (/\bjbsdc\b|\baustincampbell\b/.test(text)) return "notable-posts";
   if (/\bx post of the week\b/i.test(pageText)) return "x-post-of-the-week";
+  if (/\brelevant posts\b/i.test(pageText)) return "notable-posts";
   if (/\bnotable posts\b/i.test(pageText)) return "notable-posts";
   if (/\bnotable post\b/i.test(pageText)) return "notable-post";
   if (documentSocialIndex === 1) return "x-post-of-the-week";
@@ -1471,7 +1472,7 @@ function isSocialHref(href: string) {
 }
 
 function contextualSocialLink(pageText: string, annotations: LinkAnnotation[]) {
-  if (!/\b(?:X Post of the Week|Relevant Posts?|Notable Posts?)\b/i.test(pageText)) return null;
+  if (!/\bX Post of the Week\b/i.test(pageText)) return null;
   const socialLinks = annotations.filter((annotation) => isSocialHref(annotation.href));
   return socialLinks.length === 1 ? socialLinks[0] : null;
 }
