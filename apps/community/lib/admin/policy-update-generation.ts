@@ -72,11 +72,11 @@ const PGPZ_RESOURCE_CHROME_PATTERN = /PGPZ\s+(?:Community|Coalition)\s+Member Po
 const PGPZ_UPDATE_URL_PATTERN =
   /https:\/\/(?:community|coalition)\.pgpz\.org\/updates\/[a-z0-9]+(?:\s*-\s*[a-z0-9]+)*/gi;
 const WEEKLY_MEMO_TITLE_PATTERN = new RegExp(
-  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*(Week\\s+of\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2})\\s*,\\s*(\\d{4})\\b`,
+  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*((?:Week\\s+of\\s+)?${MONTH_NAME_PATTERN}\\s+\\d{1,2})\\s*,\\s*(\\d{4})\\b`,
   "i",
 );
 const WEEKLY_MEMO_TITLE_BOUNDARY_PATTERN = new RegExp(
-  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*Week\\s+of\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}\\s*,\\s*\\d{4}`,
+  `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*(?:Week\\s+of\\s+)?${MONTH_NAME_PATTERN}\\s+\\d{1,2}\\s*,\\s*\\d{4}`,
   "gi",
 );
 
@@ -116,11 +116,55 @@ function normalizeWeeklyMemoTitleBoundaries(value: string) {
   });
 }
 
+function normalizePgpzProgressSummaryOrder(value: string) {
+  const summaryMatch = value.match(/Here\s+is\s+a\s+summary\s+of\s+PGPZ\s+progress\s+to\s+date:/i);
+  if (!summaryMatch || typeof summaryMatch.index !== "number") return value;
+
+  const summaryStart = summaryMatch.index;
+  const summaryEnd = summaryStart + summaryMatch[0].length;
+  const afterSummary = value.slice(summaryEnd);
+  const whyMatch = afterSummary.match(/\bWhy\s+this\s+matters\s+for\s+Zcash:?\b/i);
+  if (!whyMatch || typeof whyMatch.index !== "number") return value;
+
+  const whyStart = summaryEnd + whyMatch.index;
+  const afterWhy = value.slice(whyStart);
+  const actionMatch = afterWhy.match(/\bAction\s+Items?:/i);
+  if (!actionMatch || typeof actionMatch.index !== "number") return value;
+
+  const afterActionStart = whyStart + actionMatch.index + actionMatch[0].length;
+  const listMatch = value.slice(afterActionStart).match(/\bLaunched\s+the\s+P[GT]PZ\s+Community\s+and\s+Coalition\s+Sites\b/i);
+  if (!listMatch || typeof listMatch.index !== "number") return value;
+
+  const listStart = afterActionStart + listMatch.index;
+  if (listStart < whyStart) return value;
+
+  const listRemainder = value.slice(listStart);
+  const listEndMatch = listRemainder.match(/\n\s*(?:Relevant Posts?:|X Post of the Week:|Notable Posts?:)/i);
+  const listEnd = listEndMatch && typeof listEndMatch.index === "number"
+    ? listStart + listEndMatch.index
+    : value.length;
+
+  const summaryIntro = value.slice(summaryStart, whyStart).trim();
+  const whyAndAction = value.slice(whyStart, listStart).trim();
+  const listBlock = value.slice(listStart, listEnd).trim();
+  if (!summaryIntro || !whyAndAction || !listBlock) return value;
+
+  return [
+    value.slice(0, summaryStart),
+    summaryIntro,
+    "\n\n",
+    listBlock,
+    "\n\n",
+    whyAndAction,
+    value.slice(listEnd),
+  ].join("");
+}
+
 function sourceTextForExactConversion(value: string) {
   return compactWhitespace(
-    normalizeWeeklyMemoTitleBoundaries(stripPdfChrome(value))
+    normalizePgpzProgressSummaryOrder(normalizeWeeklyMemoTitleBoundaries(stripPdfChrome(value)))
       .replace(/\s+(Key Takeaways)\b/gi, "\n\n$1\n")
-      .replace(/\s+(Action Items?:?)/gi, "\n\n$1\n")
+      .replace(/\s+(Action Items?:?)/g, "\n\n$1\n")
       .replace(/\s+(X Post of the Week:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Notable Posts?:)\s*/gi, "\n\n$1\n")
       .replace(/\s+(Relevant Posts?:)\s*/gi, "\n\n$1\n")
@@ -402,7 +446,7 @@ function splitFallbackHeading(line: string) {
     };
   }
 
-  const action = clean.match(/^(Action Items?:?)(.*)$/i);
+  const action = clean.match(/^(Action Items?:?)(.*)$/);
   if (action) {
     return {
       heading: action[1].replace(/:$/, ""),
@@ -419,6 +463,101 @@ function socialMarkerHeading(line: string) {
   if (/^Notable Post$/i.test(clean)) return "Notable Post";
   if (/^Notable Posts$/i.test(clean)) return "Notable Posts";
   return null;
+}
+
+function isPgpzProgressSummaryIntro(line: string) {
+  return /^Here\s+is\s+a\s+summary\s+of\s+PGPZ\s+progress\s+to\s+date:?$/i.test(
+    line.replace(/\s+/g, " ").trim(),
+  );
+}
+
+function isPgpzProgressSummaryHeading(line: string) {
+  return /^(?:Launched|Established|Published|Held)\b/i.test(line.replace(/\s+/g, " ").trim());
+}
+
+function pgpzProgressSummarySectionAt(lines: string[], index: number) {
+  const intro = lines[index];
+  if (!intro || !isPgpzProgressSummaryIntro(intro)) return null;
+
+  const summaryLines: string[] = [];
+  let endIndex = index;
+
+  for (let offset = index + 1; offset < lines.length; offset += 1) {
+    const line = lines[offset];
+    if (
+      line &&
+      (splitFallbackHeading(line) ||
+        socialMarkerHeading(line) ||
+        /^Relevant Posts?:$/i.test(line) ||
+        /^Weekly Policy Memo:/i.test(line))
+    ) {
+      break;
+    }
+    summaryLines.push(line);
+    endIndex = offset;
+  }
+
+  const bullets: string[] = [];
+  let currentHeading = "";
+  let currentDetail = "";
+  const details: string[] = [];
+
+  const flushDetail = () => {
+    const clean = currentDetail.trim();
+    if (clean) details.push(clean);
+    currentDetail = "";
+  };
+
+  const flushItem = () => {
+    flushDetail();
+    const cleanHeading = currentHeading.trim();
+    if (cleanHeading) {
+      bullets.push(details.length ? `${cleanHeading}: ${details.join("; ")}` : cleanHeading);
+    } else {
+      bullets.push(...details);
+    }
+    currentHeading = "";
+    details.length = 0;
+  };
+
+  for (const rawLine of summaryLines) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    if (!line) {
+      flushDetail();
+      continue;
+    }
+
+    if (isPgpzProgressSummaryHeading(line)) {
+      flushItem();
+      currentHeading = line;
+      continue;
+    }
+
+    if (isBulletLine(line)) {
+      flushDetail();
+      currentDetail = stripBulletMarker(line);
+      continue;
+    }
+
+    if (currentDetail) {
+      currentDetail = appendWrappedLine(currentDetail, line);
+    } else if (currentHeading) {
+      currentHeading = appendWrappedLine(currentHeading, line);
+    } else {
+      currentHeading = line;
+    }
+  }
+
+  flushItem();
+
+  return {
+    section: {
+      heading: "PGPZ Progress Summary",
+      body: [intro],
+      ...(bullets.length ? { bullets } : {}),
+    } satisfies GeneratedPolicyUpdateContent["sections"][number],
+    endIndex,
+  };
 }
 
 function isArticleBodyStart(line: string) {
@@ -479,7 +618,7 @@ function articleHeadingAt(lines: string[], index: number) {
 
 function isPotentialStandaloneArticleHeading(line: string) {
   const clean = line.replace(/\s+/g, " ").trim();
-  if (clean.length < 32 || clean.length > 240) return false;
+  if (clean.length < 24 || clean.length > 240) return false;
   if (/[.!?]$/.test(clean)) return false;
   if (
     /^(?:Weekly Policy Memo|Special Update|Key Takeaways|Action Items?|Relevant Posts?|Why this matters|X Post of the Week|Notable Posts?)\b/i.test(
@@ -531,6 +670,69 @@ function standaloneArticleHeadingAt(lines: string[], index: number) {
     heading: headingLines.join(" ").replace(/\s+/g, " ").trim(),
     endIndex,
   };
+}
+
+function socialArticleHeadingAt(lines: string[], index: number) {
+  const line = lines[index];
+  const next = lines[index + 1];
+  if (!line || !next) return null;
+  if (
+    socialMarkerHeading(line) ||
+    splitFallbackHeading(line) ||
+    /^Relevant Posts?:$/i.test(line) ||
+    /^Key Takeaways$/i.test(line) ||
+    /^Action Items?$/i.test(line)
+  ) {
+    return null;
+  }
+
+  const clean = line.replace(/\s+/g, " ").trim();
+  const words = clean.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word));
+  if (clean.length < 12 || clean.length > 120 || words.length < 3 || /[.!?]$/.test(clean)) return null;
+
+  const titleLikeWords = words.filter((word) => {
+    const stripped = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+    return /^[A-Z0-9]/.test(stripped) || /^[A-Z]{2,}/.test(stripped);
+  });
+  if (titleLikeWords.length / words.length < 0.55) return null;
+
+  return {
+    heading: clean,
+    endIndex: index,
+  };
+}
+
+function isLikelyBodyStart(words: string[]) {
+  const first = words[0]?.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "") || "";
+  if (/^(?:The|This|These|A|An|On|In|Recent|PGPZ)$/i.test(first)) return true;
+  return words.slice(0, 6).join(" ").toLowerCase().includes(" has ");
+}
+
+function inlineSocialArticleHeading(line: string) {
+  const clean = line.replace(/\s+/g, " ").trim();
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length < 7) return null;
+
+  for (let wordCount = 3; wordCount <= Math.min(12, words.length - 4); wordCount += 1) {
+    const heading = words.slice(0, wordCount).join(" ");
+    const remainderWords = words.slice(wordCount);
+    const lastHeadingWord = words[wordCount - 1]?.toLowerCase();
+    if (/^(?:and|or|but|for|of|on|in|to|the|a|an|with|by)$/i.test(lastHeadingWord)) continue;
+    if (!isLikelyBodyStart(remainderWords)) continue;
+
+    const headingWords = heading.split(/\s+/).filter((word) => /[A-Za-z0-9]/.test(word));
+    const titleLikeWords = headingWords.filter((word) => {
+      const stripped = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+      return /^[A-Z0-9]/.test(stripped) || /^[A-Z]{2,}/.test(stripped);
+    });
+    if (headingWords.length < 3 || titleLikeWords.length / headingWords.length < 0.55) continue;
+
+    const body = remainderWords.join(" ").trim();
+    if (body.length < 30) continue;
+    return { heading, body };
+  }
+
+  return null;
 }
 
 function fallbackBodyFromLines(lines: string[]) {
@@ -631,6 +833,17 @@ function fallbackSectionsFromText(
       continue;
     }
 
+    const progressSummary = pgpzProgressSummarySectionAt(lines, index);
+    if (progressSummary) {
+      flush();
+      skippingSidebar = null;
+      sections.push(progressSummary.section);
+      current = null;
+      expectStandaloneArticleHeading = false;
+      index = progressSummary.endIndex;
+      continue;
+    }
+
     if (/^Key Takeaways$/i.test(line)) {
       flush();
       skippingSidebar = "keyTakeaways";
@@ -653,21 +866,31 @@ function fallbackSectionsFromText(
 
     if (/^Relevant Posts?:$/i.test(line)) {
       skippingSidebar = null;
-      if (!current) {
-        current = {
-          heading: record.category === "weekly" ? "Weekly Policy Update" : "Policy Update",
-          lines: [],
-        };
+      if (current) {
+        current.lines.push("");
+        current.lines.push(line);
+      } else {
+        sections.push({ heading: "Notable Posts", body: [] });
       }
-      current.lines.push(line);
       expectStandaloneArticleHeading = true;
       continue;
     }
 
-    const standaloneHeading: ReturnType<typeof standaloneArticleHeadingAt> =
-      (expectStandaloneArticleHeading || (current && /^Action Items?/i.test(current.heading)))
-        ? standaloneArticleHeadingAt(lines, index)
-        : null;
+    const inlineSocialArticle = expectStandaloneArticleHeading ? inlineSocialArticleHeading(line) : null;
+    if (inlineSocialArticle) {
+      flush();
+      skippingSidebar = null;
+      current = { heading: inlineSocialArticle.heading, lines: [inlineSocialArticle.body] };
+      expectStandaloneArticleHeading = false;
+      continue;
+    }
+
+    const standaloneHeading: ReturnType<typeof standaloneArticleHeadingAt> | ReturnType<typeof socialArticleHeadingAt> =
+      expectStandaloneArticleHeading
+        ? standaloneArticleHeadingAt(lines, index) || socialArticleHeadingAt(lines, index)
+        : current && /^Action Items?/i.test(current.heading)
+          ? standaloneArticleHeadingAt(lines, index)
+          : null;
     if (standaloneHeading) {
       flush();
       skippingSidebar = null;
