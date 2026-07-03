@@ -59,6 +59,23 @@ describe("policy update section helpers", () => {
     ).toBe(true);
   });
 
+  it("keeps action item sections with relevant-post screenshots in document order", () => {
+    expect(
+      isPolicyUpdateSocialPostSection({
+        heading: "Action Items",
+        body: [
+          "Call your Senator's office to advocate for the passage of the CLARITY Act with developer protections preserved.",
+        ],
+        images: [
+          {
+            src: "/assets/x-intangiblecoins.png",
+            alt: "intangiblecoins X post screenshot",
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("links main policy headings from matching section links", () => {
     const section = {
       heading: "Illinois Becomes First U.S. State to Levy Direct Privilege Tax on Cryptocurrency Transactions",

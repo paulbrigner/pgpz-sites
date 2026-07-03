@@ -130,6 +130,10 @@ describe("sourcePolicyUpdateContent", () => {
 
     expect(content.title).toBe("Weekly Policy Memo: June 29, 2026");
     expect(content.emailSubject).toBe("PGPZ Weekly Policy Memo: June 29, 2026");
+    expect(content.summary).toBe(
+      "PGPZ has successfully completed its first month, establishing itself as a dedicated hub for policymakers, regulators, and industry stakeholders focused on Zcash.",
+    );
+    expect(content.summary).not.toContain("The month culminated");
     expect(content.keyTakeaways).toEqual([
       "In its inaugural month, PGPZ successfully established itself as a central policy hub for Zcash.",
       "The month culminated in a June 30 Kickoff Breakfast at the Blockchain Association.",
@@ -149,12 +153,29 @@ describe("sourcePolicyUpdateContent", () => {
       "Why this matters for Zcash",
       "Action Items",
     ]);
-    expect(content.sections.find((section) => section.heading === "PGPZ Progress Summary")?.bullets).toEqual([
-      "Launched the PTPZ Community and Coalition Sites: Developed PGPZ Policy Principles and Messaging; Created Coalition Workstreams; Mining; Tax",
-      "Established the Community and Coalition Signal Chat Groups",
-      "Published Weekly Policy Memos: Narrow/targeted weekly policy memos focusing on impact to Zcash ecosystem with action items.",
-      "Published Special Updates: Report: U.S. Digital Asset Policy H1 2026 recapping policy developments.",
-      "Held the PGPZ Coalition Launch Breakfast: June 30 Kickoff Breakfast at the Blockchain Association office",
+    expect(content.sections.find((section) => section.heading === "PGPZ Progress Summary")?.progressItems).toEqual([
+      {
+        label: "Launched the PTPZ Community and Coalition Sites",
+        details: [
+          { text: "Developed PGPZ Policy Principles and Messaging" },
+          { text: "Created Coalition Workstreams", children: ["Mining", "Tax"] },
+        ],
+      },
+      { label: "Established the Community and Coalition Signal Chat Groups" },
+      {
+        label: "Published Weekly Policy Memos",
+        details: [
+          "Narrow/targeted weekly policy memos focusing on impact to Zcash ecosystem with action items.",
+        ].map((text) => ({ text })),
+      },
+      {
+        label: "Published Special Updates",
+        details: [{ text: "Report: U.S. Digital Asset Policy H1 2026 recapping policy developments." }],
+      },
+      {
+        label: "Held the PGPZ Coalition Launch Breakfast",
+        details: [{ text: "June 30 Kickoff Breakfast at the Blockchain Association office" }],
+      },
     ]);
     expect(content.sections.at(-1)?.body).toEqual([
       "Call your Senator’s office to advocate for the passage of the CLARITY Act with developer protections preserved.",

@@ -6,6 +6,7 @@ import type {
   PolicyUpdateTable,
 } from "@/lib/policy-updates";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPgpzProgressSummarySection, progressSummaryItems } from "@/lib/policy-update-progress-summary";
 import {
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
@@ -157,10 +158,21 @@ function renderList(heading: string, items: string[]) {
   return [`## ${heading}`, "", ...items.map((item) => `- ${escapeMarkdownText(item)}`)].join("\n");
 }
 
+function renderProgressSummaryMarkdown(section: PolicyUpdateSection) {
+  return progressSummaryItems(section).flatMap((item) => [
+    `- **${escapeMarkdownText(item.label)}**`,
+    ...(item.details || []).flatMap((detail) => [
+      `  - ${linkifyText(detail.text, section.links)}`,
+      ...(detail.children || []).map((child) => `    - ${linkifyText(child, section.links)}`),
+    ]),
+  ]);
+}
+
 function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   const lines: string[] = [];
   const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
   const isSocial = isPolicyUpdateSocialPostSection(section);
+  const isProgressSummary = isPgpzProgressSummarySection(section);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
   const renderRelevantPostsImageLabel =
@@ -205,6 +217,11 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
     lines.push("", renderParagraph(paragraph, section.links || []));
   }
 
+  if (isProgressSummary) {
+    const progressLines = renderProgressSummaryMarkdown(section);
+    if (progressLines.length) lines.push("", ...progressLines);
+  }
+
   if (!isSocial) {
     if (renderRelevantPostsImageLabel) lines.push("", "## Relevant Posts");
     for (const image of section.images || []) {
@@ -221,11 +238,11 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
 
   if (section.table) lines.push("", renderTable(section.table));
 
-  if (section.bullets?.length) {
+  if (!isProgressSummary && section.bullets?.length) {
     lines.push("", ...section.bullets.map((item) => `- ${linkifyText(item, section.links)}`));
   }
 
-  for (const paragraph of section.bodyAfterBullets || []) {
+  for (const paragraph of isProgressSummary ? [] : (section.bodyAfterBullets || [])) {
     lines.push("", renderParagraph(paragraph, section.links || []));
   }
 

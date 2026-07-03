@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPgpzProgressSummarySection, progressSummaryItems } from "@/lib/policy-update-progress-summary";
 import {
   isPolicyUpdateSocialPostSection,
   policyUpdateSectionHeadingLink,
@@ -133,24 +134,9 @@ function hasRelevantPostImages(section: PolicyUpdateSection) {
   return section.images?.some(isPolicyUpdateRelevantPostImage) || false;
 }
 
-function isPgpzProgressSummarySection(section: PolicyUpdateSection) {
-  return /^PGPZ Progress Summary$/i.test(section.heading.trim());
-}
-
-function splitProgressSummaryItem(item: string) {
-  const [label, ...detailParts] = item.split(/:\s+/);
-  const details = detailParts
-    .join(": ")
-    .split(/;\s+/)
-    .map((detail) => detail.trim())
-    .filter(Boolean);
-  return {
-    label: label.trim(),
-    details,
-  };
-}
-
 function PgpzProgressSummaryBlock({ section }: { section: PolicyUpdateSection }) {
+  const progressItems = progressSummaryItems(section);
+
   return (
     <section className="space-y-4">
       <PolicyUpdateSectionHeading section={section} className="text-2xl font-semibold text-[var(--brand-ink)]">
@@ -163,17 +149,25 @@ function PgpzProgressSummaryBlock({ section }: { section: PolicyUpdateSection })
               {renderLinkedText(paragraph, section.links)}
             </p>
           ))}
-          {section.bullets?.length ? (
+          {progressItems.length ? (
             <div className="space-y-4">
-              {section.bullets.map((item) => {
-                const summary = splitProgressSummaryItem(item);
+              {progressItems.map((summary) => {
                 return (
-                  <div key={item} className="space-y-2">
+                  <div key={summary.label} className="space-y-2">
                     <p className="font-semibold text-[var(--brand-ink)]">{summary.label}</p>
-                    {summary.details.length ? (
+                    {summary.details?.length ? (
                       <ul className="list-disc space-y-1 pl-6">
                         {summary.details.map((detail) => (
-                          <li key={detail}>{renderLinkedText(detail, section.links)}</li>
+                          <li key={detail.text}>
+                            {renderLinkedText(detail.text, section.links)}
+                            {detail.children?.length ? (
+                              <ul className="mt-1 list-disc space-y-1 pl-6">
+                                {detail.children.map((child) => (
+                                  <li key={child}>{renderLinkedText(child, section.links)}</li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </li>
                         ))}
                       </ul>
                     ) : null}
@@ -503,7 +497,7 @@ export default async function UpdateDetailPage({ params }: Props) {
         </header>
 
         <div className="grid gap-8 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(21rem,0.36fr)] lg:p-8">
-          <div className="space-y-8">
+          <div className="order-2 space-y-8 lg:order-1">
             {update.sections.map((section, index) => (
               <Fragment key={`${section.heading}-${index}`}>
                 {index > 0 ? (
@@ -514,7 +508,7 @@ export default async function UpdateDetailPage({ params }: Props) {
             ))}
           </div>
 
-          <aside className="space-y-5">
+          <aside className="order-1 space-y-5 lg:order-2">
             <div className="rounded-2xl border bg-[var(--brand-ice)] p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">Key takeaways</p>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">

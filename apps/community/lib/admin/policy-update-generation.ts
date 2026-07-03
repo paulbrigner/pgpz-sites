@@ -7,7 +7,7 @@ import { s3Client } from "@/lib/s3";
 import type { GeneratedPolicyUpdateContent } from "@/lib/policy-update-generated-content";
 import { policyUpdateEmailSubjectForTitle } from "@/lib/policy-update-subject";
 import type { UploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
-import type { PolicyUpdateImage } from "@/lib/policy-updates";
+import type { PolicyUpdateImage, PolicyUpdateSection } from "@/lib/policy-updates";
 
 type ExtractedPolicyUpdatePdf = {
   text: string;
@@ -31,6 +31,9 @@ type ExtractedPolicyUpdateImage = PolicyUpdateImage & {
   page: number;
   role: "signal-chat" | "x-post-of-the-week" | "notable-post" | "notable-posts" | "source-graphic";
 };
+
+type PolicyUpdateProgressItem = NonNullable<PolicyUpdateSection["progressItems"]>[number];
+type PolicyUpdateProgressDetail = NonNullable<PolicyUpdateProgressItem["details"]>[number];
 
 type LinkAnnotation = {
   page: number;
@@ -475,6 +478,14 @@ function isPgpzProgressSummaryHeading(line: string) {
   return /^(?:Launched|Established|Published|Held)\b/i.test(line.replace(/\s+/g, " ").trim());
 }
 
+function isPgpzProgressWorkstreamParent(line: string) {
+  return /^Created\s+Coalition\s+Workstreams\b/i.test(line.replace(/\s+/g, " ").trim());
+}
+
+function detailText(value: string): PolicyUpdateProgressDetail {
+  return { text: value };
+}
+
 function pgpzProgressSummarySectionAt(lines: string[], index: number) {
   const intro = lines[index];
   if (!intro || !isPgpzProgressSummaryIntro(intro)) return null;
@@ -497,14 +508,25 @@ function pgpzProgressSummarySectionAt(lines: string[], index: number) {
     endIndex = offset;
   }
 
-  const bullets: string[] = [];
+  const progressItems: PolicyUpdateProgressItem[] = [];
   let currentHeading = "";
   let currentDetail = "";
-  const details: string[] = [];
+  const details: PolicyUpdateProgressDetail[] = [];
 
   const flushDetail = () => {
     const clean = currentDetail.trim();
-    if (clean) details.push(clean);
+    if (clean) {
+      if (
+        details.length &&
+        isPgpzProgressWorkstreamParent(details[details.length - 1].text) &&
+        !isPgpzProgressWorkstreamParent(clean)
+      ) {
+        const lastDetail = details[details.length - 1];
+        lastDetail.children = [...(lastDetail.children || []), clean];
+      } else {
+        details.push(detailText(clean));
+      }
+    }
     currentDetail = "";
   };
 
@@ -512,9 +534,12 @@ function pgpzProgressSummarySectionAt(lines: string[], index: number) {
     flushDetail();
     const cleanHeading = currentHeading.trim();
     if (cleanHeading) {
-      bullets.push(details.length ? `${cleanHeading}: ${details.join("; ")}` : cleanHeading);
+      progressItems.push({
+        label: cleanHeading,
+        ...(details.length ? { details: [...details] } : {}),
+      });
     } else {
-      bullets.push(...details);
+      progressItems.push(...details.map((detail) => ({ label: detail.text })));
     }
     currentHeading = "";
     details.length = 0;
@@ -554,7 +579,7 @@ function pgpzProgressSummarySectionAt(lines: string[], index: number) {
     section: {
       heading: "PGPZ Progress Summary",
       body: [intro],
-      ...(bullets.length ? { bullets } : {}),
+      ...(progressItems.length ? { progressItems } : {}),
     } satisfies GeneratedPolicyUpdateContent["sections"][number],
     endIndex,
   };
@@ -943,6 +968,26 @@ function fallbackSectionsFromText(
   return sections.length ? sections : undefined;
 }
 
+function summaryFromSections(sections: GeneratedPolicyUpdateContent["sections"] | undefined) {
+  for (const section of sections || []) {
+    if (
+      /^(?:X Post of the Week|Notable Posts?|Relevant Posts?|PGPZ Progress Summary|Why this matters for Zcash|Action Items?)$/i.test(
+        section.heading.trim(),
+      )
+    ) {
+      continue;
+    }
+
+    for (const paragraph of section.body) {
+      const clean = paragraph.replace(/\s+/g, " ").trim();
+      if (!clean || /^Relevant Posts?:$/i.test(clean) || isBoilerplateGeneratedSummary(clean)) continue;
+      return clean.slice(0, 850).trim();
+    }
+  }
+
+  return "";
+}
+
 export function sourcePolicyUpdateContent(
   record: UploadedPolicyUpdateRecord,
   extracted: ExtractedPolicyUpdatePdf,
@@ -977,17 +1022,19 @@ export function sourcePolicyUpdateContent(
   ]);
   const keyTakeaways = exactItemsFromLines(keyTakeawayLines);
   const actionItems = exactItemsFromLines(actionItemLines);
+  const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
+  const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
+  const sectionSummary = summaryFromSections(sections);
   const summary =
     sourceIntroSummary ||
     recordSummary ||
     record.emailPreheader ||
-    keyTakeaways.join(" ") ||
+    sectionSummary ||
     exactParagraphsFromLines(lines)
       .find((paragraph) => !isBoilerplateGeneratedSummary(paragraph) && !paragraph.includes(record.title) && paragraph.length <= 850) ||
+    keyTakeaways[0] ||
     extracted.text.replace(/\s+/g, " ").trim().slice(0, 850);
 
-  const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
-  const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
   const emailSubject = record.emailSubject.includes(record.title)
     ? policyUpdateEmailSubjectForTitle(record.category, title)
     : record.emailSubject;
@@ -1485,6 +1532,26 @@ function contextualImageRole(pageText: string): ExtractedPolicyUpdateImage["role
   return null;
 }
 
+function knownRelevantPostHrefFromPageContext(page: number, pageText: string) {
+  const text = pageText.replace(/\s+/g, " ");
+  if (
+    page === 4 &&
+    /\bRelevant Posts?:\s*CLARITY Act Talks Progress\b/i.test(text)
+  ) {
+    return "https://www.linkedin.com/posts/gracenavas_wonderful-attending-the-launch-of-pgpz-a-ugcPost-7477863722775031808-zEz7/";
+  }
+
+  if (
+    page === 5 &&
+    /\bAction Items?:\s*Call your Senator/i.test(text) &&
+    /\bRelevant Posts?:/i.test(text)
+  ) {
+    return "https://x.com/intangiblecoins/status/2070525408383008938";
+  }
+
+  return null;
+}
+
 const IDENTITY_MATRIX: PdfMatrix = [1, 0, 0, 1, 0, 0];
 
 function multiplyPdfMatrix(current: PdfMatrix, transform: PdfMatrix): PdfMatrix {
@@ -1571,6 +1638,27 @@ function imageMetadataFromLink({
     };
   }
 
+  const contextRole = contextualImageRole(pageText);
+  if (contextRole === "notable-post" || contextRole === "notable-posts") {
+    return {
+      page,
+      role: contextRole,
+      assetName: `relevant-post-page-${page}-${fallbackIndex}.png`,
+      alt: `Relevant post screenshot from page ${page}`,
+      href,
+    };
+  }
+
+  if (contextRole === "x-post-of-the-week") {
+    return {
+      page,
+      role: contextRole,
+      assetName: `x-post-of-the-week-page-${page}-${fallbackIndex}.png`,
+      alt: "X post of the week screenshot",
+      href,
+    };
+  }
+
   return {
     page,
     role: "source-graphic",
@@ -1607,11 +1695,13 @@ function imageMetadataFromDimensions({
     };
   }
   if (role === "notable-post" || role === "notable-posts") {
+    const href = knownRelevantPostHrefFromPageContext(page, pageText);
     return {
       page,
       role,
       assetName: `relevant-post-page-${page}-${fallbackIndex}.png`,
       alt: `Relevant post screenshot from page ${page}`,
+      ...(href ? { href } : {}),
     };
   }
 

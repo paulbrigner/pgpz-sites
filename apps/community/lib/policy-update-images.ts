@@ -78,6 +78,20 @@ export function knownPolicyUpdateImageHref(image: PolicyUpdateImageLike) {
     return "https://x.com/CharlesFLehman/status/2067963794836349321";
   }
 
+  if (
+    /june-29|2026-06-29|weekly-policy-memo-june-29/.test(text) &&
+    /relevant-post-page-4-1\.png\b/.test(text)
+  ) {
+    return "https://www.linkedin.com/posts/gracenavas_wonderful-attending-the-launch-of-pgpz-a-ugcPost-7477863722775031808-zEz7/";
+  }
+
+  if (
+    /june-29|2026-06-29|weekly-policy-memo-june-29/.test(text) &&
+    /relevant-post-page-5-1\.png\b/.test(text)
+  ) {
+    return "https://x.com/intangiblecoins/status/2070525408383008938";
+  }
+
   return null;
 }
 

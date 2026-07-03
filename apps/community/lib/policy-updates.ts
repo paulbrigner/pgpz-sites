@@ -7,9 +7,20 @@ export type PolicyUpdateSection = {
   body: string[];
   table?: PolicyUpdateTable;
   bullets?: string[];
+  progressItems?: PolicyUpdateProgressItem[];
   bodyAfterBullets?: string[];
   links?: PolicyUpdateLink[];
   images?: PolicyUpdateImage[];
+};
+
+export type PolicyUpdateProgressItem = {
+  label: string;
+  details?: PolicyUpdateProgressDetail[];
+};
+
+export type PolicyUpdateProgressDetail = {
+  text: string;
+  children?: string[];
 };
 
 export type PolicyUpdateTable = {

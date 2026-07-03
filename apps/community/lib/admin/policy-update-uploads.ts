@@ -137,6 +137,45 @@ const textArrayOrFallback = (value: unknown, fallback: string[]) => {
   return items.length ? items : fallback;
 };
 
+const progressItemsOrFallback = (
+  value: unknown,
+  fallback: PolicyUpdateSection["progressItems"] = [],
+) => {
+  if (!Array.isArray(value)) return fallback;
+  const items = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const label = textOrEmpty(record.label).trim();
+      if (!label) return null;
+      const details = Array.isArray(record.details)
+        ? record.details
+            .map((detail) => {
+              if (typeof detail === "string") {
+                const text = detail.trim();
+                return text ? { text } : null;
+              }
+              if (!detail || typeof detail !== "object") return null;
+              const detailRecord = detail as Record<string, unknown>;
+              const text = textOrEmpty(detailRecord.text).trim();
+              const children = textArrayOrFallback(detailRecord.children, []);
+              if (!text) return null;
+              return {
+                text,
+                ...(children.length ? { children } : {}),
+              };
+            })
+            .filter((detail): detail is { text: string; children?: string[] } => !!detail)
+        : [];
+      return {
+        label,
+        ...(details.length ? { details } : {}),
+      };
+    })
+    .filter((item): item is NonNullable<PolicyUpdateSection["progressItems"]>[number] => !!item);
+  return items.length ? items : fallback;
+};
+
 const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[]) => {
   if (!Array.isArray(value)) return fallback;
   const sections = value
@@ -149,8 +188,10 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
 
       const section: PolicyUpdateSection = { heading, body };
       const bullets = textArrayOrFallback(record.bullets, []);
+      const progressItems = progressItemsOrFallback(record.progressItems, []);
       const bodyAfterBullets = textArrayOrFallback(record.bodyAfterBullets, []);
       if (bullets.length) section.bullets = bullets;
+      if (progressItems?.length) section.progressItems = progressItems;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
       if (Array.isArray(record.images)) {
         const images = record.images
@@ -205,6 +246,7 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
       if (
         !body.length &&
         !section.bullets?.length &&
+        !section.progressItems?.length &&
         !section.bodyAfterBullets?.length &&
         !section.table &&
         !section.images?.length

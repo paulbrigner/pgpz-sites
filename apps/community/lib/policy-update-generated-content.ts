@@ -33,6 +33,9 @@ const MAX_HEADING_CHARS = 120;
 const MAX_SECTIONS = 10;
 const MAX_SECTION_PARAGRAPHS = 7;
 const MAX_SECTION_BULLETS = 10;
+const MAX_PROGRESS_ITEMS = 8;
+const MAX_PROGRESS_DETAILS = 12;
+const MAX_PROGRESS_CHILDREN = 12;
 const MAX_LINKS_PER_SECTION = 8;
 const MAX_TABLE_COLUMNS = 5;
 const MAX_TABLE_ROWS = 24;
@@ -182,6 +185,56 @@ function normalizeTable(value: unknown) {
   return rows.length ? { columns, rows } : undefined;
 }
 
+function normalizeProgressItems(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const label = cleanText(record.label, MAX_ITEM_CHARS);
+      if (!label) return null;
+
+      const details = Array.isArray(record.details)
+        ? record.details
+            .map((detail) => {
+              if (typeof detail === "string") {
+                const text = cleanText(detail, MAX_ITEM_CHARS);
+                return text ? { text } : null;
+              }
+              if (!detail || typeof detail !== "object") return null;
+              const detailRecord = detail as Record<string, unknown>;
+              const text = cleanText(detailRecord.text, MAX_ITEM_CHARS);
+              const children = textArray(detailRecord.children, MAX_PROGRESS_CHILDREN, MAX_ITEM_CHARS);
+              if (!text) return null;
+              return {
+                text,
+                ...(children.length ? { children } : {}),
+              };
+            })
+            .filter(
+              (detail): detail is {
+                text: string;
+                children?: string[];
+              } => !!detail,
+            )
+            .slice(0, MAX_PROGRESS_DETAILS)
+        : [];
+
+      return {
+        label,
+        ...(details.length ? { details } : {}),
+      };
+    })
+    .filter(
+      (item): item is {
+        label: string;
+        details?: Array<{ text: string; children?: string[] }>;
+      } => !!item,
+    )
+    .slice(0, MAX_PROGRESS_ITEMS);
+}
+
 function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
   if (!Array.isArray(value)) return fallback;
 
@@ -200,6 +253,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
       const section: PolicyUpdateSection = { heading, body };
       const table = normalizeTable(record.table);
       const bullets = textArray(record.bullets, MAX_SECTION_BULLETS, MAX_ITEM_CHARS);
+      const progressItems = normalizeProgressItems(record.progressItems);
       const images = normalizeImages(record.images);
       const bodyAfterBullets = stripMarkdownLinks(
         textArray(record.bodyAfterBullets, MAX_SECTION_PARAGRAPHS, MAX_PARAGRAPH_CHARS),
@@ -208,6 +262,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
 
       if (table) section.table = table;
       if (bullets.length) section.bullets = bullets;
+      if (progressItems.length) section.progressItems = progressItems;
       if (images.length) section.images = images;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
       if (links.length) section.links = links;
@@ -216,6 +271,7 @@ function normalizeSections(value: unknown, fallback: PolicyUpdateSection[]) {
         !body.length &&
         !table &&
         !bullets.length &&
+        !progressItems.length &&
         !images.length &&
         !bodyAfterBullets.length
       ) {

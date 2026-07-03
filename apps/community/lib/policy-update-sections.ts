@@ -21,9 +21,19 @@ export function splitPolicyUpdateSocialPostHeading(heading: string): PolicyUpdat
 }
 
 export function isPolicyUpdateSocialPostSection(
-  section: Pick<PolicyUpdateSection, "heading" | "images">,
+  section: Pick<PolicyUpdateSection, "heading" | "images"> &
+    Partial<Pick<PolicyUpdateSection, "body" | "bodyAfterBullets" | "bullets" | "progressItems" | "table">>,
 ) {
   if (splitPolicyUpdateSocialPostHeading(section.heading)) return true;
+
+  const hasNarrativeContent =
+    !!section.body?.length ||
+    !!section.bodyAfterBullets?.length ||
+    !!section.bullets?.length ||
+    !!section.progressItems?.length ||
+    !!section.table;
+
+  if (hasNarrativeContent) return false;
 
   return (
     section.images?.some((image) =>
@@ -120,7 +130,12 @@ export function normalizePolicyUpdateSectionLayout(sections: PolicyUpdateSection
     .filter(
       (section) =>
         section.heading &&
-        (section.body.length || section.bullets?.length || section.bodyAfterBullets?.length || section.table || section.images?.length),
+        (section.body.length ||
+          section.bullets?.length ||
+          section.progressItems?.length ||
+          section.bodyAfterBullets?.length ||
+          section.table ||
+          section.images?.length),
     );
 
   const output: PolicyUpdateSection[] = [];

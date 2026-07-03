@@ -6,6 +6,7 @@ import type {
   PolicyUpdateTable,
 } from "@/lib/policy-updates";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
+import { isPgpzProgressSummarySection, progressSummaryItems } from "@/lib/policy-update-progress-summary";
 import {
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
@@ -129,6 +130,43 @@ const renderBullets = (items: string[]) =>
   `<ul style="margin:0;padding-left:20px;color:${colors.slate};font-size:15px;line-height:1.64;">${items
     .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
     .join("")}</ul>`;
+
+const renderProgressSummary = (
+  section: PolicyUpdateSection,
+  baseUrl: string,
+  tracking?: PolicyUpdateEmailTracking,
+) => {
+  const items = progressSummaryItems(section);
+  const body = section.body
+    .map(
+      (paragraph) =>
+        `<p style="margin:0 0 14px;color:${colors.ink};font-size:14px;line-height:1.7;font-weight:800;">${renderLinkedHtml(paragraph, section.links, baseUrl, tracking)}</p>`,
+    )
+    .join("");
+  const itemHtml = items
+    .map((item) => {
+      const details = (item.details || [])
+        .map((detail) => {
+          const children = detail.children?.length
+            ? `<ul style="margin:6px 0 0;padding-left:20px;">${detail.children
+                .map(
+                  (child) =>
+                    `<li style="margin:0 0 5px;">${renderLinkedHtml(child, section.links, baseUrl, tracking)}</li>`,
+                )
+                .join("")}</ul>`
+            : "";
+          return `<li style="margin:0 0 8px;">${renderLinkedHtml(detail.text, section.links, baseUrl, tracking)}${children}</li>`;
+        })
+        .join("");
+      return `<div style="margin:0 0 14px;">
+                <p style="margin:0 0 6px;color:${colors.ink};font-size:14px;line-height:1.6;font-weight:800;">${escapeHtml(item.label)}</p>
+                ${details ? `<ul style="margin:0;padding-left:20px;color:${colors.slate};font-size:14px;line-height:1.62;">${details}</ul>` : ""}
+              </div>`;
+    })
+    .join("");
+
+  return `<div style="border:1px solid rgba(245,168,0,0.42);background:#fff7df;border-radius:8px;padding:16px;margin:0 0 14px;">${body}${itemHtml}</div>`;
+};
 
 function policyUpdateEmailIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
   const summary = update.summary.replace(/\s+/g, " ").trim();
@@ -271,6 +309,7 @@ const renderSectionHtml = (
   tracking: PolicyUpdateEmailTracking | undefined,
 ) => {
   const isSocial = isPolicyUpdateSocialPostSection(section);
+  const isProgressSummary = isPgpzProgressSummarySection(section);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
   const imagesHtml = renderSectionImages({
@@ -291,14 +330,51 @@ const renderSectionHtml = (
                 <div style="border-top:1px solid rgba(245,168,0,0.34);padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
                   ${renderSectionHeading(section, baseUrl, tracking)}
                   ${isSocial ? imagesHtml : ""}
-                  ${renderParagraphs(section.body, section.links, baseUrl, tracking)}
+                  ${
+                    isProgressSummary
+                      ? renderProgressSummary(section, baseUrl, tracking)
+                      : renderParagraphs(section.body, section.links, baseUrl, tracking)
+                  }
                   ${!isSocial ? `${relevantPostsImageLabel}${imagesHtml}` : ""}
                   ${section.table ? renderTable(section.table) : ""}
-                  ${section.bullets?.length ? renderBullets(section.bullets) : ""}
-                  ${section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking) : ""}
+                  ${!isProgressSummary && section.bullets?.length ? renderBullets(section.bullets) : ""}
+                  ${!isProgressSummary && section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking) : ""}
                 </div>
               </td>
             </tr>`;
+};
+
+const renderProgressSummaryText = (section: PolicyUpdateSection) =>
+  [
+    ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
+    ...progressSummaryItems(section).flatMap((item) => [
+      `- ${item.label}`,
+      ...(item.details || []).flatMap((detail) => [
+        `  - ${renderParagraphText(detail.text, section.links)}`,
+        ...(detail.children || []).map((child) => `    - ${renderParagraphText(child, section.links)}`),
+      ]),
+    ]),
+  ];
+
+const renderSectionTextLines = (section: PolicyUpdateSection) => {
+  if (isPgpzProgressSummarySection(section)) {
+    return [
+      section.heading,
+      ...renderSectionImageText(section),
+      ...renderProgressSummaryText(section),
+      "",
+    ];
+  }
+
+  return [
+    section.heading,
+    ...renderSectionImageText(section),
+    ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
+    ...(section.table ? renderTableText(section.table) : []),
+    ...(section.bullets || []).map((item) => `- ${item}`),
+    ...(section.bodyAfterBullets || []).map((paragraph) => renderParagraphText(paragraph, section.links)),
+    "",
+  ];
 };
 
 export function buildPolicyUpdateEmail(
@@ -408,15 +484,7 @@ export function buildPolicyUpdateEmail(
     `View on member portal: ${portalUrl}`,
     `View archive: ${archiveUrl}`,
     "",
-    ...sections.flatMap((section) => [
-      section.heading,
-      ...renderSectionImageText(section),
-      ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
-      ...(section.table ? renderTableText(section.table) : []),
-      ...(section.bullets || []).map((item) => `- ${item}`),
-      ...(section.bodyAfterBullets || []).map((paragraph) => renderParagraphText(paragraph, section.links)),
-      "",
-    ]),
+    ...sections.flatMap(renderSectionTextLines),
     renderForwardedEmailCommunityText(baseUrl),
     "",
     unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
