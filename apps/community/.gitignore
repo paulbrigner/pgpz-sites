@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/.venv
+/output/social/.venv
 /.pnp
 .pnp.*
 .yarn/*
