@@ -3,6 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GENERATOR="$SCRIPT_DIR/generate_weekly_social_card.py"
+PYTHON_BIN="${PYTHON:-python3}"
+
+if [[ -z "${PYTHON:-}" && -x "$SCRIPT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
+fi
 
 usage() {
   cat <<'EOF'
@@ -50,4 +55,20 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || "$#" -eq 0 ]]; then
   exit 0
 fi
 
-python3 "$GENERATOR" "$@"
+if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+from PIL import Image
+PY
+then
+  cat >&2 <<EOF
+Missing Python dependency: Pillow.
+
+Install it for this tool with:
+  python3 -m venv output/social/.venv
+  output/social/.venv/bin/python -m pip install -r output/social/requirements.txt
+
+Then rerun this command.
+EOF
+  exit 1
+fi
+
+"$PYTHON_BIN" "$GENERATOR" "$@"
