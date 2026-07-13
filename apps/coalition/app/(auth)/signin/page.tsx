@@ -271,7 +271,7 @@ function EmailSignIn({
           <Alert className="mt-5" variant="destructive">
             <AlertTitle>{expiredInvite ? "Invitation expired" : "Invitation unavailable"}</AlertTitle>
             <AlertDescription>
-              Ask a PGPZ Coalition admin to send a fresh invitation email.
+              Sign in with the invited email address to accept the invitation from the Coalition home page, or contact a PGPZ admin for help.
             </AlertDescription>
           </Alert>
         ) : null}

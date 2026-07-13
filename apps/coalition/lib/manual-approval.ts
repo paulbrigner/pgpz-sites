@@ -43,7 +43,7 @@ export async function requestManualApproval(userId: string) {
   }
 
   if (user.Item.membershipStatus === "invited") {
-    throw new ManualApprovalError("This account is invited. Use the invitation email to activate membership.", 409);
+    throw new ManualApprovalError("This account is invited. Sign in and accept the invitation to activate membership.", 409);
   }
 
   if (user.Item.manualApprovalStatus === "pending") {
@@ -119,7 +119,7 @@ export async function approveManualApproval({
   if (!approvalEligible) {
     throw new ManualApprovalError(
       membershipStatus === "invited"
-        ? "This member is in the invitation flow. They must activate from the invitation email."
+        ? "This member is in the invitation flow. They must sign in and accept the invitation."
         : "This member is not eligible for approval.",
       409,
     );

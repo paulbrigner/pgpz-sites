@@ -111,6 +111,7 @@ export default function HomeClient() {
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [manualApprovalLoading, setManualApprovalLoading] = useState(false);
+  const [invitationAccepting, setInvitationAccepting] = useState(false);
   const [directoryMembers, setDirectoryMembers] = useState<DirectoryMember[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
@@ -163,7 +164,7 @@ export default function HomeClient() {
   const onboardingDescription = manualApprovalPending
     ? "A PGPZ admin will review your membership request. You will be able to sign back in here after approval."
     : isInvited
-      ? "Open the activation link in your invitation email to activate coalition membership."
+      ? "Accept the invitation below to activate coalition membership with your verified email."
       : "This coalition is reviewed manually so partner access stays focused, trusted, and useful.";
 
   const refreshStatus = useCallback(async () => {
@@ -293,6 +294,24 @@ export default function HomeClient() {
     }
   };
 
+  const acceptInvitation = async () => {
+    setInvitationAccepting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/invitations/accept", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to accept coalition invitation");
+      setMessage("Your PGPZ Coalition membership is now active.");
+      await update({});
+      await refreshStatus();
+    } catch (err: any) {
+      setError(err?.message || "Unable to accept coalition invitation");
+    } finally {
+      setInvitationAccepting(false);
+    }
+  };
+
   const submitResource = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setResourceSubmitting(true);
@@ -388,14 +407,14 @@ export default function HomeClient() {
       {message ? (
         <Alert>
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Request received</AlertTitle>
+          <AlertTitle>Membership updated</AlertTitle>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : null}
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Approval request issue</AlertTitle>
+          <AlertTitle>Membership issue</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -434,7 +453,7 @@ export default function HomeClient() {
                     {isMember
                       ? "Your PGPZ Coalition membership is active. Use this space to coordinate policy resources, messaging, and campaign work with trusted partners."
                       : isInvited
-                        ? "Your account is in invited state. It will not receive member mail or appear in active-member workflows until the invitation link is activated."
+                        ? "Your verified email matches a coalition invitation. Accept it below to activate membership."
                         : "Coalition access is approved manually so participation stays limited to selected Zcash ecosystem partners working on crypto policy."}
                   </p>
                 </div>
@@ -473,18 +492,32 @@ export default function HomeClient() {
                         INVITATION
                       </div>
                       <h3 className="text-lg font-semibold text-[var(--brand-ink)]">
-                        Activation link required
+                        Accept your invitation
                       </h3>
                       <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                        Use the activation button in your invitation email to move from invited to active membership.
-                        Until then, this account is excluded from member emails, directories, and coalition activities.
+                        You are signed in with the invited email address, so you can activate membership here.
+                        No second email is required.
                       </p>
                     </div>
-                    <Button type="button" size="lg" variant="outline" asChild>
-                      <Link href="mailto:admin@pgpz.org?subject=PGPZ%20Coalition%20Invitation%20Help">
-                        Contact admin
-                      </Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="bg-[var(--brand-teal)] text-white hover:bg-[var(--brand-ink)]"
+                        disabled={invitationAccepting}
+                        onClick={acceptInvitation}
+                      >
+                        {invitationAccepting
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <UserCheck className="h-4 w-4" />}
+                        {invitationAccepting ? "Activating…" : "Accept invitation"}
+                      </Button>
+                      <Button type="button" size="lg" variant="outline" asChild>
+                        <Link href="mailto:admin@pgpz.org?subject=PGPZ%20Coalition%20Invitation%20Help">
+                          Contact admin
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (

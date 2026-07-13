@@ -247,6 +247,92 @@ export async function markInvitationEmailSent({
   return now;
 }
 
+export async function acceptAuthenticatedInvitation({
+  userId,
+  email,
+}: {
+  userId: string;
+  email: string;
+}) {
+  const id = userId.trim();
+  const normalizedEmail = normalizeEmail(email);
+  if (!id || !normalizedEmail) {
+    throw new InvitationError("Sign in with the invited email address to accept this invitation.", 401);
+  }
+
+  const user = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: userKey(id),
+    ProjectionExpression:
+      "id, email, membershipStatus, invitationStatus, accountStatus, deactivatedAt",
+  });
+  if (!user.Item?.id) throw new InvitationError("Member not found.", 404);
+  if (user.Item.accountStatus === "deactivated" || user.Item.deactivatedAt) {
+    throw new InvitationError("This account is deactivated.", 409);
+  }
+  if (normalizeEmail(user.Item.email) !== normalizedEmail) {
+    throw new InvitationError("Sign in with the email address that received this invitation.", 403);
+  }
+  if (user.Item.membershipStatus === "active") {
+    return {
+      ok: true,
+      status: "already_active" as const,
+      userId: id,
+      email: normalizedEmail,
+      activatedAt: null,
+      communitySync: null,
+    };
+  }
+  if (user.Item.membershipStatus !== "invited") {
+    throw new InvitationError("This account does not have a pending invitation.", 409);
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: userKey(id),
+      UpdateExpression:
+        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now",
+      ConditionExpression:
+        "attribute_exists(#pk) AND #membershipStatus = :invited AND #email = :email",
+      ExpressionAttributeNames: {
+        "#pk": "pk",
+        "#membershipStatus": "membershipStatus",
+        "#email": "email",
+      },
+      ExpressionAttributeValues: {
+        ":active": "active",
+        ":invited": "invited",
+        ":provider": "admin_invite",
+        ":accepted": "accepted",
+        ":acceptedVia": "authenticated_session",
+        ":email": normalizedEmail,
+        ":now": now,
+      },
+    });
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException") {
+      throw new InvitationError("This invitation is no longer available.", 409);
+    }
+    throw err;
+  }
+
+  const communitySync = await syncCoalitionMemberToCommunityById({
+    userId: id,
+    triggeredBy: "authenticated_invitation_acceptance",
+  });
+
+  return {
+    ok: true,
+    status: "activated" as const,
+    userId: id,
+    email: normalizedEmail,
+    activatedAt: now,
+    communitySync,
+  };
+}
+
 export async function activateInvitation(token: string) {
   const trimmed = token.trim();
   if (!trimmed) throw new InvitationError("Invitation token is required.", 400);

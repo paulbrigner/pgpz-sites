@@ -18,6 +18,7 @@ PGPZ Coalition membership can be activated through manual admin approval or thro
 4. The admin can send or resend an invitation email from the roster, or bulk-send invitations to outstanding invite-able members that are non-active, unsuppressed, not manual-approval pending, and have no prior invitation email timestamp.
 5. `POST /api/admin/email/send` creates a one-time activation token and sends a branded activation email with a conspicuous activation button inserted after the greeting.
 6. `GET /api/invitations/activate?token=...` activates the member, changes `membershipStatus` to `active`, records `invitationAcceptedAt`, and invalidates the token.
+7. If the invitation email is filtered, the invitee can sign in with the invited email address and use `POST /api/invitations/accept` from the Coalition home page. This path requires an exact session-email match, records `invitationAcceptedVia = authenticated_session`, and runs the same Coalition-to-Community membership sync.
 
 Invited members are not active members. They are excluded from newsletter and policy-update audiences, member-directory results, and active-member calls to action until activation is complete.
 

@@ -78,7 +78,7 @@ describe("manual approval admin flow", () => {
     await expect(
       approveManualApproval({ userId: "user-2", adminUserId: "admin-1" }),
     ).rejects.toMatchObject({
-      message: "This member is in the invitation flow. They must activate from the invitation email.",
+      message: "This member is in the invitation flow. They must sign in and accept the invitation.",
       status: 409,
     });
 
