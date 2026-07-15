@@ -740,8 +740,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         ))}
       </div>
 
-      <section className="rounded-lg border bg-white/85 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <details className="group rounded-lg border bg-white/85">
+        <summary className="flex cursor-pointer list-none items-start gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden="true"
+            className="mt-1 h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90"
+          />
           <div>
             <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Invitation email template</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">
@@ -755,7 +759,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                   : `Last updated ${formatDate(invitationTemplate?.updatedAt || null)}.`}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+        </summary>
+        <div className="border-t p-4">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" disabled={templateLoading || templateSaving} onClick={loadInvitationTemplate}>
               <RefreshCcw className={cn("h-4 w-4", templateLoading && "animate-spin")} />
               Reload
@@ -770,59 +776,59 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               Save template
             </Button>
           </div>
-        </div>
-        <div className="mt-5 grid gap-3">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Subject</span>
-            <input
-              value={templateDraft.subject}
-              onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))}
-              maxLength={180}
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Body</span>
-            <textarea
-              value={templateDraft.body}
-              onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))}
-              maxLength={20000}
-              rows={18}
-              className="min-h-96 w-full resize-y rounded-md border px-3 py-2 font-mono text-sm leading-6"
-            />
-          </label>
-          <div className="rounded-lg border bg-white/70 p-3 text-xs leading-5 text-slate-600">
-            Available placeholders: <code>[Name]</code>, <code>[First Name]</code>, <code>[Last Name]</code>,{" "}
-            <code>[Activation Link]</code>. A prominent activation button is inserted automatically after the greeting.
-            {" "}Markdown supported: <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and simple lists.
-          </div>
-          <div className="grid gap-3 rounded-lg border bg-white/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="mt-5 grid gap-3">
             <label className="space-y-1 text-sm">
-              <span className="font-medium">Draft recipient email</span>
+              <span className="font-medium">Subject</span>
               <input
-                type="email"
-                value={templateDraftEmail}
-                onChange={(event) => setTemplateDraftEmail(event.target.value)}
-                placeholder="name@example.com"
+                value={templateDraft.subject}
+                onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))}
+                maxLength={180}
                 className="w-full rounded-md border px-3 py-2 text-sm"
               />
             </label>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!templateDraftEmail.trim() || templateLoading || templateSaving || templateDraftSending}
-              isLoading={templateDraftSending}
-              onClick={sendInvitationTemplateDraft}
-            >
-              <MailPlus className="h-4 w-4" />
-              Email draft
-            </Button>
-            <p className="text-xs leading-5 text-slate-600 md:col-span-2">
-              Draft sends use the current unsaved subject and body with a preview activation link.
-            </p>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">Body</span>
+              <textarea
+                value={templateDraft.body}
+                onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))}
+                maxLength={20000}
+                rows={18}
+                className="min-h-96 w-full resize-y rounded-md border px-3 py-2 font-mono text-sm leading-6"
+              />
+            </label>
+            <div className="rounded-lg border bg-white/70 p-3 text-xs leading-5 text-slate-600">
+              Available placeholders: <code>[Name]</code>, <code>[First Name]</code>, <code>[Last Name]</code>,{" "}
+              <code>[Activation Link]</code>. A prominent activation button is inserted automatically after the greeting.
+              {" "}Markdown supported: <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and simple lists.
+            </div>
+            <div className="grid gap-3 rounded-lg border bg-white/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Draft recipient email</span>
+                <input
+                  type="email"
+                  value={templateDraftEmail}
+                  onChange={(event) => setTemplateDraftEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!templateDraftEmail.trim() || templateLoading || templateSaving || templateDraftSending}
+                isLoading={templateDraftSending}
+                onClick={sendInvitationTemplateDraft}
+              >
+                <MailPlus className="h-4 w-4" />
+                Email draft
+              </Button>
+              <p className="text-xs leading-5 text-slate-600 md:col-span-2">
+                Draft sends use the current unsaved subject and body with a preview activation link.
+              </p>
+            </div>
           </div>
         </div>
-      </section>
+      </details>
 
       <section className="rounded-lg border bg-white/85 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
