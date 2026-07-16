@@ -26,6 +26,13 @@
 .DS_Store
 *.pem
 
+# local publishing scratch files
+/docs/update steps.txt
+/output/pgpz-community-qr.png
+/output/zcash-forum-*.md
+/output/social/command_examples.sh
+/output/social/pgpz-li-*.png
+
 # debug
 npm-debug.log*
 yarn-debug.log*
