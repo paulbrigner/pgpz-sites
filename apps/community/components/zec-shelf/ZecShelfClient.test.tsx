@@ -33,6 +33,7 @@ describe("ZecShelfClient permissions", () => {
     expect(screen.queryByRole("button", { name: /^Edit$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Remove$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Move Zcash Community/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("01")).not.toBeInTheDocument();
   });
 
   it("shows maintenance controls and check state to administrators", () => {
@@ -45,6 +46,7 @@ describe("ZecShelfClient permissions", () => {
     expect(screen.getByText("No change")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Move Zcash Community to top/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Move Zcash Community to bottom/i })).toBeInTheDocument();
+    expect(screen.queryByText("01")).not.toBeInTheDocument();
   });
 });
 

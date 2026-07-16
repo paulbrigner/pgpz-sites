@@ -359,12 +359,11 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                     "grid gap-4 rounded-2xl border border-[rgba(245,168,0,0.24)] bg-white p-4 shadow-[0_18px_38px_-32px_rgba(30,30,30,0.38)] transition hover:border-[rgba(245,168,0,0.5)]",
                     isAdmin
                       ? "md:grid-cols-[3.5rem_13rem_minmax(0,1fr)] lg:grid-cols-[3.5rem_13rem_minmax(0,1fr)_8.5rem]"
-                      : "md:grid-cols-[3.5rem_13rem_minmax(0,1fr)]",
+                      : "md:grid-cols-[13rem_minmax(0,1fr)]",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2 md:flex-col md:justify-center">
-                    <span className="font-mono text-sm font-semibold text-slate-400">{String(actualIndex + 1).padStart(2, "0")}</span>
-                    {isAdmin ? (
+                  {isAdmin ? (
+                    <div className="flex items-center justify-between gap-2 md:flex-col md:justify-center">
                       <div className="grid grid-cols-4 gap-1 md:grid-cols-1">
                         <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[var(--zcash-gold)] hover:text-[var(--brand-denim)] disabled:cursor-not-allowed disabled:opacity-30" onClick={() => void moveResource(resource.id, "top")} disabled={actualIndex === 0 || category !== "All resources" || Boolean(query)} aria-label={`Move ${resource.title} to top`}>
                           <ArrowUpToLine className="h-4 w-4" aria-hidden="true" />
@@ -379,8 +378,8 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                           <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </div>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
 
                   <a href={resource.url} target="_blank" rel="noreferrer" className="group relative block aspect-[8/5] overflow-hidden rounded-xl border border-slate-200 bg-[var(--brand-ice)]" aria-label={`Open ${resource.title}`}>
                     {preview ? (
