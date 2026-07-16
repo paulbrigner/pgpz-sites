@@ -22,6 +22,7 @@ import { SensitiveDataText, useAdminSensitiveData } from "@/components/admin/sen
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { canSendWelcomeEmail } from "@/lib/admin/welcome-email";
 
 type Props = {
   initialRoster: AdminRoster | null;
@@ -607,6 +608,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             {filteredMembers.map((member) => {
               const deactivated = member.accountStatus === "deactivated";
               const active = member.membershipStatus === "active";
+              const welcomeEligible = canSendWelcomeEmail(member);
               const welcomeSent = !!member.welcomeEmailSentAt;
               const welcomeSuppressed =
                 !!member.welcomeEmailSuppressedAt || member.welcomeEmailSuppressedReason === "coalition_member";
@@ -727,14 +729,18 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={emailSending[member.id] || !member.email || deactivated}
+                          disabled={emailSending[member.id] || !member.email || deactivated || !welcomeEligible}
                           isLoading={!!emailSending[member.id]}
                           onClick={() => sendWelcome(member)}
+                          title={!welcomeEligible ? "Activate membership before sending a welcome email" : undefined}
                         >
                           <MailPlus className="h-4 w-4" />
                           Send welcome
                         </Button>
                       )}
+                      {!welcomeSent && !welcomeSuppressed && !welcomeEligible ? (
+                        <div className="text-xs text-slate-500">Activate membership first</div>
+                      ) : null}
                       {member.emailSuppressed ? (
                         <div className="text-xs text-rose-700">Suppressed</div>
                       ) : null}

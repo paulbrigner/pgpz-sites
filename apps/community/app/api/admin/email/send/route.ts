@@ -13,6 +13,10 @@ import {
   type UserProfile,
 } from "@/lib/admin/user-profile";
 import { buildCustomAdminEmail, buildWelcomeEmail } from "@/lib/system-email";
+import {
+  canSendWelcomeEmail,
+  WELCOME_EMAIL_ACTIVE_MEMBERS_ONLY_ERROR,
+} from "@/lib/admin/welcome-email";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +62,9 @@ export async function POST(request: NextRequest) {
     let markWelcome = false;
 
     if (type === "welcome") {
+      if (!canSendWelcomeEmail(user)) {
+        return NextResponse.json({ error: WELCOME_EMAIL_ACTIVE_MEMBERS_ONLY_ERROR }, { status: 409 });
+      }
       const customSubject = typeof body?.subject === "string" ? body.subject.trim() : "";
       const customHtml = typeof body?.html === "string" ? body.html.trim() : "";
       const customText = typeof body?.text === "string" ? body.text.trim() : "";
