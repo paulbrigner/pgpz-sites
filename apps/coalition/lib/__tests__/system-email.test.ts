@@ -10,7 +10,7 @@ import {
 describe("system email builders", () => {
   it("renders magic-link email with the refreshed branded shell", () => {
     const built = buildMagicLinkEmail({
-      url: "https://coalition.pgpz.org/api/auth/callback/email?token=abc",
+      url: "https://coalition.pgpz.org/api/better-auth/magic-link/verify?token=abc",
       host: "coalition.pgpz.org",
     });
 

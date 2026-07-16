@@ -6,7 +6,7 @@ The coalition site is a selective workspace for Zcash ecosystem partners involve
 
 ## Features
 
-- Email magic-link authentication with NextAuth.
+- Email magic-link authentication with Better Auth.
 - DynamoDB-backed user/profile/session persistence.
 - Manual admin approval for coalition membership access.
 - Admin-created invitations with one-time activation links and an `invited` state.
@@ -44,15 +44,21 @@ NEXT_PUBLIC_SITE_URL=https://coalition.pgpz.org
 REGION_AWS=us-east-1
 PGPZ_AWS_ACCESS_KEY_ID=...
 PGPZ_AWS_SECRET_ACCESS_KEY=...
-NEXTAUTH_URL=https://coalition.pgpz.org
-NEXTAUTH_SECRET=...
 NEXTAUTH_TABLE=PGPZCoalitionNextAuth
+BETTER_AUTH_URL=https://coalition.pgpz.org
+BETTER_AUTH_SECRET=...
+BETTER_AUTH_TRUSTED_ORIGINS=https://coalition.pgpz.org
+EMAIL_TRACKING_SECRET=...
 EMAIL_SERVER_HOST=email-smtp.us-east-1.amazonaws.com
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER=...
 EMAIL_SERVER_PASSWORD=...
 EMAIL_FROM="PGPZ Coalition <no-reply@coalition.pgpz.org>"
 ```
+
+`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Set `EMAIL_TRACKING_SECRET` to the former `NEXTAUTH_SECRET` value when removing that legacy environment variable so historical email-open fingerprints remain comparable.
+
+See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
 
 ## DynamoDB
 

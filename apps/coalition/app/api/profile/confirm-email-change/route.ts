@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
-import { NEXTAUTH_TABLE } from "@/lib/config";
-import { documentClient } from "@/lib/dynamodb";
-import { findAppUserByEmail, getAppUserById, updateAppUserEmail } from "@/lib/app-users";
+import { findAppUserByEmail, getAppUserById } from "@/lib/app-users";
+import { consumeEmailChangeToken } from "@/lib/email-change-token";
+import {
+  BetterAuthEmailCollisionError,
+  updateAppAndBetterAuthUserEmail,
+} from "@/lib/better-auth-user-email";
+import { expireLegacySessionCookies } from "@/lib/legacy-session-cookies";
 
 const renderHtml = (title: string, message: string) =>
   new NextResponse(
@@ -24,12 +27,8 @@ export async function GET(request: NextRequest) {
     return renderHtml("Email change failed", "Missing or invalid token.");
   }
 
-  const adapter: any = DynamoDBAdapter(documentClient as any, {
-    tableName: NEXTAUTH_TABLE || "NextAuth",
-  });
-
   try {
-    const record = await adapter.useVerificationToken({ identifier, token });
+    const record = await consumeEmailChangeToken({ identifier, token });
     if (!record) {
       return renderHtml("Email change failed", "This link is invalid or has already been used.");
     }
@@ -37,9 +36,9 @@ export async function GET(request: NextRequest) {
       return renderHtml("Email change failed", "This link has expired. Please request a new one.");
     }
 
-    const rawNewEmail = (record as any).newEmail;
-    const userId = identifier.startsWith("EMAIL_CHANGE#") ? identifier.replace("EMAIL_CHANGE#", "") : null;
-    if (!userId || !rawNewEmail || typeof rawNewEmail !== "string") {
+    const rawNewEmail = record.newEmail;
+    const userId = record.userId;
+    if (identifier !== `EMAIL_CHANGE#${userId}` || !rawNewEmail) {
       return renderHtml("Email change failed", "Invalid token payload.");
     }
     const newEmail = rawNewEmail.trim().toLowerCase();
@@ -54,25 +53,28 @@ export async function GET(request: NextRequest) {
       return renderHtml("Email change failed", "That email is already in use.");
     }
 
-    const updated = await updateAppUserEmail(user.id, newEmail);
-    if (!updated?.id) {
-      return renderHtml("Email change failed", "Account not found.");
-    }
+    await updateAppAndBetterAuthUserEmail({
+      appUserId: user.id,
+      betterAuthUserId: record.betterAuthUserId,
+      oldEmail: String(user.email || ""),
+      newEmail,
+    });
 
     const host = request.headers.get("host");
     const baseUrl = host ? `https://${host}` : request.url;
     const redirectUrl = new URL("/signin?reason=email-updated", baseUrl);
     const response = NextResponse.redirect(redirectUrl);
-    // Expire common NextAuth session cookies so the user signs back in with the new email.
+    // Expire both current and legacy sessions so the user signs back in with the new email.
     const expires = new Date(0).toUTCString();
-    response.headers.append("Set-Cookie", `next-auth.session-token=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
-    response.headers.append("Set-Cookie", `__Secure-next-auth.session-token=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
     response.headers.append("Set-Cookie", `better-auth.session_token=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
     response.headers.append("Set-Cookie", `__Secure-better-auth.session_token=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
     response.headers.append("Set-Cookie", `better-auth.session_data=; Path=/; Expires=${expires}; HttpOnly; SameSite=Lax`);
     response.headers.append("Set-Cookie", `__Secure-better-auth.session_data=; Path=/; Expires=${expires}; HttpOnly; SameSite=None; Secure`);
-    return response;
+    return expireLegacySessionCookies(response, request);
   } catch (e) {
+    if (e instanceof BetterAuthEmailCollisionError) {
+      return renderHtml("Email change failed", e.message);
+    }
     console.error("/api/profile/confirm-email-change error:", e);
     return renderHtml("Email change failed", "An unexpected error occurred. Please request a new link and try again.");
   }

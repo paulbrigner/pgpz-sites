@@ -25,6 +25,7 @@ const sanitizeCallbackUrl = (value: string | null | undefined, reason: string | 
   if (reason === "signup" && trimmed === "/") return membershipRequestCallback;
   if (/^\/signin(?:\/|\?|$)/.test(trimmed)) return fallback;
   if (/^\/api\/auth(?:\/|\?|$)/.test(trimmed)) return fallback;
+  if (/^\/api\/better-auth(?:\/|\?|$)/.test(trimmed)) return fallback;
 
   return trimmed;
 };

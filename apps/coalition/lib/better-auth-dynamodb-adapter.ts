@@ -18,6 +18,7 @@ type AdapterRecord = Record<string, any> & {
   type?: string;
   GSI1PK?: string;
   GSI1SK?: string;
+  expires?: number;
 };
 
 const MODEL_TYPE_PREFIX = "BETTER_AUTH";
@@ -36,7 +37,15 @@ const modelKey = (model: string, id: string) => ({
 
 const cleanRecord = (item: AdapterRecord | null | undefined) => {
   if (!item) return null;
-  const { pk: _pk, sk: _sk, type: _type, GSI1PK: _GSI1PK, GSI1SK: _GSI1SK, ...record } = item;
+  const {
+    pk: _pk,
+    sk: _sk,
+    type: _type,
+    GSI1PK: _GSI1PK,
+    GSI1SK: _GSI1SK,
+    expires: _expires,
+    ...record
+  } = item;
   return record;
 };
 
@@ -77,6 +86,13 @@ function indexedAttributes(model: string, data: AdapterRecord) {
   return {};
 }
 
+function ttlAttributes(model: string, data: AdapterRecord) {
+  if (model !== "better_auth_sessions" && model !== "better_auth_verifications") return {};
+  const expiresAt = data.expiresAt instanceof Date ? data.expiresAt : new Date(data.expiresAt);
+  const expiresAtMs = expiresAt.getTime();
+  return Number.isFinite(expiresAtMs) ? { expires: Math.ceil(expiresAtMs / 1000) } : {};
+}
+
 function storedItem(model: string, data: AdapterRecord): AdapterRecord {
   assertSupportedModel(model);
   const id = stringValue(data.id);
@@ -86,6 +102,7 @@ function storedItem(model: string, data: AdapterRecord): AdapterRecord {
     type: modelType(model),
     ...data,
     ...indexedAttributes(model, data),
+    ...ttlAttributes(model, data),
   };
 }
 
@@ -114,7 +131,7 @@ function matchesCondition(item: AdapterRecord, condition: AdapterCondition) {
     }
   }
 
-  if (operator === "eq") return left === right;
+  if (operator === "eq") return right === null ? left == null : left === right;
   if (operator === "ne") return left !== right;
   if (operator === "lt") return compareValues(left, right) < 0;
   if (operator === "lte") return compareValues(left, right) <= 0;
@@ -149,6 +166,71 @@ function projectRecord(item: AdapterRecord, select?: string[]) {
   }, {} as AdapterRecord);
 }
 
+function conditionValues(condition: AdapterCondition | undefined) {
+  if (!condition) return [];
+  const operator = condition.operator || "eq";
+  const values =
+    operator === "eq"
+      ? [condition.value]
+      : operator === "in" && Array.isArray(condition.value)
+        ? condition.value
+        : [];
+  return values.filter((value) => value !== null && value !== undefined && String(value) !== "");
+}
+
+function indexPartitionKeys(model: string, where: AdapterCondition[] | undefined): string[] | null {
+  if (!where?.length || where.slice(1).some((condition) => condition.connector === "OR")) return null;
+
+  const condition = (field: string) => where.find((candidate) => candidate.field === field);
+  const prefix = modelType(model);
+
+  if (model === "better_auth_users") {
+    const values = conditionValues(condition("email"));
+    return values.length ? values.map((value) => `${prefix}#email#${String(value).toLowerCase()}`) : null;
+  }
+
+  if (model === "better_auth_sessions") {
+    const values = conditionValues(condition("token"));
+    return values.length ? values.map((value) => `${prefix}#token#${String(value)}`) : null;
+  }
+
+  if (model === "better_auth_verifications") {
+    const values = conditionValues(condition("identifier"));
+    return values.length ? values.map((value) => `${prefix}#identifier#${String(value)}`) : null;
+  }
+
+  if (model === "better_auth_accounts") {
+    const providerValues = conditionValues(condition("providerId"));
+    const accountValues = conditionValues(condition("accountId"));
+    if (providerValues.length !== 1 || accountValues.length !== 1) return null;
+    return [`${prefix}#provider#${String(providerValues[0])}#${String(accountValues[0])}`];
+  }
+
+  return null;
+}
+
+async function queryModelIndex(model: string, partitionKey: string): Promise<AdapterRecord[]> {
+  const items: AdapterRecord[] = [];
+  let ExclusiveStartKey: Record<string, any> | undefined;
+
+  do {
+    const res = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI1",
+      KeyConditionExpression: "#gsi1pk = :gsi1pk",
+      ExpressionAttributeNames: { "#gsi1pk": "GSI1PK" },
+      ExpressionAttributeValues: { ":gsi1pk": partitionKey },
+      ExclusiveStartKey,
+    });
+    for (const item of res.Items || []) {
+      if (item.type === modelType(model)) items.push(item as AdapterRecord);
+    }
+    ExclusiveStartKey = res.LastEvaluatedKey as any;
+  } while (ExclusiveStartKey);
+
+  return items;
+}
+
 async function scanModel(model: string): Promise<AdapterRecord[]> {
   assertSupportedModel(model);
   const items: AdapterRecord[] = [];
@@ -180,6 +262,15 @@ async function findMatching(model: string, where?: AdapterCondition[]) {
     return item && item.type === modelType(model) && matchesWhere(item, where) ? [item] : [];
   }
 
+  const partitionKeys = indexPartitionKeys(model, where);
+  if (partitionKeys) {
+    const indexedItems = (await Promise.all(partitionKeys.map((key) => queryModelIndex(model, key)))).flat();
+    const uniqueItems = Array.from(
+      new Map(indexedItems.map((item) => [`${item.pk || ""}#${item.sk || ""}`, item])).values(),
+    );
+    return uniqueItems.filter((item) => matchesWhere(item, where));
+  }
+
   return (await scanModel(model)).filter((item) => matchesWhere(item, where));
 }
 
@@ -188,6 +279,104 @@ async function putRecord(model: string, data: AdapterRecord) {
   await documentClient.put({ TableName: TABLE_NAME, Item: item });
   return cleanRecord(item);
 }
+
+export const createBetterAuthAdapterImplementation = () => ({
+  create: async <T>({ model, data }: { model: string; data: T }) =>
+    (await putRecord(model, data as AdapterRecord)) as T,
+  findOne: async <T>({ model, where, select }: { model: string; where?: AdapterCondition[]; select?: string[] }) => {
+    const [item] = await findMatching(model, where);
+    return projectRecord(item, select) as T | null;
+  },
+  findMany: async <T>({
+    model,
+    where,
+    limit = 100,
+    offset = 0,
+    sortBy,
+    select,
+  }: {
+    model: string;
+    where?: AdapterCondition[];
+    limit?: number;
+    offset?: number;
+    sortBy?: { field: string; direction?: "asc" | "desc" };
+    select?: string[];
+  }) => {
+    let items = await findMatching(model, where);
+    if (sortBy?.field) {
+      const direction = sortBy.direction === "desc" ? -1 : 1;
+      items = items.sort((a, b) => direction * compareValues(a[sortBy.field], b[sortBy.field]));
+    }
+    return items.slice(offset, offset + limit).map((item) => projectRecord(item, select) as T);
+  },
+  count: async ({ model, where }: { model: string; where?: AdapterCondition[] }) =>
+    (await findMatching(model, where)).length,
+  update: async <T>({ model, where, update }: { model: string; where?: AdapterCondition[]; update: T }) => {
+    if (!where?.length) return null;
+    const [item] = await findMatching(model, where);
+    if (!item?.id) return null;
+    return (await putRecord(model, { ...item, ...(update as AdapterRecord) })) as T;
+  },
+  updateMany: async <T>({ model, where, update }: { model: string; where?: AdapterCondition[]; update: T }) => {
+    const items = await findMatching(model, where);
+    for (const item of items) {
+      if (item.id) await putRecord(model, { ...item, ...(update as AdapterRecord) });
+    }
+    return items.length;
+  },
+  delete: async ({ model, where }: { model: string; where?: AdapterCondition[] }) => {
+    if (!where?.length) return;
+    const [item] = await findMatching(model, where);
+    if (!item?.pk || !item?.sk) return;
+    await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
+  },
+  deleteMany: async ({ model, where }: { model: string; where?: AdapterCondition[] }) => {
+    const items = await findMatching(model, where);
+    for (const item of items) {
+      if (item.pk && item.sk) {
+        await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
+      }
+    }
+    return items.length;
+  },
+  consumeOne: async <T>({ model, where }: { model: string; where?: AdapterCondition[] }) => {
+    if (!where?.length) return null;
+    const [item] = await findMatching(model, where);
+    if (!item?.pk || !item?.sk) return null;
+    try {
+      await documentClient.delete({
+        TableName: TABLE_NAME,
+        Key: { pk: item.pk, sk: item.sk },
+        ConditionExpression: "attribute_exists(#pk)",
+        ExpressionAttributeNames: { "#pk": "pk" },
+      });
+    } catch (err: any) {
+      if (err?.name === "ConditionalCheckFailedException") return null;
+      throw err;
+    }
+    return cleanRecord(item) as T | null;
+  },
+  incrementOne: async <T>({
+    model,
+    where,
+    increment,
+    set,
+  }: {
+    model: string;
+    where?: AdapterCondition[];
+    increment?: Record<string, number>;
+    set?: Record<string, unknown>;
+  }) => {
+    if (!where?.length) return null;
+    const [item] = await findMatching(model, where);
+    if (!item?.id) return null;
+    const next = { ...item, ...set };
+    for (const [field, delta] of Object.entries(increment || {})) {
+      next[field] = (typeof next[field] === "number" ? next[field] : 0) + Number(delta || 0);
+    }
+    return (await putRecord(model, next)) as T;
+  },
+});
 
 export const betterAuthDynamoDBAdapter = createAdapterFactory({
   config: {
@@ -200,97 +389,5 @@ export const betterAuthDynamoDBAdapter = createAdapterFactory({
     supportsNumericIds: false,
     transaction: false,
   },
-  adapter: () => ({
-    create: async <T>({ model, data }: { model: string; data: T }) =>
-      (await putRecord(model, data as AdapterRecord)) as T,
-    findOne: async <T>({ model, where, select }: { model: string; where?: AdapterCondition[]; select?: string[] }) => {
-      const [item] = await findMatching(model, where);
-      return projectRecord(item, select) as T | null;
-    },
-    findMany: async <T>({
-      model,
-      where,
-      limit = 100,
-      offset = 0,
-      sortBy,
-      select,
-    }: {
-      model: string;
-      where?: AdapterCondition[];
-      limit?: number;
-      offset?: number;
-      sortBy?: { field: string; direction?: "asc" | "desc" };
-      select?: string[];
-    }) => {
-      let items = await findMatching(model, where);
-      if (sortBy?.field) {
-        const direction = sortBy.direction === "desc" ? -1 : 1;
-        items = items.sort((a, b) => direction * compareValues(a[sortBy.field], b[sortBy.field]));
-      }
-      return items.slice(offset, offset + limit).map((item) => projectRecord(item, select) as T);
-    },
-    count: async ({ model, where }: { model: string; where?: AdapterCondition[] }) =>
-      (await findMatching(model, where)).length,
-    update: async <T>({ model, where, update }: { model: string; where?: AdapterCondition[]; update: T }) => {
-      const [item] = await findMatching(model, where);
-      if (!item?.id) return null;
-      return (await putRecord(model, { ...item, ...(update as AdapterRecord) })) as T;
-    },
-    updateMany: async <T>({ model, where, update }: { model: string; where?: AdapterCondition[]; update: T }) => {
-      const items = await findMatching(model, where);
-      for (const item of items) {
-        if (item.id) await putRecord(model, { ...item, ...(update as AdapterRecord) });
-      }
-      return items.length;
-    },
-    delete: async ({ model, where }: { model: string; where?: AdapterCondition[] }) => {
-      const [item] = await findMatching(model, where);
-      if (!item?.pk || !item?.sk) return;
-      await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
-    },
-    deleteMany: async ({ model, where }: { model: string; where?: AdapterCondition[] }) => {
-      const items = await findMatching(model, where);
-      for (const item of items) {
-        if (item.pk && item.sk) {
-          await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
-        }
-      }
-      return items.length;
-    },
-    consumeOne: async <T>({ model, where }: { model: string; where?: AdapterCondition[] }) => {
-      const [item] = await findMatching(model, where);
-      if (!item?.pk || !item?.sk) return null;
-      try {
-        await documentClient.delete({
-          TableName: TABLE_NAME,
-          Key: { pk: item.pk, sk: item.sk },
-          ConditionExpression: "attribute_exists(#pk)",
-          ExpressionAttributeNames: { "#pk": "pk" },
-        });
-      } catch (err: any) {
-        if (err?.name === "ConditionalCheckFailedException") return null;
-        throw err;
-      }
-      return cleanRecord(item) as T | null;
-    },
-    incrementOne: async <T>({
-      model,
-      where,
-      increment,
-      set,
-    }: {
-      model: string;
-      where?: AdapterCondition[];
-      increment?: Record<string, number>;
-      set?: Record<string, unknown>;
-    }) => {
-      const [item] = await findMatching(model, where);
-      if (!item?.id) return null;
-      const next = { ...item, ...set };
-      for (const [field, delta] of Object.entries(increment || {})) {
-        next[field] = (typeof next[field] === "number" ? next[field] : 0) + Number(delta || 0);
-      }
-      return (await putRecord(model, next)) as T;
-    },
-  }),
+  adapter: createBetterAuthAdapterImplementation,
 });

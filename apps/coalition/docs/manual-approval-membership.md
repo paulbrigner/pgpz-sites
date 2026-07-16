@@ -44,9 +44,11 @@ Active members can manage topic-group selections from `/groups`. Each topic has 
 ## Required Environment
 
 - `NEXT_PUBLIC_SITE_URL`
-- `NEXTAUTH_URL`
-- `NEXTAUTH_SECRET`
+- `BETTER_AUTH_URL`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE`
+- `EMAIL_TRACKING_SECRET` (or the legacy `NEXTAUTH_SECRET` during migration)
 - `REGION_AWS`
 - `EMAIL_SERVER_HOST`
 - `EMAIL_SERVER_PORT`

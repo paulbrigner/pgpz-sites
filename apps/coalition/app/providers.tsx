@@ -1,7 +1,6 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { SessionProvider } from "next-auth/react";
 import { AccessTracker } from "@/components/access/AccessTracker";
 import { AdminViewModeProvider } from "@/components/admin/AdminViewMode";
 
@@ -12,11 +11,9 @@ export function Providers({ children }: { children: ReactNode }) {
   if (!mounted) return null;
 
   return (
-    <SessionProvider>
-      <AdminViewModeProvider>
-        <AccessTracker />
-        {children}
-      </AdminViewModeProvider>
-    </SessionProvider>
+    <AdminViewModeProvider>
+      <AccessTracker />
+      {children}
+    </AdminViewModeProvider>
   );
 }

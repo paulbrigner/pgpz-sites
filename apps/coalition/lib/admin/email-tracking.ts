@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHmac, randomUUID } from "crypto";
-import { NEXTAUTH_SECRET } from "@/lib/config";
+import { BETTER_AUTH_SECRET, EMAIL_TRACKING_SECRET, NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
 export type EmailMessageType = "newsletter" | "policy_update";
@@ -64,7 +64,10 @@ function openClientFingerprint(clientInfo?: TrackingClientInfo | null) {
 
   if (!material.trim()) return null;
 
-  return createHmac("sha256", NEXTAUTH_SECRET || "pgpz-email-tracking")
+  return createHmac(
+    "sha256",
+    EMAIL_TRACKING_SECRET || NEXTAUTH_SECRET || BETTER_AUTH_SECRET || "pgpz-email-tracking",
+  )
     .update(material)
     .digest("hex")
     .slice(0, 32);

@@ -4,6 +4,7 @@ export const PGPZ_AWS_SECRET_ACCESS_KEY = process.env.PGPZ_AWS_SECRET_ACCESS_KEY
 export const NEXTAUTH_URL = process.env.NEXTAUTH_URL as string;
 export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET as string;
 export const NEXTAUTH_TABLE = process.env.NEXTAUTH_TABLE as string;
+export const EMAIL_TRACKING_SECRET = process.env.EMAIL_TRACKING_SECRET as string | undefined;
 export const BETTER_AUTH_URL = process.env.BETTER_AUTH_URL as string | undefined;
 export const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET as string | undefined;
 export const BETTER_AUTH_TRUSTED_ORIGINS =

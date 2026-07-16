@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
 
     await recordAccessEvent({
       eventType: "page_view",
+      authProvider: session?.authProvider || null,
       userId,
       email: typeof user?.email === "string" ? user.email : null,
       name: user ? getUserDisplayName(user) : null,

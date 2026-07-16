@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   assertLegalAcceptanceForAccountEmail: vi.fn(),
 }));
 
-vi.mock("@/lib/auth-options", () => ({
+vi.mock("@/lib/account-signin-eligibility", () => ({
   assertLegalAcceptanceForAccountEmail: mocks.assertLegalAcceptanceForAccountEmail,
 }));
 

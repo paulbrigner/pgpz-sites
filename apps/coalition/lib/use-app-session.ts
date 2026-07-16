@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { signOut as nextAuthSignOut } from "next-auth/react";
 import { signOut as betterAuthSignOut } from "@/lib/better-auth-client";
-import type { AppSession, AuthSessionProvider } from "@/lib/app-session";
+import type { AppSession } from "@/lib/app-session";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -29,21 +28,14 @@ export function useAppSession() {
     void update();
   }, [update]);
 
-  const signOut = useCallback(
-    async ({ callbackUrl = "/" }: { callbackUrl?: string } = {}) => {
-      const provider = data?.authProvider as AuthSessionProvider | undefined;
-      if (provider === "better-auth") {
-        try {
-          await betterAuthSignOut();
-        } finally {
-          window.location.assign(callbackUrl);
-        }
-        return;
-      }
-      await nextAuthSignOut({ callbackUrl });
-    },
-    [data?.authProvider],
-  );
+  const signOut = useCallback(async ({ callbackUrl = "/" }: { callbackUrl?: string } = {}) => {
+    try {
+      await betterAuthSignOut();
+    } finally {
+      await fetch("/api/auth/session/legacy", { method: "DELETE" }).catch(() => undefined);
+      window.location.assign(callbackUrl);
+    }
+  }, []);
 
   return { data, status, update, signOut };
 }

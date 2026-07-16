@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertLegalAcceptanceForAccountEmail } from "@/lib/auth-options";
+import { assertLegalAcceptanceForAccountEmail } from "@/lib/account-signin-eligibility";
 import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
-import { NEXTAUTH_URL, SITE_URL } from "@/lib/config";
+import { SITE_URL } from "@/lib/config";
 
 const normalizeEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -15,7 +15,7 @@ const resolveRequestOrigin = (request: NextRequest) => {
 };
 
 const buildValidationUrl = (callbackURL: string, requestOrigin: string) => {
-  const baseUrl = (SITE_URL || NEXTAUTH_URL || requestOrigin || "https://coalition.pgpz.org").replace(/\/+$/, "");
+  const baseUrl = (SITE_URL || requestOrigin || "https://coalition.pgpz.org").replace(/\/+$/, "");
   const url = new URL(`${BETTER_AUTH_BASE_PATH}/magic-link/verify`, baseUrl);
   url.searchParams.set("callbackURL", callbackURL || "/");
   return url.toString();
