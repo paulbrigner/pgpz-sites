@@ -12,7 +12,11 @@ vi.mock("@/lib/dynamodb", () => ({
   TABLE_NAME: "TestTable",
 }));
 
-import { deactivateAdminMember, updateAdminMemberProfile } from "@/lib/admin/roster";
+import {
+  deactivateAdminMember,
+  updateAdminMemberAdminAccess,
+  updateAdminMemberProfile,
+} from "@/lib/admin/roster";
 
 describe("admin roster account actions", () => {
   beforeEach(() => {
@@ -122,6 +126,121 @@ describe("admin roster account actions", () => {
       status: 409,
     });
 
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("grants admin access with an explicit confirmation phrase", async () => {
+    const result = await updateAdminMemberAdminAccess({
+      userId: "user-1",
+      adminUserId: "admin-1",
+      isAdmin: true,
+      confirmation: "MAKE ADMIN member@example.com",
+    });
+
+    expect(result).toMatchObject({ userId: "user-1", isAdmin: true });
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Key: { pk: "USER#user-1", sk: "USER#user-1" },
+        ExpressionAttributeValues: expect.objectContaining({
+          ":isAdmin": true,
+          ":currentIsAdmin": false,
+          ":adminUserId": "admin-1",
+        }),
+      }),
+    );
+  });
+
+  it("prevents an administrator from removing their own access", async () => {
+    dynamoMocks.get.mockResolvedValueOnce({
+      Item: { id: "admin-1", email: "admin@example.com", isAdmin: true, accountStatus: "active" },
+    });
+
+    await expect(
+      updateAdminMemberAdminAccess({
+        userId: "admin-1",
+        adminUserId: "admin-1",
+        isAdmin: false,
+        confirmation: "REMOVE ADMIN admin@example.com",
+      }),
+    ).rejects.toMatchObject({
+      message: "You cannot remove your own admin access.",
+      status: 409,
+    });
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("removes another administrator when an active administrator remains", async () => {
+    dynamoMocks.get.mockResolvedValueOnce({
+      Item: { id: "admin-2", email: "other-admin@example.com", isAdmin: true, accountStatus: "active" },
+    });
+    dynamoMocks.scan.mockResolvedValueOnce({
+      Items: [
+        { id: "admin-1", isAdmin: true, accountStatus: "active" },
+        { id: "admin-2", isAdmin: true, accountStatus: "active" },
+      ],
+    });
+
+    const result = await updateAdminMemberAdminAccess({
+      userId: "admin-2",
+      adminUserId: "admin-1",
+      isAdmin: false,
+      confirmation: "REMOVE ADMIN other-admin@example.com",
+    });
+
+    expect(result).toMatchObject({ userId: "admin-2", isAdmin: false });
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ExpressionAttributeValues: expect.objectContaining({
+          ":isAdmin": false,
+          ":currentIsAdmin": true,
+        }),
+      }),
+    );
+  });
+
+  it("preserves the last active administrator", async () => {
+    dynamoMocks.get.mockResolvedValueOnce({
+      Item: { id: "admin-2", email: "other-admin@example.com", isAdmin: true, accountStatus: "active" },
+    });
+    dynamoMocks.scan.mockResolvedValueOnce({
+      Items: [{ id: "admin-2", isAdmin: true, accountStatus: "active" }],
+    });
+
+    await expect(
+      updateAdminMemberAdminAccess({
+        userId: "admin-2",
+        adminUserId: "admin-1",
+        isAdmin: false,
+        confirmation: "REMOVE ADMIN other-admin@example.com",
+      }),
+    ).rejects.toMatchObject({
+      message: "At least one active administrator is required.",
+      status: 409,
+    });
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("prevents granting admin access to a deactivated user", async () => {
+    dynamoMocks.get.mockResolvedValueOnce({
+      Item: {
+        id: "user-1",
+        email: "member@example.com",
+        isAdmin: false,
+        accountStatus: "deactivated",
+      },
+    });
+
+    await expect(
+      updateAdminMemberAdminAccess({
+        userId: "user-1",
+        adminUserId: "admin-1",
+        isAdmin: true,
+        confirmation: "MAKE ADMIN member@example.com",
+      }),
+    ).rejects.toMatchObject({
+      message: "Reactivate this user before granting admin access.",
+      status: 409,
+    });
     expect(dynamoMocks.update).not.toHaveBeenCalled();
   });
 });

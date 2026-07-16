@@ -199,7 +199,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   }, [roster]);
 
   const filteredMembers = useMemo(() => {
-    let members = (roster?.members || []).filter((member) => member.id !== currentAdminId);
+    let members = roster?.members || [];
     const normalized = query.trim().toLowerCase();
     if (normalized) {
       members = members.filter((member) => {
@@ -217,6 +217,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
           member.emailSuppressedReason,
           member.emailBounceReason,
           member.adminNotes,
+          member.isAdmin ? "admin administrator" : "member",
         ]
           .filter(Boolean)
           .join(" ")
@@ -242,7 +243,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
 
       return compare || compareText(a.lastName || a.name || a.email, b.lastName || b.name || b.email);
     });
-  }, [actionsFirst, currentAdminId, query, roster, sortDirection, sortKey]);
+  }, [actionsFirst, query, roster, sortDirection, sortKey]);
 
   const actionNeededCount = useMemo(
     () => (roster?.members || []).filter((member) => member.id !== currentAdminId && memberNeedsAction(member)).length,
@@ -377,6 +378,39 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       setError(err?.message || "Failed to save member profile");
     } finally {
       setProfileSaving((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
+  const setMemberAdminAccess = async (member: AdminMember, isAdmin: boolean) => {
+    const phrase = `${isAdmin ? "MAKE ADMIN" : "REMOVE ADMIN"} ${memberActionTarget(member)}`;
+    const entered = window.prompt(`Type ${phrase} to continue.`);
+    if (entered !== phrase) return;
+
+    const actionKey = `${member.id}:admin_access`;
+    setMemberActionLoading((current) => ({ ...current, [actionKey]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: member.id,
+          action: "set_admin",
+          isAdmin,
+          confirmation: phrase,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to update administrator access");
+      setNotice(
+        `${isAdmin ? "Administrator access granted to" : "Administrator access removed from"} ${member.email || displayName(member)}.`,
+      );
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to update administrator access");
+    } finally {
+      setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
     }
   };
 
@@ -595,6 +629,19 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       </div>
                       <div className="text-xs text-slate-500">
                         <SensitiveDataText value={member.email || "No email"} kind="email" />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {member.isAdmin ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-ink)] px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[var(--zcash-gold)]">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            Admin
+                          </span>
+                        ) : null}
+                        {member.id === currentAdminId ? (
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                            You
+                          </span>
+                        ) : null}
                       </div>
                       {member.linkedinUrl ? (
                         <Link className="text-xs text-[var(--brand-denim)] underline" href={member.linkedinUrl} target="_blank" rel="noopener noreferrer">
@@ -835,6 +882,56 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <dd className="text-right text-slate-800">{formatDate(member.manualApprovalApprovedAt)}</dd>
                             </div>
                           </dl>
+                          <div className="rounded-md border border-[rgba(31,76,111,0.22)] bg-white p-3">
+                            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-denim)]">
+                              Administrator access
+                            </div>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={member.isAdmin}
+                              disabled={
+                                member.id === currentAdminId ||
+                                deactivated ||
+                                memberActionLoading[`${member.id}:admin_access`]
+                              }
+                              onClick={() => setMemberAdminAccess(member, !member.isAdmin)}
+                              className={cn(
+                                "mt-3 flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition",
+                                member.isAdmin
+                                  ? "border-[rgba(245,168,0,0.55)] bg-[var(--zcash-gold-soft)]"
+                                  : "border-slate-200 bg-slate-50",
+                                (member.id === currentAdminId || deactivated) && "cursor-not-allowed opacity-60",
+                              )}
+                            >
+                              <span>
+                                <span className="block text-sm font-semibold text-[var(--brand-ink)]">
+                                  {member.isAdmin ? "Administrator" : "Member"}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  {member.id === currentAdminId
+                                    ? "You cannot remove your own access."
+                                    : deactivated
+                                      ? "Reactivate this user before granting access."
+                                      : "Controls access to the Admin console."}
+                                </span>
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                className={cn(
+                                  "relative h-6 w-11 shrink-0 rounded-full transition",
+                                  member.isAdmin ? "bg-[var(--brand-ink)]" : "bg-slate-300",
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition",
+                                    member.isAdmin ? "left-6" : "left-1",
+                                  )}
+                                />
+                              </span>
+                            </button>
+                          </div>
                           <div className="rounded-md border border-rose-200 bg-white p-3">
                             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">
                               Account controls

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { requireAdminSession } from "@/lib/admin/auth";
+import { AdminMemberActionError, updateAdminMemberAdminAccess } from "@/lib/admin/roster";
 
 export const dynamic = "force-dynamic";
 
@@ -42,23 +43,11 @@ async function findUserByEmail(email: string): Promise<UserRecord | null> {
   };
 }
 
-async function setAdminFlag(userId: string, isAdmin: boolean) {
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: {
-      pk: `USER#${userId}`,
-      sk: `USER#${userId}`,
-    },
-    UpdateExpression: "SET isAdmin = :flag",
-    ExpressionAttributeValues: {
-      ":flag": isAdmin,
-    },
-  });
-}
-
 export async function POST(request: NextRequest) {
+  let adminUserId: string | null = null;
   try {
-    await requireAdminSession();
+    const session = await requireAdminSession();
+    adminUserId = (session.user as any)?.id || null;
   } catch {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
@@ -68,6 +57,7 @@ export async function POST(request: NextRequest) {
     const emailRaw = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const userIdRaw = typeof body?.userId === "string" ? body.userId.trim() : "";
     const makeAdmin = typeof body?.isAdmin === "boolean" ? body.isAdmin : true;
+    const confirmation = typeof body?.confirmation === "string" ? body.confirmation : "";
 
     if (!emailRaw && !userIdRaw) {
       return NextResponse.json({ error: "Provide userId or email" }, { status: 400 });
@@ -81,15 +71,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    await setAdminFlag(user.id, makeAdmin);
+    const result = await updateAdminMemberAdminAccess({
+      userId: user.id,
+      adminUserId,
+      isAdmin: makeAdmin,
+      confirmation,
+    });
 
     return NextResponse.json({
-      ok: true,
-      userId: user.id,
+      ...result,
       email: user.email || null,
-      isAdmin: makeAdmin,
     });
   } catch (err) {
+    if (err instanceof AdminMemberActionError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("Admin adminize error", err);
     return NextResponse.json({ error: "Failed to update admin flag" }, { status: 500 });
   }

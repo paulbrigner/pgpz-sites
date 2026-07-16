@@ -357,6 +357,83 @@ export async function updateAdminMemberProfile({
   };
 }
 
+export async function updateAdminMemberAdminAccess({
+  userId,
+  adminUserId,
+  isAdmin,
+  confirmation,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  isAdmin: boolean;
+  confirmation: string;
+}) {
+  if (!adminUserId) {
+    throw new AdminMemberActionError("Administrator identity is required.", 403);
+  }
+
+  const user = await getUserForAdminAction(userId);
+  if (user.id === adminUserId && !isAdmin) {
+    throw new AdminMemberActionError("You cannot remove your own admin access.", 409);
+  }
+  if (isAdmin && (user.accountStatus === "deactivated" || !!user.deactivatedAt)) {
+    throw new AdminMemberActionError("Reactivate this user before granting admin access.", 409);
+  }
+
+  const currentIsAdmin = user.isAdmin === true;
+  if (currentIsAdmin === isAdmin) {
+    return { ok: true, userId: user.id!, isAdmin };
+  }
+
+  const target = confirmationTarget(user);
+  if (!target) throw new AdminMemberActionError("User not found.", 404);
+  assertConfirmation(confirmation, `${isAdmin ? "MAKE ADMIN" : "REMOVE ADMIN"} ${target}`);
+
+  if (!isAdmin) {
+    const users = await scanUsers();
+    const activeAdminCount = users.filter(
+      (candidate) =>
+        candidate.isAdmin === true &&
+        candidate.accountStatus !== "deactivated" &&
+        !candidate.deactivatedAt,
+    ).length;
+    if (activeAdminCount <= 1) {
+      throw new AdminMemberActionError("At least one active administrator is required.", 409);
+    }
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: userKey(user.id!),
+      UpdateExpression:
+        "SET isAdmin = :isAdmin, adminAccessUpdatedAt = :now, adminAccessUpdatedBy = :adminUserId, updatedAt = :now",
+      ConditionExpression: "attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :currentIsAdmin)",
+      ExpressionAttributeNames: { "#pk": "pk" },
+      ExpressionAttributeValues: {
+        ":isAdmin": isAdmin,
+        ":currentIsAdmin": currentIsAdmin,
+        ":now": now,
+        ":adminUserId": adminUserId,
+      },
+    });
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException") {
+      throw new AdminMemberActionError("Administrator access changed. Refresh and try again.", 409);
+    }
+    throw err;
+  }
+
+  return {
+    ok: true,
+    userId: user.id!,
+    isAdmin,
+    adminAccessUpdatedAt: now,
+    adminAccessUpdatedBy: adminUserId,
+  };
+}
+
 export async function optOutAdminMemberEmail({
   userId,
   adminUserId,
