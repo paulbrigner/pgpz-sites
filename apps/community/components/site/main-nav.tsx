@@ -66,6 +66,7 @@ export function MainNav() {
     ? [
         { key: "home", label: "Home", href: "/" },
         { key: "updates", label: "Updates", href: "/updates" },
+        { key: "zec-shelf", label: "ZEC Shelf", href: "/zec-shelf" },
         { key: "invite", label: "Invite", href: "/settings/profile#member-recruitment" },
         { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
@@ -131,6 +132,14 @@ export function MainNav() {
               <NavigationMenuItem>
                 <NavigationMenuLink className={linkClasses} asChild>
                   <Link href="/updates">Updates</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={linkClasses} asChild>
+                  <Link href="/zec-shelf">ZEC Shelf</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}
