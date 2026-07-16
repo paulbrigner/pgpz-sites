@@ -6,7 +6,7 @@ Membership is activated through automated X social proof. The previous NFT, Unlo
 
 ## Features
 
-- Email magic-link authentication with NextAuth.
+- Email magic-link authentication with Better Auth.
 - DynamoDB-backed user/profile/session persistence.
 - X proof challenge generation and automatic verification.
 - Denormalized active membership state on the user record.
@@ -36,9 +36,11 @@ NEXT_PUBLIC_SITE_URL=https://community.pgpz.org
 REGION_AWS=us-east-1
 PGPZ_AWS_ACCESS_KEY_ID=...
 PGPZ_AWS_SECRET_ACCESS_KEY=...
-NEXTAUTH_URL=https://community.pgpz.org
-NEXTAUTH_SECRET=...
 NEXTAUTH_TABLE=PGPZCommunityNextAuth
+BETTER_AUTH_URL=https://community.pgpz.org
+BETTER_AUTH_SECRET=...
+BETTER_AUTH_TRUSTED_ORIGINS=https://community.pgpz.org
+EMAIL_TRACKING_SECRET=...
 X_BEARER_TOKEN=...
 X_API_BASE_URL=https://api.x.com/2
 X_API_TIMEOUT_MS=15000
@@ -51,6 +53,10 @@ EMAIL_SERVER_USER=...
 EMAIL_SERVER_PASSWORD=...
 EMAIL_FROM="PGPZ Community <no-reply@community.pgpz.org>"
 ```
+
+`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Set `EMAIL_TRACKING_SECRET` to the former `NEXTAUTH_SECRET` value when removing that legacy environment variable so historical email-open fingerprints remain comparable.
+
+See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
 
 ## DynamoDB
 

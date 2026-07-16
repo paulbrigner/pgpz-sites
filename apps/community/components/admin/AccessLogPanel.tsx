@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type AccessEventType = "login" | "page_view";
+type AccessAuthProvider = "better-auth" | "next-auth";
 
 type AccessLogEvent = {
   id: string;
@@ -17,6 +18,7 @@ type AccessLogEvent = {
   email: string | null;
   name: string | null;
   membershipStatus: string | null;
+  authProvider: AccessAuthProvider | null;
   path: string | null;
   title: string | null;
   referrer: string | null;
@@ -28,9 +30,15 @@ type AccessLogResponse = {
   events: AccessLogEvent[];
   meta: {
     returned: number;
+    totalCount: number;
     loginCount: number;
     pageViewCount: number;
     uniqueMemberCount: number;
+    betterAuthCount: number;
+    nextAuthCount: number;
+    unknownAuthProviderCount: number;
+    since: string | null;
+    complete: boolean;
   };
 };
 
@@ -49,6 +57,9 @@ const formatDateTime = (value: string | null) => {
 const eventLabel = (eventType: AccessEventType) =>
   eventType === "login" ? "Login" : "Page view";
 
+const authProviderLabel = (provider: AccessAuthProvider | null) =>
+  provider === "better-auth" ? "Better Auth" : provider === "next-auth" ? "NextAuth" : "Unattributed";
+
 const memberLabel = (event: AccessLogEvent) =>
   event.name || event.email || event.userId || "Unknown member";
 
@@ -64,7 +75,7 @@ export function AccessLogPanel() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit: "200" });
+      const params = new URLSearchParams({ limit: "200", days: "30" });
       if (eventType !== "all") params.set("eventType", eventType);
       const res = await fetch(`/api/admin/access-log?${params.toString()}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
@@ -91,6 +102,7 @@ export function AccessLogPanel() {
         event.name,
         event.email,
         event.membershipStatus,
+        event.authProvider,
         event.path,
         event.title,
         event.referrer,
@@ -106,12 +118,15 @@ export function AccessLogPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {[
-          ["Loaded events", meta?.returned ?? events.length],
+          ["30-day events", meta?.totalCount ?? events.length],
           ["Logins", meta?.loginCount ?? 0],
           ["Page views", meta?.pageViewCount ?? 0],
           ["Members", meta?.uniqueMemberCount ?? 0],
+          ["Better Auth", meta?.betterAuthCount ?? 0],
+          ["NextAuth", meta?.nextAuthCount ?? 0],
+          ["Unattributed", meta?.unknownAuthProviderCount ?? 0],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border bg-white/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</div>
@@ -119,6 +134,12 @@ export function AccessLogPanel() {
           </div>
         ))}
       </div>
+
+      {meta && !meta.complete ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Provider totals are incomplete because the 30-day query exceeded the safety page limit.
+        </div>
+      ) : null}
 
       <div className="rounded-lg border bg-white/85 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -205,6 +226,9 @@ export function AccessLogPanel() {
                     {event.eventType === "login" ? <LogIn className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     {eventLabel(event.eventType)}
                   </span>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {authProviderLabel(event.authProvider)}
+                  </div>
                 </div>
                 <div className="min-w-0 space-y-1">
                   {event.path ? (

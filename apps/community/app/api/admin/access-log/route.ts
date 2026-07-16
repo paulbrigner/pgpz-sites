@@ -12,7 +12,9 @@ export async function GET(request: NextRequest) {
       eventTypeParam === "login" || eventTypeParam === "page_view" ? eventTypeParam : "all";
     const userId = request.nextUrl.searchParams.get("userId") || null;
     const limit = Number(request.nextUrl.searchParams.get("limit") || 200);
-    const accessLog = await listAccessLog({ eventType, userId, limit });
+    const days = Math.min(Math.max(Number(request.nextUrl.searchParams.get("days") || 30), 1), 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const accessLog = await listAccessLog({ eventType, userId, limit, since });
     return NextResponse.json(accessLog);
   } catch (err) {
     if (err instanceof AdminAccessError) {

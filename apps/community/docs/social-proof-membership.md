@@ -21,7 +21,7 @@ Both discovery paths use exact one-time-code searches, exclude reposts and quote
 
 ## Storage
 
-The app uses the existing NextAuth DynamoDB table:
+The app uses the existing shared application DynamoDB table (still configured through the legacy `NEXTAUTH_TABLE` variable):
 
 - `USER#<userId>` records store denormalized membership fields for fast sessions and admin lists.
 - `SOCIAL_PROOF#USER#<userId>` records store challenge and proof audit records.
@@ -49,8 +49,10 @@ That means membership remains active if the public X post is later deleted. The 
 
 ## Required Environment
 
-- `NEXTAUTH_URL`
-- `NEXTAUTH_SECRET`
+- `NEXT_PUBLIC_SITE_URL`
+- `BETTER_AUTH_URL`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE`
 - `REGION_AWS`
 - `X_BEARER_TOKEN`

@@ -15,13 +15,13 @@ import {
   EMAIL_SERVER_PORT,
   EMAIL_SERVER_SECURE,
   EMAIL_SERVER_USER,
-  NEXTAUTH_SECRET,
-  NEXTAUTH_URL,
   SITE_URL,
 } from "@/lib/config";
 import { betterAuthDynamoDBAdapter } from "@/lib/better-auth-dynamodb-adapter";
+import { betterAuthDynamoDBRateLimitStorage } from "@/lib/better-auth-rate-limit";
+import { BETTER_AUTH_CLIENT_IP_HEADER } from "@/lib/better-auth-client-ip";
 import { BETTER_AUTH_BASE_PATH, BETTER_AUTH_EMAIL_PROVIDER_ID } from "@/lib/better-auth-constants";
-import { assertLegalAcceptanceForAccountEmail } from "@/lib/auth-options";
+import { assertLegalAcceptanceForAccountEmail } from "@/lib/account-signin-eligibility";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import { recordAccessEvent } from "@/lib/admin/access-log";
 import { buildMagicLinkEmail } from "@/lib/system-email";
@@ -33,10 +33,10 @@ const trimValue = (value: string | undefined | null) => {
 };
 
 const configuredBaseUrl = () =>
-  trimValue(BETTER_AUTH_URL) || trimValue(NEXTAUTH_URL) || trimValue(SITE_URL) || undefined;
+  trimValue(BETTER_AUTH_URL) || trimValue(SITE_URL) || undefined;
 
 const configuredSecret = () =>
-  trimValue(BETTER_AUTH_SECRET) || trimValue(NEXTAUTH_SECRET) || undefined;
+  trimValue(BETTER_AUTH_SECRET) || undefined;
 
 const configuredTrustedOrigins = () => {
   const origins = new Set<string>();
@@ -181,6 +181,7 @@ async function recordBetterAuthLogin(email: string, betterAuthUserId: string) {
 
   await recordAccessEvent({
     eventType: "login",
+    authProvider: "better-auth",
     userId: user.id ? String(user.id) : betterAuthUserId,
     email: normalizedEmail,
     name: sessionUser.name,
@@ -196,6 +197,12 @@ export const auth = betterAuth({
   database: betterAuthDynamoDBAdapter,
   plugins: betterAuthPlugins(),
   trustedOrigins: configuredTrustedOrigins(),
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: [BETTER_AUTH_CLIENT_IP_HEADER, "x-forwarded-for"],
+      ipv6Subnet: 64,
+    },
+  },
   user: {
     modelName: "better_auth_users",
   },
@@ -208,10 +215,11 @@ export const auth = betterAuth({
   verification: {
     modelName: "better_auth_verifications",
     storeIdentifier: "hashed",
+    disableCleanup: true,
   },
   rateLimit: {
     enabled: true,
-    storage: "memory",
+    customStorage: betterAuthDynamoDBRateLimitStorage,
   },
   databaseHooks: {
     session: {

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DynamoDBAdapter } from "@next-auth/dynamodb-adapter";
 import { randomBytes } from "crypto";
 // Nodemailer types are not installed; import with explicit any for runtime only.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -7,27 +6,22 @@ import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
 import {
   EMAIL_FROM,
-  NEXTAUTH_TABLE,
-  NEXTAUTH_URL,
+  SITE_URL,
 } from "@/lib/config";
-import { documentClient } from "@/lib/dynamodb";
 import { resolveAppSession } from "@/lib/app-session";
 import { findAppUserByEmail } from "@/lib/app-users";
-import { buildEmailServerConfig } from "@/lib/admin/email-transport";
+import { buildEmailServerConfig, isValidEmail } from "@/lib/admin/email-transport";
 import { buildEmailChangeConfirmationEmail } from "@/lib/system-email";
+import { createEmailChangeToken } from "@/lib/email-change-token";
 
 const EMAIL_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
-
-const isValidEmail = (value: string) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(value);
-};
 
 export async function POST(request: NextRequest) {
   try {
     const session = await resolveAppSession(request.headers);
     const userId = session?.user?.id || "";
-    if (!userId) {
+    const betterAuthUserId = session?.authUserId || "";
+    if (!userId || !betterAuthUserId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -36,10 +30,6 @@ export async function POST(request: NextRequest) {
     if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
     }
-
-    const adapter: any = DynamoDBAdapter(documentClient as any, {
-      tableName: NEXTAUTH_TABLE || "NextAuth",
-    });
 
     // Prevent collisions with existing app accounts across both auth providers.
     const existing = await findAppUserByEmail(normalizedEmail);
@@ -50,16 +40,16 @@ export async function POST(request: NextRequest) {
     const identifier = `EMAIL_CHANGE#${userId}`;
     const token = randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + EMAIL_TOKEN_TTL_MS);
-    await adapter.createVerificationToken({
+    await createEmailChangeToken({
       identifier,
       token,
       expires,
       newEmail: normalizedEmail,
       userId,
+      betterAuthUserId,
     });
 
-    const host = request.headers.get("host");
-    const baseUrl = NEXTAUTH_URL || (host ? `https://${host}` : request.nextUrl.origin);
+    const baseUrl = SITE_URL || request.nextUrl.origin;
     const confirmUrl = new URL("/api/profile/confirm-email-change", baseUrl);
     confirmUrl.searchParams.set("token", token);
     confirmUrl.searchParams.set("identifier", identifier);

@@ -95,7 +95,7 @@ function parseArgs(argv: string[]): CliOptions {
     siteUrl: normalizeBaseUrl(
       values.get("site-url") ||
         process.env.NEXT_PUBLIC_SITE_URL ||
-        process.env.NEXTAUTH_URL ||
+        process.env.BETTER_AUTH_URL ||
         "https://community.pgpz.org",
     ),
     greeting: values.get("greeting")?.trim() || "Hi everyone,",
