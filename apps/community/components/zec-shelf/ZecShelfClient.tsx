@@ -342,7 +342,7 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                   className={cn(
                     "grid gap-4 rounded-2xl border border-[rgba(245,168,0,0.24)] bg-white p-4 shadow-[0_18px_38px_-32px_rgba(30,30,30,0.38)] transition hover:border-[rgba(245,168,0,0.5)]",
                     isAdmin
-                      ? "md:grid-cols-[3.5rem_13rem_minmax(0,1fr)] xl:grid-cols-[3.5rem_13rem_minmax(0,1fr)_8.5rem]"
+                      ? "md:grid-cols-[3.5rem_13rem_minmax(0,1fr)] lg:grid-cols-[3.5rem_13rem_minmax(0,1fr)_8.5rem]"
                       : "md:grid-cols-[3.5rem_13rem_minmax(0,1fr)]",
                   )}
                 >
@@ -386,7 +386,7 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                   </div>
 
                   {isAdmin ? (
-                    <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 xl:flex-col xl:justify-center xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
+                    <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
                       <Button size="sm" variant="outline" onClick={() => void checkForUpdates(resource.id)} disabled={checking !== null}>
                         <RefreshCw className={cn("h-3.5 w-3.5", checking === resource.id && "animate-spin")} aria-hidden="true" />
                         Check
