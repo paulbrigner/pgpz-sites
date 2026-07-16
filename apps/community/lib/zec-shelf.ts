@@ -17,6 +17,8 @@ export type ZecShelfResource = {
   lastChangedAt: string | null;
   lastHttpStatus: number | null;
   checkState: ZecShelfCheckState;
+  previewUrl: string | null;
+  previewUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -110,6 +112,8 @@ function fromStored(item: Record<string, unknown>): ZecShelfResource {
     lastChangedAt: typeof item.lastChangedAt === "string" ? item.lastChangedAt : null,
     lastHttpStatus: typeof item.lastHttpStatus === "number" ? item.lastHttpStatus : null,
     checkState: isCheckState(item.checkState) ? item.checkState : "unchecked",
+    previewUrl: typeof item.previewUrl === "string" ? item.previewUrl : null,
+    previewUpdatedAt: typeof item.previewUpdatedAt === "string" ? item.previewUpdatedAt : null,
     createdAt: String(item.createdAt),
     updatedAt: String(item.updatedAt),
   };
@@ -143,6 +147,8 @@ async function seedResourcesIfEmpty() {
       lastChangedAt: null,
       lastHttpStatus: null,
       checkState: "unchecked",
+      previewUrl: null,
+      previewUpdatedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -217,6 +223,8 @@ export async function createZecShelfResource(input: Partial<ZecShelfResourceDraf
     lastChangedAt: null,
     lastHttpStatus: null,
     checkState: "unchecked",
+    previewUrl: null,
+    previewUpdatedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -243,6 +251,8 @@ export async function updateZecShelfResource(id: string, input: Partial<ZecShelf
       lastChangedAt: null,
       lastHttpStatus: null,
       checkState: "unchecked" as const,
+      previewUrl: null,
+      previewUpdatedAt: null,
     } : {}),
   };
   await documentClient.put({ TableName: TABLE_NAME, Item: toStored(resource) });

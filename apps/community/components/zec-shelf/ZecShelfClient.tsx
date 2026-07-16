@@ -4,7 +4,9 @@ import Image from "next/image";
 import React, { FormEvent, useMemo, useState } from "react";
 import {
   ArrowDown,
+  ArrowDownToLine,
   ArrowUp,
+  ArrowUpToLine,
   ExternalLink,
   Library,
   Pencil,
@@ -66,6 +68,23 @@ function hostFor(url: string) {
 
 function previewFor(url: string) {
   return SITE_PREVIEWS[hostFor(url)] || null;
+}
+
+type MoveDestination = -1 | 1 | "top" | "bottom";
+
+export function reorderClientResources(resources: ZecShelfResource[], id: string, destination: MoveDestination) {
+  const index = resources.findIndex((resource) => resource.id === id);
+  if (index < 0) return resources;
+  const targetIndex = destination === "top"
+    ? 0
+    : destination === "bottom"
+      ? resources.length - 1
+      : index + destination;
+  if (targetIndex < 0 || targetIndex >= resources.length || targetIndex === index) return resources;
+  const reordered = [...resources];
+  const [resource] = reordered.splice(index, 1);
+  reordered.splice(targetIndex, 0, resource);
+  return reordered;
 }
 
 function formatRelativeDate(value: string | null) {
@@ -219,12 +238,9 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
     }
   }
 
-  async function moveResource(id: string, direction: -1 | 1) {
-    const index = resources.findIndex((resource) => resource.id === id);
-    const targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= resources.length) return;
-    const reordered = [...resources];
-    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+  async function moveResource(id: string, destination: MoveDestination) {
+    const reordered = reorderClientResources(resources, id, destination);
+    if (reordered === resources) return;
     setResources(reordered);
     try {
       await request("/api/zec-shelf/resources", {
@@ -285,7 +301,7 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
             <h2 id="zec-shelf-heading" className="mt-2 text-3xl font-semibold text-[var(--brand-ink)]">Resource library</h2>
           </div>
           {isAdmin ? (
-            <Button variant="outline" onClick={() => void checkForUpdates()} disabled={checking !== null || resources.length === 0}>
+            <Button variant="outline" title="Check page content and refresh previews when needed" onClick={() => void checkForUpdates()} disabled={checking !== null || resources.length === 0}>
               <RefreshCw className={cn("h-4 w-4", checking === "all" && "animate-spin")} aria-hidden="true" />
               {checking === "all" ? "Checking sites…" : "Check for updates"}
             </Button>
@@ -334,7 +350,7 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
           <div className="mt-5 space-y-4">
             {visible.map((resource) => {
               const actualIndex = resources.findIndex((item) => item.id === resource.id);
-              const preview = previewFor(resource.url);
+              const preview = resource.previewUrl || previewFor(resource.url);
               const state = STATE_COPY[resource.checkState];
               return (
                 <article
@@ -349,12 +365,18 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                   <div className="flex items-center justify-between gap-2 md:flex-col md:justify-center">
                     <span className="font-mono text-sm font-semibold text-slate-400">{String(actualIndex + 1).padStart(2, "0")}</span>
                     {isAdmin ? (
-                      <div className="flex gap-1 md:flex-col">
+                      <div className="grid grid-cols-4 gap-1 md:grid-cols-1">
+                        <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[var(--zcash-gold)] hover:text-[var(--brand-denim)] disabled:cursor-not-allowed disabled:opacity-30" onClick={() => void moveResource(resource.id, "top")} disabled={actualIndex === 0 || category !== "All resources" || Boolean(query)} aria-label={`Move ${resource.title} to top`}>
+                          <ArrowUpToLine className="h-4 w-4" aria-hidden="true" />
+                        </button>
                         <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[var(--zcash-gold)] hover:text-[var(--brand-denim)] disabled:cursor-not-allowed disabled:opacity-30" onClick={() => void moveResource(resource.id, -1)} disabled={actualIndex === 0 || category !== "All resources" || Boolean(query)} aria-label={`Move ${resource.title} up`}>
                           <ArrowUp className="h-4 w-4" aria-hidden="true" />
                         </button>
                         <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[var(--zcash-gold)] hover:text-[var(--brand-denim)] disabled:cursor-not-allowed disabled:opacity-30" onClick={() => void moveResource(resource.id, 1)} disabled={actualIndex === resources.length - 1 || category !== "All resources" || Boolean(query)} aria-label={`Move ${resource.title} down`}>
                           <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-[var(--zcash-gold)] hover:text-[var(--brand-denim)] disabled:cursor-not-allowed disabled:opacity-30" onClick={() => void moveResource(resource.id, "bottom")} disabled={actualIndex === resources.length - 1 || category !== "All resources" || Boolean(query)} aria-label={`Move ${resource.title} to bottom`}>
+                          <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </div>
                     ) : null}
@@ -382,12 +404,13 @@ export function ZecShelfClient({ initialResources, isAdmin }: { initialResources
                       <span className="font-medium text-[var(--brand-denim)]">{hostFor(resource.url)}</span>
                       {resource.lastChangedAt ? <><span aria-hidden="true">•</span><span>Last update observed {formatRelativeDate(resource.lastChangedAt)}</span></> : null}
                       {isAdmin && resource.lastCheckedAt ? <><span aria-hidden="true">•</span><span>Checked {formatRelativeDate(resource.lastCheckedAt)}</span></> : null}
+                      {isAdmin && resource.previewUpdatedAt ? <><span aria-hidden="true">•</span><span>Preview refreshed {formatRelativeDate(resource.previewUpdatedAt)}</span></> : null}
                     </div>
                   </div>
 
                   {isAdmin ? (
                     <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-                      <Button size="sm" variant="outline" onClick={() => void checkForUpdates(resource.id)} disabled={checking !== null}>
+                      <Button size="sm" variant="outline" title="Check page content and refresh its preview when needed" onClick={() => void checkForUpdates(resource.id)} disabled={checking !== null}>
                         <RefreshCw className={cn("h-3.5 w-3.5", checking === resource.id && "animate-spin")} aria-hidden="true" />
                         Check
                       </Button>

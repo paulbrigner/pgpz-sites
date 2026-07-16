@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ZecShelfClient } from "@/components/zec-shelf/ZecShelfClient";
+import { reorderClientResources, ZecShelfClient } from "@/components/zec-shelf/ZecShelfClient";
 import type { ZecShelfResource } from "@/lib/zec-shelf";
 
 const RESOURCE: ZecShelfResource = {
@@ -16,6 +16,8 @@ const RESOURCE: ZecShelfResource = {
   lastChangedAt: "2026-07-15T10:00:00.000Z",
   lastHttpStatus: 200,
   checkState: "same",
+  previewUrl: null,
+  previewUpdatedAt: null,
   createdAt: "2026-07-14T10:00:00.000Z",
   updatedAt: "2026-07-16T10:00:00.000Z",
 };
@@ -41,5 +43,25 @@ describe("ZecShelfClient permissions", () => {
     expect(screen.getByRole("button", { name: /^Edit$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Remove$/i })).toBeInTheDocument();
     expect(screen.getByText("No change")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Move Zcash Community to top/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Move Zcash Community to bottom/i })).toBeInTheDocument();
+  });
+});
+
+describe("ZEC Shelf reordering", () => {
+  const resources = [
+    { ...RESOURCE, id: "first", title: "First" },
+    { ...RESOURCE, id: "second", title: "Second", position: 1 },
+    { ...RESOURCE, id: "third", title: "Third", position: 2 },
+  ];
+
+  it("moves an entry directly to the top", () => {
+    expect(reorderClientResources(resources, "third", "top").map((resource) => resource.id))
+      .toEqual(["third", "first", "second"]);
+  });
+
+  it("moves an entry directly to the bottom", () => {
+    expect(reorderClientResources(resources, "first", "bottom").map((resource) => resource.id))
+      .toEqual(["second", "third", "first"]);
   });
 });

@@ -85,6 +85,44 @@ async function responseFingerprint(response: Response) {
     .digest("hex");
 }
 
+function isMicrolinkAsset(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "microlink.io" || url.hostname.endsWith(".microlink.io"));
+  } catch {
+    return false;
+  }
+}
+
+async function capturePreview(value: string) {
+  const apiKey = process.env.MICROLINK_API_KEY?.trim();
+  const endpoint = new URL(apiKey ? "https://pro.microlink.io/" : "https://api.microlink.io/");
+  endpoint.searchParams.set("url", value);
+  endpoint.searchParams.set("screenshot.type", "jpeg");
+  endpoint.searchParams.set("viewport.width", "960");
+  endpoint.searchParams.set("viewport.height", "600");
+  endpoint.searchParams.set("viewport.deviceScaleFactor", "1");
+  endpoint.searchParams.set("meta", "false");
+
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "PGPZ-ZEC-Shelf-Preview/1.0",
+      ...(apiKey ? { "x-api-key": apiKey } : {}),
+    },
+    signal: AbortSignal.timeout(20_000),
+    cache: "no-store",
+  });
+  const result = await response.json().catch(() => ({})) as {
+    data?: { screenshot?: { url?: string } };
+    message?: string;
+  };
+  if (!response.ok) throw new Error(result.message || `Preview capture returned ${response.status}.`);
+  const previewUrl = result.data?.screenshot?.url;
+  if (!previewUrl || !isMicrolinkAsset(previewUrl)) throw new Error("Preview capture did not return a usable image.");
+  return previewUrl;
+}
+
 async function checkOne(resource: ZecShelfResource) {
   const checkedAt = new Date().toISOString();
   try {
@@ -93,6 +131,19 @@ async function checkOne(resource: ZecShelfResource) {
     const signature = await responseFingerprint(response);
     const firstCheck = !resource.contentSignature;
     const changed = Boolean(resource.contentSignature && resource.contentSignature !== signature);
+    let previewUrl = resource.previewUrl;
+    let previewUpdatedAt = resource.previewUpdatedAt;
+    let previewRefreshed = false;
+    let previewError: string | null = null;
+    if (firstCheck || changed || !previewUrl) {
+      try {
+        previewUrl = await capturePreview(resource.url);
+        previewUpdatedAt = checkedAt;
+        previewRefreshed = true;
+      } catch (error) {
+        previewError = error instanceof Error ? error.message : "Preview capture failed.";
+      }
+    }
     const next = {
       ...resource,
       contentSignature: signature,
@@ -100,10 +151,12 @@ async function checkOne(resource: ZecShelfResource) {
       lastChangedAt: changed ? checkedAt : resource.lastChangedAt,
       lastHttpStatus: response.status,
       checkState: firstCheck ? "baseline" as const : changed ? "changed" as const : "same" as const,
+      previewUrl,
+      previewUpdatedAt,
       updatedAt: checkedAt,
     };
     await saveZecShelfCheckResult(next);
-    return { id: resource.id, ok: true, state: next.checkState };
+    return { id: resource.id, ok: true, state: next.checkState, previewRefreshed, previewError };
   } catch (error) {
     await saveZecShelfCheckResult({
       ...resource,
