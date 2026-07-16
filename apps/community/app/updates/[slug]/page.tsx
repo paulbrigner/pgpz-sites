@@ -8,6 +8,8 @@ import {
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
 import { getMemberAccess } from "@/lib/member-access";
+import { isEffectiveAdmin } from "@/lib/admin/member-preview";
+import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import { isPgpzProgressSummarySection, progressSummaryItems } from "@/lib/policy-update-progress-summary";
 import {
@@ -428,7 +430,8 @@ export default async function UpdateDetailPage({ params }: Props) {
   if (!update) notFound();
 
   const access = await getMemberAccess();
-  const isAdmin = access.user?.isAdmin === true;
+  const viewAsMember = await isMemberPreviewRequest();
+  const isAdmin = isEffectiveAdmin(access.user?.isAdmin === true, viewAsMember);
   if (!access.authenticated) {
     redirect(`/signin?callbackUrl=${encodeURIComponent(update.portalPath)}`);
   }

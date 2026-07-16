@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2, Menu, X } from "lucide-react";
+import { Eye, Loader2, Menu, X } from "lucide-react";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
 import { useAppSession } from "@/lib/use-app-session";
+import { useAdminViewMode } from "@/components/admin/AdminViewMode";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
   const path = pathname || "/";
@@ -23,9 +24,9 @@ const sanitizeAuthCallback = (pathname: string | null, query: string | null) => 
 };
 
 export function MainNav() {
-  const { data: session, status, signOut } = useAppSession();
+  const { status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
-  const isAdmin = !!(session?.user as any)?.isAdmin;
+  const { actualIsAdmin, effectiveIsAdmin: isAdmin, viewAsMember, setViewAsMember } = useAdminViewMode();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -56,6 +57,11 @@ export function MainNav() {
   }, [pathname, status]);
 
   const closeMobileMenu = () => setMobileOpen(false);
+  const enterMemberView = () => {
+    setViewAsMember(true);
+    closeMobileMenu();
+    router.push("/");
+  };
   const mobileMenuId = "main-nav-mobile-menu";
   const mobileToggleClasses =
     "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(245,168,0,0.34)] bg-[rgba(245,168,0,0.12)] text-white transition hover:border-[rgba(245,168,0,0.55)] hover:bg-[rgba(245,168,0,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)]";
@@ -80,6 +86,9 @@ export function MainNav() {
                 router.push("/admin");
               },
             }] : []),
+        ...(actualIsAdmin && !viewAsMember
+          ? [{ key: "member-view", label: "View as member", action: enterMemberView }]
+          : []),
         { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
         {
           key: "logout",
@@ -171,6 +180,15 @@ export function MainNav() {
                   }}
                 >
                   Admin
+                </button>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && actualIsAdmin && !viewAsMember ? (
+              <NavigationMenuItem>
+                <button type="button" className={linkClasses} onClick={enterMemberView}>
+                  <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  View as member
                 </button>
               </NavigationMenuItem>
             ) : null}

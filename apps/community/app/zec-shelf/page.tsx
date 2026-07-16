@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { getMemberAccess } from "@/lib/member-access";
 import { canManageZecShelf, canViewZecShelf } from "@/lib/zec-shelf-access";
 import { getZecShelfResources } from "@/lib/zec-shelf";
+import { isEffectiveAdmin } from "@/lib/admin/member-preview";
+import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +43,15 @@ function MembershipRequired() {
 export default async function ZecShelfPage() {
   const access = await getMemberAccess();
   if (!access.authenticated) redirect(`/signin?callbackUrl=${encodeURIComponent("/zec-shelf")}`);
-  if (!canViewZecShelf(access.user)) return <MembershipRequired />;
+  const viewAsMember = await isMemberPreviewRequest();
+  const effectiveUser = access.user
+    ? {
+        ...access.user,
+        isAdmin: isEffectiveAdmin(access.user.isAdmin === true, viewAsMember),
+      }
+    : access.user;
+  if (!canViewZecShelf(effectiveUser)) return <MembershipRequired />;
 
   const resources = await getZecShelfResources();
-  return <ZecShelfClient initialResources={resources} isAdmin={canManageZecShelf(access.user)} />;
+  return <ZecShelfClient initialResources={resources} isAdmin={canManageZecShelf(effectiveUser)} />;
 }
