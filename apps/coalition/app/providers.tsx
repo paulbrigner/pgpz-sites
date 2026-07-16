@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { SessionProvider } from "next-auth/react";
 import { AccessTracker } from "@/components/access/AccessTracker";
+import { AdminViewModeProvider } from "@/components/admin/AdminViewMode";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -12,8 +13,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <SessionProvider>
-      <AccessTracker />
-      {children}
+      <AdminViewModeProvider>
+        <AccessTracker />
+        {children}
+      </AdminViewModeProvider>
     </SessionProvider>
   );
 }

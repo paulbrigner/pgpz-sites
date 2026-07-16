@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Providers } from "./providers";
 import { MainNav } from "@/components/site/main-nav";
+import { AdminViewModeBanner } from "@/components/admin/AdminViewMode";
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className="font-sans min-h-screen bg-background text-foreground">
         <Providers>
           <MainNav />
+          <AdminViewModeBanner />
           <main className="relative min-h-[calc(100vh-3.5rem)] bg-[linear-gradient(180deg,var(--brand-ice)_0%,#ffffff_72%)] pb-16 pt-8">
             {children}
           </main>
