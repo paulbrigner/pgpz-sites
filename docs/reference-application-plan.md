@@ -219,3 +219,6 @@ checklist passes, `reference.pgpz.org` passes its post-DNS smoke, email and
 mutations remain disabled, the release record proves branded production stayed
 unchanged, and the rollback/teardown path has been rehearsed without touching a
 branded resource.
+
+The first protected public demonstration is recorded in
+[`reference-deployment-2026-07-17.md`](reference-deployment-2026-07-17.md).
