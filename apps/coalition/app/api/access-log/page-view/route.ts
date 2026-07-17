@@ -1,0 +1,36 @@
+import { NextRequest, NextResponse } from "next/server";
+import { resolveAppSession } from "@/lib/app-session";
+import { getAccessLogRequestMetadata, recordAccessEvent } from "@/lib/admin/access-log";
+import { getUserDisplayName } from "@/lib/user-display-name";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await resolveAppSession(request.headers);
+    const user = session?.user || null;
+    const userId = typeof user?.id === "string" ? user.id : "";
+    if (!userId) return new NextResponse(null, { status: 204 });
+
+    const body = await request.json().catch(() => ({}));
+    const metadata = getAccessLogRequestMetadata(request.headers);
+
+    await recordAccessEvent({
+      eventType: "page_view",
+      authProvider: session?.authProvider || null,
+      userId,
+      email: typeof user?.email === "string" ? user.email : null,
+      name: user ? getUserDisplayName(user) : null,
+      membershipStatus: typeof user?.membershipStatus === "string" ? user.membershipStatus : null,
+      path: typeof body?.path === "string" ? body.path : null,
+      title: typeof body?.title === "string" ? body.title : null,
+      referrer: typeof body?.referrer === "string" ? body.referrer : null,
+      ...metadata,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Failed to record access page view", err);
+    return NextResponse.json({ error: "Failed to record page view" }, { status: 500 });
+  }
+}

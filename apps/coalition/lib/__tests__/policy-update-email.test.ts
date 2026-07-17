@@ -1,0 +1,248 @@
+import { describe, expect, it } from "vitest";
+import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
+import { getLatestPolicyUpdate } from "@/lib/policy-updates";
+
+const weeklyUpdate = getLatestPolicyUpdate("weekly");
+const specialUpdate = getLatestPolicyUpdate("special");
+
+describe("buildPolicyUpdateEmail", () => {
+  it("greets recipients by first name", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      {
+        email: "paul@example.com",
+        name: "Paul Brigner",
+        firstName: "Paul",
+        lastName: "Brigner",
+      },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain("Hi Paul,");
+    expect(built.html).toContain("Did someone forward you this email?");
+    expect(built.html).toContain('src="https://coalition.pgpz.org/coalition-join-qr.png"');
+    expect(built.text).toContain("Hi Paul,");
+    expect(built.text).toContain("Request PGPZ Coalition access to receive updates directly");
+  });
+
+  it("uses only the stored first name field for greetings", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      {
+        email: "paul@example.com",
+        firstName: "Paul",
+        lastName: "Brigner",
+      },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain("Hi Paul,");
+    expect(built.text).toContain("Hi Paul,");
+    expect(built.html).not.toContain("Hi Paul Brigner,");
+    expect(built.text).not.toContain("Hi Paul Brigner,");
+  });
+
+  it("falls back when no profile name is available", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      { email: "unknown@example.com" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain("Hi there,");
+    expect(built.text).toContain("Hi there,");
+  });
+
+  it("turns terse topic-list summaries into a proper email intro", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        summary: "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements",
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      "This week&#39;s PGPZ Coalition policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+    expect(built.text).toContain(
+      "This week's PGPZ Coalition policy memo covers FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements.",
+    );
+  });
+
+  it("renders policy update tables in HTML and text email bodies", () => {
+    if (!specialUpdate) throw new Error("Missing special update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      specialUpdate,
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain("Status as of June 12, 2026");
+    expect(built.html).toContain("Digital Asset Market Clarity Act");
+    expect(built.text).toContain("Development | Status as of June 12, 2026 | Relevance to the Zcash ecosystem");
+    expect(built.text).toContain("SEC closure of the Zcash Foundation inquiry");
+  });
+
+  it("preserves embedded policy update links in HTML and text email bodies", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      { email: "paul@example.com", name: "Paul Brigner", firstName: "Paul", lastName: "Brigner" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain('href="https://x.com/paulbrigner/thread/2064698213236408727"');
+    expect(built.html).toContain(">June 10 thread</a>");
+    expect(built.html).toContain('href="https://x.com/paulbrigner/status/2060327543387857190?s=20"');
+    expect(built.text).toContain(
+      "June 10 thread (https://x.com/paulbrigner/thread/2064698213236408727)",
+    );
+    expect(built.text).toContain(
+      "EU correction post (https://x.com/paulbrigner/status/2060327543387857190?s=20)",
+    );
+    expect(built.text).toContain("The record stays open for written submissions through June 23.");
+  });
+
+  it("renders policy update section images through unauthenticated email asset URLs", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "X Post of the Week",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/x-josh-swihart.png",
+                alt: "Josh Swihart X post screenshot",
+                caption: "Embedded X post screenshot from the source memo.",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png"',
+    );
+    expect(built.html).not.toContain("Embedded X post screenshot from the source memo.");
+    expect(built.html).not.toContain("cid:");
+    expect(built.html).not.toContain(
+      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/assets/x-josh-swihart.png"',
+    );
+    expect(built.text).toContain("[Image: Josh Swihart X post screenshot]");
+    expect(built.text).not.toContain("Embedded X post screenshot from the source memo.");
+  });
+
+  it("formats relevant post markers and does not link screenshots to section fallback links", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "Policy development",
+            body: ["Relevant Posts:"],
+            links: [{ text: "Policy development", href: "https://example.com/article" }],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/relevant-post-page-3-1.png",
+                alt: "Relevant post screenshot from page 3",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain(">Relevant Posts</h2>");
+    expect(built.html).toContain("relevant-post-page-3-1.png");
+    expect(built.html).not.toContain(
+      '<a href="https://example.com/article" style="display:inline-block;text-decoration:none;">',
+    );
+    expect(built.text).toContain("Relevant Posts:");
+    expect(built.text).toContain("[Image: Relevant post screenshot from page 3]");
+    expect(built.text).not.toContain("[Image: Relevant post screenshot from page 3] https://example.com/article");
+  });
+
+  it("links known June 22 relevant post screenshots to their source X posts", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "2026-06-22-weekly-policy-memo",
+        sections: [
+          {
+            heading: "Action Items",
+            body: ["Relevant Posts:"],
+            images: [
+              {
+                src: "/api/policy-updates/2026-06-22-weekly-policy-memo/assets/relevant-post-page-4-1.png",
+                alt: "Relevant post screenshot from page 4",
+                width: 1200,
+                height: 800,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html).toContain('href="https://x.com/SummerMersinger/status/2069562907621536034"');
+    expect(built.text).toContain(
+      "[Image: Relevant post screenshot from page 4] https://x.com/SummerMersinger/status/2069562907621536034",
+    );
+  });
+
+  it("adds tracked links, an open pixel, and unsubscribe URL when tracking is enabled", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      weeklyUpdate,
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+      {
+        trackingId: "policy-track-123",
+        trackLinks: true,
+        includeOpenPixel: true,
+        includeUnsubscribe: true,
+      },
+    );
+
+    expect(built.html).toContain("/api/email/open/policy-track-123.png");
+    expect(built.html).toContain(
+      "/api/email/click/policy-track-123?url=https%3A%2F%2Fcoalition.pgpz.org%2Fupdates%2F2026-06-08-weekly-policy-memo",
+    );
+    expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
+    expect(built.text).toContain("Unsubscribe: https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123");
+  });
+});
