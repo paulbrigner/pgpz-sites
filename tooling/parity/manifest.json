@@ -198,6 +198,10 @@
         "sha256": "5f98df2a9523cf0dc03ab0ab84940cb3a15c2a605935262297ce86d522b4460e"
       },
       {
+        "path": "lib/__tests__/aws-s3-sdk.test.ts",
+        "sha256": "42b0dbb03b873b3539bb3fe79c13a38b1f61404c150585c202ed420cd0c5316b"
+      },
+      {
         "path": "lib/__tests__/better-auth-client-ip.test.ts",
         "sha256": "780d29a535cab9d1ba35c8dc67969e9b6563b6b69bc96ce8398b8ea4636a065b"
       },
@@ -212,6 +216,10 @@
       {
         "path": "lib/__tests__/email-log.test.ts",
         "sha256": "6423a477721d2c314e90b1b46bb8b125579d768a6cab731e5b3163e9945fbed6"
+      },
+      {
+        "path": "lib/__tests__/nodemailer-security.test.ts",
+        "sha256": "a26a2aa41a4934663ee0316f1acf36ac03bdf2b41c32c452fb4f7416120bb7af"
       },
       {
         "path": "lib/__tests__/policy-update-subject.test.ts",

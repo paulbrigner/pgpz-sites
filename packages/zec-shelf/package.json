@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/lib-dynamodb": "^3.864.0",
+    "@aws-sdk/lib-dynamodb": "3.1089.0",
     "clsx": "^2.1.1",
     "ipaddr.js": "^1.9.1",
     "lucide-react": "^0.539.0",
