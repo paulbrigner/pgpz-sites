@@ -149,9 +149,25 @@ a package, both branded applications build from a clean root install, both
 production cutovers pass their smoke checks, and no migration rollback is in
 progress.
 
+The `2026-07-17` cutover record now satisfies those gates, so implementation and
+CI integration may proceed while the original repositories remain available
+for their independent 30-day rollback window. Reference work must not change a
+branded application's repository connection, app root, build specification,
+webhook, environment, domain, or runtime resource.
+
 The reference application is a runnable CI proving ground and starter, not an
 initial third deployment. Its full scope and acceptance criteria are recorded
 in [`reference-application-plan.md`](reference-application-plan.md). Do not
 start a `create-pgpz-site` generator until that app has demonstrated that its
 public configuration surface is sufficient without branded imports or copied
 application internals.
+
+An optional public `reference.pgpz.org` demonstration is a later,
+non-production release phase—not a third branded production deployment. Before
+DNS is attached, it must pass the pre-DNS checklist in
+[`reference-application-plan.md`](reference-application-plan.md), use a
+dedicated reference-only Amplify application/build definition, keep email and
+all mutations disabled, and prove by infrastructure diff that neither branded
+application changed. Any reference rollback or teardown is confined to
+reference-scoped resources; it must never reconnect or redeploy Community or
+Coalition.

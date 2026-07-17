@@ -1,0 +1,43 @@
+{
+  "name": "pgpz-reference",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint app components config content --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@pgpz/core": "0.1.0",
+    "@pgpz/ui": "0.1.0",
+    "@pgpz/zec-shelf": "0.1.0",
+    "lucide-react": "^0.539.0",
+    "next": "^15.5.18",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.12",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "^24.2.1",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "eslint": "9.36.0",
+    "eslint-config-next": "15.5.18",
+    "jsdom": "^26.1.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.12",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

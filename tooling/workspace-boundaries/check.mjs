@@ -101,6 +101,97 @@ function resolvesIntoApps(sourcePath, specifier) {
   return false;
 }
 
+const brandedApplicationPaths = [
+  resolve(repositoryRoot, "apps/community"),
+  resolve(repositoryRoot, "apps/coalition"),
+];
+
+function resolvesIntoBrandedApplication(sourcePath, specifier) {
+  if (
+    specifier === "apps/community" ||
+    specifier.startsWith("apps/community/") ||
+    specifier === "apps/coalition" ||
+    specifier.startsWith("apps/coalition/")
+  ) {
+    return true;
+  }
+
+  if (!specifier.startsWith(".") && !isAbsolute(specifier)) return false;
+  const resolvedPath = specifier.startsWith(".")
+    ? resolve(dirname(sourcePath), specifier)
+    : resolve(specifier);
+  return brandedApplicationPaths.some((applicationPath) =>
+    isWithin(resolvedPath, applicationPath),
+  );
+}
+
+function validatePathAliases(workspace, declaredDependencies) {
+  const tsconfigPath = resolve(workspace.path, "tsconfig.json");
+  if (!existsSync(tsconfigPath)) return;
+
+  const compilerOptions = readJson(tsconfigPath).compilerOptions || {};
+  const paths = compilerOptions.paths;
+  if (!paths || typeof paths !== "object") return;
+
+  const aliasBase = resolve(workspace.path, compilerOptions.baseUrl || ".");
+  const isSharedPackage = workspace.relativePath.startsWith(`packages${sep}`);
+  const isReferenceApplication =
+    workspace.relativePath === ["apps", "reference"].join(sep);
+
+  for (const [alias, targets] of Object.entries(paths)) {
+    if (!Array.isArray(targets)) {
+      failures.push(`${workspace.relativePath}/tsconfig.json alias ${alias} must be an array`);
+      continue;
+    }
+
+    for (const target of targets) {
+      if (typeof target !== "string") {
+        failures.push(
+          `${workspace.relativePath}/tsconfig.json alias ${alias} has a non-string target`,
+        );
+        continue;
+      }
+
+      const resolvedTarget = resolve(aliasBase, target.replaceAll("*", "__alias__"));
+      if (
+        isSharedPackage &&
+        isWithin(resolvedTarget, resolve(repositoryRoot, "apps"))
+      ) {
+        failures.push(
+          `${workspace.relativePath}/tsconfig.json alias ${alias} resolves into application-owned code`,
+        );
+      }
+      if (
+        isReferenceApplication &&
+        !isWithin(resolvedTarget, workspace.path) &&
+        !isWithin(resolvedTarget, resolve(repositoryRoot, "packages"))
+      ) {
+        failures.push(
+          `${workspace.relativePath}/tsconfig.json alias ${alias} resolves outside ` +
+            "the reference application and shared packages",
+        );
+      }
+      if (
+        isReferenceApplication &&
+        isWithin(resolvedTarget, resolve(repositoryRoot, "packages"))
+      ) {
+        const targetWorkspace = workspaces.find(({ path }) =>
+          isWithin(resolvedTarget, path),
+        );
+        if (
+          targetWorkspace &&
+          !declaredDependencies.has(targetWorkspace.manifest.name)
+        ) {
+          failures.push(
+            `${workspace.relativePath}/tsconfig.json alias ${alias} targets ` +
+              `undeclared shared package ${targetWorkspace.manifest.name}`,
+          );
+        }
+      }
+    }
+  }
+}
+
 const workspacePatterns = Array.isArray(rootManifest.workspaces)
   ? rootManifest.workspaces
   : rootManifest.workspaces?.packages;
@@ -188,6 +279,10 @@ for (const workspace of workspaces) {
     ].flatMap((dependencies) => Object.keys(dependencies || {})),
   );
   const isSharedPackage = workspace.relativePath.startsWith(`packages${sep}`);
+  const isReferenceApplication =
+    workspace.relativePath === ["apps", "reference"].join(sep);
+
+  validatePathAliases(workspace, declaredDependencies);
 
   for (const sourcePath of gitFiles(workspace.path)) {
     const sourceRelative = relative(repositoryRoot, sourcePath);
@@ -202,6 +297,15 @@ for (const workspace of workspaces) {
       ) {
         failures.push(
           `${sourceRelative} imports application-owned code via ${JSON.stringify(specifier)}`,
+        );
+      }
+
+      if (
+        isReferenceApplication &&
+        resolvesIntoBrandedApplication(sourcePath, specifier)
+      ) {
+        failures.push(
+          `${sourceRelative} imports branded application code via ${JSON.stringify(specifier)}`,
         );
       }
 

@@ -8,11 +8,16 @@ workflows, data, sessions, environment variables, domains, or release controls.
 ## Repository layout
 
 ```text
-apps/community/       PGPZ Community Next.js application
-apps/coalition/       PGPZ Coalition Next.js application
-packages/zec-shelf/   Reusable ZEC Shelf feature
-tooling/              Repository and deployment helpers
-docs/                 Migration records and operating runbooks
+apps/community/         PGPZ Community Next.js application
+apps/coalition/         PGPZ Coalition Next.js application
+apps/reference/         Neutral executable example and CI proving ground
+packages/core/          Public and server-only configuration contracts
+packages/auth-dynamodb/ Injected Better Auth persistence and rate limits
+packages/ui/            Brand-neutral interface primitives
+packages/zec-shelf/     Reusable ZEC Shelf feature
+templates/              Starter configuration examples
+tooling/                Repository and deployment helpers
+docs/                   Migration records and operating runbooks
 ```
 
 The two source histories were imported without squashing. See
@@ -38,9 +43,11 @@ Common commands:
 ```bash
 npm run dev:community
 npm run dev:coalition
+npm run dev:reference
 npm run check
 npm run build:community
 npm run build:coalition
+npm run build:reference
 npm run history:verify
 npm run parity:check
 npm run boundaries:check
@@ -70,13 +77,15 @@ manifest and ZEC Shelf extraction placement.
 
 ## Deployment
 
-The root `amplify.yml` describes two independent Amplify applications. Each
-Amplify project retains its own domain, environment variables, IAM role, and
-DynamoDB table. Configure these console variables before switching the source
-repository:
+The root `amplify.yml` describes three independently deployed Amplify
+applications. Community and Coalition retain their own domains, environment
+variables, IAM roles, and DynamoDB tables. Reference is an isolated,
+seed-backed, read-only demonstration with no application data plane. Configure
+the matching monorepo root on each Amplify project:
 
 - Community: `AMPLIFY_MONOREPO_APP_ROOT=apps/community`
 - Coalition: `AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`
+- Reference: `AMPLIFY_MONOREPO_APP_ROOT=apps/reference`
 
 The build helper writes only the selected application's allowlisted variables
 to its own `.env.production`; it overwrites atomically and never prints values.
@@ -87,13 +96,13 @@ monorepo builds.
 See [`docs/monorepo-migration-runbook.md`](docs/monorepo-migration-runbook.md)
 for cutover gates, live checks, and rollback instructions.
 
-## Planned reference application
+## Reference application
 
-After both production applications are stable on the monorepo, the next
-structural milestone is a minimal runnable `apps/reference` application. It
-will not be a third production deployment. Its CI build will prove that shared
-packages can be configured without importing Community or Coalition branding,
-aliases, membership state machines, seed content, or infrastructure wiring.
+`apps/reference` is the executable proof that shared packages can be configured
+without importing Community or Coalition branding, aliases, membership state
+machines, seed content, or infrastructure wiring. It is not a third production
+membership service. Its optional public deployment at `reference.pgpz.org` is
+non-production, read-only, non-indexed, and isolated from both branded apps.
 
 See [`docs/reference-application-plan.md`](docs/reference-application-plan.md)
 for its configuration contract, dependency rules, acceptance gates, and the
