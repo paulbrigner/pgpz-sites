@@ -5,6 +5,7 @@ import { referenceSiteConfig } from "./site";
 
 const appRoot = path.resolve(process.cwd(), "app");
 const componentsRoot = path.resolve(process.cwd(), "components");
+const apiRoot = path.join(appRoot, "api");
 
 function findTsxFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -15,6 +16,14 @@ function findTsxFiles(root: string): string[] {
     return entry.isFile() && entry.name.endsWith(".tsx") && !entry.name.endsWith(".test.tsx")
       ? [absolutePath]
       : [];
+  });
+}
+
+function findRouteHandlers(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) return findRouteHandlers(absolutePath);
+    return entry.isFile() && entry.name === "route.ts" ? [absolutePath] : [];
   });
 }
 
@@ -30,6 +39,14 @@ describe("disabled reference feature surface", () => {
 
   it.each(["admin", "signin", "signup"])("does not expose /%s", (route) => {
     expect(existsSync(path.join(appRoot, route))).toBe(false);
+  });
+
+  it("exposes only the allowlisted read-only API route", () => {
+    const routes = findRouteHandlers(apiRoot).map((route) =>
+      path.relative(appRoot, route).split(path.sep).join("/"),
+    );
+
+    expect(routes).toEqual(["api/zec-shelf/resources/route.ts"]);
   });
 
   it("keeps server-only configuration out of layouts, pages, and shared UI", () => {
