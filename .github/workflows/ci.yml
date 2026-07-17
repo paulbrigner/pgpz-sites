@@ -1,0 +1,81 @@
+name: Monorepo CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monorepo-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci
+      - name: Verify imported history baseline
+        run: npm run history:verify
+      - name: Enforce sibling parity
+        run: npm run parity:check
+      - name: Enforce workspace import and dependency boundaries
+        run: npm run boundaries:check
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+      - name: Run tests
+        run: npm test
+      - name: Run linters
+        run: npm run lint
+
+  build:
+    name: Build ${{ matrix.application }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        application:
+          - community
+          - coalition
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-at-least-32-characters
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000
+      BETTER_AUTH_URL: http://localhost:3000
+      EMAIL_FROM: PGPZ CI <ci@example.invalid>
+      NEXTAUTH_TABLE: PGPZCiNextAuth
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      REGION_AWS: us-east-1
+      X_BEARER_TOKEN: ci-only-x-token
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci
+      - name: Materialize the application environment
+        run: node tooling/write-amplify-env.mjs ${{ matrix.application }}
+      - name: Build application
+        run: npm run build:${{ matrix.application }}

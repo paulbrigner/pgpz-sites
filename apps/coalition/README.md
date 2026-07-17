@@ -37,7 +37,8 @@ See [Manual Approval Membership](docs/manual-approval-membership.md) for impleme
 
 ## Environment
 
-Copy `.env.example` and set:
+From the monorepo root, copy `apps/coalition/.env.example` to
+`apps/coalition/.env.local` and set:
 
 ```bash
 NEXT_PUBLIC_SITE_URL=https://coalition.pgpz.org
@@ -65,7 +66,8 @@ See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION
 Create or verify the table:
 
 ```bash
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCoalitionNextAuth node scripts/setup/create-dynamodb-tables.mjs
+REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCoalitionNextAuth \
+  node apps/coalition/scripts/setup/create-dynamodb-tables.mjs
 ```
 
 For AWS CLI operations in the existing environment, use:
@@ -76,16 +78,30 @@ aws sts get-caller-identity --profile zodldashboard --region us-east-1
 
 ## Development
 
+The root workspace install and lockfile are authoritative. Run these commands
+from the monorepo root; do not create an application-local lockfile or run a
+separate install in `apps/coalition`.
+
 ```bash
-npm install
-npm run dev
-npm test
-npm run build
+npm ci
+npm run dev:coalition
+npm run test --workspace=apps/coalition
+npm run build:coalition
+npm run start:coalition
 ```
+
+The former `serve out` script was intentionally removed. This application uses
+the Next.js server runtime and does not configure `output: "export"`, so it does
+not produce an `out/` directory; use `npm run start:coalition` after building.
 
 ## Deployment
 
-The app is configured for AWS Amplify via `amplify.yml`. Runtime environment variables should be configured in the Amplify app before deployment.
+The repository-root `amplify.yml` is authoritative for monorepo deployments;
+`apps/coalition/amplify.yml` is retained only as a rollback reference during
+the migration observation period. Configure the existing Coalition Amplify app
+with `AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`, keep its runtime environment
+variables and IAM role application-specific, and follow the root
+`docs/monorepo-migration-runbook.md` before reconnecting or deploying it.
 
 ## Design Resources
 

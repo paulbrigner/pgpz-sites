@@ -25,7 +25,7 @@ vi.mock("@/lib/dynamodb", () => ({
   },
 }));
 
-const storageKey = (item: { pk: string; sk: string }) => `${item.pk}|${item.sk}`;
+const storageKey = (item: Record<string, unknown>) => `${String(item.pk)}|${String(item.sk)}`;
 
 const clone = <T>(value: T): T => structuredClone(value);
 

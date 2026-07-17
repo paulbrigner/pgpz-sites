@@ -1,8 +1,8 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { reorderClientResources, ZecShelfClient } from "@/components/zec-shelf/ZecShelfClient";
-import type { ZecShelfResource } from "@/lib/zec-shelf";
+import { reorderClientResources, ZecShelfClient, type ZecShelfResource } from "@pgpz/zec-shelf/client";
+import { COMMUNITY_ZEC_SHELF_CLIENT_CONFIG } from "@/lib/zec-shelf-config";
 
 const RESOURCE: ZecShelfResource = {
   id: "zcash-community",
@@ -24,7 +24,7 @@ const RESOURCE: ZecShelfResource = {
 
 describe("ZecShelfClient permissions", () => {
   it("shows freshness but no administrative controls to members", () => {
-    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} />);
+    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
 
     expect(screen.getByText(/Last update observed/i)).toBeInTheDocument();
     expect(screen.queryByText("No change")).not.toBeInTheDocument();
@@ -37,7 +37,7 @@ describe("ZecShelfClient permissions", () => {
   });
 
   it("shows maintenance controls and check state to administrators", () => {
-    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin />);
+    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
 
     expect(screen.getByRole("button", { name: /Add resource/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Check for updates/i })).toBeInTheDocument();

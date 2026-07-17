@@ -1,0 +1,622 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-17",
+  "appRoots": {
+    "community": "apps/community",
+    "coalition": "apps/coalition"
+  },
+  "categoryDefinitions": {
+    "exact-copy": "Files that must remain byte-identical in both apps; each recorded SHA-256 must match.",
+    "branding-config-variant": "Site identity, copy, theme, legal, deployment, dependency, or environment configuration that may differ deliberately.",
+    "intentional-workflow-divergence": "Application-owned Community or Coalition membership and capability behavior that remains independently tested.",
+    "reconcile-before-sharing": "Unresolved drift that must be reconciled or extracted before it can be treated as shared behavior."
+  },
+  "classifications": {
+    "exact-copy": [
+      {
+        "path": ".eslintrc.json",
+        "sha256": "6430f46bd7ecd21fab478dba639905ae3d8531ead06fdacde73c68f3a4490377"
+      },
+      {
+        "path": ".npmrc",
+        "sha256": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464"
+      },
+      {
+        "path": ".nvmrc",
+        "sha256": "f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56"
+      },
+      {
+        "path": ".storybook/main.ts",
+        "sha256": "eb9035bb01781cbdd159e54c2a2794dd2c0d239d8de8609fd2f8fe2308362cd0"
+      },
+      {
+        "path": ".storybook/preview.ts",
+        "sha256": "54a2119ff30d7b80ec7137df28d5dea265145c108568a3d113417fe9cbf2d8c7"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "sha256": "c95bae1d1ce0235ecccd3560b772ec1efb97f348a79f0fbe0a634f0c2ccefe2c"
+      },
+      {
+        "path": "app/admin/page.tsx",
+        "sha256": "3650ff005375bb80ce647e3aa88f708a6cd99dac33c983d15a4f61fa2656bd75"
+      },
+      {
+        "path": "app/api/access-log/page-view/route.ts",
+        "sha256": "f409a93da72388a7bb0a88906aa0f0ed0c6438c045fcc21ebada538dcbdbcab7"
+      },
+      {
+        "path": "app/api/admin/access-log/route.ts",
+        "sha256": "be480fb795179c5e3594f548258f28b2f9d0298ca54157ee6b1640b08b5176a1"
+      },
+      {
+        "path": "app/api/admin/members/manual-approval/route.ts",
+        "sha256": "d38b865c8adb7f163a7e2ba3b8981b84b9134b57c733f10eba73b9e16df467a5"
+      },
+      {
+        "path": "app/api/admin/newsletters/route.test.ts",
+        "sha256": "51be0e540d4e87bfb6250f1bd565fb401076e215d6f6d6fa9ee7b38217c79235"
+      },
+      {
+        "path": "app/api/admin/newsletters/route.ts",
+        "sha256": "3de973d0327bbb63b17c063356cc0c675740cb4fe2039deee08ce1ebd361ceed"
+      },
+      {
+        "path": "app/api/admin/policy-updates/route.ts",
+        "sha256": "110d44850a9939ad6753ff90ffe29d8d1cd6f318fb2b5c078695aed1fdca56b0"
+      },
+      {
+        "path": "app/api/admin/users/adminize/route.ts",
+        "sha256": "72f81b2871cb4ababb6e063e648e063a4ef150d18f40faa95cecca7c6b74e349"
+      },
+      {
+        "path": "app/api/auth/session/app/route.ts",
+        "sha256": "942302d921b743c447bcd9e7c552606c8b44d7a69334407a23ad59c70eed9271"
+      },
+      {
+        "path": "app/api/auth/session/legacy/route.test.ts",
+        "sha256": "308b0a50c537e1d01844cf635b2a4b2cf016c7285b48ba568ac1423a0236f78c"
+      },
+      {
+        "path": "app/api/auth/session/legacy/route.ts",
+        "sha256": "7cb32260f1f4329e52314ce3338cf8df3f0b79e2b327e1416b0c8133cda2a4b2"
+      },
+      {
+        "path": "app/api/better-auth/[...all]/route.ts",
+        "sha256": "5ccb61d148bb4e3869a2921873298c0dee439ae7ba83952be38c70447b18cce7"
+      },
+      {
+        "path": "app/api/content/[file]/route.ts",
+        "sha256": "1e7a50bbd404a4b57c183b890b6f811912950bcd6ade8b7b07c7e9fa8ee5d813"
+      },
+      {
+        "path": "app/api/email/open/[trackingId]/route.ts",
+        "sha256": "e2fa24459667061ce5917d798e5681b1644b36da8cc81e5d507ac1ed9cbc6581"
+      },
+      {
+        "path": "app/api/manual-approval/request/route.ts",
+        "sha256": "78e7596d4c244d127de9b9e0219b1c98c9f80ea245c56f9c07613e9017a6e4ae"
+      },
+      {
+        "path": "app/api/policy-updates/[slug]/assets/[asset]/route.ts",
+        "sha256": "861f4be662633dfbfde7507f1875918da21bdf6a98fc2d124d5a7c66d4def483"
+      },
+      {
+        "path": "app/api/policy-updates/[slug]/email-assets/[asset]/route.ts",
+        "sha256": "fe764f030b0ce3f890daf157971c6a0d5ed3cf9f1335b1715b3aad5992576430"
+      },
+      {
+        "path": "app/api/policy-updates/[slug]/pdf/route.ts",
+        "sha256": "41ca7e60931defc0c108469aa6686dd35b989f02a1075e0843923acfde65b6f6"
+      },
+      {
+        "path": "app/api/profile/confirm-email-change/route.ts",
+        "sha256": "7e663970e5feb46bdb4e336c9562c02e8582054ea16d4be0bc348dd58ee23065"
+      },
+      {
+        "path": "app/api/profile/request-email-change/route.ts",
+        "sha256": "7791c63bc53e98a8d538767f6ee70707a14cedb029c8764bccc33c94a6b08b4c"
+      },
+      {
+        "path": "app/favicon.ico",
+        "sha256": "3d06c84fe55722fb446e0dfd86d3189aac8e264993820bed02a40e92c722f85e"
+      },
+      {
+        "path": "app/loading.tsx",
+        "sha256": "05ad55796b1436248d474a22a93e2177370dbb6a48f4c871b054d25481d6dfef"
+      },
+      {
+        "path": "app/page.tsx",
+        "sha256": "0892a7829e95e1aa1c346e7a5a3720ab7a48ef77ed1fe19527ef87f023b96844"
+      },
+      {
+        "path": "app/providers.tsx",
+        "sha256": "ff7eded26c8191512e84de6a3ac0e447fffc81926168dafa8f36e67f6f44aae5"
+      },
+      {
+        "path": "components.json",
+        "sha256": "dbec030f4ec0232bb629afb64893c5fda6a9e0da083c05ff37a1a54dcf86d4f1"
+      },
+      {
+        "path": "components/access/AccessTracker.tsx",
+        "sha256": "15e9ea5171bcacd90e23bdf4b1f375d1a7e1ef817dca6d22ac11cc9079167472"
+      },
+      {
+        "path": "components/admin/AccessLogPanel.tsx",
+        "sha256": "2e2209e8f7ea59c6f829d333a5977ff268a8bd12cb170254d12ad40ffcf2375a"
+      },
+      {
+        "path": "components/admin/AdminSkeleton.tsx",
+        "sha256": "b4e975edd9d8a56e04b2c6a8eeddde3bb483f48ddd72c9ff5efcf13b56134572"
+      },
+      {
+        "path": "components/admin/AdminViewMode.tsx",
+        "sha256": "d8880d2d36e15b8c175644cdb5a6b9d7da8719566aa3a6c128510e5f7769e463"
+      },
+      {
+        "path": "components/admin/NewsletterMailer.tsx",
+        "sha256": "babecb3eaed200d0d91a735ff561ffa75424551465800823a7f8cd3bc8df951b"
+      },
+      {
+        "path": "components/admin/sensitive-data.tsx",
+        "sha256": "37b52c06b792f3f410981a85ddeb0b80d62d4cce856cebf5e5d9cca0a66bf135"
+      },
+      {
+        "path": "components/ui/alert-dialog.tsx",
+        "sha256": "03b171b1bcc0655df80a4a974cf61ea08c4ff13f3cc3fbb88eb8db735c53f4b3"
+      },
+      {
+        "path": "components/ui/alert.tsx",
+        "sha256": "f774320ad974e29ce83866390804ca0741538c65e7e63d0156ec1e6f4ccfe8e1"
+      },
+      {
+        "path": "components/ui/button.test.ts",
+        "sha256": "289e03b135483b51622ba5273c4d78adf2b1d994cf4fbcca123f0f5a3dad317e"
+      },
+      {
+        "path": "components/ui/button.tsx",
+        "sha256": "a091a3fac5ec946a7850fefed12ef538ea700f530d6ade16f0c2a1c0a50f713d"
+      },
+      {
+        "path": "components/ui/drawer.tsx",
+        "sha256": "dc814960ce7382231be3da472c4caf63d66a4f8f7d4a52c0dee9c9a2124fdabd"
+      },
+      {
+        "path": "components/ui/navigation-menu.tsx",
+        "sha256": "bdb8d998ce8c8471bb66dbe130237e0eb0e85febbdf3624f08fc930f63bb2338"
+      },
+      {
+        "path": "components/ui/select.tsx",
+        "sha256": "e16beac07758ff19a47b8b8ac9fc9cf1ae1b23327686c3e1b0e6f227f8272bb9"
+      },
+      {
+        "path": "lib/__tests__/admin-member-preview.test.ts",
+        "sha256": "c511504bbe6f3bd2e84253f97f0b6aef4f99cb7795f3b10f5cbef5be5c0d5ed7"
+      },
+      {
+        "path": "lib/__tests__/app-session.test.ts",
+        "sha256": "5f98df2a9523cf0dc03ab0ab84940cb3a15c2a605935262297ce86d522b4460e"
+      },
+      {
+        "path": "lib/__tests__/better-auth-client-ip.test.ts",
+        "sha256": "780d29a535cab9d1ba35c8dc67969e9b6563b6b69bc96ce8398b8ea4636a065b"
+      },
+      {
+        "path": "lib/__tests__/better-auth-dynamodb-adapter.test.ts",
+        "sha256": "e75a810211e77f5bc7db82d60d82313cdd614d28a0d4606875f51c01bcef4e28"
+      },
+      {
+        "path": "lib/__tests__/better-auth-rate-limit.test.ts",
+        "sha256": "3cd547eb94adc79b42e046d4f88e1a4e13dd0c060089c71bc349356510a3f86c"
+      },
+      {
+        "path": "lib/__tests__/email-log.test.ts",
+        "sha256": "6423a477721d2c314e90b1b46bb8b125579d768a6cab731e5b3163e9945fbed6"
+      },
+      {
+        "path": "lib/__tests__/policy-update-subject.test.ts",
+        "sha256": "a90ecbe08bf26975777ba0a3070696baad7cf395c383dab0bdb1b50601205ab2"
+      },
+      {
+        "path": "lib/__tests__/user-display-name.test.ts",
+        "sha256": "2abbe139bf54d5e165acd52a2b57dcf72977ea9351ad725ab4d493de798765e4"
+      },
+      {
+        "path": "lib/admin/access-log.ts",
+        "sha256": "0b67131b8b0c7bfc1dc88b41cb12895d3cc41468e7803246e91d30619f4cea4d"
+      },
+      {
+        "path": "lib/admin/auth.ts",
+        "sha256": "3d977aa49224d146de2f5401c90e6a905c15745f05b89d27dbf4c763f70570e7"
+      },
+      {
+        "path": "lib/admin/email-log.ts",
+        "sha256": "5ccb906b1fce8fb8ab4d1a83fc7df0825145db40ea9c88bdc0d35c52b8997bd5"
+      },
+      {
+        "path": "lib/admin/email-tracking.ts",
+        "sha256": "fe36f0a5b797a149e2e283f91d5ec13feca7b41984f8fb10453f5bcc13843896"
+      },
+      {
+        "path": "lib/admin/email-transport.ts",
+        "sha256": "59d1730312d0c91fbeb415a7e23d16231dad1c89a302446bc90cdf30bad05d29"
+      },
+      {
+        "path": "lib/admin/member-preview-server.ts",
+        "sha256": "56027fdd89acb855168263caf36ffdc40637d2deb7286e5a1559f7530955b222"
+      },
+      {
+        "path": "lib/admin/member-preview.ts",
+        "sha256": "cb0158ccb978952df8f8f8c02d1f80a4a64bace867d22278fefc41f79edb2128"
+      },
+      {
+        "path": "lib/admin/newsletters.ts",
+        "sha256": "40dd6a7ae5835c12e7ca50fff36690afcb5b12507496c04d2908a3525af083d1"
+      },
+      {
+        "path": "lib/app-session.ts",
+        "sha256": "d06caed6f7375ff376b2b89031f1a573cf553861c65ba6cb25309bf2304e5051"
+      },
+      {
+        "path": "lib/better-auth-client-ip.ts",
+        "sha256": "3081ec4b1534301331a0f4a7265cf614beb61e12cb5a2eb3256d88d2cd226a8e"
+      },
+      {
+        "path": "lib/better-auth-client.ts",
+        "sha256": "a54cd43cf5aa4793b0daf7ce411a4fc37d1307c17806222b7a0ad9c9a2cd346e"
+      },
+      {
+        "path": "lib/better-auth-constants.ts",
+        "sha256": "b2d1a81bbf1d9003c891a808bf37891fb44666c78c7d037a7409afdceb20f158"
+      },
+      {
+        "path": "lib/better-auth-dynamodb-adapter.ts",
+        "sha256": "0ccaed4f8452a09822ebc8455fc2819c17776e0fa1f678dd81dbf7e6d1b3aa3b"
+      },
+      {
+        "path": "lib/better-auth-rate-limit.ts",
+        "sha256": "0507699764f89754ba7b46dfccada5db46bc7ffe4a92b06051290fb53e01e779"
+      },
+      {
+        "path": "lib/better-auth-user-email.ts",
+        "sha256": "1c62483828ba5dce66fce904138511620cc18d63ca28c46ec5fc7a4036d9dd91"
+      },
+      {
+        "path": "lib/cloudFrontSigner.ts",
+        "sha256": "a39555811f74082ee1b771020ec52270df96754e2cadec359d6cfd0a08cd0d64"
+      },
+      {
+        "path": "lib/dynamodb.ts",
+        "sha256": "f4625f2389bb7ba06e23d39987aef843196861ca2b3b14cedee754ad950f455f"
+      },
+      {
+        "path": "lib/legacy-session-cookies.ts",
+        "sha256": "d619a77cf1081000464787f75546619fc640bd408b230ccdd9bcc259ffb4664d"
+      },
+      {
+        "path": "lib/member-access.ts",
+        "sha256": "6f125f16dec4a467e193d8a87f77bf1a42309b3bb9efd2052d67888930436f81"
+      },
+      {
+        "path": "lib/policy-update-access.ts",
+        "sha256": "208635e196a99b8087691d10789ebbb1c58c4bdae548cb49cb39e861a1b23fc7"
+      },
+      {
+        "path": "lib/policy-update-subject.ts",
+        "sha256": "16bb8c525a37c2ab5c33208bb3d1bd5e174d9e95a468fdd4cf2dc2769d0eeb4b"
+      },
+      {
+        "path": "lib/s3.ts",
+        "sha256": "7ca620ea9f95f9cce50dacccdb0bc75fdcaa70b08a45614b7e567f0d24e54e92"
+      },
+      {
+        "path": "lib/use-app-session.ts",
+        "sha256": "59ce994d60872bd33cb7c1f29423f7bbe4bab566a4671ae2f59e1c53d4527ff4"
+      },
+      {
+        "path": "lib/user-display-name.ts",
+        "sha256": "dbcf02a65519598aacf2afe257c0f0c6c1e052a1fd69553430362aef51096b21"
+      },
+      {
+        "path": "lib/utils.ts",
+        "sha256": "7c8c3dfc0cdd370d44932828eb067ef771c8fe7996693221d5d4b90af6d54f2d"
+      },
+      {
+        "path": "postcss.config.mjs",
+        "sha256": "5b0bc4c78be977cd81f947fb5563aaa7cc6d451e6f1c53a3260b7656a7144d20"
+      },
+      {
+        "path": "public/logo.png",
+        "sha256": "5a0a2d607069cd0c0d41a1aaa4221797616ffaf97a09a1e1cea0f9eb14cab0b7"
+      },
+      {
+        "path": "public/pgp_profile_image.png",
+        "sha256": "96b86a90d3ec2426b45fb31c1240b1d52f854fb8c6cade64eefbabcfc70059e6"
+      },
+      {
+        "path": "public/resources/1H2026-us-digital-asset-policy-cover.png",
+        "sha256": "edfae5eec79ad469d964a4505e443b10668c44ace7d3a1706212caa8636290b8"
+      },
+      {
+        "path": "public/resources/1H2026-us-digital-asset-policy.pdf",
+        "sha256": "de54e21272a422edad4cb1a49f2a1c0af1483082bea8dbf324fcfac44ac070db"
+      },
+      {
+        "path": "public/resources/2026-06-08-weekly-policy-memo-cover.png",
+        "sha256": "cb93395b5d14cf391ac57a93f7187d34cac52b097e5a28980252abc0b0cc77c6"
+      },
+      {
+        "path": "public/resources/2026-06-08-weekly-policy-memo.pdf",
+        "sha256": "3e51b6351c0ca52d961d9e9de3a98fa237c2adf4ad79f4087229a7d79e3d2245"
+      },
+      {
+        "path": "scripts/copy-pdf-worker.mjs",
+        "sha256": "5d370ffa7f755cbd2bcaa4bfe651e37a9ccd91995383aff3ceb06014afe2d2ba"
+      },
+      {
+        "path": "scripts/generate-policy-update-pdfs.py",
+        "sha256": "30b2cda0f9fbb1e3c845e85875540475521c0491a9285076ffec4cf67691ddca"
+      },
+      {
+        "path": "src/stories/Button.stories.ts",
+        "sha256": "285251965f0cb6fe2bb15b279c6df688215dc54fee67af53f6a2ee66c4a54d25"
+      },
+      {
+        "path": "src/stories/Button.tsx",
+        "sha256": "703ca36d85385b08cfe3066b836cd40da5d460300f62e032316001ae966768f6"
+      },
+      {
+        "path": "src/stories/Configure.mdx",
+        "sha256": "74f5e0dcb9b277c4364582e23ebcdb2813589c122f937b27d886e47b2c9d1f96"
+      },
+      {
+        "path": "src/stories/Header.stories.ts",
+        "sha256": "c302dfe40eb10d57ccd81c0e07720c1bb1a400f04ce256c249c9a1e7e2490380"
+      },
+      {
+        "path": "src/stories/Header.tsx",
+        "sha256": "e91323839b8ad42c615e0db4b9ab3cae1b76e39bccc35cc1feec841ed719eb7c"
+      },
+      {
+        "path": "src/stories/Page.stories.ts",
+        "sha256": "662e38ae87fa2eb21c5bbf06e001de6ff8d0bbfd59e11c95de3dcbfb4f759084"
+      },
+      {
+        "path": "src/stories/Page.tsx",
+        "sha256": "2b052ee5f074ffebd7af9306ecb3e71948880d4fa765257448e99f2aed6b9110"
+      },
+      {
+        "path": "src/stories/assets/accessibility.png",
+        "sha256": "cd6d60f7f8fee968e7687b6d886f766990424923f2a4c4b7d03b7ba54ccee191"
+      },
+      {
+        "path": "src/stories/assets/accessibility.svg",
+        "sha256": "75e59b0443a248b91372f09fee7ca4e3acff2269cfee4ea684bb6ffbc48221bd"
+      },
+      {
+        "path": "src/stories/assets/addon-library.png",
+        "sha256": "bc7ba70560462f6ddc4d22a6fcaaf40e577b2f37f3c3df88fcaa5b08a708a5e8"
+      },
+      {
+        "path": "src/stories/assets/assets.png",
+        "sha256": "2c90cb173ddcf13fec797baf538fbb211f4675eb6cd438b09ec64a84d7a2ffde"
+      },
+      {
+        "path": "src/stories/assets/avif-test-image.avif",
+        "sha256": "2d63d30c71eba93e6ce5ea77a1b85718be67aafde52c772da44ff891225558c6"
+      },
+      {
+        "path": "src/stories/assets/context.png",
+        "sha256": "c612d889d515d6e680ecf1131c4f116532eb19ae17654c6df5bc8ff0864f96fa"
+      },
+      {
+        "path": "src/stories/assets/discord.svg",
+        "sha256": "728ff2659cd453eb3abca53948ac35e815e6b8880a78582ba4ccab3c50564803"
+      },
+      {
+        "path": "src/stories/assets/docs.png",
+        "sha256": "5b0c7100c80607174ad6e930376103fae0d729328e9de85ee292b36b6b102214"
+      },
+      {
+        "path": "src/stories/assets/figma-plugin.png",
+        "sha256": "b0a5ad2d021efea93a13ae3829211714ab162a49b0b9e215559dab01c2328149"
+      },
+      {
+        "path": "src/stories/assets/github.svg",
+        "sha256": "a4113cf2c6e0e6fba99a85498e6b7c84c42d8c13928f89e0eede78bc596e0add"
+      },
+      {
+        "path": "src/stories/assets/share.png",
+        "sha256": "b59d6c77b3ac1fc89d6d026e9e70ba5204801d6864022e801322ce8d579bcbd9"
+      },
+      {
+        "path": "src/stories/assets/styling.png",
+        "sha256": "c83082e0e8386ae5d56e13dc4cd85b06a53162a4b6575a0fbb2e45c95ec7f82e"
+      },
+      {
+        "path": "src/stories/assets/testing.png",
+        "sha256": "6a59f68143c561f5feb549cf417fa084d0c761b856b0d9903f4fed44d850da16"
+      },
+      {
+        "path": "src/stories/assets/theming.png",
+        "sha256": "b6e819c3dd77c466a6509b199a33dd2bbc9471b42891c3fcb469d9bf849bc976"
+      },
+      {
+        "path": "src/stories/assets/tutorials.svg",
+        "sha256": "92011d59300200edd459f01eee8203576a90d5f2b0cf1a15481a0205d84c1f74"
+      },
+      {
+        "path": "src/stories/assets/youtube.svg",
+        "sha256": "9d265ff6f05ea0610040f990152026109bba39cc505b8e5aec2bdcd0e84d0ff2"
+      },
+      {
+        "path": "src/stories/button.css",
+        "sha256": "ce7e5ebbb8ef0ea5829f7c454c17f665d49aab949f818b41cfc1bafdfef189c7"
+      },
+      {
+        "path": "src/stories/header.css",
+        "sha256": "ed8e84506ae708a15428ddad389b5d331d90e3c4a8373ce64532b5ca50c368b0"
+      },
+      {
+        "path": "src/stories/page.css",
+        "sha256": "3a9c853368c58b9f850959f6e90f44a4621e37484a3280bd360a463de9f7a6c1"
+      },
+      {
+        "path": "tailwind.config.css",
+        "sha256": "deee33eaf424291f25ab796c75105eb33e4cd74ee1f29cda14bf0674719f94e3"
+      },
+      {
+        "path": "tsconfig.json",
+        "sha256": "4a21657e931d500e7f6498c97e8d913b1a8f66a98d438ef0a8fec8da189b35c1"
+      },
+      {
+        "path": "types/pdfjs-dist.d.ts",
+        "sha256": "b0bbfeb2c5e764e1c72687b2ed1ab97129e661d15646cead7854e5eff7cb5b27"
+      },
+      {
+        "path": "vitest.setup.ts",
+        "sha256": "d3491cbf9cd3907ea827b7bbe18189c7486e2e665208333bce843ecbb1fb706f"
+      }
+    ],
+    "branding-config-variant": [
+      ".env.example",
+      ".gitignore",
+      "LICENSE-MIT",
+      "README.md",
+      "amplify.yml",
+      "app/admin/layout.tsx",
+      "app/api/email/click/[trackingId]/route.ts",
+      "app/api/email/unsubscribe/[trackingId]/route.ts",
+      "app/globals.css",
+      "app/layout.tsx",
+      "app/privacy/page.tsx",
+      "app/settings/profile/layout.tsx",
+      "app/terms/page.tsx",
+      "components/admin/AdminShell.tsx",
+      "components/legal/LegalDocumentPage.tsx",
+      "docs/BETTER_AUTH_PARALLEL_MIGRATION.md",
+      "docs/ux-enhancement-process.md",
+      "lib/__tests__/newsletter-email.test.ts",
+      "lib/better-auth.ts",
+      "lib/branded-email.ts",
+      "lib/config.ts",
+      "lib/legal-config.ts",
+      "lib/legal.ts",
+      "lib/newsletter-email.ts",
+      "next.config.ts",
+      "package.json",
+      "scripts/adminize.ts",
+      "scripts/setup/create-dynamodb-tables.mjs",
+      "vitest.config.ts"
+    ],
+    "intentional-workflow-divergence": [
+      ".github/copilot-instructions.md",
+      "app/(auth)/signin/page.tsx",
+      "app/admin/admin-client.tsx",
+      "app/admin/admin-console.tsx",
+      "app/api/admin/email/send/route.ts",
+      "app/api/admin/members/route.ts",
+      "app/api/profile/update/route.ts",
+      "app/api/signup/pending/route.ts",
+      "app/home-client.tsx",
+      "app/settings/profile/page.tsx",
+      "components/home/Skeletons.tsx",
+      "components/site/main-nav.tsx",
+      "lib/__tests__/account-signin-eligibility.test.ts",
+      "lib/__tests__/admin-roster-actions.test.ts",
+      "lib/__tests__/system-email.test.ts",
+      "lib/account-signin-eligibility.ts",
+      "lib/admin/roster.ts",
+      "lib/admin/user-profile.ts",
+      "lib/app-users.ts",
+      "lib/manual-approval.ts",
+      "lib/system-email.ts"
+    ],
+    "reconcile-before-sharing": [
+      "app/updates/[slug]/page.tsx",
+      "app/updates/page.tsx",
+      "components/admin/PolicyUpdateMailer.tsx",
+      "lib/__tests__/access-log-auth-provider.test.ts",
+      "lib/__tests__/better-auth-user-email.test.ts",
+      "lib/__tests__/email-change-token.test.ts",
+      "lib/__tests__/policy-update-email.test.ts",
+      "lib/__tests__/policy-update-generated-content.test.ts",
+      "lib/__tests__/policy-update-generation.test.ts",
+      "lib/__tests__/policy-update-markdown.test.ts",
+      "lib/__tests__/policy-update-sections.test.ts",
+      "lib/admin/policy-update-generation.ts",
+      "lib/admin/policy-update-uploads.ts",
+      "lib/email-change-token.ts",
+      "lib/policy-update-email.ts",
+      "lib/policy-update-generated-content.ts",
+      "lib/policy-update-images.ts",
+      "lib/policy-update-markdown.ts",
+      "lib/policy-update-sections.ts",
+      "lib/policy-updates.ts"
+    ]
+  },
+  "extractedFeatures": [
+    {
+      "name": "zec-shelf",
+      "packagePath": "packages/zec-shelf",
+      "contentOwnership": "Each consuming app owns its catalog, access policy, routes, branding, and adapter configuration; the package owns the domain model, client UI, checking, and repository behavior.",
+      "adoption": {
+        "community": "active",
+        "coalition": "not-yet-enabled"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "src/index.ts",
+        "src/domain.ts",
+        "src/client/index.ts",
+        "src/client/ZecShelfClient.tsx",
+        "src/server/index.ts",
+        "src/server/checker.ts",
+        "src/server/repository.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [
+        "lib/zec-shelf.ts",
+        "components/zec-shelf/ZecShelfClient.tsx"
+      ],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/zec-shelf-access.ts",
+          "lib/zec-shelf-config.ts",
+          "lib/zec-shelf-server.ts",
+          "app/zec-shelf/page.tsx",
+          "app/api/zec-shelf/check/route.ts",
+          "app/api/zec-shelf/resources/route.ts",
+          "components/zec-shelf/ZecShelfClient.test.tsx"
+        ],
+        "coalition": []
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/zec-shelf-config.ts",
+          "import": "@pgpz/zec-shelf"
+        },
+        {
+          "app": "community",
+          "path": "lib/zec-shelf-server.ts",
+          "import": "@pgpz/zec-shelf/server"
+        },
+        {
+          "app": "community",
+          "path": "app/zec-shelf/page.tsx",
+          "import": "@pgpz/zec-shelf/client"
+        },
+        {
+          "app": "community",
+          "path": "app/api/zec-shelf/resources/route.ts",
+          "import": "@pgpz/zec-shelf"
+        },
+        {
+          "app": "community",
+          "path": "components/zec-shelf/ZecShelfClient.test.tsx",
+          "import": "@pgpz/zec-shelf/client"
+        }
+      ]
+    }
+  ]
+}

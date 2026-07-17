@@ -1,13 +1,7 @@
 import { resolveAppSession } from "@/lib/app-session";
 import { canManageZecShelf, canViewZecShelf } from "@/lib/zec-shelf-access";
-import {
-  createZecShelfResource,
-  deleteZecShelfResource,
-  getZecShelfResources,
-  reorderZecShelfResources,
-  updateZecShelfResource,
-  type ZecShelfResourceDraft,
-} from "@/lib/zec-shelf";
+import type { ZecShelfResourceDraft } from "@pgpz/zec-shelf";
+import { communityZecShelfRepository } from "@/lib/zec-shelf-server";
 
 type ResourceInput = Partial<ZecShelfResourceDraft> & {
   id?: string;
@@ -36,7 +30,7 @@ export async function GET(request: Request) {
   if (!access.canView) return accessError(access.authenticated, "Active membership is required.");
 
   try {
-    return Response.json({ resources: await getZecShelfResources() });
+    return Response.json({ resources: await communityZecShelfRepository.getResources() });
   } catch (error) {
     return errorResponse(error, 500);
   }
@@ -48,7 +42,7 @@ export async function POST(request: Request) {
 
   try {
     const input = await request.json() as ResourceInput;
-    const resource = await createZecShelfResource(input);
+    const resource = await communityZecShelfRepository.createResource(input);
     return Response.json({ resource }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
@@ -62,11 +56,11 @@ export async function PATCH(request: Request) {
   try {
     const input = await request.json() as ResourceInput;
     if (Array.isArray(input.order)) {
-      await reorderZecShelfResources(input.order);
+      await communityZecShelfRepository.reorderResources(input.order);
       return Response.json({ ok: true });
     }
     if (!input.id) return Response.json({ error: "A resource id is required." }, { status: 400 });
-    return Response.json({ resource: await updateZecShelfResource(input.id, input) });
+    return Response.json({ resource: await communityZecShelfRepository.updateResource(input.id, input) });
   } catch (error) {
     return errorResponse(error);
   }
@@ -79,7 +73,7 @@ export async function DELETE(request: Request) {
   try {
     const id = new URL(request.url).searchParams.get("id") || "";
     if (!id) return Response.json({ error: "A resource id is required." }, { status: 400 });
-    await deleteZecShelfResource(id);
+    await communityZecShelfRepository.deleteResource(id);
     return Response.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

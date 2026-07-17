@@ -1,29 +1,58 @@
-# Copilot Instructions
+# Copilot Instructions: PGPZ Community
 
-- Project: Next.js 15 app deployed via AWS Amplify; auth is NextAuth (email + SIWE) with DynamoDB adapter, membership is Unlock Protocol on Base, UI uses shadcn + Tailwind CLI.
-- Front door: Home screen is client-only in [app/home-client.tsx](app/home-client.tsx); it orchestrates membership/NFT queries, Unlock checkouts, and Base network prompts via React Query + `useUnlockCheckout`. SSR no longer prefetches membership/NFTs in `app/page.tsx`; it only passes session membership status/expiry to avoid reload delays.
-- Membership model: Source of truth is on-chain locks from `NEXT_PUBLIC_LOCK_TIERS`; state is derived/cached in [lib/membership-state-service.ts](lib/membership-state-service.ts) and normalized by `snapshotToMembershipSummary` in [lib/membership-server.ts](lib/membership-server.ts). Prefer client-side React Query caching for Home; invalidate via `/api/membership/invalidate` after checkout.
-- Checkout targets: Lock/tier metadata come from [lib/checkout-config.ts](lib/checkout-config.ts) fed by env vars (`NEXT_PUBLIC_LOCK_TIERS`, optional recurring/referrer settings). Event locks are discovered on-chain, and `getMembershipCheckoutTarget` / `getEventCheckoutTarget` should be used instead of hardcoding addresses.
-- Wallet flows: Keep users on Base (see network switch helper in home-client) before approvals; cap USDC approvals to 12 months and reject unlimited caps (`SAFE_ALLOWANCE_CAP`). Prefer `extendKey` over `purchaseKey` when a tokenId exists.
-- Token IDs: Subgraph preferred (`UNLOCK_SUBGRAPH_URL` or `UNLOCK_SUBGRAPH_API_KEY` + `UNLOCK_SUBGRAPH_ID`); fallback enumerates `tokenOfOwnerByIndex` with small caps. If no tokenId is resolvable, block renewal to avoid max-keys reverts.
-- Membership caching: In-memory service caches per addresses+chain for ~3m with variants for allowances/tokenIds; `forceRefresh` or `invalidate` when side effects occur. Queries should scope by normalized, comma-joined addresses.
-- Auto-renew UX: Allowance prompts live in home-client; approvals use computed target months (defaults to 12) and hide prompts when allowance is present or non-renewable/never-expires tiers are selected.
-- NFTs/events: `/api/nfts` aggregates owned/missed/upcoming creator NFTs on Base, merging Alchemy metadata when available; Home loads NFTs client-side via `useMemberNfts` and relies on React Query cache (Profile page may prefetch into the cache).
-- Event details: Upcoming meetings link to `/events/[lockAddress]`, which fetches metadata from `GET /api/events/details?lockAddress=` and handles sponsored RSVP with Unlock checkout fallback for paid events.
-- Event token metadata (Option C): Public tokenURI responses are served by `GET /api/events/metadata/{lockAddress}/{tokenId}` using `EVENT_METADATA_TABLE`. Set each event lock's base tokenURI to `https://<site>/api/events/metadata/<lockAddress>/` via `scripts/setup/set-event-token-uri.mjs`.
-- Auth/session: NextAuth v4 in `app/api/auth/[...nextauth]/route.ts` (email magic link via SES SMTP + SIWE credentials). Session is JWT enriched with profile fields and membership snapshots; wallet linking uses `/api/auth/link-wallet` and `/api/auth/unlink-wallet`.
-- Signup flow: Wallet-first signup persists `{ email, wallet }` via `/api/signup/pending`, then links on email verification in NextAuth callback; legacy email-first flow still redirects to `/signin` with banners.
-- Profile data: Stored via NextAuth in DynamoDB; fields include first/last name, xHandle, linkedinUrl. Settings/Profile UI lets users link/unlink wallets.
-- Admin surface: Admin pages under [app/admin](app/admin) and components in [components/admin](components/admin) handle roster views, refunds, emails, and cache resets; ensure routes verify auth/membership and planned admin role flag.
-- Admin roster cache: Uses a separate DynamoDB cache table (`ADMIN_ROSTER_CACHE_TABLE`) with meta + paged roster items and a short-lived lock. `GET /api/admin/members` supports `preferStale=1` and `triggerRebuild=1` to return stale data quickly and kick off rebuilds; `GET /api/admin/members/status` returns cache metadata for polling. `/admin` no longer builds the roster on SSR to avoid Amplify timeouts. A standalone SAM Lambda in `infra/admin-roster-rebuild` now handles background rebuilds (scheduled + manual), triggered via `/api/admin/members/rebuild` using `ADMIN_ROSTER_REBUILD_URL` + `ADMIN_ROSTER_REBUILD_SECRET`.
-- Admin roster data/UI: Member "joined" date is derived from the lowest (Member) tier lock via Unlock subgraph `createdAtBlock` + Base RPC block timestamps when building the cached roster. The Admin member table now filters by tier level and sorts by last name/joined/expiry; wallets/balances/email details are hidden behind per-member expand toggles with manual detail refresh.
-- Admin test members: User records may include `isTestMember` (boolean). Admin actions can toggle this flag; test members are hidden from the roster by default and only shown when the "Test members" filter is selected.
-- Styling/UI: Tailwind CLI builds `src/output.css` from `src/input.css`; shadcn components live in `components/ui/*`. Glassmorphic accents appear on alerts/panels in home-client; match existing class patterns when extending.
-- Testing: Use Vitest + Testing Library (`npm test`). Storybook v8 runs with `npm run storybook`; component stories reside in `components/home/*.stories.tsx`.
-- Builds: `npm run build` runs Tailwind CLI then `next build`; local dev via `npm run dev`. Node 22 is required (see package engines).
-- Environment: Keep server-only secrets unprefixed (e.g., `NEXTAUTH_SECRET`, RPC keys). Public vars start with `NEXT_PUBLIC_`. Amplify injects env per branch; do not commit secrets.
-- RPC hygiene: `BASE_RPC_URL` is required server-side; client uses `NEXT_PUBLIC_BASE_RPC_URL`. Enable RPC debug logs with `RPC_DEBUG=true` to print provider info at startup in membership service.
-- Error handling: Treat 429/503 as throttling in membership service; retries and batch delays are built-in for allowances. Surface user-rejected errors distinctly in wallet flows.
-- Patterns to follow: Normalize addresses to lowercase, prefer checksum storage when available; avoid direct fetches—use shared hooks (`useMembership`, `useMemberNfts`, `useEventRegistration`, `useUnlockCheckout`). Scope React Query keys with `addressesKey` and feature flags.
-- Deploy: Amplify pipeline defined in [amplify.yml](amplify.yml); pushes trigger builds, PRs create previews. Ensure DynamoDB + SES IAM permissions are available.
-- Licensing: Dual MIT or Apache-2.0; see root LICENSE files.
+- Repository: This app lives at `apps/community` in the `pgpz-sites` npm
+  workspace. Install once from the repository root with `npm ci`; the root
+  `package-lock.json`, root scripts, root CI, and root `amplify.yml` are
+  authoritative.
+- Project: Next.js 15 application for `community.pgpz.org`, deployed as an
+  independent AWS Amplify application with Community-only environment values,
+  IAM permissions, DynamoDB data, domain, and release controls.
+- Auth/session: Better Auth email magic links are the only active sign-in and
+  server-session provider. Better Auth is mounted at
+  `app/api/better-auth/[...all]`; there is no NextAuth runtime or NextAuth auth
+  route. `app/api/auth/session/legacy` only expires old NextAuth cookies.
+- Auth storage: The custom Better Auth DynamoDB adapter uses base-table ID reads
+  and `GSI1` for interactive non-ID lookups. Rate limits use shared atomic
+  DynamoDB counters, not process memory. Preserve the adapter, rate-limit,
+  client-IP, and session contract tests when changing authentication.
+- Legacy names: `NEXTAUTH_TABLE` is the historical name of the application data
+  table, not an active authentication provider. Historical access-log values
+  may still say `next-auth`, and `NEXTAUTH_SECRET` may temporarily remain only
+  as an email-tracking compatibility fallback.
+- Membership: Users sign in by email, generate an X proof code, post it publicly,
+  and submit the post for server-side verification. Successful proof activates
+  `membershipStatus: "active"`; do not add Coalition's invitation or manual
+  approval state machine to Community unless explicitly requested.
+- Community-specific features: X proof verification, referrals, policy updates,
+  newsletters, member/admin email tools, and guarded welcome mail. Welcome mail
+  requires an active membership on both the route and UI paths.
+- ZEC Shelf: Reusable domain, client, checker, and repository behavior comes
+  from `@pgpz/zec-shelf`. Community owns its catalog, access policy, routes,
+  theme/configuration, DynamoDB injection, partition key, and seed content in
+  this application. Do not copy the package implementation back into the app.
+- Authorization: Route handlers must resolve the application session and apply
+  explicit membership/admin checks. `isAdmin` is stored on application user
+  records. Admins can use the shared page-shell "View as member" mode; do not
+  treat that presentation mode as a server authorization change.
+- Data: Application identity, profile, membership, referral, email, content, and
+  admin records remain in Community's table. Do not import Coalition data or
+  infrastructure wiring into shared packages.
+- Styling: Tailwind CSS v4 and the app's Zcash-inspired Community tokens live in
+  `app/globals.css`. Shared packages must accept configuration rather than
+  importing Community aliases, CSS modules, branding, or assets.
+- Environment: Keep secrets server-only and unprefixed; expose only intentional
+  browser configuration through `NEXT_PUBLIC_*`. Never commit credentials or
+  copy Coalition environment values into Community.
+- Commands: From the repository root use `npm run dev:community`,
+  `npm run test --workspace=apps/community`, `npm run typecheck:community`, and
+  `npm run build:community`. Node 22 is required.
+- Boundaries: Applications may import declared workspace packages but not a
+  sibling application. Code under `packages/` may not import `apps/` or this
+  app's `@/` alias. All imported packages must be directly declared. Run
+  `npm run boundaries:check` and `npm run parity:check` after structural changes.
+- Deployment: Use the root build spec with
+  `AMPLIFY_MONOREPO_APP_ROOT=apps/community`. The app-local `amplify.yml` is a
+  temporary rollback reference, not the monorepo deployment authority. Follow
+  `docs/monorepo-migration-runbook.md` for preview, cutover, and rollback gates.
+- Licensing: Repository and shared-package code is dual-licensed
+  `MIT OR Apache-2.0` under the root license files.

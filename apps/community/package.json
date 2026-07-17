@@ -10,13 +10,13 @@
     "build": "next build && node scripts/copy-pdf-worker.mjs",
     "start": "next start",
     "lint": "next lint",
-    "serve": "serve out",
     "forum:update": "NODE_OPTIONS=--conditions=react-server tsx scripts/export-policy-update-forum-markdown.ts",
     "test": "vitest run --passWithNoTests",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@pgpz/zec-shelf": "0.1.0",
     "@aws-sdk/client-dynamodb": "^3.879.0",
     "@aws-sdk/client-s3": "3.879.0",
     "@aws-sdk/cloudfront-signer": "^3.862.0",
@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^1.9.0",
+    "@next/env": "^15.5.3",
     "@storybook/addon-essentials": "8.3.6",
     "@storybook/addon-interactions": "8.3.6",
     "@storybook/addon-links": "8.3.6",

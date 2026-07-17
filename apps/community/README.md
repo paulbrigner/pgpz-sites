@@ -29,7 +29,8 @@ See [Social Proof Membership](docs/social-proof-membership.md) for implementatio
 
 ## Environment
 
-Copy `.env.example` and set:
+From the monorepo root, copy `apps/community/.env.example` to
+`apps/community/.env.local` and set:
 
 ```bash
 NEXT_PUBLIC_SITE_URL=https://community.pgpz.org
@@ -63,7 +64,8 @@ See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION
 Create or verify the shared table:
 
 ```bash
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth node scripts/setup/create-dynamodb-tables.mjs
+REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth \
+  node apps/community/scripts/setup/create-dynamodb-tables.mjs
 ```
 
 For AWS CLI operations in the existing environment, use:
@@ -74,12 +76,21 @@ aws sts get-caller-identity --profile zodldashboard --region us-east-1
 
 ## Development
 
+The root workspace install and lockfile are authoritative. Run these commands
+from the monorepo root; do not create an application-local lockfile or run a
+separate install in `apps/community`.
+
 ```bash
-npm install
-npm run dev
-npm test
-npm run build
+npm ci
+npm run dev:community
+npm run test --workspace=apps/community
+npm run build:community
+npm run start:community
 ```
+
+The former `serve out` script was intentionally removed. This application uses
+the Next.js server runtime and does not configure `output: "export"`, so it does
+not produce an `out/` directory; use `npm run start:community` after building.
 
 ## Forum Markdown Export
 
@@ -89,7 +100,7 @@ The command-line exporter is available as a fallback:
 
 ```bash
 AWS_PROFILE=pgpcommunity REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth \
-  npm run forum:update -- \
+  npm run forum:update --workspace=apps/community -- \
   --slug 2026-06-15-weekly-policy-memo \
   --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
 ```
@@ -103,7 +114,7 @@ aws sso login --profile pgpcommunity
 Before the generated record is available, the exporter can use the source PDF as a fallback while still pointing social images at the expected public email-asset URLs for that slug:
 
 ```bash
-npm run forum:update -- \
+npm run forum:update --workspace=apps/community -- \
   --source pdf \
   --pdf "/path/to/weekly-policy-memo.pdf" \
   --slug 2026-06-15-weekly-policy-memo \
@@ -116,4 +127,9 @@ npm run forum:update -- \
 
 ## Deployment
 
-The app is configured for AWS Amplify via `amplify.yml`. Required runtime environment variables should be configured in the Amplify app before deployment.
+The repository-root `amplify.yml` is authoritative for monorepo deployments;
+`apps/community/amplify.yml` is retained only as a rollback reference during
+the migration observation period. Configure the existing Community Amplify app
+with `AMPLIFY_MONOREPO_APP_ROOT=apps/community`, keep its runtime environment
+variables and IAM role application-specific, and follow the root
+`docs/monorepo-migration-runbook.md` before reconnecting or deploying it.

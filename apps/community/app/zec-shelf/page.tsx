@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
-import { ZecShelfClient } from "@/components/zec-shelf/ZecShelfClient";
+import { ZecShelfClient } from "@pgpz/zec-shelf/client";
 import { Button } from "@/components/ui/button";
 import { getMemberAccess } from "@/lib/member-access";
 import { canManageZecShelf, canViewZecShelf } from "@/lib/zec-shelf-access";
-import { getZecShelfResources } from "@/lib/zec-shelf";
+import { COMMUNITY_ZEC_SHELF_CLIENT_CONFIG } from "@/lib/zec-shelf-config";
+import { communityZecShelfRepository } from "@/lib/zec-shelf-server";
 import { isEffectiveAdmin } from "@/lib/admin/member-preview";
 import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
 
@@ -52,6 +53,12 @@ export default async function ZecShelfPage() {
     : access.user;
   if (!canViewZecShelf(effectiveUser)) return <MembershipRequired />;
 
-  const resources = await getZecShelfResources();
-  return <ZecShelfClient initialResources={resources} isAdmin={canManageZecShelf(effectiveUser)} />;
+  const resources = await communityZecShelfRepository.getResources();
+  return (
+    <ZecShelfClient
+      initialResources={resources}
+      isAdmin={canManageZecShelf(effectiveUser)}
+      config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG}
+    />
+  );
 }
