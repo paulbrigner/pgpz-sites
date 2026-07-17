@@ -55,16 +55,15 @@ jobs:
         application:
           - community
           - coalition
+          - reference
     env:
       AWS_EC2_METADATA_DISABLED: 'true'
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-at-least-32-characters
       BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000
       BETTER_AUTH_URL: http://localhost:3000
       EMAIL_FROM: PGPZ CI <ci@example.invalid>
-      NEXTAUTH_TABLE: PGPZCiNextAuth
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       REGION_AWS: us-east-1
-      X_BEARER_TOKEN: ci-only-x-token
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -75,7 +74,31 @@ jobs:
           cache: npm
       - name: Install workspace dependencies
         run: npm ci
-      - name: Materialize the application environment
+      - name: Materialize the branded application environment
+        if: matrix.application != 'reference'
+        env:
+          NEXTAUTH_TABLE: PGPZCiNextAuth
+          X_BEARER_TOKEN: ci-only-x-token
         run: node tooling/write-amplify-env.mjs ${{ matrix.application }}
-      - name: Build application
+      - name: Build branded application
+        if: matrix.application != 'reference'
+        env:
+          NEXTAUTH_TABLE: PGPZCiNextAuth
+          X_BEARER_TOKEN: ci-only-x-token
         run: npm run build:${{ matrix.application }}
+      - name: Materialize the isolated reference environment
+        if: matrix.application == 'reference'
+        env:
+          DYNAMODB_TABLE: PGPZReferenceCi
+          EMAIL_DELIVERY_MODE: disabled
+          REFERENCE_DEPLOYMENT_MODE: demo
+          ZEC_SHELF_PARTITION_KEY: REFERENCE#CI
+        run: node tooling/write-amplify-env.mjs reference
+      - name: Build reference application
+        if: matrix.application == 'reference'
+        env:
+          DYNAMODB_TABLE: PGPZReferenceCi
+          EMAIL_DELIVERY_MODE: disabled
+          REFERENCE_DEPLOYMENT_MODE: demo
+          ZEC_SHELF_PARTITION_KEY: REFERENCE#CI
+        run: npm run build:reference

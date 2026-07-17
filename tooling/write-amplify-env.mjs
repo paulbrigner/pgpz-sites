@@ -75,6 +75,31 @@ const applications = {
       "COMMUNITY_NEXTAUTH_TABLE",
     ],
   },
+  reference: {
+    output: "apps/reference/.env.production",
+    required: [
+      "NEXT_PUBLIC_SITE_URL",
+      "REFERENCE_DEPLOYMENT_MODE",
+      "EMAIL_DELIVERY_MODE",
+    ],
+    // The reference app deliberately does not inherit NEXTAUTH_TABLE, SMTP,
+    // upload, or branded application credentials. Optional runtime services
+    // use generic names and must point only at isolated non-production
+    // resources.
+    keys: [
+      "NEXT_PUBLIC_SITE_URL",
+      "REFERENCE_DEPLOYMENT_MODE",
+      "EMAIL_DELIVERY_MODE",
+      "REGION_AWS",
+      "AWS_REGION",
+      "DYNAMODB_TABLE",
+      "BETTER_AUTH_URL",
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_TRUSTED_ORIGINS",
+      "EMAIL_FROM",
+      "ZEC_SHELF_PARTITION_KEY",
+    ],
+  },
 };
 
 const applicationName = process.argv[2];
