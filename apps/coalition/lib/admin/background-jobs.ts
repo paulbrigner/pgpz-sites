@@ -3,9 +3,19 @@ import "server-only";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { SendMessageBatchCommand, SQSClient } from "@aws-sdk/client-sqs";
 import {
+  BACKGROUND_JOB_RECENT_INDEX,
+  BACKGROUND_JOB_STATUS_INDEX,
+  backgroundJobExpiration,
+  decodeBackgroundJobCursor,
   deriveJobProgress,
+  encodeBackgroundJobCursor,
+  jobStatusIndexKeys,
   normalizeRecipients as normalizeBackgroundJobRecipients,
+  normalizeBackgroundJobPageSize,
+  recentJobIndexKeys,
   sanitizeJobError,
+  taskStatusIndexKeys,
+  type BackgroundJobCursorKey,
 } from "@pgpz/background-jobs";
 import { documentClient, TABLE_NAME as APPLICATION_TABLE_NAME } from "@/lib/dynamodb";
 import { awsRuntimeClientConfig } from "@/lib/aws-runtime";
@@ -116,8 +126,6 @@ type ClaimResult =
   | { outcome: "claimed"; job: BackgroundJobRecord; task: BackgroundJobTaskRecord; leaseToken: string }
   | { outcome: "terminal" | "busy" | "missing"; job?: BackgroundJobRecord; task?: BackgroundJobTaskRecord };
 
-const JOB_GSI_PK = "BACKGROUND_JOB";
-const JOB_RETENTION_SECONDS = 60 * 60 * 24 * 180;
 const AUDIENCE_MANIFEST_PAGE_MAX_BYTES = 240_000;
 const LEASE_SECONDS = 120;
 const MAX_ATTEMPTS = 3;
@@ -140,6 +148,12 @@ const TERMINAL_JOB_STATUSES = new Set<BackgroundJobStatus>([
   "needs_review",
   "canceled",
 ]);
+const ACTIVE_JOB_STATUSES: readonly BackgroundJobStatus[] = [
+  "building",
+  "dispatch_pending",
+  "queued",
+  "running",
+];
 
 let sqsClient: SQSClient | null = null;
 
@@ -469,6 +483,7 @@ function taskItemForRecipient(
   recipient: BackgroundJobRecipient,
 ) {
   const taskId = taskIdForRecipient(recipient);
+  const expires = backgroundJobExpiration("task", job.createdAt);
   return {
     ...taskKey(job.id, taskId),
     type: "BACKGROUND_JOB_TASK",
@@ -488,7 +503,13 @@ function taskItemForRecipient(
     result: null,
     lastError: null,
     projectionCompletedAt: null,
-    expires: job.expires,
+    expires,
+    ...taskStatusIndexKeys({
+      jobId: job.id,
+      taskId,
+      status: "pending",
+      updatedAt: job.createdAt,
+    }),
   };
 }
 
@@ -498,26 +519,70 @@ export async function getBackgroundJob(jobId: string) {
   return toJob(response.Item);
 }
 
-export async function listBackgroundJobTasks(jobId: string) {
+export type BackgroundJobTaskPage = {
+  tasks: BackgroundJobTaskRecord[];
+  nextCursor: string | null;
+};
+
+export async function listBackgroundJobTasksPage(
+  jobId: string,
+  {
+    limit = 50,
+    cursor,
+    status,
+  }: {
+    limit?: number;
+    cursor?: string | null;
+    status?: BackgroundJobTaskStatus | null;
+  } = {},
+): Promise<BackgroundJobTaskPage> {
   const { tableName } = requireConfiguration();
-  const tasks: BackgroundJobTaskRecord[] = [];
-  let ExclusiveStartKey: Record<string, any> | undefined;
-  do {
-    const response = await documentClient.query({
+  const requested = normalizeBackgroundJobPageSize(limit, 50);
+  const cursorIndex = status ? "job_task_status" : "job_tasks";
+  const ExclusiveStartKey = decodeBackgroundJobCursor(cursor, cursorIndex);
+  const response = await documentClient.query({
       TableName: tableName,
-      KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :task)",
-      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
-      ExpressionAttributeValues: { ":pk": `BACKGROUND_JOB#${jobId}`, ":task": "TASK#" },
-      ConsistentRead: true,
+      ...(status
+        ? {
+            IndexName: BACKGROUND_JOB_STATUS_INDEX,
+            KeyConditionExpression: "#gsi2pk = :pk",
+            ExpressionAttributeNames: { "#gsi2pk": "GSI2PK" },
+            ExpressionAttributeValues: {
+              ":pk": `BACKGROUND_JOB#${jobId}#TASK_STATUS#${status}`,
+            },
+            ScanIndexForward: false,
+          }
+        : {
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :task)",
+            ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+            ExpressionAttributeValues: {
+              ":pk": `BACKGROUND_JOB#${jobId}`,
+              ":task": "TASK#",
+            },
+            ConsistentRead: true,
+          }),
+      Limit: requested,
       ExclusiveStartKey,
-    });
-    tasks.push(
-      ...((response.Items || [])
-        .map((item) => toTask(item))
-        .filter(Boolean) as BackgroundJobTaskRecord[]),
-    );
-    ExclusiveStartKey = response.LastEvaluatedKey as Record<string, any> | undefined;
-  } while (ExclusiveStartKey);
+  });
+  return {
+    tasks: (response.Items || [])
+      .map((item) => toTask(item))
+      .filter(Boolean) as BackgroundJobTaskRecord[],
+    nextCursor: encodeBackgroundJobCursor(
+      cursorIndex,
+      response.LastEvaluatedKey as BackgroundJobCursorKey | undefined,
+    ),
+  };
+}
+
+export async function listBackgroundJobTasks(jobId: string) {
+  const tasks: BackgroundJobTaskRecord[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await listBackgroundJobTasksPage(jobId, { limit: 100, cursor });
+    tasks.push(...page.tasks);
+    cursor = page.nextCursor;
+  } while (cursor);
   return tasks;
 }
 
@@ -541,17 +606,25 @@ export async function repairBuildingBackgroundJobSnapshot(job: BackgroundJobReco
     throw new Error("The background-job task snapshot is incomplete.");
   }
   const now = new Date().toISOString();
+  const statusIndex = jobStatusIndexKeys({
+    jobId: job.id,
+    status: "dispatch_pending",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: jobKey(job.id),
     UpdateExpression:
-      "SET #status = :pending, updatedAt = :now, snapshotCompletedAt = :now REMOVE buildError",
+      "SET #status = :pending, updatedAt = :now, snapshotCompletedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE buildError",
     ConditionExpression: "#status = :building",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":building": "building",
       ":pending": "dispatch_pending",
       ":now": now,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("job", now),
     },
   }).catch((error: any) => {
     if (error?.name !== "ConditionalCheckFailedException") throw error;
@@ -580,11 +653,16 @@ export async function refreshBackgroundJob(jobId: string) {
   const tasks = await listBackgroundJobTasks(jobId);
   const progress = deriveProgress(tasks);
   const now = new Date().toISOString();
+  const statusIndex = jobStatusIndexKeys({
+    jobId,
+    status: progress.status,
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: jobKey(jobId),
     UpdateExpression:
-      "SET #status = :status, updatedAt = :now, pendingCount = :pending, queuedCount = :queued, processingCount = :processing, sentCount = :sent, validatedCount = :validated, skippedCount = :skipped, failedCount = :failed, deliveryUnknownCount = :unknown, canceledCount = :canceled",
+      "SET #status = :status, updatedAt = :now, pendingCount = :pending, queuedCount = :queued, processingCount = :processing, sentCount = :sent, validatedCount = :validated, skippedCount = :skipped, failedCount = :failed, deliveryUnknownCount = :unknown, canceledCount = :canceled, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":status": progress.status,
@@ -598,6 +676,9 @@ export async function refreshBackgroundJob(jobId: string) {
       ":failed": progress.failedCount,
       ":unknown": progress.deliveryUnknownCount,
       ":canceled": progress.canceledCount,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("job", now),
     },
   });
   return getBackgroundJob(jobId);
@@ -616,7 +697,9 @@ async function dispatchTasks(jobId: string, tasks: BackgroundJobTaskRecord[]) {
         MessageBody: JSON.stringify({ version: 1, jobId, taskId: task.taskId } satisfies BackgroundJobMessage),
       })),
     }));
-    const successful = new Set((response.Successful || []).map((entry) => entry.Id));
+    const successful = new Set(
+      (response.Successful || []).map((entry: { Id?: string }) => entry.Id),
+    );
     for (let index = 0; index < batch.length; index += 1) {
       const task = batch[index];
       if (!successful.has(`task-${offset + index}`)) {
@@ -624,13 +707,28 @@ async function dispatchTasks(jobId: string, tasks: BackgroundJobTaskRecord[]) {
         continue;
       }
       dispatched += 1;
+      const now = new Date().toISOString();
+      const statusIndex = taskStatusIndexKeys({
+        jobId,
+        taskId: task.taskId,
+        status: "queued",
+        updatedAt: now,
+      });
       await documentClient.update({
         TableName: tableName,
         Key: taskKey(jobId, task.taskId),
-        UpdateExpression: "SET #status = :queued, updatedAt = :now, queuedAt = :now",
+        UpdateExpression:
+          "SET #status = :queued, updatedAt = :now, queuedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
         ConditionExpression: "#status = :pending",
         ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":pending": "pending", ":queued": "queued", ":now": new Date().toISOString() },
+        ExpressionAttributeValues: {
+          ":pending": "pending",
+          ":queued": "queued",
+          ":now": now,
+          ":gsi2pk": statusIndex.GSI2PK,
+          ":gsi2sk": statusIndex.GSI2SK,
+          ":expires": backgroundJobExpiration("task", now),
+        },
       }).catch((error: any) => {
         if (error?.name !== "ConditionalCheckFailedException") throw error;
       });
@@ -650,7 +748,9 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
   if (!stableIdempotencyKey || stableIdempotencyKey.length > 180) throw new Error("A valid idempotency key is required.");
   const fingerprint = requestFingerprint(input, recipients);
   const now = new Date().toISOString();
-  const expires = Math.floor(Date.now() / 1000) + JOB_RETENTION_SECONDS;
+  const jobExpires = backgroundJobExpiration("job", now);
+  const taskExpires = backgroundJobExpiration("task", now);
+  const idempotencyExpires = backgroundJobExpiration("idempotency", now);
   const jobId = backgroundJobIdForIdempotencyKey(stableIdempotencyKey);
   const recipient = recipients[0];
   const taskId = taskIdForRecipient(recipient);
@@ -678,9 +778,9 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
     failedCount: 0,
     deliveryUnknownCount: 0,
     canceledCount: 0,
-    expires,
-    GSI1PK: JOB_GSI_PK,
-    GSI1SK: `${now}#${jobId}`,
+    expires: jobExpires,
+    ...recentJobIndexKeys({ jobId, createdAt: now }),
+    ...jobStatusIndexKeys({ jobId, status: "building", updatedAt: now }),
   };
   const taskItem = {
     ...taskKey(jobId, taskId),
@@ -701,7 +801,13 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
     result: null,
     lastError: null,
     projectionCompletedAt: null,
-    expires,
+    expires: taskExpires,
+    ...taskStatusIndexKeys({
+      jobId,
+      taskId,
+      status: "pending",
+      updatedAt: now,
+    }),
   };
   return {
     job: toJob(jobItem)!,
@@ -733,7 +839,7 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
             fingerprint,
             jobId,
             createdAt: now,
-            expires,
+            expires: idempotencyExpires,
           },
           ConditionExpression: "attribute_not_exists(#pk)",
           ExpressionAttributeNames: { "#pk": "pk" },
@@ -745,13 +851,27 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
 
 export async function dispatchStagedBackgroundJob(jobId: string) {
   const { tableName } = requireConfiguration();
+  const now = new Date().toISOString();
+  const statusIndex = jobStatusIndexKeys({
+    jobId,
+    status: "dispatch_pending",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: jobKey(jobId),
-    UpdateExpression: "SET #status = :pending, updatedAt = :now, snapshotCompletedAt = :now",
+    UpdateExpression:
+      "SET #status = :pending, updatedAt = :now, snapshotCompletedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
     ConditionExpression: "#status = :building",
     ExpressionAttributeNames: { "#status": "status" },
-    ExpressionAttributeValues: { ":building": "building", ":pending": "dispatch_pending", ":now": new Date().toISOString() },
+    ExpressionAttributeValues: {
+      ":building": "building",
+      ":pending": "dispatch_pending",
+      ":now": now,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("job", now),
+    },
   }).catch((error: any) => {
     if (error?.name !== "ConditionalCheckFailedException") throw error;
   });
@@ -781,7 +901,9 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
   }
 
   const now = new Date().toISOString();
-  const expires = Math.floor(Date.now() / 1000) + JOB_RETENTION_SECONDS;
+  const jobExpires = backgroundJobExpiration("job", now);
+  const audienceManifestExpires = backgroundJobExpiration("audienceManifest", now);
+  const idempotencyExpires = backgroundJobExpiration("idempotency", now);
   const jobId = backgroundJobIdForIdempotencyKey(stableIdempotencyKey);
   const audienceManifestPages = buildAudienceManifestPages(recipients);
   await persistAudienceManifest({
@@ -790,7 +912,7 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
     fingerprint,
     pages: audienceManifestPages,
     createdAt: now,
-    expires,
+    expires: audienceManifestExpires,
   });
   const jobItem = {
     ...jobKey(jobId),
@@ -817,9 +939,9 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
     failedCount: 0,
     deliveryUnknownCount: 0,
     canceledCount: 0,
-    expires,
-    GSI1PK: JOB_GSI_PK,
-    GSI1SK: `${now}#${jobId}`,
+    expires: jobExpires,
+    ...recentJobIndexKeys({ jobId, createdAt: now }),
+    ...jobStatusIndexKeys({ jobId, status: "building", updatedAt: now }),
   };
   try {
     await documentClient.transactWrite({
@@ -842,7 +964,7 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
               fingerprint,
               jobId,
               createdAt: now,
-              expires,
+              expires: idempotencyExpires,
             },
             ConditionExpression: "attribute_not_exists(#pk)",
             ExpressionAttributeNames: { "#pk": "pk" },
@@ -882,16 +1004,26 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
   try {
     tasks = await repairBuildingBackgroundJobSnapshot(persistedJob);
   } catch (error) {
+    const failedAt = new Date().toISOString();
+    const statusIndex = jobStatusIndexKeys({
+      jobId,
+      status: "building",
+      updatedAt: failedAt,
+    });
     await documentClient.update({
       TableName: tableName,
       Key: jobKey(jobId),
-      UpdateExpression: "SET updatedAt = :now, buildError = :error",
+      UpdateExpression:
+        "SET updatedAt = :now, buildError = :error, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
       ConditionExpression: "#status = :building",
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: {
         ":building": "building",
-        ":now": new Date().toISOString(),
+        ":now": failedAt,
         ":error": safeError(error),
+        ":gsi2pk": statusIndex.GSI2PK,
+        ":gsi2sk": statusIndex.GSI2SK,
+        ":expires": backgroundJobExpiration("job", failedAt),
       },
     }).catch(() => undefined);
     throw error;
@@ -906,26 +1038,61 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
   return { job, duplicate: false, ...dispatch };
 }
 
-export async function listBackgroundJobs(limit = 30) {
+export type BackgroundJobPage = {
+  jobs: BackgroundJobRecord[];
+  nextCursor: string | null;
+};
+
+export async function listBackgroundJobsPage({
+  limit = 30,
+  cursor,
+  status,
+}: {
+  limit?: number;
+  cursor?: string | null;
+  status?: BackgroundJobStatus | null;
+} = {}): Promise<BackgroundJobPage> {
   const { tableName } = requireConfiguration();
-  const requested = Math.min(Math.max(limit, 1), 1000);
-  const items: BackgroundJobRecord[] = [];
-  let ExclusiveStartKey: Record<string, any> | undefined;
+  const requested = normalizeBackgroundJobPageSize(limit);
+  const cursorIndex = status ? "job_status" : "recent_jobs";
+  const response = await documentClient.query({
+    TableName: tableName,
+    IndexName: status ? BACKGROUND_JOB_STATUS_INDEX : BACKGROUND_JOB_RECENT_INDEX,
+    KeyConditionExpression: status ? "#gsi2pk = :pk" : "#gsi1pk = :pk",
+    ExpressionAttributeNames: status
+      ? { "#gsi2pk": "GSI2PK" }
+      : { "#gsi1pk": "GSI1PK" },
+    ExpressionAttributeValues: {
+      ":pk": status ? `BACKGROUND_JOB_STATUS#${status}` : "BACKGROUND_JOB",
+    },
+    ScanIndexForward: false,
+    Limit: requested,
+    ExclusiveStartKey: decodeBackgroundJobCursor(cursor, cursorIndex),
+  });
+  return {
+    jobs: (response.Items || [])
+      .map((item) => toJob(item))
+      .filter(Boolean) as BackgroundJobRecord[],
+    nextCursor: encodeBackgroundJobCursor(
+      cursorIndex,
+      response.LastEvaluatedKey as BackgroundJobCursorKey | undefined,
+    ),
+  };
+}
+
+export async function listBackgroundJobs(limit = 30) {
+  const requested = Math.min(Math.max(Math.trunc(limit), 1), 1000);
+  const jobs: BackgroundJobRecord[] = [];
+  let cursor: string | null = null;
   do {
-    const response = await documentClient.query({
-      TableName: tableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "#gsi1pk = :pk",
-      ExpressionAttributeNames: { "#gsi1pk": "GSI1PK" },
-      ExpressionAttributeValues: { ":pk": JOB_GSI_PK },
-      ScanIndexForward: false,
-      Limit: Math.min(requested - items.length, 100),
-      ExclusiveStartKey,
+    const page = await listBackgroundJobsPage({
+      limit: Math.min(requested - jobs.length, 100),
+      cursor,
     });
-    items.push(...(response.Items || []).map((item) => toJob(item)).filter(Boolean) as BackgroundJobRecord[]);
-    ExclusiveStartKey = response.LastEvaluatedKey as Record<string, any> | undefined;
-  } while (ExclusiveStartKey && items.length < requested);
-  return items.slice(0, requested);
+    jobs.push(...page.jobs);
+    cursor = page.nextCursor;
+  } while (cursor && jobs.length < requested);
+  return jobs.slice(0, requested);
 }
 
 export async function claimBackgroundJobTask(jobId: string, taskId: string): Promise<ClaimResult> {
@@ -939,14 +1106,21 @@ export async function claimBackgroundJobTask(jobId: string, taskId: string): Pro
   if (TERMINAL_TASK_STATUSES.has(existing.status)) return { outcome: "terminal", job, task: existing };
   if (job.status === "canceled") return { outcome: "terminal", job, task: existing };
   const now = new Date();
+  const nowIso = now.toISOString();
   const leaseToken = randomUUID();
   const leaseExpiresAt = new Date(now.getTime() + LEASE_SECONDS * 1000).toISOString();
+  const statusIndex = taskStatusIndexKeys({
+    jobId,
+    taskId,
+    status: "processing",
+    updatedAt: nowIso,
+  });
   try {
     const response = await documentClient.update({
       TableName: tableName,
       Key: taskKey(jobId, taskId),
       UpdateExpression:
-        "SET #status = :processing, updatedAt = :now, startedAt = if_not_exists(startedAt, :now), leaseToken = :leaseToken, leaseExpiresAt = :leaseExpiresAt, attemptCount = if_not_exists(attemptCount, :zero) + :one REMOVE lastError",
+        "SET #status = :processing, updatedAt = :now, startedAt = if_not_exists(startedAt, :now), leaseToken = :leaseToken, leaseExpiresAt = :leaseExpiresAt, attemptCount = if_not_exists(attemptCount, :zero) + :one, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE lastError",
       ConditionExpression:
         "#status IN (:pending, :queued) OR (#status = :processing AND leaseExpiresAt < :now AND attribute_not_exists(deliveryStartedAt))",
       ExpressionAttributeNames: { "#status": "status" },
@@ -954,11 +1128,14 @@ export async function claimBackgroundJobTask(jobId: string, taskId: string): Pro
         ":pending": "pending",
         ":queued": "queued",
         ":processing": "processing",
-        ":now": now.toISOString(),
+        ":now": nowIso,
         ":leaseToken": leaseToken,
         ":leaseExpiresAt": leaseExpiresAt,
         ":zero": 0,
         ":one": 1,
+        ":gsi2pk": statusIndex.GSI2PK,
+        ":gsi2sk": statusIndex.GSI2SK,
+        ":expires": backgroundJobExpiration("task", nowIso),
       },
       ReturnValues: "ALL_NEW",
     });
@@ -972,13 +1149,27 @@ export async function claimBackgroundJobTask(jobId: string, taskId: string): Pro
 export async function markBackgroundJobDeliveryStarted(jobId: string, taskId: string, leaseToken: string) {
   const { tableName } = requireConfiguration();
   const now = new Date().toISOString();
+  const statusIndex = taskStatusIndexKeys({
+    jobId,
+    taskId,
+    status: "processing",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: taskKey(jobId, taskId),
-    UpdateExpression: "SET deliveryStartedAt = :now, updatedAt = :now",
+    UpdateExpression:
+      "SET deliveryStartedAt = :now, updatedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
     ConditionExpression: "#status = :processing AND leaseToken = :leaseToken",
     ExpressionAttributeNames: { "#status": "status" },
-    ExpressionAttributeValues: { ":processing": "processing", ":leaseToken": leaseToken, ":now": now },
+    ExpressionAttributeValues: {
+      ":processing": "processing",
+      ":leaseToken": leaseToken,
+      ":now": now,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("task", now),
+    },
   });
 }
 
@@ -1001,11 +1192,12 @@ export async function completeBackgroundJobTask({
 }) {
   const { tableName } = requireConfiguration();
   const now = new Date().toISOString();
+  const statusIndex = taskStatusIndexKeys({ jobId, taskId, status, updatedAt: now });
   await documentClient.update({
     TableName: tableName,
     Key: taskKey(jobId, taskId),
     UpdateExpression:
-      "SET #status = :status, updatedAt = :now, completedAt = :now, providerMessageId = :messageId, #result = :result, lastError = :error REMOVE leaseToken, leaseExpiresAt",
+      "SET #status = :status, updatedAt = :now, completedAt = :now, providerMessageId = :messageId, #result = :result, lastError = :error, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE leaseToken, leaseExpiresAt",
     ConditionExpression: "#status = :processing AND leaseToken = :leaseToken",
     ExpressionAttributeNames: { "#status": "status", "#result": "result" },
     ExpressionAttributeValues: {
@@ -1016,6 +1208,9 @@ export async function completeBackgroundJobTask({
       ":messageId": providerMessageId || null,
       ":result": result || null,
       ":error": error ? safeError(error) : null,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("task", now),
     },
   });
   try {
@@ -1062,18 +1257,29 @@ export async function releaseBackgroundJobTaskForRetry({
   if (task.attemptCount >= MAX_ATTEMPTS) {
     return completeBackgroundJobTask({ jobId, taskId, leaseToken, status: "failed", error });
   }
+  const now = new Date().toISOString();
+  const statusIndex = taskStatusIndexKeys({
+    jobId,
+    taskId,
+    status: "pending",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: taskKey(jobId, taskId),
-    UpdateExpression: "SET #status = :pending, updatedAt = :now, lastError = :error REMOVE leaseToken, leaseExpiresAt",
+    UpdateExpression:
+      "SET #status = :pending, updatedAt = :now, lastError = :error, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE leaseToken, leaseExpiresAt",
     ConditionExpression: "#status = :processing AND leaseToken = :leaseToken",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":processing": "processing",
       ":pending": "pending",
       ":leaseToken": leaseToken,
-      ":now": new Date().toISOString(),
+      ":now": now,
       ":error": safeError(error),
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("task", now),
     },
   });
   await refreshBackgroundJob(jobId);
@@ -1112,10 +1318,16 @@ export async function retryBackgroundJob(
   );
   if (!retryable.length) throw new Error("This job has no failed recipients to retry.");
   const now = new Date().toISOString();
+  const jobStatusIndex = jobStatusIndexKeys({
+    jobId,
+    status: "dispatch_pending",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: jobKey(jobId),
-    UpdateExpression: "SET #status = :pending, updatedAt = :now, retryRequestedAt = :now",
+    UpdateExpression:
+      "SET #status = :pending, updatedAt = :now, retryRequestedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
     ConditionExpression: "attribute_exists(#pk) AND #status IN (:completed, :partial, :failed, :review)",
     ExpressionAttributeNames: { "#pk": "pk", "#status": "status" },
     ExpressionAttributeValues: {
@@ -1125,17 +1337,34 @@ export async function retryBackgroundJob(
       ":failed": "failed",
       ":review": "needs_review",
       ":now": now,
+      ":gsi2pk": jobStatusIndex.GSI2PK,
+      ":gsi2sk": jobStatusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("job", now),
     },
   });
   for (const task of retryable) {
+    const taskStatusIndex = taskStatusIndexKeys({
+      jobId,
+      taskId: task.taskId,
+      status: "pending",
+      updatedAt: now,
+    });
     await documentClient.update({
       TableName: tableName,
       Key: taskKey(jobId, task.taskId),
       UpdateExpression:
-        "SET #status = :pending, updatedAt = :now, retryRequestedAt = :now REMOVE leaseToken, leaseExpiresAt, deliveryStartedAt, providerMessageId, #result, lastError, projectionCompletedAt",
+        "SET #status = :pending, updatedAt = :now, retryRequestedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE leaseToken, leaseExpiresAt, deliveryStartedAt, providerMessageId, #result, lastError, projectionCompletedAt",
       ConditionExpression: "#status IN (:failed, :unknown)",
       ExpressionAttributeNames: { "#status": "status", "#result": "result" },
-      ExpressionAttributeValues: { ":pending": "pending", ":failed": "failed", ":unknown": "delivery_unknown", ":now": now },
+      ExpressionAttributeValues: {
+        ":pending": "pending",
+        ":failed": "failed",
+        ":unknown": "delivery_unknown",
+        ":now": now,
+        ":gsi2pk": taskStatusIndex.GSI2PK,
+        ":gsi2sk": taskStatusIndex.GSI2SK,
+        ":expires": backgroundJobExpiration("task", now),
+      },
     });
   }
   const pending = (await listBackgroundJobTasks(jobId)).filter((task) => task.status === "pending");
@@ -1149,14 +1378,26 @@ export async function markBackgroundJobTaskProjectionCompleted(
 ) {
   const { tableName } = requireConfiguration();
   const now = new Date().toISOString();
+  const statusIndex = taskStatusIndexKeys({
+    jobId,
+    taskId,
+    status: "sent",
+    updatedAt: now,
+  });
   await documentClient.update({
     TableName: tableName,
     Key: taskKey(jobId, taskId),
     UpdateExpression:
-      "SET projectionCompletedAt = if_not_exists(projectionCompletedAt, :now), updatedAt = :now",
+      "SET projectionCompletedAt = if_not_exists(projectionCompletedAt, :now), updatedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
     ConditionExpression: "#status = :sent",
     ExpressionAttributeNames: { "#status": "status" },
-    ExpressionAttributeValues: { ":sent": "sent", ":now": now },
+    ExpressionAttributeValues: {
+      ":sent": "sent",
+      ":now": now,
+      ":gsi2pk": statusIndex.GSI2PK,
+      ":gsi2sk": statusIndex.GSI2SK,
+      ":expires": backgroundJobExpiration("task", now),
+    },
   });
 }
 
@@ -1164,13 +1405,29 @@ export async function cancelBackgroundJob(jobId: string) {
   const { tableName } = requireConfiguration();
   const tasks = await listBackgroundJobTasks(jobId);
   for (const task of tasks.filter((candidate) => candidate.status === "pending" || candidate.status === "queued")) {
+    const now = new Date().toISOString();
+    const statusIndex = taskStatusIndexKeys({
+      jobId,
+      taskId: task.taskId,
+      status: "canceled",
+      updatedAt: now,
+    });
     await documentClient.update({
       TableName: tableName,
       Key: taskKey(jobId, task.taskId),
-      UpdateExpression: "SET #status = :canceled, updatedAt = :now, completedAt = :now",
+      UpdateExpression:
+        "SET #status = :canceled, updatedAt = :now, completedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
       ConditionExpression: "#status IN (:pending, :queued)",
       ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: { ":pending": "pending", ":queued": "queued", ":canceled": "canceled", ":now": new Date().toISOString() },
+      ExpressionAttributeValues: {
+        ":pending": "pending",
+        ":queued": "queued",
+        ":canceled": "canceled",
+        ":now": now,
+        ":gsi2pk": statusIndex.GSI2PK,
+        ":gsi2sk": statusIndex.GSI2SK,
+        ":expires": backgroundJobExpiration("task", now),
+      },
     }).catch((error: any) => {
       if (error?.name !== "ConditionalCheckFailedException") throw error;
     });
@@ -1180,8 +1437,22 @@ export async function cancelBackgroundJob(jobId: string) {
 
 export async function reconcileBackgroundJobs() {
   const { tableName } = requireConfiguration();
-  const jobs = await listBackgroundJobs(1000);
-  const active = jobs.filter((job) => !TERMINAL_JOB_STATUSES.has(job.status));
+  const indexedJobs = new Map<string, BackgroundJobRecord>();
+  for (const status of ACTIVE_JOB_STATUSES) {
+    let cursor: string | null = null;
+    do {
+      const page = await listBackgroundJobsPage({ status, limit: 100, cursor });
+      for (const job of page.jobs) indexedJobs.set(job.id, job);
+      cursor = page.nextCursor;
+    } while (cursor && indexedJobs.size < 1000);
+    if (indexedJobs.size >= 1000) break;
+  }
+  const active = (
+    await Promise.all([...indexedJobs.keys()].map((jobId) => getBackgroundJob(jobId)))
+  ).filter(
+    (job): job is BackgroundJobRecord =>
+      !!job && !TERMINAL_JOB_STATUSES.has(job.status),
+  );
   let dispatched = 0;
   let deliveryUnknown = 0;
   for (const job of active) {
@@ -1190,16 +1461,26 @@ export async function reconcileBackgroundJobs() {
       try {
         tasks = await repairBuildingBackgroundJobSnapshot(job);
       } catch (error) {
+        const failedAt = new Date().toISOString();
+        const statusIndex = jobStatusIndexKeys({
+          jobId: job.id,
+          status: "building",
+          updatedAt: failedAt,
+        });
         await documentClient.update({
           TableName: tableName,
           Key: jobKey(job.id),
-          UpdateExpression: "SET updatedAt = :now, buildError = :error",
+          UpdateExpression:
+            "SET updatedAt = :now, buildError = :error, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
           ConditionExpression: "#status = :building",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: {
             ":building": "building",
-            ":now": new Date().toISOString(),
+            ":now": failedAt,
             ":error": safeError(error),
+            ":gsi2pk": statusIndex.GSI2PK,
+            ":gsi2sk": statusIndex.GSI2SK,
+            ":expires": backgroundJobExpiration("job", failedAt),
           },
         }).catch(() => undefined);
         continue;
@@ -1210,23 +1491,52 @@ export async function reconcileBackgroundJobs() {
       candidate.status === "processing" && !!candidate.leaseExpiresAt && candidate.leaseExpiresAt < now,
     )) {
       if (task.deliveryStartedAt) {
+        const statusIndex = taskStatusIndexKeys({
+          jobId: job.id,
+          taskId: task.taskId,
+          status: "delivery_unknown",
+          updatedAt: now,
+        });
         await documentClient.update({
           TableName: tableName,
           Key: taskKey(job.id, task.taskId),
-          UpdateExpression: "SET #status = :unknown, updatedAt = :now, completedAt = :now, lastError = :error REMOVE leaseToken, leaseExpiresAt",
+          UpdateExpression:
+            "SET #status = :unknown, updatedAt = :now, completedAt = :now, lastError = :error, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE leaseToken, leaseExpiresAt",
           ConditionExpression: "#status = :processing AND leaseExpiresAt < :now",
           ExpressionAttributeNames: { "#status": "status" },
-          ExpressionAttributeValues: { ":processing": "processing", ":unknown": "delivery_unknown", ":now": now, ":error": "Delivery outcome is unknown after an expired provider-call lease; manual review is required." },
+          ExpressionAttributeValues: {
+            ":processing": "processing",
+            ":unknown": "delivery_unknown",
+            ":now": now,
+            ":error": "Delivery outcome is unknown after an expired provider-call lease; manual review is required.",
+            ":gsi2pk": statusIndex.GSI2PK,
+            ":gsi2sk": statusIndex.GSI2SK,
+            ":expires": backgroundJobExpiration("task", now),
+          },
         }).catch(() => undefined);
         deliveryUnknown += 1;
       } else {
+        const statusIndex = taskStatusIndexKeys({
+          jobId: job.id,
+          taskId: task.taskId,
+          status: "pending",
+          updatedAt: now,
+        });
         await documentClient.update({
           TableName: tableName,
           Key: taskKey(job.id, task.taskId),
-          UpdateExpression: "SET #status = :pending, updatedAt = :now REMOVE leaseToken, leaseExpiresAt",
+          UpdateExpression:
+            "SET #status = :pending, updatedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires REMOVE leaseToken, leaseExpiresAt",
           ConditionExpression: "#status = :processing AND leaseExpiresAt < :now AND attribute_not_exists(deliveryStartedAt)",
           ExpressionAttributeNames: { "#status": "status" },
-          ExpressionAttributeValues: { ":processing": "processing", ":pending": "pending", ":now": now },
+          ExpressionAttributeValues: {
+            ":processing": "processing",
+            ":pending": "pending",
+            ":now": now,
+            ":gsi2pk": statusIndex.GSI2PK,
+            ":gsi2sk": statusIndex.GSI2SK,
+            ":expires": backgroundJobExpiration("task", now),
+          },
         }).catch(() => undefined);
       }
     }

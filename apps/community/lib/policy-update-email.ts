@@ -432,7 +432,7 @@ export function buildPolicyUpdateEmail(
   const subject = update.emailSubject;
   const intro = policyUpdateEmailIntro(update);
   const unsubscribeHtml = unsubscribeUrl
-    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
+    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from policy updates</a>.`
     : undefined;
   const footerHtml = renderMemberEmailFooter({ portalUrl: base, unsubscribeHtml });
   const html = `<!doctype html>
@@ -519,7 +519,7 @@ export function buildPolicyUpdateEmail(
     ...sections.flatMap(renderSectionTextLines),
     renderForwardedEmailCommunityText(baseUrl),
     "",
-    unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
+    unsubscribeUrl ? `Unsubscribe from policy updates: ${unsubscribeUrl}` : "To stop receiving policy updates, contact admin@pgpz.org.",
   ].join("\n");
 
   return {

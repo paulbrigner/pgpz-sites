@@ -1,6 +1,7 @@
 import "server-only";
 
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { normalizeAccessApplicationStatus } from "@/lib/manual-approval";
 
 export type MembershipStatus = "active" | "invited" | "none";
 
@@ -23,7 +24,7 @@ export async function getUserMembershipStatus(userId: string) {
     TableName: TABLE_NAME,
     Key: userKey(userId),
     ProjectionExpression:
-      "membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt",
+      "membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, applicationStatus, applicationRequestedAt, applicationApprovedAt, applicationDeclinedAt, applicationDeclineReason, applicationWithdrawnAt",
   });
 
   const item = res.Item || {};
@@ -45,5 +46,24 @@ export async function getUserMembershipStatus(userId: string) {
       typeof item.manualApprovalRequestedAt === "string" ? item.manualApprovalRequestedAt : null,
     manualApprovalApprovedAt:
       typeof item.manualApprovalApprovedAt === "string" ? item.manualApprovalApprovedAt : null,
+    applicationStatus: normalizeAccessApplicationStatus(item.applicationStatus, item.manualApprovalStatus),
+    applicationRequestedAt:
+      typeof item.applicationRequestedAt === "string"
+        ? item.applicationRequestedAt
+        : typeof item.manualApprovalRequestedAt === "string"
+          ? item.manualApprovalRequestedAt
+          : null,
+    applicationApprovedAt:
+      typeof item.applicationApprovedAt === "string"
+        ? item.applicationApprovedAt
+        : typeof item.manualApprovalApprovedAt === "string"
+          ? item.manualApprovalApprovedAt
+          : null,
+    applicationDeclinedAt:
+      typeof item.applicationDeclinedAt === "string" ? item.applicationDeclinedAt : null,
+    applicationDeclineReason:
+      typeof item.applicationDeclineReason === "string" ? item.applicationDeclineReason : null,
+    applicationWithdrawnAt:
+      typeof item.applicationWithdrawnAt === "string" ? item.applicationWithdrawnAt : null,
   };
 }

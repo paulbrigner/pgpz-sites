@@ -7,14 +7,43 @@ export type DynamoDBDocumentClientLike = {
   scan(input: any): Promise<{ Items?: DynamoDBItem[]; LastEvaluatedKey?: DynamoDBItem }>;
   delete(input: any): Promise<any>;
   update(input: any): Promise<{ Attributes?: DynamoDBItem }>;
+  transactWrite?(input: any): Promise<any>;
 };
+
+export type BetterAuthUserEmailOwnershipConfig = Readonly<{
+  normalizeEmail(value: unknown): string;
+  ownershipKey(email: string): DynamoDBItem;
+  assertCompatible(
+    record: DynamoDBItem | null | undefined,
+    bindings: { betterAuthUserId: string },
+  ): void;
+  claimTransactionItem(input: {
+    tableName: string;
+    email: string;
+    betterAuthUserId: string;
+  }): DynamoDBItem;
+  releaseTransactionItem(input: {
+    tableName: string;
+    email: string;
+    betterAuthUserId: string;
+  }): DynamoDBItem;
+  releaseBetterAuthTransactionItem(input: {
+    tableName: string;
+    email: string;
+    betterAuthUserId: string;
+    preserveAppOwner: boolean;
+  }): DynamoDBItem;
+  collisionError(): Error;
+}>;
 
 export type BetterAuthDynamoDBConfig = Readonly<{
   documentClient: DynamoDBDocumentClientLike;
   tableName: string;
   indexName?: string;
+  userIdIndexName?: string;
   adapterId?: string;
   adapterName?: string;
+  userEmailOwnership?: BetterAuthUserEmailOwnershipConfig;
 }>;
 
 export type BetterAuthRateLimitDynamoDBConfig = Readonly<{

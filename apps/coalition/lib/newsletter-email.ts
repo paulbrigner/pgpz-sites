@@ -105,8 +105,8 @@ export function buildNewsletterEmail(
       ? trackingOpenPixel(portalUrl, emailTracking.trackingId)
       : "";
   const unsubscribeHtml = unsubscribeUrl
-    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
-    : ` To stop receiving member updates, contact <a href="mailto:admin@pgpz.org" style="color:${colors.goldDeep};">admin@pgpz.org</a>.`;
+    ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from newsletters</a>.`
+    : ` To stop receiving newsletters, contact <a href="mailto:admin@pgpz.org" style="color:${colors.goldDeep};">admin@pgpz.org</a>.`;
   const footerHtml = renderMemberEmailFooter({ portalUrl, unsubscribeHtml });
   const html = `<!doctype html>
 <html>
@@ -155,7 +155,7 @@ export function buildNewsletterEmail(
     renderForwardedEmailCoalitionText(portalUrl),
     "",
     `PGPZ Coalition: ${portalUrl}`,
-    unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
+    unsubscribeUrl ? `Unsubscribe from newsletters: ${unsubscribeUrl}` : "To stop receiving newsletters, contact admin@pgpz.org.",
   ].join("\n");
 
   return { subject, html, text, preheader, unsubscribeUrl, trackedDestinations: [...trackedDestinations] };

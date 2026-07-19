@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Mail, Newspaper, Users } from "lucide-react";
+import { Activity, Inbox, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
 import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
 import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
+import { ResourceModerationPanel } from "@/components/admin/ResourceModerationPanel";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "users" | "updates" | "newsletters" | "access";
+type AdminTab = "users" | "resources" | "updates" | "newsletters" | "access";
 
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
@@ -22,6 +23,12 @@ const tabs: Array<{
   description: string;
   icon: typeof Users;
 }> = [
+  {
+    id: "resources",
+    label: "Resource queue",
+    description: "Approve or reject member submissions",
+    icon: Inbox,
+  },
   {
     id: "users",
     label: "User management",
@@ -54,7 +61,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 lg:grid-cols-4">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -90,6 +97,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       </div>
 
       {activeTab === "users" ? <AdminClient initialRoster={null} currentAdminId={currentAdminId} /> : null}
+      {activeTab === "resources" ? <ResourceModerationPanel /> : null}
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
       {activeTab === "access" ? <AccessLogPanel /> : null}

@@ -274,7 +274,7 @@ describe("buildPolicyUpdateEmail", () => {
     );
     expect(built.html).toContain("&amp;sig=");
     expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
-    expect(built.text).toContain("Unsubscribe: https://community.pgpz.org/api/email/unsubscribe/policy-track-123");
+    expect(built.text).toContain("Unsubscribe from policy updates: https://community.pgpz.org/api/email/unsubscribe/policy-track-123");
     expect(built.unsubscribeUrl).toBe(
       "https://community.pgpz.org/api/email/unsubscribe/policy-track-123",
     );

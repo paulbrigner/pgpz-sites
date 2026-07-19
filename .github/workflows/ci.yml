@@ -18,6 +18,11 @@ jobs:
     name: Checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -43,6 +48,11 @@ jobs:
         run: npm run typecheck
       - name: Run tests
         run: npm test
+      - name: Run DynamoDB adapter integration contracts
+        env:
+          PGPZ_DYNAMODB_INTEGRATION_ENDPOINT: http://127.0.0.1:8000
+          PGPZ_DYNAMODB_INTEGRATION_REQUIRED: '1'
+        run: npm run test:integration --workspace=@pgpz/auth-dynamodb
       - name: Run linters
         run: npm run lint
 
@@ -112,3 +122,23 @@ jobs:
           REFERENCE_DEPLOYMENT_MODE: demo
           ZEC_SHELF_PARTITION_KEY: REFERENCE#CI
         run: npm run build:reference
+
+  browser-tests:
+    name: Browser journeys
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run critical browser journeys
+        run: npm run test:e2e

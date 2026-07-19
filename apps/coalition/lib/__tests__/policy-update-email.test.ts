@@ -249,7 +249,7 @@ describe("buildPolicyUpdateEmail", () => {
     );
     expect(built.html).toContain("&amp;sig=");
     expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
-    expect(built.text).toContain("Unsubscribe: https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123");
+    expect(built.text).toContain("Unsubscribe from policy updates: https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123");
     expect(built.unsubscribeUrl).toBe(
       "https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123",
     );

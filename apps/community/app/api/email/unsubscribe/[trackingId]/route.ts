@@ -81,12 +81,31 @@ const htmlPage = (title: string, body: string, confirm = false) => `<!doctype ht
   </body>
 </html>`;
 
+const temporarilyUnavailable = () =>
+  new NextResponse(
+    htmlPage(
+      "Please try again",
+      "We could not process this unsubscribe request right now. No preference was changed; please try again in a moment.",
+    ),
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Retry-After": "30",
+      },
+    },
+  );
+
 export async function GET(_request: NextRequest, { params }: Props) {
   const { trackingId } = await params;
-  const tracking = await getNewsletterTrackingRecord(trackingId).catch((err) => {
+  let tracking;
+  try {
+    tracking = await getNewsletterTrackingRecord(trackingId);
+  } catch (err) {
     console.error("Newsletter unsubscribe lookup failed", err);
-    return null;
-  });
+    return temporarilyUnavailable();
+  }
 
   if (!tracking) {
     return new NextResponse(
@@ -102,12 +121,13 @@ export async function GET(_request: NextRequest, { params }: Props) {
   }
 
   const alreadyUnsubscribed = !!tracking.unsubscribedAt;
+  const categoryLabel = tracking.messageType === "policy_update" ? "policy updates" : "newsletters";
   return new NextResponse(
     htmlPage(
       alreadyUnsubscribed ? "Already unsubscribed" : "Confirm unsubscribe",
       alreadyUnsubscribed
-        ? "This email address is already suppressed for future PGPZ Community member emails. Your community account and member access are unchanged."
-        : "Confirm that you want to stop future PGPZ Community member emails. Your community account and member access will remain unchanged.",
+        ? `This email address is already unsubscribed from ${categoryLabel}. Other email preferences, your community account, and member access are unchanged.`
+        : `Confirm that you want to stop future PGPZ Community ${categoryLabel}. Other email preferences, your community account, and member access will remain unchanged.`,
       !alreadyUnsubscribed,
     ),
     {
@@ -125,10 +145,13 @@ export async function POST(request: NextRequest, { params }: Props) {
   }
 
   const { trackingId } = await params;
-  const tracking = await recordNewsletterUnsubscribe(trackingId).catch((err) => {
+  let tracking;
+  try {
+    tracking = await recordNewsletterUnsubscribe(trackingId);
+  } catch (err) {
     console.error("Newsletter unsubscribe tracking failed", err);
-    return null;
-  });
+    return temporarilyUnavailable();
+  }
 
   if (!tracking) {
     return new NextResponse(
@@ -143,10 +166,12 @@ export async function POST(request: NextRequest, { params }: Props) {
     );
   }
 
+  const categoryLabel = tracking.messageType === "policy_update" ? "policy updates" : "newsletters";
+
   return new NextResponse(
     htmlPage(
       "You have been unsubscribed",
-      "This email address has been suppressed for future PGPZ Community member emails. Your community account and member access are unchanged.",
+      `This email address has been unsubscribed from ${categoryLabel}. Other email preferences, your community account, and member access are unchanged.`,
     ),
     {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },

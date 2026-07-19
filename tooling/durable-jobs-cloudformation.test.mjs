@@ -33,7 +33,7 @@ test("builds isolated Community and Coalition plans", () => {
   assert.doesNotMatch(JSON.stringify(coalition.template), /PGPZCommunity/);
 });
 
-test("creates a protected on-demand jobs table with its listing index and TTL", () => {
+test("creates a protected on-demand jobs table with recent and status indexes plus TTL", () => {
   const table = buildDurableJobsTemplate({ applicationName: "community" })
     .Resources.JobsTable;
 
@@ -55,6 +55,17 @@ test("creates a protected on-demand jobs table with its listing index and TTL", 
       { AttributeName: "GSI1PK", KeyType: "HASH" },
       { AttributeName: "GSI1SK", KeyType: "RANGE" },
     ],
+  );
+  assert.deepEqual(
+    table.Properties.GlobalSecondaryIndexes[1],
+    {
+      IndexName: "GSI2",
+      KeySchema: [
+        { AttributeName: "GSI2PK", KeyType: "HASH" },
+        { AttributeName: "GSI2SK", KeyType: "RANGE" },
+      ],
+      Projection: { ProjectionType: "ALL" },
+    },
   );
 });
 
@@ -82,6 +93,12 @@ test("uses encrypted fourteen-day queues, redrive, and a batch-one partial-failu
   assert.match(worker.Code.ZipFile, /batchItemFailures/);
   assert.match(worker.Code.ZipFile, /authorization: "Bearer "/);
   assert.match(worker.Code.ZipFile, /x-background-job-receive-count/);
+  assert.equal(worker.Environment.Variables.APPLICATION_NAME, "community");
+  assert.match(worker.Code.ZipFile, /task\.forward\.started/);
+  assert.match(worker.Code.ZipFile, /task\.forward\.succeeded/);
+  assert.match(worker.Code.ZipFile, /task\.forward\.failed/);
+  assert.match(worker.Code.ZipFile, /schemaVersion/);
+  assert.doesNotMatch(worker.Code.ZipFile, /detail =/);
 });
 
 test("keeps the bridge consumer role free of application data and email permissions", () => {
@@ -101,6 +118,7 @@ test("configures a bearer-authenticated scheduled reconciler and operational ala
   const reconciler = template.Resources.ReconcilerFunction.Properties;
 
   assert.equal(reconciler.Runtime, "nodejs22.x");
+  assert.equal(reconciler.Environment.Variables.APPLICATION_NAME, "coalition");
   assert.equal(
     reconciler.Environment.Variables.RECONCILE_PATH,
     BACKGROUND_JOBS_INTERNAL_PATHS.reconcile,
@@ -125,13 +143,33 @@ test("configures a bearer-authenticated scheduled reconciler and operational ala
       "OldestQueuedMessageAlarm",
       "BridgeWorkerErrorAlarm",
       "ReconcilerErrorAlarm",
+      "BridgeDeliveryFailureAlarm",
     ].filter((logicalId) => template.Resources[logicalId]?.Type === "AWS::CloudWatch::Alarm"),
     [
       "DeadLetterQueueAlarm",
       "OldestQueuedMessageAlarm",
       "BridgeWorkerErrorAlarm",
       "ReconcilerErrorAlarm",
+      "BridgeDeliveryFailureAlarm",
     ],
+  );
+  assert.match(reconciler.Code.ZipFile, /reconciliation\.started/);
+  assert.match(reconciler.Code.ZipFile, /reconciliation\.succeeded/);
+  assert.match(reconciler.Code.ZipFile, /reconciliation\.failed/);
+  assert.deepEqual(
+    template.Resources.BridgeDeliveryFailureMetric.Properties,
+    {
+      LogGroupName: { Ref: "BridgeWorkerLogGroup" },
+      FilterPattern: '{ $.event = "task.forward.failed" }',
+      MetricTransformations: [
+        {
+          MetricNamespace: "PGPZ/BackgroundJobs",
+          MetricName: "coalition-bridge-delivery-failures",
+          MetricValue: "1",
+          DefaultValue: 0,
+        },
+      ],
+    },
   );
 });
 

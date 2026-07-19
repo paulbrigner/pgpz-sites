@@ -24,8 +24,9 @@ const sanitizeAuthCallback = (pathname: string | null, query: string | null) => 
 };
 
 export function MainNav() {
-  const { status, signOut } = useAppSession();
+  const { data: session, status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
+  const isMember = session?.capabilities.member === true;
   const { actualIsAdmin, effectiveIsAdmin: isAdmin, viewAsMember, setViewAsMember } = useAdminViewMode();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -73,7 +74,9 @@ export function MainNav() {
         { key: "home", label: "Home", href: "/" },
         { key: "updates", label: "Updates", href: "/updates" },
         { key: "zec-shelf", label: "ZEC Shelf", href: "/zec-shelf" },
-        { key: "invite", label: "Invite", href: "/settings/profile#member-recruitment" },
+        ...(isMember
+          ? [{ key: "invite", label: "Invite", href: "/settings/profile#member-recruitment" }]
+          : []),
         { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
           ? [{
@@ -153,7 +156,7 @@ export function MainNav() {
               </NavigationMenuItem>
             ) : null}
 
-            {authenticated ? (
+            {authenticated && isMember ? (
               <NavigationMenuItem>
                 <NavigationMenuLink className={linkClasses} asChild>
                   <Link href="/settings/profile#member-recruitment">Invite</Link>

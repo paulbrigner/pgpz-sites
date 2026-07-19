@@ -7,6 +7,7 @@ const dynamoMocks = vi.hoisted(() => ({
   put: vi.fn(),
   query: vi.fn(),
   scan: vi.fn(),
+  transactWrite: vi.fn(),
   update: vi.fn(),
 }));
 
@@ -46,14 +47,28 @@ describe("referral signup crediting", () => {
     dynamoMocks.put.mockReset();
     dynamoMocks.query.mockReset();
     dynamoMocks.scan.mockReset();
+    dynamoMocks.transactWrite.mockReset();
     dynamoMocks.update.mockReset();
     dynamoMocks.put.mockResolvedValue({});
+    dynamoMocks.transactWrite.mockResolvedValue({});
     dynamoMocks.update.mockResolvedValue({});
   });
 
   it("records a recruitment credit and updates both user records", async () => {
     dynamoMocks.get.mockImplementation(async ({ Key }) => {
       if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "USER#referrer-1") {
+        return {
+          Item: {
+            id: "referrer-1",
+            email: "referrer@example.com",
+            firstName: "Referrer",
+            lastName: "Member",
+            accountStatus: "active",
+            membershipStatus: "active",
+          },
+        };
+      }
       if (Key.pk === "USER#referred-1") {
         return {
           Item: {
@@ -76,7 +91,16 @@ describe("referral signup crediting", () => {
     });
 
     expect(result.credited).toBe(true);
-    expect(dynamoMocks.put).toHaveBeenCalledWith(
+    const transaction = dynamoMocks.transactWrite.mock.calls[0][0];
+    expect(transaction.TransactItems).toHaveLength(4);
+    expect(transaction.TransactItems[0].ConditionCheck).toEqual(
+      expect.objectContaining({
+        TableName: "TestTable",
+        Key: { pk: "REFERRAL_CODE#abc123", sk: "REFERRAL_CODE#abc123" },
+        ConditionExpression: expect.stringContaining("#userId = :ownerUserId"),
+      }),
+    );
+    expect(transaction.TransactItems[1].Put).toEqual(
       expect.objectContaining({
         TableName: "TestTable",
         Item: expect.objectContaining({
@@ -95,23 +119,27 @@ describe("referral signup crediting", () => {
         ConditionExpression: "attribute_not_exists(#pk)",
       }),
     );
-    expect(dynamoMocks.update).toHaveBeenCalledWith(
+    expect(transaction.TransactItems[2].Update).toEqual(
       expect.objectContaining({
         Key: { pk: "USER#referred-1", sk: "USER#referred-1" },
+        ConditionExpression: expect.stringContaining("attribute_not_exists(#referralCreditedAt)"),
         ExpressionAttributeValues: expect.objectContaining({
           ":referrerUserId": "referrer-1",
           ":code": "abc123",
         }),
       }),
     );
-    expect(dynamoMocks.update).toHaveBeenCalledWith(
+    expect(transaction.TransactItems[3].Update).toEqual(
       expect.objectContaining({
         Key: { pk: "USER#referrer-1", sk: "USER#referrer-1" },
+        ConditionExpression: expect.stringContaining("#membershipStatus = :active"),
         ExpressionAttributeValues: expect.objectContaining({
           ":one": 1,
         }),
       }),
     );
+    expect(dynamoMocks.put).not.toHaveBeenCalled();
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
   });
 
   it("does not credit self-referrals", async () => {
@@ -126,13 +154,22 @@ describe("referral signup crediting", () => {
     });
 
     expect(result).toEqual({ credited: false, reason: "self_referral" });
-    expect(dynamoMocks.put).not.toHaveBeenCalled();
-    expect(dynamoMocks.update).not.toHaveBeenCalled();
+    expect(dynamoMocks.transactWrite).not.toHaveBeenCalled();
   });
 
   it("does not credit an existing account that predates the pending signup", async () => {
     dynamoMocks.get.mockImplementation(async ({ Key }) => {
       if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "USER#referrer-1") {
+        return {
+          Item: {
+            id: "referrer-1",
+            email: "referrer@example.com",
+            accountStatus: "active",
+            membershipStatus: "active",
+          },
+        };
+      }
       if (Key.pk === "USER#referred-1") {
         return {
           Item: {
@@ -153,8 +190,145 @@ describe("referral signup crediting", () => {
     });
 
     expect(result).toEqual({ credited: false, reason: "not_new_signup" });
+    expect(dynamoMocks.transactWrite).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["unverified", { accountStatus: "active", membershipStatus: "none" }],
+    ["deactivated", { accountStatus: "deactivated", membershipStatus: "active" }],
+  ])("does not credit referrals owned by an %s account", async (_label, state) => {
+    dynamoMocks.get.mockImplementation(async ({ Key }) => {
+      if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "USER#referrer-1") {
+        return { Item: { id: "referrer-1", email: "referrer@example.com", ...state } };
+      }
+      return {};
+    });
+
+    const result = await creditReferralSignup({
+      referralCode: "abc123",
+      referredUserId: "referred-1",
+      referredEmail: "referred@example.com",
+    });
+
+    expect(result).toEqual({ credited: false, reason: "ineligible_referrer" });
+    expect(dynamoMocks.transactWrite).not.toHaveBeenCalled();
+  });
+
+  it("does not credit when the referrer is deactivated during the transaction", async () => {
+    let ownerReads = 0;
+    dynamoMocks.get.mockImplementation(async ({ Key }) => {
+      if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "REFERRAL_CREDIT#referred-1") return {};
+      if (Key.pk === "USER#referrer-1") {
+        ownerReads += 1;
+        return {
+          Item: {
+            id: "referrer-1",
+            accountStatus: ownerReads === 1 ? "active" : "deactivated",
+            membershipStatus: "active",
+          },
+        };
+      }
+      if (Key.pk === "USER#referred-1") {
+        return {
+          Item: {
+            id: "referred-1",
+            createdAt: "2026-06-02T00:00:00.000Z",
+          },
+        };
+      }
+      return {};
+    });
+    const cancellation = new Error("condition changed");
+    cancellation.name = "TransactionCanceledException";
+    dynamoMocks.transactWrite.mockRejectedValue(cancellation);
+
+    const result = await creditReferralSignup({
+      referralCode: "abc123",
+      referredUserId: "referred-1",
+      pendingSignupCreatedAt: "2026-06-02T00:00:00.000Z",
+    });
+
+    expect(result).toEqual({ credited: false, reason: "ineligible_referrer" });
     expect(dynamoMocks.put).not.toHaveBeenCalled();
     expect(dynamoMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("classifies a concurrently created credit as already credited", async () => {
+    dynamoMocks.get.mockImplementation(async ({ Key }) => {
+      if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "REFERRAL_CREDIT#referred-1") {
+        return { Item: { type: "REFERRAL_CREDIT", referredUserId: "referred-1" } };
+      }
+      if (Key.pk === "USER#referrer-1") {
+        return { Item: { id: "referrer-1", accountStatus: "active", membershipStatus: "active" } };
+      }
+      if (Key.pk === "USER#referred-1") {
+        return { Item: { id: "referred-1", createdAt: "2026-06-02T00:00:00.000Z" } };
+      }
+      return {};
+    });
+    const cancellation = new Error("credit won elsewhere");
+    cancellation.name = "TransactionCanceledException";
+    dynamoMocks.transactWrite.mockRejectedValue(cancellation);
+
+    await expect(creditReferralSignup({
+      referralCode: "abc123",
+      referredUserId: "referred-1",
+    })).resolves.toEqual({ credited: false, reason: "already_credited" });
+  });
+
+  it("classifies a concurrently changed referral-code owner", async () => {
+    let codeReads = 0;
+    dynamoMocks.get.mockImplementation(async ({ Key }) => {
+      if (Key.pk === "REFERRAL_CODE#abc123") {
+        codeReads += 1;
+        return {
+          Item: codeReads === 1
+            ? referralCodeRecord
+            : { ...referralCodeRecord, userId: "different-owner" },
+        };
+      }
+      if (Key.pk === "REFERRAL_CREDIT#referred-1") return {};
+      if (Key.pk === "USER#referrer-1") {
+        return { Item: { id: "referrer-1", accountStatus: "active", membershipStatus: "active" } };
+      }
+      if (Key.pk === "USER#referred-1") {
+        return { Item: { id: "referred-1", createdAt: "2026-06-02T00:00:00.000Z" } };
+      }
+      return {};
+    });
+    const cancellation = new Error("code owner changed");
+    cancellation.name = "TransactionCanceledException";
+    dynamoMocks.transactWrite.mockRejectedValue(cancellation);
+
+    await expect(creditReferralSignup({
+      referralCode: "abc123",
+      referredUserId: "referred-1",
+    })).resolves.toEqual({ credited: false, reason: "unknown_referral_code" });
+  });
+
+  it("preserves an unclassified transaction cancellation for retry", async () => {
+    dynamoMocks.get.mockImplementation(async ({ Key }) => {
+      if (Key.pk === "REFERRAL_CODE#abc123") return { Item: referralCodeRecord };
+      if (Key.pk === "REFERRAL_CREDIT#referred-1") return {};
+      if (Key.pk === "USER#referrer-1") {
+        return { Item: { id: "referrer-1", accountStatus: "active", membershipStatus: "active" } };
+      }
+      if (Key.pk === "USER#referred-1") {
+        return { Item: { id: "referred-1", createdAt: "2026-06-02T00:00:00.000Z" } };
+      }
+      return {};
+    });
+    const cancellation = new Error("transaction conflict");
+    cancellation.name = "TransactionCanceledException";
+    dynamoMocks.transactWrite.mockRejectedValue(cancellation);
+
+    await expect(creditReferralSignup({
+      referralCode: "abc123",
+      referredUserId: "referred-1",
+    })).rejects.toBe(cancellation);
   });
 });
 
@@ -164,6 +338,7 @@ describe("referral member summaries", () => {
     dynamoMocks.put.mockReset();
     dynamoMocks.query.mockReset();
     dynamoMocks.scan.mockReset();
+    dynamoMocks.transactWrite.mockReset();
     dynamoMocks.update.mockReset();
     dynamoMocks.put.mockResolvedValue({});
     dynamoMocks.update.mockResolvedValue({});
@@ -196,6 +371,8 @@ describe("referral member summaries", () => {
             firstName: "Referrer",
             lastName: "Member",
             referralCode: "abc123",
+            accountStatus: "active",
+            membershipStatus: "active",
           },
         };
       }
@@ -233,8 +410,30 @@ describe("referral member summaries", () => {
     expect(summary.activeRecruitCount).toBe(15);
     expect(summary.recentCredits).toHaveLength(5);
     expect(summary.recentCredits[0]).toMatchObject({
-      referredUserId: "referred-30",
+      displayLabel: "New member",
       membershipStatus: "active",
     });
+    expect(summary.recentCredits[0]).not.toHaveProperty("referredUserId");
+    expect(summary.recentCredits[0]).not.toHaveProperty("referredEmail");
+    expect(summary.recentCredits[0]).not.toHaveProperty("referredName");
+  });
+
+  it.each([
+    ["unverified", { accountStatus: "active", membershipStatus: "none" }],
+    ["deactivated", { accountStatus: "deactivated", membershipStatus: "active" }],
+  ])("does not create a referral code for an %s account", async (_label, state) => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        id: "referrer-1",
+        email: "referrer@example.com",
+        ...state,
+      },
+    });
+
+    await expect(getReferralSummaryForUser("referrer-1")).rejects.toThrow(
+      "Active membership is required",
+    );
+    expect(dynamoMocks.put).not.toHaveBeenCalled();
+    expect(dynamoMocks.query).not.toHaveBeenCalled();
   });
 });

@@ -165,7 +165,7 @@ async function queueNewsletterSnapshot({
 async function resolveNewsletterAudience(body: any) {
   const audienceMode: NewsletterAudienceMode =
     body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
-  const allRecipients = await listPolicyUpdateRecipients();
+  const allRecipients = await listPolicyUpdateRecipients("newsletter");
 
   if (audienceMode === "all_active_members") {
     return { audienceMode, recipients: allRecipients, activeRecipientCount: allRecipients.length };
@@ -335,7 +335,7 @@ export async function GET() {
   const [newsletters, sendRuns, recipients] = await Promise.all([
     listNewsletters(),
     listNewsletterSendRuns(),
-    listPolicyUpdateRecipients(),
+    listPolicyUpdateRecipients("newsletter"),
   ]);
   const sendRunNewsletterIds = new Set(sendRuns.map((sendRun) => sendRun.newsletterId));
   const legacySendRuns = newsletters

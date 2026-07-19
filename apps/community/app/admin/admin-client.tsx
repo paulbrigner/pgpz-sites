@@ -12,7 +12,6 @@ import {
   PowerOff,
   RefreshCcw,
   Save,
-  Search,
   ShieldCheck,
   StickyNote,
   Trash2,
@@ -23,14 +22,18 @@ import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { canSendWelcomeEmail } from "@/lib/admin/welcome-email";
+import {
+  CommunityRosterOverview,
+  type CommunityRosterSortDirection,
+  type CommunityRosterSortKey,
+  type CommunityRosterStatusFilter,
+} from "@/components/admin/CommunityRosterOverview";
 
 type Props = {
   initialRoster: AdminRoster | null;
   currentAdminId?: string | null;
 };
 
-type SortKey = "firstName" | "lastName" | "joinedAt";
-type SortDirection = "asc" | "desc";
 type ProfileDraft = {
   email: string;
   firstName: string;
@@ -116,7 +119,7 @@ const memberNeedsAction = (member: AdminMember) => {
     (active && !member.welcomeEmailSentAt && !welcomeSuppressed && !!member.email && !member.emailSuppressed);
 };
 
-const compareText = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+const compareText = (a: string | null, b: string | null, direction: CommunityRosterSortDirection = "asc") => {
   const aText = (a || "").trim();
   const bText = (b || "").trim();
   if (aText && !bText) return -1;
@@ -125,7 +128,7 @@ const compareText = (a: string | null, b: string | null, direction: SortDirectio
   return direction === "desc" ? -compare : compare;
 };
 
-const compareJoinedAt = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+const compareJoinedAt = (a: string | null, b: string | null, direction: CommunityRosterSortDirection = "asc") => {
   const aTime = a ? Date.parse(a) : NaN;
   const bTime = b ? Date.parse(b) : NaN;
   const aValid = Number.isFinite(aTime);
@@ -141,7 +144,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const { sensitiveDataVisible } = useAdminSensitiveData();
   const [roster, setRoster] = useState<AdminRoster | null>(initialRoster);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "none" | "manual">("all");
+  const [statusFilter, setStatusFilter] = useState<CommunityRosterStatusFilter>("all");
   const [loading, setLoading] = useState(!initialRoster);
   const [error, setError] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState<Record<string, boolean>>({});
@@ -152,8 +155,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [memberActionLoading, setMemberActionLoading] = useState<Record<string, boolean>>({});
   const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
   const [notesSaving, setNotesSaving] = useState<Record<string, boolean>>({});
-  const [sortKey, setSortKey] = useState<SortKey>("lastName");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortKey, setSortKey] = useState<CommunityRosterSortKey>("lastName");
+  const [sortDirection, setSortDirection] = useState<CommunityRosterSortDirection>("asc");
   const [actionsFirst, setActionsFirst] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -517,94 +520,22 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-5">
-        {[
-          ["Total", roster?.meta.total ?? 0],
-          ["Active", roster?.meta.active ?? 0],
-          ["Unverified", roster?.meta.none ?? 0],
-          ["Manual pending", roster?.meta.manualPending ?? 0],
-          ["Admins", roster?.meta.admins ?? 0],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border bg-white/80 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</div>
-            <div className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">{value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-lg border bg-white/85 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative max-w-xl flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, email, X handle, proof URL, or notes"
-              className="w-full rounded-md border py-2 pl-9 pr-3 text-sm"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              ["all", "All"],
-              ["active", "Active"],
-              ["none", "Unverified"],
-              ["manual", "Manual requests"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value as typeof statusFilter)}
-                className={cn(
-                  "rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]",
-                  statusFilter === value
-                    ? "border-[var(--brand-ink)] bg-[var(--brand-ink)] text-[var(--zcash-gold)]"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-            <Button type="button" variant="outline" onClick={loadRoster} disabled={loading}>
-              <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
-              Refresh
-            </Button>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Sort
-            <select
-              value={sortKey}
-              onChange={(event) => setSortKey(event.target.value as SortKey)}
-              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
-            >
-              <option value="lastName">Last name</option>
-              <option value="firstName">First name</option>
-              <option value="joinedAt">Date joined</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Order
-            <select
-              value={sortDirection}
-              onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            <input
-              type="checkbox"
-              checked={actionsFirst}
-              onChange={(event) => setActionsFirst(event.target.checked)}
-              className="h-4 w-4 accent-[var(--zcash-gold)]"
-            />
-            Actions first ({actionNeededCount})
-          </label>
-        </div>
-      </div>
+      <CommunityRosterOverview
+        meta={roster?.meta}
+        query={query}
+        onQueryChange={setQuery}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        loading={loading}
+        onRefresh={loadRoster}
+        sortKey={sortKey}
+        onSortKeyChange={setSortKey}
+        sortDirection={sortDirection}
+        onSortDirectionChange={setSortDirection}
+        actionsFirst={actionsFirst}
+        onActionsFirstChange={setActionsFirst}
+        actionNeededCount={actionNeededCount}
+      />
 
       {notice ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -700,8 +631,14 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     </div>
                     <div className="space-y-1">
                       <div className="font-medium">
-                        {manualApproved ? "Manual approval" : member.xHandle || "—"}
+                        {manualApproved ? "Manual approval" : member.membershipProofHandle || "—"}
                       </div>
+                      {!manualApproved && member.membershipProofHandle ? (
+                        <div className="text-xs text-slate-500">Verified X identity</div>
+                      ) : null}
+                      {member.xHandle && member.xHandle !== member.membershipProofHandle ? (
+                        <div className="text-xs text-slate-500">Profile handle: {member.xHandle}</div>
+                      ) : null}
                       {member.membershipProofPostUrl ? (
                         <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofPostUrl} target="_blank" rel="noopener noreferrer">
                           Proof post

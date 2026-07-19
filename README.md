@@ -51,12 +51,20 @@ npm run build:reference
 npm run history:verify
 npm run parity:check
 npm run boundaries:check
+npx playwright install chromium
+npm run test:e2e
 ```
 
 `npm run check` verifies the imported-history baseline, enforces the parity
 manifest and extracted-feature placement, checks workspace import and direct
 dependency boundaries, typechecks both apps and package workspaces, runs all
 tests, and runs each available workspace linter.
+
+`npm run test:e2e` starts both branded applications on isolated local ports and
+runs the same anonymous critical journeys against each: server-rendered public
+content, protected-admin redirects, mobile navigation, and serious/critical
+axe accessibility findings. It uses only local test configuration and does not
+send email or require a production login.
 
 ## Dependency boundaries
 
@@ -95,6 +103,11 @@ monorepo builds.
 
 See [`docs/monorepo-migration-runbook.md`](docs/monorepo-migration-runbook.md)
 for cutover gates, live checks, and rollback instructions.
+
+Schema-sensitive production releases must also follow the guarded
+[`Better Auth user-index runbook`](docs/better-auth-user-index-runbook.md) and
+[`durable background-jobs runbook`](docs/durable-jobs-runbook.md) before the
+matching application code is deployed.
 
 ## Reference application
 

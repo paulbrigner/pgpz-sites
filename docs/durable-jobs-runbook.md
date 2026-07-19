@@ -11,7 +11,9 @@ enqueue work for the sibling application.
 
 - The application writes the parent job and its immutable recipient/work
   snapshot to its dedicated on-demand DynamoDB table before queue dispatch.
-  `GSI1` supports status and recent-job queries without scans. Point-in-time
+  `GSI1` supports newest-first job history. `GSI2` partitions parent jobs by
+  status and tasks by parent-job/status, so reconciliation and incident review
+  do not scan completed history. Point-in-time
   recovery, deletion protection, server-side encryption, TTL, stack
   termination protection, and resource-retention policies are enabled.
 - The application can only send messages to its own encrypted Standard SQS
@@ -22,6 +24,12 @@ enqueue work for the sibling application.
   `/api/internal/background-jobs/process`. It supplies the SQS message ID and
   receive count as headers, authenticates with a bearer secret, and reports
   partial batch failures so SQS retains failed work.
+- Bridge and reconciler Lambdas emit one-line JSON telemetry with schema
+  version, application, component, event, timestamp, duration, status code,
+  SQS message ID/receive count, and job/task IDs where available. Logs never
+  include a recipient, email body, bearer secret, or endpoint response body.
+  A log metric and alarm cover record-level bridge failures because Lambda's
+  native `Errors` metric does not count a successful partial-batch response.
 - A separate Node.js 22 Lambda calls
   `/api/internal/background-jobs/reconcile` every five minutes. It has no
   DynamoDB, SQS, or SES permission; the application performs reconciliation
@@ -63,6 +71,46 @@ The application origins are pinned to `https://community.pgpz.org` and
 `https://coalition.pgpz.org`. This prevents an infrastructure parameter mistake
 from forwarding the internal bearer secret to another origin.
 
+## Index, pagination, and retention policy
+
+The jobs table uses these access patterns:
+
+| Index | Partition key | Sort key | Purpose |
+| --- | --- | --- | --- |
+| `GSI1` | `BACKGROUND_JOB` | `<createdAt>#<jobId>` | Recent jobs, newest first |
+| `GSI2` | `BACKGROUND_JOB_STATUS#<status>` | `<updatedAt>#<jobId>` | Jobs in a specific operational state |
+| `GSI2` | `BACKGROUND_JOB#<jobId>#TASK_STATUS#<status>` | `<updatedAt>#<taskId>` | Tasks in a specific state within one job |
+
+Admin job queries accept a bounded `limit` and opaque `cursor`; a status
+filter is bound into the cursor and cannot be changed between pages. Job task
+pages use `includeTasks=true`, `taskLimit`, `taskCursor`, and optional
+`taskStatus`. The normal admin UI may continue to request the first page, while
+operators and future UI work can traverse large histories without causing the
+server to drain every DynamoDB page.
+
+TTL is a data-minimization and cost-control mechanism, not an exact deletion
+schedule. DynamoDB may remove expired items later than their `expires` value.
+For records created or advanced by this release, the enforced policy is:
+
+| Record | Retention |
+| --- | ---: |
+| Parent job summary | 180 days |
+| Idempotency claim | 180 days |
+| Per-recipient task/result | 90 days |
+| Recoverable audience manifest | 30 days |
+
+Active job and task expirations are renewed when state advances. Job summaries
+outlive recipient-level details intentionally, preserving aggregate audit and
+failure counts while removing email-address-bearing snapshots sooner. PITR is
+for disaster recovery and does not extend the supported operational retention
+contract.
+
+This policy is forward-applied: terminal records written by an earlier release
+are not rewritten automatically and may retain their prior expiration for up
+to 180 days. Require an exact empty-table check at the initial cutover, or
+record the grandfathered count and use a separately reviewed conditional TTL
+backfill if shortening those existing records is required.
+
 ## Review and validate without changing AWS
 
 The provisioner is nonmutating by default and prints the complete template and
@@ -79,7 +127,16 @@ node tooling/provision-durable-jobs.mjs \
 ```
 
 Review both plans for the exact table and queue names, canonical URL, IAM
-actions, queue redrive, alarms, and `WorkersEnabled=false`. Then ask AWS to
+actions, both table indexes, queue redrive, alarms, and `WorkersEnabled=false`.
+If updating a previously created stack that has only `GSI1`, keep both worker
+switches disabled while CloudFormation adds `GSI2`, and require DynamoDB to
+report the table and both indexes as `ACTIVE` before deploying code that
+queries status partitions. Before disabling the old workers, freeze new job
+creation and require the queue to be empty with no nonterminal jobs; existing
+records without `GSI2PK`/`GSI2SK` are not automatically discoverable through
+the new status index. If any legacy job remains active, either let the old
+worker/reconciler drain it first or run a reviewed one-time backfill of its
+status keys before cutover. Then ask AWS to
 validate each template. `--validate-only` calls only
 `cloudformation validate-template`; it does not create a change set or mutate a
 resource, and it is distinct from an application job whose mode is
@@ -226,7 +283,7 @@ Cut over one application at a time, Coalition first and Community second:
 7. Exercise one deliberately failed mocked/non-production message before the
    production release, or use a `validate_only` fault-injection path, to verify
    retry accounting and reconciliation without addressing a registered user.
-8. Confirm the four alarms are `OK`, the live queue and DLQ are empty, logs
+8. Confirm the five alarms are `OK`, the live queue and DLQ are empty, logs
    contain no secret or message body, and the admin job-progress UI matches the
    table totals. Only then unfreeze normal bulk operations for that application
    and proceed to the sibling application.
@@ -238,9 +295,9 @@ Div, stop and add a bounded smoke path; do not approximate with a bulk audience.
 ## Monitoring, retries, and DLQ handling
 
 The stack creates alarms for a visible DLQ message, a live-queue message older
-than ten minutes, bridge Lambda errors, and reconciler Lambda errors. Treat a
-DLQ alarm as an operational incident, not as permission to replay every
-message.
+than ten minutes, bridge Lambda errors, bridge delivery-failure metrics, and
+reconciler Lambda errors. Treat a DLQ alarm as an operational incident, not as
+permission to replay every message.
 
 1. Pause the affected admin workflow and record the job ID, recipient/work ID,
    SQS message ID, receive count, and latest application state. Never record
@@ -271,11 +328,17 @@ audience is enabled.
    `BACKGROUND_JOBS_ENABLED=false` if a controlled drain or repair is needed:
    that application flag also gates worker processing. With the event source
    disabled, inspect and reconcile the preserved records first.
-3. When no in-flight processing remains, set
-   `BACKGROUND_JOBS_ENABLED=false` and redeploy the same commit, or deploy the
-   previously recorded application release. A previous release restores the
-   synchronous implementation, so bulk actions must remain frozen until the
-   rollback is verified.
+3. When no in-flight processing remains, choose the rollback that matches the
+   recorded release contract. For an operational pause, set
+   `BACKGROUND_JOBS_ENABLED=false`, redeploy the same commit, and leave the
+   infrastructure workers disabled. For this `GSI2` release, the immediately
+   previous application release is the `GSI1` durable-jobs implementation,
+   not a synchronous implementation: deploy that release while both gates are
+   disabled, verify its routes and preserved records, then set
+   `BACKGROUND_JOBS_ENABLED=true` and redeploy it before reapplying the stack
+   with `--workers-enabled true`. The retained `GSI2` is harmless to the
+   `GSI1` release. Keep bulk actions frozen until the selected rollback is
+   fully verified, and never assume an older release's processing contract.
 4. Do not delete the stack, table, queue, DLQ, or secret. Retention, deletion
    protection, and termination protection intentionally preserve forensic and
    recovery state. Fix code or data separately, then repeat dry run,

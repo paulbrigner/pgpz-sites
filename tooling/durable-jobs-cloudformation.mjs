@@ -46,9 +46,42 @@ const alarmActions = {
   "Fn::If": ["HasAlarmTopic", [{ Ref: "AlarmTopicArn" }], { Ref: "AWS::NoValue" }],
 };
 
-const bridgeWorkerSource = String.raw`exports.handler = async (event) => {
+const bridgeWorkerSource = String.raw`const emit = (level, event, fields = {}) => {
+  const entry = {
+    schemaVersion: 1,
+    service: "pgpz-background-jobs",
+    application: process.env.APPLICATION_NAME,
+    component: "bridge",
+    event,
+    timestamp: new Date().toISOString(),
+    ...fields,
+  };
+  console[level](JSON.stringify(entry));
+};
+
+const identifiers = (body) => {
+  try {
+    const value = JSON.parse(body);
+    return {
+      ...(typeof value?.jobId === "string" ? { jobId: value.jobId } : {}),
+      ...(typeof value?.taskId === "string" ? { taskId: value.taskId } : {}),
+    };
+  } catch {
+    return {};
+  }
+};
+
+exports.handler = async (event) => {
   const failures = [];
   for (const record of event.Records || []) {
+    const startedAt = Date.now();
+    const receiveCount = Number(record.attributes?.ApproximateReceiveCount || 1);
+    const context = {
+      messageId: record.messageId,
+      receiveCount,
+      ...identifiers(record.body),
+    };
+    emit("log", "task.forward.started", context);
     try {
       const response = await fetch(
         process.env.APPLICATION_BASE_URL + process.env.PROCESS_PATH,
@@ -66,13 +99,24 @@ const bridgeWorkerSource = String.raw`exports.handler = async (event) => {
         },
       );
       if (!response.ok) {
-        const detail = (await response.text()).slice(0, 500);
-        throw new Error("process endpoint returned " + response.status + ": " + detail);
+        await response.text();
+        const error = new Error("process endpoint returned " + response.status);
+        error.statusCode = response.status;
+        throw error;
       }
+      await response.text();
+      emit("log", "task.forward.succeeded", {
+        ...context,
+        statusCode: response.status,
+        durationMs: Date.now() - startedAt,
+      });
     } catch (error) {
-      console.error("Background job delivery failed", {
-        messageId: record.messageId,
-        error: error instanceof Error ? error.message : String(error),
+      emit("error", "task.forward.failed", {
+        ...context,
+        durationMs: Date.now() - startedAt,
+        errorName: error instanceof Error ? error.name : "Error",
+        errorMessage: String(error instanceof Error ? error.message : error).slice(0, 300),
+        ...(Number.isInteger(error?.statusCode) ? { statusCode: error.statusCode } : {}),
       });
       failures.push({ itemIdentifier: record.messageId });
     }
@@ -81,25 +125,61 @@ const bridgeWorkerSource = String.raw`exports.handler = async (event) => {
 };
 `;
 
-const reconcilerSource = String.raw`exports.handler = async () => {
-  const response = await fetch(
-    process.env.APPLICATION_BASE_URL + process.env.RECONCILE_PATH,
-    {
-      method: "POST",
-      headers: {
-        authorization: "Bearer " + process.env.INTERNAL_SECRET,
-        "content-type": "application/json",
+const reconcilerSource = String.raw`const emit = (level, event, fields = {}) => {
+  console[level](JSON.stringify({
+    schemaVersion: 1,
+    service: "pgpz-background-jobs",
+    application: process.env.APPLICATION_NAME,
+    component: "reconciler",
+    event,
+    timestamp: new Date().toISOString(),
+    ...fields,
+  }));
+};
+
+exports.handler = async () => {
+  const startedAt = Date.now();
+  emit("log", "reconciliation.started");
+  try {
+    const response = await fetch(
+      process.env.APPLICATION_BASE_URL + process.env.RECONCILE_PATH,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + process.env.INTERNAL_SECRET,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          source: "schedule",
+          requestedAt: new Date().toISOString(),
+        }),
+        signal: AbortSignal.timeout(25000),
       },
-      body: JSON.stringify({
-        source: "schedule",
-        requestedAt: new Date().toISOString(),
-      }),
-      signal: AbortSignal.timeout(25000),
-    },
-  );
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
-    throw new Error("reconcile endpoint returned " + response.status + ": " + detail);
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error("reconcile endpoint returned " + response.status);
+      error.statusCode = response.status;
+      throw error;
+    }
+    const summary = {};
+    for (const key of ["inspectedJobs", "dispatched", "deliveryUnknown"]) {
+      if (Number.isFinite(body?.[key])) summary[key] = body[key];
+    }
+    emit("log", "reconciliation.succeeded", {
+      durationMs: Date.now() - startedAt,
+      statusCode: response.status,
+      ...summary,
+    });
+    return summary;
+  } catch (error) {
+    emit("error", "reconciliation.failed", {
+      durationMs: Date.now() - startedAt,
+      errorName: error instanceof Error ? error.name : "Error",
+      errorMessage: String(error instanceof Error ? error.message : error).slice(0, 300),
+      ...(Number.isInteger(error?.statusCode) ? { statusCode: error.statusCode } : {}),
+    });
+    throw error;
   }
 };
 `;
@@ -203,6 +283,8 @@ export function buildDurableJobsTemplate({ applicationName }) {
             { AttributeName: "sk", AttributeType: "S" },
             { AttributeName: "GSI1PK", AttributeType: "S" },
             { AttributeName: "GSI1SK", AttributeType: "S" },
+            { AttributeName: "GSI2PK", AttributeType: "S" },
+            { AttributeName: "GSI2SK", AttributeType: "S" },
           ],
           KeySchema: [
             { AttributeName: "pk", KeyType: "HASH" },
@@ -214,6 +296,14 @@ export function buildDurableJobsTemplate({ applicationName }) {
               KeySchema: [
                 { AttributeName: "GSI1PK", KeyType: "HASH" },
                 { AttributeName: "GSI1SK", KeyType: "RANGE" },
+              ],
+              Projection: { ProjectionType: "ALL" },
+            },
+            {
+              IndexName: "GSI2",
+              KeySchema: [
+                { AttributeName: "GSI2PK", KeyType: "HASH" },
+                { AttributeName: "GSI2SK", KeyType: "RANGE" },
               ],
               Projection: { ProjectionType: "ALL" },
             },
@@ -317,6 +407,7 @@ export function buildDurableJobsTemplate({ applicationName }) {
           Environment: {
             Variables: {
               APPLICATION_BASE_URL: { Ref: "ApplicationBaseUrl" },
+              APPLICATION_NAME: applicationName,
               PROCESS_PATH: BACKGROUND_JOBS_INTERNAL_PATHS.process,
               INTERNAL_SECRET: { Ref: "InternalSecret" },
             },
@@ -388,6 +479,7 @@ export function buildDurableJobsTemplate({ applicationName }) {
           Environment: {
             Variables: {
               APPLICATION_BASE_URL: { Ref: "ApplicationBaseUrl" },
+              APPLICATION_NAME: applicationName,
               RECONCILE_PATH: BACKGROUND_JOBS_INTERNAL_PATHS.reconcile,
               INTERNAL_SECRET: { Ref: "InternalSecret" },
             },
@@ -487,6 +579,38 @@ export function buildDurableJobsTemplate({ applicationName }) {
         functionLogicalId: "ReconcilerFunction",
         description: `${applicationName} background-job reconciler returned errors`,
       }),
+      BridgeDeliveryFailureMetric: {
+        Type: "AWS::Logs::MetricFilter",
+        DependsOn: "BridgeWorkerLogGroup",
+        Properties: {
+          LogGroupName: { Ref: "BridgeWorkerLogGroup" },
+          FilterPattern: '{ $.event = "task.forward.failed" }',
+          MetricTransformations: [
+            {
+              MetricNamespace: "PGPZ/BackgroundJobs",
+              MetricName: `${applicationName}-bridge-delivery-failures`,
+              MetricValue: "1",
+              DefaultValue: 0,
+            },
+          ],
+        },
+      },
+      BridgeDeliveryFailureAlarm: {
+        Type: "AWS::CloudWatch::Alarm",
+        Properties: {
+          AlarmDescription: `${applicationName} background-job bridge reported a record failure`,
+          Namespace: "PGPZ/BackgroundJobs",
+          MetricName: `${applicationName}-bridge-delivery-failures`,
+          Statistic: "Sum",
+          Period: 300,
+          EvaluationPeriods: 1,
+          DatapointsToAlarm: 1,
+          Threshold: 1,
+          ComparisonOperator: "GreaterThanOrEqualToThreshold",
+          TreatMissingData: "notBreaching",
+          AlarmActions: alarmActions,
+        },
+      },
     },
     Outputs: {
       JobsTableName: { Value: { Ref: "JobsTable" } },

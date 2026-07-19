@@ -7,6 +7,10 @@ import {
 } from "@/lib/better-auth-user-email";
 import { releaseEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
+import {
+  memberAcceptsEmailCategory,
+  type MemberEmailCategory,
+} from "@/lib/email-preferences";
 
 type RawUser = {
   id?: string;
@@ -28,6 +32,8 @@ type RawUser = {
   emailSuppressedAt?: string | null;
   emailSuppressedReason?: string | null;
   emailSuppressedBy?: string | null;
+  emailNewsletterOptIn?: boolean | null;
+  emailPolicyUpdateOptIn?: boolean | null;
   accountStatus?: "active" | "deactivated" | null;
   deactivatedAt?: string | null;
   deactivatedBy?: string | null;
@@ -36,6 +42,7 @@ type RawUser = {
   membershipVerifiedAt?: string | null;
   membershipProofPostUrl?: string | null;
   membershipProofPostId?: string | null;
+  membershipProofHandle?: string | null;
   proofRetentionPolicy?: string | null;
   manualApprovalStatus?: "none" | "pending" | "approved" | null;
   manualApprovalRequestedAt?: string | null;
@@ -61,6 +68,7 @@ export type AdminMember = {
   joinedAt: string | null;
   membershipProofPostUrl: string | null;
   membershipProofPostId: string | null;
+  membershipProofHandle: string | null;
   proofRetentionPolicy: string | null;
   manualApprovalStatus: "none" | "pending" | "approved";
   manualApprovalRequestedAt: string | null;
@@ -81,6 +89,8 @@ export type AdminMember = {
   emailSuppressedAt: string | null;
   emailSuppressedReason: string | null;
   emailSuppressedBy: string | null;
+  emailNewsletterOptIn: boolean | null;
+  emailPolicyUpdateOptIn: boolean | null;
   accountStatus: "active" | "deactivated";
   deactivatedAt: string | null;
   deactivatedBy: string | null;
@@ -267,7 +277,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, welcomeEmailSuppressedAt, welcomeEmailSuppressedReason, welcomeEmailSuppressedBy, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, welcomeEmailSuppressedAt, welcomeEmailSuppressedReason, welcomeEmailSuppressedBy, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, membershipProofHandle, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -305,6 +315,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
     joinedAt: textOrNull(user.membershipVerifiedAt),
     membershipProofPostUrl: textOrNull(user.membershipProofPostUrl),
     membershipProofPostId: textOrNull(user.membershipProofPostId),
+    membershipProofHandle: textOrNull(user.membershipProofHandle),
     proofRetentionPolicy: textOrNull(user.proofRetentionPolicy),
     manualApprovalStatus,
     manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),
@@ -325,6 +336,10 @@ function toAdminMember(user: RawUser): AdminMember | null {
     emailSuppressedAt: textOrNull(user.emailSuppressedAt),
     emailSuppressedReason: textOrNull(user.emailSuppressedReason),
     emailSuppressedBy: textOrNull(user.emailSuppressedBy),
+    emailNewsletterOptIn:
+      typeof user.emailNewsletterOptIn === "boolean" ? user.emailNewsletterOptIn : null,
+    emailPolicyUpdateOptIn:
+      typeof user.emailPolicyUpdateOptIn === "boolean" ? user.emailPolicyUpdateOptIn : null,
     accountStatus,
     deactivatedAt: textOrNull(user.deactivatedAt),
     deactivatedBy: textOrNull(user.deactivatedBy),
@@ -958,7 +973,9 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
   };
 }
 
-export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipient[]> {
+export async function listPolicyUpdateRecipients(
+  category: MemberEmailCategory = "policy_update",
+): Promise<PolicyUpdateRecipient[]> {
   const rawUsers = await scanUsers();
   return rawUsers
     .map(toAdminMember)
@@ -968,7 +985,7 @@ export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipien
         member.accountStatus !== "deactivated" &&
         member.membershipStatus === "active" &&
         !!member.email &&
-        !member.emailSuppressed
+        memberAcceptsEmailCategory(member, category)
     )
     .map((member) => ({
       id: member.id,

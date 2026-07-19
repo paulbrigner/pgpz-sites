@@ -1057,6 +1057,7 @@ export async function getUserProofStatus(userId: string) {
     membershipVerifiedAt: (user.Item?.membershipVerifiedAt as string | undefined) || null,
     membershipProofPostUrl: (user.Item?.membershipProofPostUrl as string | undefined) || null,
     membershipProofPostId: (user.Item?.membershipProofPostId as string | undefined) || null,
+    membershipProofHandle: (user.Item?.membershipProofHandle as string | undefined) || null,
     xHandle: (user.Item?.xHandle as string | undefined) || null,
     proofRetentionPolicy: (user.Item?.proofRetentionPolicy as string | undefined) || null,
     manualApprovalStatus: (user.Item?.manualApprovalStatus as string | undefined) || "none",

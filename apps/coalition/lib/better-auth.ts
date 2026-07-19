@@ -1,4 +1,8 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
+import {
+  createBetterAuthDynamoDBAdapter,
+  createBetterAuthDynamoDBRateLimitStorage,
+} from "@pgpz/auth-dynamodb";
 import { resolveSigningSecret } from "@pgpz/core";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types are not installed in this app.
@@ -12,8 +16,6 @@ import {
   EMAIL_FROM,
   SITE_URL,
 } from "@/lib/config";
-import { betterAuthDynamoDBAdapter } from "@/lib/better-auth-dynamodb-adapter";
-import { betterAuthDynamoDBRateLimitStorage } from "@/lib/better-auth-rate-limit";
 import { BETTER_AUTH_CLIENT_IP_HEADER } from "@/lib/better-auth-client-ip";
 import { BETTER_AUTH_BASE_PATH, BETTER_AUTH_EMAIL_PROVIDER_ID } from "@/lib/better-auth-constants";
 import { assertLegalAcceptanceForAccountEmail } from "@/lib/account-signin-eligibility";
@@ -22,6 +24,34 @@ import { recordAccessEvent } from "@/lib/admin/access-log";
 import { buildEmailServerConfig } from "@/lib/admin/email-transport";
 import { buildMagicLinkEmail } from "@/lib/system-email";
 import { appSessionUserFromRecord, ensureAppUserForEmail, normalizeEmail } from "@/lib/app-users";
+import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import {
+  assertCompatibleEmailOwnership,
+  claimEmailOwnershipTransactionItem,
+  emailOwnershipKey,
+  EmailOwnershipCollisionError,
+  normalizeOwnedEmail,
+  releaseBetterAuthOwnershipTransactionItem,
+  releaseEmailOwnershipTransactionItem,
+} from "@/lib/email-ownership";
+
+const betterAuthDynamoDBAdapter = createBetterAuthDynamoDBAdapter({
+  documentClient,
+  tableName: TABLE_NAME,
+  userEmailOwnership: {
+    normalizeEmail: normalizeOwnedEmail,
+    ownershipKey: emailOwnershipKey,
+    assertCompatible: assertCompatibleEmailOwnership,
+    claimTransactionItem: claimEmailOwnershipTransactionItem,
+    releaseTransactionItem: releaseEmailOwnershipTransactionItem,
+    releaseBetterAuthTransactionItem: releaseBetterAuthOwnershipTransactionItem,
+    collisionError: () => new EmailOwnershipCollisionError(),
+  },
+});
+const betterAuthDynamoDBRateLimitStorage = createBetterAuthDynamoDBRateLimitStorage({
+  documentClient,
+  tableName: TABLE_NAME,
+});
 
 const trimValue = (value: string | undefined | null) => {
   const trimmed = typeof value === "string" ? value.trim() : "";

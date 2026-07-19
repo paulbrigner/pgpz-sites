@@ -9,6 +9,14 @@ import { releaseEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { normalizePolicyInterestGroups, type PolicyInterestGroupId } from "@/lib/policy-interest-groups";
+import {
+  normalizeAccessApplicationStatus,
+  type AccessApplicationStatus,
+} from "@/lib/manual-approval";
+import {
+  memberAcceptsEmailCategory,
+  type MemberEmailCategory,
+} from "@/lib/email-preferences";
 
 export type MemberStatus = "active" | "invited" | "none";
 export type ManualApprovalStatus = "none" | "pending" | "approved";
@@ -37,6 +45,8 @@ type RawUser = {
   emailSuppressedAt?: string | null;
   emailSuppressedReason?: string | null;
   emailSuppressedBy?: string | null;
+  emailNewsletterOptIn?: boolean | null;
+  emailPolicyUpdateOptIn?: boolean | null;
   accountStatus?: "active" | "deactivated" | null;
   deactivatedAt?: string | null;
   deactivatedBy?: string | null;
@@ -47,6 +57,14 @@ type RawUser = {
   manualApprovalRequestedAt?: string | null;
   manualApprovalApprovedAt?: string | null;
   manualApprovalApprovedBy?: string | null;
+  applicationStatus?: AccessApplicationStatus | null;
+  applicationRequestedAt?: string | null;
+  applicationApprovedAt?: string | null;
+  applicationApprovedBy?: string | null;
+  applicationDeclinedAt?: string | null;
+  applicationDeclinedBy?: string | null;
+  applicationDeclineReason?: string | null;
+  applicationWithdrawnAt?: string | null;
   invitationTokenHash?: string | null;
   communitySyncStatus?: string | null;
   communitySyncAttemptedAt?: string | null;
@@ -82,6 +100,14 @@ export type AdminMember = {
   manualApprovalRequestedAt: string | null;
   manualApprovalApprovedAt: string | null;
   manualApprovalApprovedBy: string | null;
+  applicationStatus: AccessApplicationStatus;
+  applicationRequestedAt: string | null;
+  applicationApprovedAt: string | null;
+  applicationApprovedBy: string | null;
+  applicationDeclinedAt: string | null;
+  applicationDeclinedBy: string | null;
+  applicationDeclineReason: string | null;
+  applicationWithdrawnAt: string | null;
   communitySyncStatus: string | null;
   communitySyncAttemptedAt: string | null;
   communitySyncedAt: string | null;
@@ -100,6 +126,8 @@ export type AdminMember = {
   emailSuppressedAt: string | null;
   emailSuppressedReason: string | null;
   emailSuppressedBy: string | null;
+  emailNewsletterOptIn: boolean | null;
+  emailPolicyUpdateOptIn: boolean | null;
   accountStatus: "active" | "deactivated";
   deactivatedAt: string | null;
   deactivatedBy: string | null;
@@ -255,6 +283,13 @@ const lifecycleRemoveExpression = [
   "manualApprovalRequestedAt",
   "manualApprovalApprovedAt",
   "manualApprovalApprovedBy",
+  "applicationRequestedAt",
+  "applicationApprovedAt",
+  "applicationApprovedBy",
+  "applicationDeclinedAt",
+  "applicationDeclinedBy",
+  "applicationDeclineReason",
+  "applicationWithdrawnAt",
   "invitationStatus",
   "invitationTokenHash",
   "invitationTokenCreatedAt",
@@ -296,7 +331,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, applicationStatus, applicationRequestedAt, applicationApprovedAt, applicationApprovedBy, applicationDeclinedAt, applicationDeclinedBy, applicationDeclineReason, applicationWithdrawnAt, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -349,6 +384,20 @@ function toAdminMember(user: RawUser): AdminMember | null {
     manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),
     manualApprovalApprovedAt: textOrNull(user.manualApprovalApprovedAt),
     manualApprovalApprovedBy: textOrNull(user.manualApprovalApprovedBy),
+    applicationStatus: normalizeAccessApplicationStatus(
+      user.applicationStatus,
+      user.manualApprovalStatus,
+    ),
+    applicationRequestedAt:
+      textOrNull(user.applicationRequestedAt) || textOrNull(user.manualApprovalRequestedAt),
+    applicationApprovedAt:
+      textOrNull(user.applicationApprovedAt) || textOrNull(user.manualApprovalApprovedAt),
+    applicationApprovedBy:
+      textOrNull(user.applicationApprovedBy) || textOrNull(user.manualApprovalApprovedBy),
+    applicationDeclinedAt: textOrNull(user.applicationDeclinedAt),
+    applicationDeclinedBy: textOrNull(user.applicationDeclinedBy),
+    applicationDeclineReason: textOrNull(user.applicationDeclineReason),
+    applicationWithdrawnAt: textOrNull(user.applicationWithdrawnAt),
     communitySyncStatus: textOrNull(user.communitySyncStatus),
     communitySyncAttemptedAt: textOrNull(user.communitySyncAttemptedAt),
     communitySyncedAt: textOrNull(user.communitySyncedAt),
@@ -367,6 +416,10 @@ function toAdminMember(user: RawUser): AdminMember | null {
     emailSuppressedAt: textOrNull(user.emailSuppressedAt),
     emailSuppressedReason: textOrNull(user.emailSuppressedReason),
     emailSuppressedBy: textOrNull(user.emailSuppressedBy),
+    emailNewsletterOptIn:
+      typeof user.emailNewsletterOptIn === "boolean" ? user.emailNewsletterOptIn : null,
+    emailPolicyUpdateOptIn:
+      typeof user.emailPolicyUpdateOptIn === "boolean" ? user.emailPolicyUpdateOptIn : null,
     accountStatus,
     deactivatedAt: textOrNull(user.deactivatedAt),
     deactivatedBy: textOrNull(user.deactivatedBy),
@@ -652,7 +705,7 @@ export async function deactivateAdminMember({
     TableName: TABLE_NAME,
     Key: userKey(user.id!),
     UpdateExpression:
-      `SET accountStatus = :accountStatus, deactivatedAt = :now, deactivatedBy = :adminUserId, membershipStatus = :membershipStatus, manualApprovalStatus = :manualNone, emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now REMOVE ${lifecycleRemoveExpression}`,
+      `SET accountStatus = :accountStatus, deactivatedAt = :now, deactivatedBy = :adminUserId, membershipStatus = :membershipStatus, manualApprovalStatus = :manualNone, applicationStatus = :applicationNone, emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now REMOVE ${lifecycleRemoveExpression}`,
     ConditionExpression:
       "attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :notAdmin)",
     ExpressionAttributeNames: { "#pk": "pk" },
@@ -662,6 +715,7 @@ export async function deactivateAdminMember({
       ":adminUserId": adminUserId,
       ":membershipStatus": "none",
       ":manualNone": "none",
+      ":applicationNone": "none",
       ":suppressed": true,
       ":reason": "account_deactivated",
       ":notAdmin": false,
@@ -737,7 +791,7 @@ export async function reactivateAdminMember({
     TableName: TABLE_NAME,
     Key: userKey(user.id!),
     UpdateExpression:
-      `SET accountStatus = :active, membershipStatus = :membershipNone, manualApprovalStatus = :manualNone, emailSuppressed = :notSuppressed, reactivatedAt = :now, reactivatedBy = :adminUserId, updatedAt = :now REMOVE deactivatedAt, deactivatedBy, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, ${lifecycleRemoveExpression}`,
+      `SET accountStatus = :active, membershipStatus = :membershipNone, manualApprovalStatus = :manualNone, applicationStatus = :applicationNone, emailSuppressed = :notSuppressed, reactivatedAt = :now, reactivatedBy = :adminUserId, updatedAt = :now REMOVE deactivatedAt, deactivatedBy, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, ${lifecycleRemoveExpression}`,
     ConditionExpression:
       "attribute_exists(#pk) AND (#accountStatus = :deactivated OR attribute_exists(#deactivatedAt)) AND (attribute_not_exists(isAdmin) OR isAdmin = :notAdmin)",
     ExpressionAttributeNames: {
@@ -750,6 +804,7 @@ export async function reactivateAdminMember({
       ":deactivated": "deactivated",
       ":membershipNone": "none",
       ":manualNone": "none",
+      ":applicationNone": "none",
       ":notSuppressed": false,
       ":notAdmin": false,
       ":now": now,
@@ -980,7 +1035,7 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
         return (
           member.accountStatus !== "deactivated" &&
           member.membershipStatus !== "active" &&
-          (member.manualApprovalStatus === "pending" || member.membershipStatus === "none")
+          member.applicationStatus === "requested"
         );
       }
       return member.accountStatus !== "deactivated" && member.membershipStatus === statusFilter;
@@ -1014,14 +1069,16 @@ export async function buildAdminRoster(options: BuildAdminRosterOptions = {}): P
         (member) =>
           member.accountStatus !== "deactivated" &&
           member.membershipStatus !== "active" &&
-          (member.manualApprovalStatus === "pending" || member.membershipStatus === "none"),
+          member.applicationStatus === "requested",
       ).length,
       admins: allMembers.filter((member) => member.isAdmin).length,
     },
   };
 }
 
-export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipient[]> {
+export async function listPolicyUpdateRecipients(
+  category: MemberEmailCategory = "policy_update",
+): Promise<PolicyUpdateRecipient[]> {
   const rawUsers = await scanUsers();
   return rawUsers
     .map(toAdminMember)
@@ -1031,7 +1088,7 @@ export async function listPolicyUpdateRecipients(): Promise<PolicyUpdateRecipien
         member.accountStatus !== "deactivated" &&
         member.membershipStatus === "active" &&
         !!member.email &&
-        !member.emailSuppressed
+        memberAcceptsEmailCategory(member, category)
     )
     .map((member) => ({
       id: member.id,

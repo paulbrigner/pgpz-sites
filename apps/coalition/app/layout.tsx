@@ -4,6 +4,7 @@ import { MainNav } from "@/components/site/main-nav";
 import { AdminViewModeBanner } from "@/components/admin/AdminViewMode";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { Suspense } from "react";
 import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
 
 export const metadata = {
@@ -26,7 +27,9 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} antialiased`} data-scroll-behavior="smooth">
       <body className="font-sans min-h-screen bg-background text-foreground">
         <Providers>
-          <MainNav />
+          <Suspense fallback={null}>
+            <MainNav />
+          </Suspense>
           <AdminViewModeBanner />
           <main className="relative min-h-[calc(100vh-3.5rem)] bg-[linear-gradient(180deg,var(--brand-ice)_0%,#ffffff_72%)] pb-16 pt-8">
             {children}

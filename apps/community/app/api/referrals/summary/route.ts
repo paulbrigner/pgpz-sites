@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
     const session = await resolveAppSession(request.headers);
     const userId = session?.user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.capabilities.member) {
+      return NextResponse.json({ error: "Active membership is required" }, { status: 403 });
+    }
 
     return NextResponse.json(await getReferralSummaryForUser(userId));
   } catch (err) {

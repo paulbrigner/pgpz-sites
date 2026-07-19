@@ -29,6 +29,7 @@ lambda-build/
 .DS_Store
 .vercel/
 .playwright-cli/
+output/playwright/
 *.tsbuildinfo
 next-env.d.ts
 npm-debug.log*

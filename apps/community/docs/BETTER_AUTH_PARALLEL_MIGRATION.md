@@ -7,7 +7,7 @@ Application identity, profiles, membership, referrals or invitations, and admini
 ## Hardened runtime
 
 - Better Auth is mounted at `/api/better-auth/[...all]`; `/api/auth/[...nextauth]` is not mounted.
-- ID reads use the base-table key. Email, session-token, verification-identifier, and provider/account reads use `GSI1` rather than table scans.
+- ID reads use the base-table key. Email, session-token, verification-identifier, and provider/account reads use `GSI1`; session/account ownership reads use sparse `GSI2` keys rather than table scans.
 - Session and verification records write the epoch-second `expires` attribute used by DynamoDB TTL.
 - Better Auth rate limiting uses a shared DynamoDB fixed-window counter with atomic conditional updates, so limits apply across serverless instances.
 - The auth route normalizes CloudFront's immutable `CloudFront-Viewer-Address` into an internal bare-IP header. A single-value `X-Forwarded-For` remains a fail-closed fallback; spoofable multi-hop chains are rejected rather than trusted.
@@ -16,7 +16,7 @@ Application identity, profiles, membership, referrals or invitations, and admini
 - Profile email changes atomically update the normalized-email ownership claim, application user, Better Auth user/index, and token consumption. Email-change tokens retain the existing `VT#...` key shape.
 - Every normalized email has one durable `EMAIL_OWNERSHIP#...` item. It can bind independent application and Better Auth IDs and is maintained in the same transaction as identity creation, email movement, or deletion. Use the root `docs/email-ownership-and-identity-reconciliation.md` runbook for backfill and audit ordering.
 
-The single existing GSI cannot simultaneously index session/account ownership and their hot unique keys. Session-by-user, account-by-user, arbitrary admin lists, and bulk predicates retain a compatibility scan path; interactive sign-in and session-token lookups must not scan. A future `GSI2` or materialized owner index can remove those remaining administrative scans.
+`GSI2` is reserved for session/account ownership. Arbitrary admin lists and unsupported bulk predicates retain a compatibility scan path; ID, interactive sign-in, session-token, provider/account, and user-ownership lookups must not scan. Follow the repository-root `docs/better-auth-user-index-runbook.md` for schema-first deployment, legacy-record backfill, and rollback.
 
 ## Required production configuration
 
@@ -38,7 +38,7 @@ All criteria must pass in both applications:
 1. `npm test`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` succeed.
 2. Adapter contract tests prove that supported hot-key lookups use `Get` or `Query`, paginate correctly, preserve residual predicates, and consume one-time records once.
 3. Durable rate-limit tests prove that separate storage instances share one atomic counter and enforce the configured maximum.
-4. The DynamoDB table and `GSI1` are `ACTIVE`, and TTL on `expires` is `ENABLED`.
+4. The DynamoDB table, `GSI1`, and `GSI2` are `ACTIVE`; the reverse-user backfill is complete; and TTL on `expires` is `ENABLED`.
 5. Amplify has non-default Better Auth URL, secret, and trusted-origin values for each canonical domain.
 6. Current and optional previous email-tracking secrets pass the production validator; saved links verify across a rehearsed current/previous-key swap.
 7. Amplify provides a usable client IP; there is no evidence that unrelated visitors collapse into one rate-limit bucket.

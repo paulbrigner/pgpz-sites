@@ -13,12 +13,18 @@ type ReferralSummary = {
   creditedSignupCount: number;
   activeRecruitCount: number;
   recentCredits: Array<{
-    referredUserId: string;
-    referredEmail: string | null;
-    referredName: string | null;
+    displayLabel: "New member";
     membershipStatus: "active" | "none";
     creditedAt: string;
   }>;
+};
+
+type EmailPreferences = {
+  newsletter: boolean;
+  policyUpdates: boolean;
+  globallySuppressed: boolean;
+  suppressionReason: string | null;
+  canSelfResubscribe: boolean;
 };
 
 export default function ProfileSettingsPage() {
@@ -42,11 +48,17 @@ export default function ProfileSettingsPage() {
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
   const [referralCopied, setReferralCopied] = useState(false);
+  const [emailPreferences, setEmailPreferences] = useState<EmailPreferences | null>(null);
+  const [emailPreferencesLoading, setEmailPreferencesLoading] = useState(false);
+  const [emailPreferencesSaving, setEmailPreferencesSaving] = useState(false);
+  const [emailPreferencesMessage, setEmailPreferencesMessage] = useState<string | null>(null);
+  const [emailPreferencesError, setEmailPreferencesError] = useState<string | null>(null);
   const [initial, setInitial] = useState<
     { firstName: string; lastName: string; xHandle: string; linkedinUrl: string } | null
   >(null);
 
   const sessionUser = session?.user as any | undefined;
+  const isMember = session?.capabilities.member === true;
   const currentEmail = typeof sessionUser?.email === "string" ? sessionUser.email : "";
 
   useEffect(() => {
@@ -74,7 +86,7 @@ export default function ProfileSettingsPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!authenticated) return;
+    if (!authenticated || !isMember) return;
     let cancelled = false;
     const loadReferralSummary = async () => {
       setReferralLoading(true);
@@ -92,6 +104,29 @@ export default function ProfileSettingsPage() {
     };
 
     void loadReferralSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, isMember]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    const loadEmailPreferences = async () => {
+      setEmailPreferencesLoading(true);
+      setEmailPreferencesError(null);
+      try {
+        const response = await fetch("/api/profile/email-preferences", { cache: "no-store" });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error || "Failed to load email preferences");
+        if (!cancelled) setEmailPreferences(body);
+      } catch (err: any) {
+        if (!cancelled) setEmailPreferencesError(err?.message || "Failed to load email preferences");
+      } finally {
+        if (!cancelled) setEmailPreferencesLoading(false);
+      }
+    };
+    void loadEmailPreferences();
     return () => {
       cancelled = true;
     };
@@ -183,6 +218,31 @@ export default function ProfileSettingsPage() {
     }
   };
 
+  const saveEmailPreferences = async () => {
+    if (!emailPreferences) return;
+    setEmailPreferencesSaving(true);
+    setEmailPreferencesMessage(null);
+    setEmailPreferencesError(null);
+    try {
+      const response = await fetch("/api/profile/email-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newsletter: emailPreferences.newsletter,
+          policyUpdates: emailPreferences.policyUpdates,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error || "Failed to save email preferences");
+      setEmailPreferences(body);
+      setEmailPreferencesMessage("Email preferences saved.");
+    } catch (err: any) {
+      setEmailPreferencesError(err?.message || "Failed to save email preferences");
+    } finally {
+      setEmailPreferencesSaving(false);
+    }
+  };
+
   const handleBack = () => {
     if (isDirty()) {
       const proceed = confirm("You have unsaved changes. Leave without saving?");
@@ -243,6 +303,74 @@ export default function ProfileSettingsPage() {
 
       <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Member email preferences</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose which optional Community messages you want to receive. Account and security messages are unaffected.
+          </p>
+        </div>
+        {emailPreferencesError ? (
+          <Alert className="mt-4" variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Email preferences unavailable</AlertTitle>
+            <AlertDescription>{emailPreferencesError}</AlertDescription>
+          </Alert>
+        ) : null}
+        {emailPreferencesMessage ? (
+          <Alert className="mt-4">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Preferences updated</AlertTitle>
+            <AlertDescription>{emailPreferencesMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+        {emailPreferences?.globallySuppressed && !emailPreferences.canSelfResubscribe ? (
+          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Delivery is currently suppressed for an administrative or delivery reason. Contact admin@pgpz.org to restore it.
+          </p>
+        ) : null}
+        <div className="mt-5 space-y-3">
+          <label className="flex items-start gap-3 rounded-md border bg-white px-4 py-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4"
+              checked={emailPreferences?.newsletter ?? false}
+              disabled={emailPreferencesLoading || !emailPreferences || (emailPreferences.globallySuppressed && !emailPreferences.canSelfResubscribe)}
+              onChange={(event) =>
+                setEmailPreferences((current) => current ? { ...current, newsletter: event.target.checked } : current)
+              }
+            />
+            <span>
+              <span className="block text-sm font-medium">Community newsletters</span>
+              <span className="block text-xs text-muted-foreground">General Community news and member announcements.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-md border bg-white px-4 py-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4"
+              checked={emailPreferences?.policyUpdates ?? false}
+              disabled={emailPreferencesLoading || !emailPreferences || (emailPreferences.globallySuppressed && !emailPreferences.canSelfResubscribe)}
+              onChange={(event) =>
+                setEmailPreferences((current) => current ? { ...current, policyUpdates: event.target.checked } : current)
+              }
+            />
+            <span>
+              <span className="block text-sm font-medium">Policy updates</span>
+              <span className="block text-xs text-muted-foreground">Weekly policy memos and special policy reports.</span>
+            </span>
+          </label>
+        </div>
+        <Button
+          type="button"
+          className="mt-4"
+          onClick={saveEmailPreferences}
+          disabled={emailPreferencesLoading || emailPreferencesSaving || !emailPreferences || (emailPreferences.globallySuppressed && !emailPreferences.canSelfResubscribe)}
+        >
+          {emailPreferencesSaving ? "Saving..." : "Save email preferences"}
+        </Button>
+      </section>
+
+      <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
+        <div className="space-y-1">
           <h2 className="text-lg font-semibold">Profile information</h2>
           <p className="text-sm text-muted-foreground">
             Keep your contact and social details current for PGPZ community membership and updates.
@@ -277,7 +405,7 @@ export default function ProfileSettingsPage() {
           </div>
           <div className="space-y-2">
             <label htmlFor="xHandle" className="text-sm font-medium">
-              X handle
+              Profile X handle
             </label>
             <input
               id="xHandle"
@@ -286,6 +414,15 @@ export default function ProfileSettingsPage() {
               placeholder="@handle"
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
+            <p className="text-xs text-muted-foreground">
+              This editable profile field does not change the X identity used for membership verification.
+            </p>
+            {sessionUser?.membershipProofHandle ? (
+              <div className="rounded-md border bg-slate-50 px-3 py-2 text-sm">
+                <span className="font-medium">Verified X identity:</span>{" "}
+                {sessionUser.membershipProofHandle}
+              </div>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label htmlFor="linkedin" className="text-sm font-medium">
@@ -305,7 +442,7 @@ export default function ProfileSettingsPage() {
         </form>
       </section>
 
-      <section id="member-recruitment" className="rounded-lg border bg-white/80 p-6 shadow-sm">
+      {isMember ? <section id="member-recruitment" className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -369,11 +506,11 @@ export default function ProfileSettingsPage() {
               Recent credits
             </div>
             <div className="divide-y">
-              {referralSummary.recentCredits.map((credit) => (
-                <div key={`${credit.referredUserId}:${credit.creditedAt}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              {referralSummary.recentCredits.map((credit, index) => (
+                <div key={`${credit.creditedAt}:${index}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0">
                     <div className="truncate font-medium text-[var(--brand-ink)]">
-                      {credit.referredName || credit.referredEmail || "New member"}
+                      {credit.displayLabel}
                     </div>
                     <div className="text-xs text-slate-500">
                       {new Date(credit.creditedAt).toLocaleDateString()}
@@ -387,7 +524,7 @@ export default function ProfileSettingsPage() {
             </div>
           </div>
         ) : null}
-      </section>
+      </section> : null}
 
       <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="space-y-1">

@@ -200,14 +200,17 @@ test("direct Amplify builds enforce distinct rotation keys before serialization"
   );
 });
 
-test("all branded production mail routes use the shared SES-aware transport", () => {
+test("member resource submissions use the durable moderation queue without sending mail", () => {
   const coalitionResourceShare = readFileSync(
     resolve(repositoryRoot, "apps/coalition/app/api/resources/share/route.ts"),
     "utf8",
   );
   assert.match(
     coalitionResourceShare,
-    /import \{ buildEmailServerConfig \} from "@\/lib\/admin\/email-transport"/,
+    /createResourceSubmission/,
   );
-  assert.doesNotMatch(coalitionResourceShare, /EMAIL_SERVER_(?:HOST|USER|PASSWORD)/);
+  assert.doesNotMatch(
+    coalitionResourceShare,
+    /nodemailer|buildEmailServerConfig|sendMail|EMAIL_SERVER_(?:HOST|USER|PASSWORD)/,
+  );
 });

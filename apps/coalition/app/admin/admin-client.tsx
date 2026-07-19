@@ -12,7 +12,6 @@ import {
   PowerOff,
   RefreshCcw,
   Save,
-  Search,
   ShieldCheck,
   StickyNote,
   Trash2,
@@ -29,6 +28,15 @@ import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { policyInterestGroupLabel, policyInterestGroupOptions } from "@/lib/policy-interest-groups";
+import {
+  CoalitionInvitationTemplateEditor,
+  CoalitionRosterControls,
+  CoalitionRosterSummary,
+  type CoalitionInvitationTemplateState,
+  type CoalitionRosterSortDirection,
+  type CoalitionRosterSortKey,
+  type CoalitionRosterStatusFilter,
+} from "@/components/admin/CoalitionRosterSections";
 
 type Props = {
   initialRoster: AdminRoster | null;
@@ -48,22 +56,12 @@ type CreateMemberForm = {
   sendInvitation: boolean;
 };
 
-type InvitationTemplateState = {
-  subject: string;
-  body: string;
-  updatedAt: string | null;
-  updatedBy: string | null;
-  isDefault: boolean;
-};
-
 type BackgroundJobView = {
   job: BackgroundJobSummary;
   statusUrl: string;
   active: boolean;
 };
 
-type SortKey = "firstName" | "lastName" | "company" | "joinedAt";
-type SortDirection = "asc" | "desc";
 type ProfileDraft = {
   email: string;
   firstName: string;
@@ -173,7 +171,7 @@ const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVAT
 const memberCanBeApproved = (member: AdminMember) =>
   member.accountStatus !== "deactivated" &&
   member.membershipStatus !== "active" &&
-  (member.manualApprovalStatus === "pending" || member.membershipStatus === "none");
+  member.applicationStatus === "requested";
 
 const memberCanBeInvited = (member: AdminMember) =>
   member.accountStatus !== "deactivated" &&
@@ -186,7 +184,9 @@ const statusLabel = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return "Deactivated";
   if (member.membershipStatus === "active") return "Active";
   if (member.membershipStatus === "invited") return "Invited";
-  if (memberCanBeApproved(member)) return "Needs approval";
+  if (member.applicationStatus === "requested") return "Application requested";
+  if (member.applicationStatus === "declined") return "Application declined";
+  if (member.applicationStatus === "withdrawn") return "Application withdrawn";
   return "Unapproved";
 };
 
@@ -217,7 +217,7 @@ const memberNeedsAction = (member: AdminMember) => {
   return memberCanBeInvited(member) && !member.invitationEmailSentAt;
 };
 
-const compareText = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+const compareText = (a: string | null, b: string | null, direction: CoalitionRosterSortDirection = "asc") => {
   const aText = (a || "").trim();
   const bText = (b || "").trim();
   if (aText && !bText) return -1;
@@ -226,7 +226,7 @@ const compareText = (a: string | null, b: string | null, direction: SortDirectio
   return direction === "desc" ? -compare : compare;
 };
 
-const compareJoinedAt = (a: string | null, b: string | null, direction: SortDirection = "asc") => {
+const compareJoinedAt = (a: string | null, b: string | null, direction: CoalitionRosterSortDirection = "asc") => {
   const aTime = a ? Date.parse(a) : NaN;
   const bTime = b ? Date.parse(b) : NaN;
   const aValid = Number.isFinite(aTime);
@@ -242,7 +242,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const { sensitiveDataVisible } = useAdminSensitiveData();
   const [roster, setRoster] = useState<AdminRoster | null>(initialRoster);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "invited" | "none" | "manual">("all");
+  const [statusFilter, setStatusFilter] = useState<CoalitionRosterStatusFilter>("all");
   const [loading, setLoading] = useState(!initialRoster);
   const [error, setError] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState<Record<string, boolean>>({});
@@ -256,7 +256,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateMemberForm>(emptyCreateForm);
   const [creating, setCreating] = useState(false);
-  const [invitationTemplate, setInvitationTemplate] = useState<InvitationTemplateState | null>(null);
+  const [invitationTemplate, setInvitationTemplate] = useState<CoalitionInvitationTemplateState | null>(null);
   const [templateDraft, setTemplateDraft] = useState({ subject: "", body: "" });
   const [templateLoading, setTemplateLoading] = useState(true);
   const [templateSaving, setTemplateSaving] = useState(false);
@@ -264,8 +264,8 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [templateDraftSending, setTemplateDraftSending] = useState(false);
   const [bulkInviting, setBulkInviting] = useState(false);
   const [bulkInvitationJob, setBulkInvitationJob] = useState<BackgroundJobView | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("lastName");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortKey, setSortKey] = useState<CoalitionRosterSortKey>("lastName");
+  const [sortDirection, setSortDirection] = useState<CoalitionRosterSortDirection>("asc");
   const [actionsFirst, setActionsFirst] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -506,7 +506,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       const res = await fetch("/api/admin/members/manual-approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: member.id }),
+        body: JSON.stringify({ userId: member.id, action: "approve" }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to approve member");
@@ -514,6 +514,29 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       await loadRoster();
     } catch (err: any) {
       setError(err?.message || "Failed to approve member");
+    } finally {
+      setApprovalLoading((current) => ({ ...current, [member.id]: false }));
+    }
+  };
+
+  const declineManual = async (member: AdminMember) => {
+    const reason = window.prompt("Optional reason for declining this application. Select Cancel to keep it pending.", "");
+    if (reason === null) return;
+    setApprovalLoading((current) => ({ ...current, [member.id]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members/manual-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id, action: "decline", reason }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to decline application");
+      setNotice(`Application declined for ${member.email || displayName(member)}.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to decline application");
     } finally {
       setApprovalLoading((current) => ({ ...current, [member.id]: false }));
     }
@@ -867,111 +890,23 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        {[
-          ["Total", roster?.meta.total ?? 0],
-          ["Active", roster?.meta.active ?? 0],
-          ["Invited", roster?.meta.invited ?? 0],
-          ["Unapproved", roster?.meta.none ?? 0],
-          ["Approval ready", roster?.meta.manualPending ?? 0],
-          ["Admins", roster?.meta.admins ?? 0],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border bg-white/80 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</div>
-            <div className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">{value}</div>
-          </div>
-        ))}
-      </div>
+      <CoalitionRosterSummary meta={roster?.meta} />
 
-      <details className="group rounded-lg border bg-white/85">
-        <summary className="flex cursor-pointer list-none items-start gap-3 p-4 [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            aria-hidden="true"
-            className="mt-1 h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90"
-          />
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Invitation email template</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Edit the language used when sending activation invitations to invited coalition members.
-            </p>
-            <div className="mt-2 text-xs font-medium text-slate-500">
-              {templateLoading
-                ? "Loading template..."
-                : invitationTemplate?.isDefault
-                  ? "Using the default launch invitation."
-                  : `Last updated ${formatDate(invitationTemplate?.updatedAt || null)}.`}
-            </div>
-          </div>
-        </summary>
-        <div className="border-t p-4">
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" disabled={templateLoading || templateSaving} onClick={loadInvitationTemplate}>
-              <RefreshCcw className={cn("h-4 w-4", templateLoading && "animate-spin")} />
-              Reload
-            </Button>
-            <Button
-              type="button"
-              disabled={!templateChanged || templateLoading || templateSaving}
-              isLoading={templateSaving}
-              onClick={saveInvitationTemplate}
-            >
-              <Save className="h-4 w-4" />
-              Save template
-            </Button>
-          </div>
-          <div className="mt-5 grid gap-3">
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Subject</span>
-              <input
-                value={templateDraft.subject}
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))}
-                maxLength={180}
-                className="w-full rounded-md border px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Body</span>
-              <textarea
-                value={templateDraft.body}
-                onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))}
-                maxLength={20000}
-                rows={18}
-                className="min-h-96 w-full resize-y rounded-md border px-3 py-2 font-mono text-sm leading-6"
-              />
-            </label>
-            <div className="rounded-lg border bg-white/70 p-3 text-xs leading-5 text-slate-600">
-              Available placeholders: <code>[Name]</code>, <code>[First Name]</code>, <code>[Last Name]</code>,{" "}
-              <code>[Activation Link]</code>. A prominent activation button is inserted automatically after the greeting.
-              {" "}Markdown supported: <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and simple lists.
-            </div>
-            <div className="grid gap-3 rounded-lg border bg-white/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-              <label className="space-y-1 text-sm">
-                <span className="font-medium">Draft recipient email</span>
-                <input
-                  type="email"
-                  value={templateDraftEmail}
-                  onChange={(event) => setTemplateDraftEmail(event.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </label>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!templateDraftEmail.trim() || templateLoading || templateSaving || templateDraftSending}
-                isLoading={templateDraftSending}
-                onClick={sendInvitationTemplateDraft}
-              >
-                <MailPlus className="h-4 w-4" />
-                Email draft
-              </Button>
-              <p className="text-xs leading-5 text-slate-600 md:col-span-2">
-                Draft sends use the current unsaved subject and body with a preview activation link.
-              </p>
-            </div>
-          </div>
-        </div>
-      </details>
+      <CoalitionInvitationTemplateEditor
+        template={invitationTemplate}
+        draft={templateDraft}
+        onDraftChange={setTemplateDraft}
+        loading={templateLoading}
+        saving={templateSaving}
+        changed={templateChanged}
+        onReload={loadInvitationTemplate}
+        onSave={saveInvitationTemplate}
+        draftEmail={templateDraftEmail}
+        onDraftEmailChange={setTemplateDraftEmail}
+        draftSending={templateDraftSending}
+        onSendDraft={sendInvitationTemplateDraft}
+        formatDate={formatDate}
+      />
 
       <section className="rounded-lg border bg-white/85 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1127,81 +1062,21 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         ) : null}
       </section>
 
-      <div className="rounded-lg border bg-white/85 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative max-w-xl flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, email, affiliation, title, LinkedIn, X, or notes"
-              className="w-full rounded-md border py-2 pl-9 pr-3 text-sm"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              ["all", "All"],
-              ["active", "Active"],
-              ["invited", "Invited"],
-              ["none", "Unapproved"],
-              ["manual", "Approval ready"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value as typeof statusFilter)}
-                className={cn(
-                  "rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]",
-                  statusFilter === value
-                    ? "border-[var(--brand-ink)] bg-[var(--brand-ink)] text-[var(--zcash-gold)]"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-            <Button type="button" variant="outline" onClick={loadRoster} disabled={loading}>
-              <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
-              Refresh
-            </Button>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Sort
-            <select
-              value={sortKey}
-              onChange={(event) => setSortKey(event.target.value as SortKey)}
-              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
-            >
-              <option value="lastName">Last name</option>
-              <option value="firstName">First name</option>
-              <option value="company">Company</option>
-              <option value="joinedAt">Date joined</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            Order
-            <select
-              value={sortDirection}
-              onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-              className="bg-transparent normal-case tracking-normal text-slate-800 outline-none"
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            <input
-              type="checkbox"
-              checked={actionsFirst}
-              onChange={(event) => setActionsFirst(event.target.checked)}
-              className="h-4 w-4 accent-[var(--zcash-gold)]"
-            />
-            Actions first ({actionNeededCount})
-          </label>
-        </div>
-      </div>
+      <CoalitionRosterControls
+        query={query}
+        onQueryChange={setQuery}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        loading={loading}
+        onRefresh={loadRoster}
+        sortKey={sortKey}
+        onSortKeyChange={setSortKey}
+        sortDirection={sortDirection}
+        onSortDirectionChange={setSortDirection}
+        actionsFirst={actionsFirst}
+        onActionsFirstChange={setActionsFirst}
+        actionNeededCount={actionNeededCount}
+      />
 
       {notice ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -1410,15 +1285,26 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {approvalReady ? (
-                        <Button
-                          size="sm"
-                          disabled={approvalLoading[member.id]}
-                          isLoading={!!approvalLoading[member.id]}
-                          onClick={() => approveManual(member)}
-                        >
-                          <UserCheck className="h-4 w-4" />
-                          {manualPending ? "Approve request" : "Approve member"}
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={approvalLoading[member.id]}
+                            isLoading={!!approvalLoading[member.id]}
+                            onClick={() => approveManual(member)}
+                          >
+                            <UserCheck className="h-4 w-4" />
+                            Approve request
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={approvalLoading[member.id]}
+                            onClick={() => declineManual(member)}
+                          >
+                            <Ban className="h-4 w-4" />
+                            Decline
+                          </Button>
+                        </>
                       ) : null}
                       {active ? (
                         <Button
@@ -1628,13 +1514,26 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <dd className="text-right text-slate-800">{formatDateTime(member.joinedAt)}</dd>
                             </div>
                             <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">Manual status</dt>
-                              <dd className="text-right text-slate-800">{member.manualApprovalStatus}</dd>
+                              <dt className="font-medium text-slate-500">Application</dt>
+                              <dd className="text-right text-slate-800">{member.applicationStatus}</dd>
                             </div>
                             <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">Manual approved</dt>
-                              <dd className="text-right text-slate-800">{formatDate(member.manualApprovalApprovedAt)}</dd>
+                              <dt className="font-medium text-slate-500">Application updated</dt>
+                              <dd className="text-right text-slate-800">
+                                {formatDate(
+                                  member.applicationApprovedAt ||
+                                  member.applicationDeclinedAt ||
+                                  member.applicationWithdrawnAt ||
+                                  member.applicationRequestedAt,
+                                )}
+                              </dd>
                             </div>
+                            {member.applicationDeclineReason ? (
+                              <div className="flex justify-between gap-3">
+                                <dt className="font-medium text-slate-500">Decision note</dt>
+                                <dd className="max-w-[14rem] text-right text-slate-800">{member.applicationDeclineReason}</dd>
+                              </div>
+                            ) : null}
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Invitation status</dt>
                               <dd className="text-right text-slate-800">{member.invitationStatus || "—"}</dd>

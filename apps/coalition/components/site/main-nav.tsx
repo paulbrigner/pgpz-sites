@@ -24,8 +24,9 @@ const sanitizeAuthCallback = (pathname: string | null, query: string | null) => 
 };
 
 export function MainNav() {
-  const { status, signOut } = useAppSession();
+  const { data: session, status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
+  const isMember = session?.capabilities.member === true;
   const { actualIsAdmin, effectiveIsAdmin: isAdmin, viewAsMember, setViewAsMember } = useAdminViewMode();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -72,6 +73,8 @@ export function MainNav() {
     ? [
         { key: "home", label: "Home", href: "/" },
         { key: "groups", label: "Policy Groups", href: "/groups" },
+        ...(isMember ? [{ key: "members", label: "Members", href: "/members" }] : []),
+        ...(isMember ? [{ key: "resources", label: "Resources", href: "/resources" }] : []),
         { key: "updates", label: "Updates", href: "/updates" },
         { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
@@ -140,6 +143,22 @@ export function MainNav() {
               <NavigationMenuItem>
                 <NavigationMenuLink className={linkClasses} asChild>
                   <Link href="/groups">Groups</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && isMember ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={linkClasses} asChild>
+                  <Link href="/members">Members</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && isMember ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={linkClasses} asChild>
+                  <Link href="/resources">Resources</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}

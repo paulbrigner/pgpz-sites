@@ -8,6 +8,7 @@ import {
   getEmailTrackingSecret,
   safeHttpDestination,
 } from "@/lib/email-link-security";
+import { unsubscribeMemberFromEmailCategory } from "@/lib/email-preferences";
 
 export type EmailMessageType = "newsletter" | "policy_update";
 export type EmailTrackingAudienceMode = "all_active_members" | "selected_members";
@@ -187,13 +188,14 @@ export async function markNewsletterTrackingSent({
   });
 }
 
-export async function getNewsletterTrackingRecord(trackingId: string) {
+export async function getNewsletterTrackingRecord(trackingId: string, consistentRead = false) {
   const normalized = normalizeTrackingId(trackingId);
   if (!normalized) return null;
 
   const res = await documentClient.get({
     TableName: TABLE_NAME,
     Key: trackingKey(normalized),
+    ...(consistentRead ? { ConsistentRead: true } : {}),
   });
 
   return toTrackingRecord(res.Item);
@@ -353,37 +355,82 @@ export async function recordNewsletterUnsubscribe(trackingId: string) {
   if (!tracking) return null;
 
   const now = new Date().toISOString();
-  const firstUnsubscribe = !tracking.unsubscribedAt;
-
-  if (firstUnsubscribe) {
-    await documentClient.update({
-      TableName: TABLE_NAME,
-      Key: trackingKey(tracking.trackingId),
-      UpdateExpression: "SET unsubscribedAt = :now",
-      ExpressionAttributeValues: {
-        ":now": now,
-      },
-    });
-  }
 
   if (tracking.userId) {
-    await documentClient.update({
-      TableName: TABLE_NAME,
-      Key: { pk: `USER#${tracking.userId}`, sk: `USER#${tracking.userId}` },
-      UpdateExpression: "SET emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason",
-      ExpressionAttributeValues: {
-        ":suppressed": true,
-        ":now": now,
-        ":reason": "newsletter_unsubscribe",
-      },
+    await unsubscribeMemberFromEmailCategory({
+      userId: tracking.userId,
+      category: tracking.messageType,
+      now,
     });
   }
 
-  if (firstUnsubscribe) {
-    await incrementMessageAggregate(tracking, "unsubscribeCount");
+  if (tracking.unsubscribedAt) return tracking;
+
+  const aggregateUpdate = await unsubscribeAggregateTransactionItem(tracking, now);
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: trackingKey(tracking.trackingId),
+            UpdateExpression: "SET #unsubscribedAt = :now",
+            ConditionExpression:
+              "attribute_exists(#pk) AND (attribute_not_exists(#unsubscribedAt) OR attribute_type(#unsubscribedAt, :nullType) OR #unsubscribedAt = :empty)",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#unsubscribedAt": "unsubscribedAt",
+            },
+            ExpressionAttributeValues: {
+              ":now": now,
+              ":nullType": "NULL",
+              ":empty": "",
+            },
+          },
+        },
+        ...(aggregateUpdate ? [aggregateUpdate] : []),
+      ],
+    });
+  } catch (error: any) {
+    if (error?.name !== "TransactionCanceledException") throw error;
+    const latest = await getNewsletterTrackingRecord(tracking.trackingId, true);
+    if (!latest?.unsubscribedAt) throw error;
+    return latest;
   }
 
-  return { ...tracking, unsubscribedAt: tracking.unsubscribedAt || now };
+  return { ...tracking, unsubscribedAt: now };
+}
+
+async function unsubscribeAggregateTransactionItem(
+  tracking: NewsletterTrackingRecord,
+  now: string,
+) {
+  if (tracking.sendRunId) {
+    const prefix = tracking.messageType === "policy_update" ? "POLICY_UPDATE_SEND" : "NEWSLETTER_SEND";
+    return {
+      Update: {
+        TableName: TABLE_NAME,
+        Key: { pk: `${prefix}#${tracking.sendRunId}`, sk: `${prefix}#${tracking.sendRunId}` },
+        UpdateExpression:
+          "SET #unsubscribeCount = if_not_exists(#unsubscribeCount, :zero) + :one, lastEventAt = :now",
+        ExpressionAttributeNames: { "#unsubscribeCount": "unsubscribeCount" },
+        ExpressionAttributeValues: { ":zero": 0, ":one": 1, ":now": now },
+      },
+    };
+  }
+
+  if (tracking.messageType !== "newsletter") return null;
+  if (!(await shouldAggregateTrackingRecord(tracking))) return null;
+  return {
+    Update: {
+      TableName: TABLE_NAME,
+      Key: { pk: `NEWSLETTER#${tracking.newsletterId}`, sk: `NEWSLETTER#${tracking.newsletterId}` },
+      UpdateExpression:
+        "SET #unsubscribeCount = if_not_exists(#unsubscribeCount, :zero) + :one",
+      ExpressionAttributeNames: { "#unsubscribeCount": "unsubscribeCount" },
+      ExpressionAttributeValues: { ":zero": 0, ":one": 1 },
+    },
+  };
 }
 
 async function incrementMessageAggregate(
