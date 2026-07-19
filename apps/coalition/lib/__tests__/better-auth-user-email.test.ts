@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
   query: vi.fn(),
   scan: vi.fn(),
   update: vi.fn(),
@@ -11,6 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/dynamodb", () => ({
   TABLE_NAME: "TestTable",
   documentClient: {
+    get: mocks.get,
     query: mocks.query,
     scan: mocks.scan,
     update: mocks.update,
@@ -26,6 +28,7 @@ vi.mock("@/lib/app-users", () => ({
 describe("Better Auth user email synchronization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.get.mockResolvedValue({});
     mocks.query.mockResolvedValue({ Items: [] });
     mocks.scan.mockResolvedValue({ Items: [] });
     mocks.update.mockResolvedValue({});
@@ -50,26 +53,20 @@ describe("Better Auth user email synchronization", () => {
         },
       }),
     );
-    expect(mocks.transactWrite).toHaveBeenCalledWith({
-      TransactItems: [
-        expect.objectContaining({
-          Update: expect.objectContaining({
-            TableName: "TestTable",
-            Key: { pk: "USER#app-user-1", sk: "USER#app-user-1" },
-            ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
-          }),
-        }),
-        expect.objectContaining({
-          Update: expect.objectContaining({
-            TableName: "TestTable",
-            Key: {
-              pk: "BETTER_AUTH#better_auth_users#better-user-1",
-              sk: "BETTER_AUTH#better_auth_users#better-user-1",
-            },
-            ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
-          }),
-        }),
-      ],
+    const request = mocks.transactWrite.mock.calls[0][0];
+    expect(request.TransactItems).toHaveLength(4);
+    expect(request.TransactItems[1].Update).toMatchObject({
+      TableName: "TestTable",
+      Key: { pk: "USER#app-user-1", sk: "USER#app-user-1" },
+      ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
+    });
+    expect(request.TransactItems[2].Update).toMatchObject({
+      TableName: "TestTable",
+      Key: {
+        pk: "BETTER_AUTH#better_auth_users#better-user-1",
+        sk: "BETTER_AUTH#better_auth_users#better-user-1",
+      },
+      ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
     });
   });
 
@@ -92,9 +89,9 @@ describe("Better Auth user email synchronization", () => {
     });
 
     const request = mocks.transactWrite.mock.calls[0][0];
-    expect(request.TransactItems).toHaveLength(3);
+    expect(request.TransactItems).toHaveLength(5);
     expect(request.TransactItems[0]).toEqual(tokenDelete);
-    expect(request.TransactItems[1].Update).toMatchObject({
+    expect(request.TransactItems[2].Update).toMatchObject({
       Key: { pk: "USER#app-user-1", sk: "USER#app-user-1" },
       ConditionExpression: expect.stringContaining(
         "attribute_not_exists(#accountStatus) OR #accountStatus = :activeAccount",
@@ -156,14 +153,42 @@ describe("Better Auth user email synchronization", () => {
       }),
     ).resolves.toEqual({ betterAuthUpdated: false });
 
-    expect(mocks.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Key: { pk: "USER#app-user-1", sk: "USER#app-user-1" },
-        ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
-        ExpressionAttributeValues: expect.objectContaining({ ":app0": "Invited" }),
-      }),
+    const request = mocks.transactWrite.mock.calls[0][0];
+    expect(request.TransactItems).toHaveLength(3);
+    expect(request.TransactItems[1].Update).toMatchObject({
+      Key: { pk: "USER#app-user-1", sk: "USER#app-user-1" },
+      ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
+      ExpressionAttributeValues: expect.objectContaining({ ":app0": "Invited" }),
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("maps a lost target-claim race to the public collision error", async () => {
+    mocks.transactWrite.mockRejectedValueOnce(
+      Object.assign(new Error("race"), { name: "TransactionCanceledException" }),
     );
-    expect(mocks.transactWrite).not.toHaveBeenCalled();
+    mocks.get
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Item: {
+          type: "EMAIL_OWNERSHIP",
+          email: "new@example.test",
+          appUserId: "different-app-user",
+        },
+      });
+    const { BetterAuthEmailCollisionError, updateAppAndBetterAuthUserEmail } = await import(
+      "@/lib/better-auth-user-email"
+    );
+
+    await expect(
+      updateAppAndBetterAuthUserEmail({
+        appUserId: "app-user-1",
+        betterAuthUserId: "better-user-1",
+        oldEmail: "old@example.test",
+        newEmail: "new@example.test",
+      }),
+    ).rejects.toBeInstanceOf(BetterAuthEmailCollisionError);
   });
 
   it("collects only records owned by the matching application and Better Auth users", async () => {

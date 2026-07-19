@@ -3,6 +3,7 @@ import { documentClient, TABLE_NAME as COALITION_TABLE_NAME } from "@/lib/dynamo
 import { PGPZ_COMMUNITY_NEXTAUTH_TABLE } from "@/lib/config";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { textOrNull } from "@/lib/user-display-name";
+import { claimEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 
 export type CoalitionMemberForCommunitySync = {
   id: string;
@@ -185,12 +186,37 @@ async function createCommunityMember({
     emailSuppressedBy: source.emailSuppressed === true ? source.emailSuppressedBy || triggeredBy : null,
   };
 
-  await documentClient.put({
-    TableName: COMMUNITY_TABLE_NAME,
-    Item: item,
-    ConditionExpression: "attribute_not_exists(#pk)",
-    ExpressionAttributeNames: { "#pk": "pk" },
-  });
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        claimEmailOwnershipTransactionItem({
+          tableName: COMMUNITY_TABLE_NAME,
+          email,
+          appUserId: communityUserId,
+          now,
+        }),
+        {
+          Put: {
+            TableName: COMMUNITY_TABLE_NAME,
+            Item: item,
+            ConditionExpression: "attribute_not_exists(#pk)",
+            ExpressionAttributeNames: { "#pk": "pk" },
+          },
+        },
+      ],
+    });
+  } catch (error: any) {
+    if (error?.name === "TransactionCanceledException") {
+      return result({
+        status: "conflict",
+        source,
+        email,
+        message: "Community email ownership changed during sync; leaving for manual review.",
+        dryRun,
+      });
+    }
+    throw error;
+  }
 
   return result({
     status: "created",

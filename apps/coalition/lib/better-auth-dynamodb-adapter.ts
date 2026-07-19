@@ -2,6 +2,16 @@ import "server-only";
 
 import { createAdapterFactory } from "better-auth/adapters";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import {
+  assertCompatibleEmailOwnership,
+  claimEmailOwnershipTransactionItem,
+  emailOwnershipKey,
+  EmailOwnershipCollisionError,
+  normalizeOwnedEmail,
+  releaseBetterAuthOwnershipTransactionItem,
+  releaseEmailOwnershipTransactionItem,
+  type EmailOwnershipRecord,
+} from "@/lib/email-ownership";
 
 type AdapterCondition = {
   field?: string;
@@ -274,10 +284,140 @@ async function findMatching(model: string, where?: AdapterCondition[]) {
   return (await scanModel(model)).filter((item) => matchesWhere(item, where));
 }
 
-async function putRecord(model: string, data: AdapterRecord) {
+async function getEmailOwnership(email: string): Promise<EmailOwnershipRecord | null> {
+  const result = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: emailOwnershipKey(email),
+    ConsistentRead: true,
+  });
+  return (result.Item as EmailOwnershipRecord | undefined) || null;
+}
+
+const identityPut = ({
+  item,
+  previous,
+}: {
+  item: AdapterRecord;
+  previous?: AdapterRecord | null;
+}) => ({
+  Put: {
+    TableName: TABLE_NAME,
+    Item: item,
+    ConditionExpression: previous
+      ? "attribute_exists(#pk) AND #id = :id AND #email = :oldEmail"
+      : "attribute_not_exists(#pk)",
+    ExpressionAttributeNames: previous
+      ? { "#pk": "pk", "#id": "id", "#email": "email" }
+      : { "#pk": "pk" },
+    ...(previous
+      ? {
+          ExpressionAttributeValues: {
+            ":id": String(item.id),
+            ":oldEmail": previous.email ?? null,
+          },
+        }
+      : {}),
+  },
+});
+
+async function putRecord(model: string, data: AdapterRecord, previous?: AdapterRecord | null) {
   const item = storedItem(model, data);
-  await documentClient.put({ TableName: TABLE_NAME, Item: item });
+  if (model !== "better_auth_users") {
+    await documentClient.put({ TableName: TABLE_NAME, Item: item });
+    return cleanRecord(item);
+  }
+
+  const betterAuthUserId = String(item.id);
+  const oldEmail = normalizeOwnedEmail(previous?.email);
+  const newEmail = normalizeOwnedEmail(item.email);
+  const transactItems: any[] = [];
+
+  if (!previous && !newEmail) {
+    throw new Error("Better Auth user creation requires an email.");
+  }
+
+  if (oldEmail !== newEmail && oldEmail) {
+    const oldOwnership = await getEmailOwnership(oldEmail);
+    if (!oldOwnership) {
+      throw new Error(
+        "Email ownership must be backfilled before changing a Better Auth user email.",
+      );
+    }
+    assertCompatibleEmailOwnership(oldOwnership, { betterAuthUserId });
+    if (oldOwnership?.appUserId) {
+      throw new Error("Bound account email changes must update the application identity atomically.");
+    }
+  }
+  if (newEmail) {
+    const targetOwnership = await getEmailOwnership(newEmail);
+    assertCompatibleEmailOwnership(targetOwnership, { betterAuthUserId });
+    transactItems.push(
+      claimEmailOwnershipTransactionItem({
+        tableName: TABLE_NAME,
+        email: newEmail,
+        betterAuthUserId,
+      }),
+    );
+  }
+  transactItems.push(identityPut({ item, previous }));
+  if (oldEmail && oldEmail !== newEmail) {
+    transactItems.push(
+      releaseEmailOwnershipTransactionItem({
+        tableName: TABLE_NAME,
+        email: oldEmail,
+        betterAuthUserId,
+      }),
+    );
+  }
+
+  try {
+    await documentClient.transactWrite({ TransactItems: transactItems });
+  } catch (error: any) {
+    if (error?.name === "TransactionCanceledException" && newEmail) {
+      const targetOwnership = await getEmailOwnership(newEmail);
+      try {
+        assertCompatibleEmailOwnership(targetOwnership, { betterAuthUserId });
+      } catch {
+        throw new EmailOwnershipCollisionError();
+      }
+    }
+    throw error;
+  }
   return cleanRecord(item);
+}
+
+async function deleteRecord(model: string, item: AdapterRecord) {
+  if (!item.pk || !item.sk) return;
+  if (model !== "better_auth_users" || !item.id || !normalizeOwnedEmail(item.email)) {
+    await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
+    return;
+  }
+
+  const email = normalizeOwnedEmail(item.email);
+  const ownership = await getEmailOwnership(email);
+  assertCompatibleEmailOwnership(ownership, { betterAuthUserId: String(item.id) });
+  await documentClient.transactWrite({
+    TransactItems: [
+      releaseBetterAuthOwnershipTransactionItem({
+        tableName: TABLE_NAME,
+        email,
+        betterAuthUserId: String(item.id),
+        preserveAppOwner: !!ownership?.appUserId,
+      }),
+      {
+        Delete: {
+          TableName: TABLE_NAME,
+          Key: { pk: item.pk, sk: item.sk },
+          ConditionExpression: "attribute_exists(#pk) AND #id = :id AND #email = :email",
+          ExpressionAttributeNames: { "#pk": "pk", "#id": "id", "#email": "email" },
+          ExpressionAttributeValues: {
+            ":id": String(item.id),
+            ":email": item.email,
+          },
+        },
+      },
+    ],
+  });
 }
 
 export const createBetterAuthAdapterImplementation = () => ({
@@ -315,12 +455,12 @@ export const createBetterAuthAdapterImplementation = () => ({
     if (!where?.length) return null;
     const [item] = await findMatching(model, where);
     if (!item?.id) return null;
-    return (await putRecord(model, { ...item, ...(update as AdapterRecord) })) as T;
+    return (await putRecord(model, { ...item, ...(update as AdapterRecord) }, item)) as T;
   },
   updateMany: async <T>({ model, where, update }: { model: string; where?: AdapterCondition[]; update: T }) => {
     const items = await findMatching(model, where);
     for (const item of items) {
-      if (item.id) await putRecord(model, { ...item, ...(update as AdapterRecord) });
+      if (item.id) await putRecord(model, { ...item, ...(update as AdapterRecord) }, item);
     }
     return items.length;
   },
@@ -328,13 +468,13 @@ export const createBetterAuthAdapterImplementation = () => ({
     if (!where?.length) return;
     const [item] = await findMatching(model, where);
     if (!item?.pk || !item?.sk) return;
-    await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
+    await deleteRecord(model, item);
   },
   deleteMany: async ({ model, where }: { model: string; where?: AdapterCondition[] }) => {
     const items = await findMatching(model, where);
     for (const item of items) {
       if (item.pk && item.sk) {
-        await documentClient.delete({ TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } });
+        await deleteRecord(model, item);
       }
     }
     return items.length;
@@ -374,7 +514,7 @@ export const createBetterAuthAdapterImplementation = () => ({
     for (const [field, delta] of Object.entries(increment || {})) {
       next[field] = (typeof next[field] === "number" ? next[field] : 0) + Number(delta || 0);
     }
-    return (await putRecord(model, next)) as T;
+    return (await putRecord(model, next, item)) as T;
   },
 });
 

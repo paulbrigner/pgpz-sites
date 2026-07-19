@@ -8,6 +8,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
 import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
+import { claimEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 
 export type CreateInvitedMemberInput = {
   email: string;
@@ -147,12 +148,31 @@ export async function createInvitedMember(input: CreateInvitedMemberInput) {
     GSI1SK: `USER#${values.email}`,
   };
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: item,
-    ConditionExpression: "attribute_not_exists(#pk)",
-    ExpressionAttributeNames: { "#pk": "pk" },
-  });
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        claimEmailOwnershipTransactionItem({
+          tableName: TABLE_NAME,
+          email: values.email,
+          appUserId: userId,
+          now,
+        }),
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: item,
+            ConditionExpression: "attribute_not_exists(#pk)",
+            ExpressionAttributeNames: { "#pk": "pk" },
+          },
+        },
+      ],
+    });
+  } catch (error: any) {
+    if (error?.name === "TransactionCanceledException") {
+      throw new InvitationError("A member with this email already exists.", 409);
+    }
+    throw error;
+  }
 
   return item;
 }
