@@ -25,8 +25,10 @@ level rather than app level when preview branches exist.
 - The compute role is attached to the production `main` branch only, not as an
   Amplify app default. Community and Coalition use distinct roles.
 - The role permits only the application's DynamoDB table and indexes, the
-  configured policy-update S3 prefix, and `ses:SendEmail` for the selected SES
-  identity and exact From address. Coalition additionally receives the smaller
+  configured policy-update S3 prefix, and `ses:SendEmail` plus
+  `ses:SendRawEmail` for the selected SES identity and exact From address.
+  Nodemailer's SESv2 transport generates a MIME message and AWS authorizes that
+  raw-content path with `ses:SendRawEmail`. Coalition additionally receives the smaller
   action set used by its one-way Community entitlement synchronization.
 
 Local and non-AWS development can explicitly use `EMAIL_TRANSPORT=smtp` with
