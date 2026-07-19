@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
@@ -6,16 +7,13 @@ import { requireAdminSession } from "@/lib/admin/auth";
 import { buildEmailServerConfig, normalizeEmail, stripHtml } from "@/lib/admin/email-transport";
 import { getInvitationEmailTemplate } from "@/lib/admin/invitation-template";
 import {
-  createInvitationActivationLink,
-  InvitationError,
-  markInvitationEmailSent,
-} from "@/lib/admin/invitations";
+  enqueueBackgroundJob,
+} from "@/lib/admin/background-jobs";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import {
   buildCustomAdminEmail,
-  buildInvitationEmail,
   buildWelcomeEmail,
 } from "@/lib/system-email";
 import { getUserDisplayName } from "@/lib/user-display-name";
@@ -133,15 +131,42 @@ export async function POST(request: NextRequest) {
           { status: 409 },
         );
       }
-      const invitation = await createInvitationActivationLink({ userId: user.id, adminUserId });
       const template = await getInvitationEmailTemplate();
-      built = buildInvitationEmail({
-        recipientName: getUserDisplayName(user),
-        recipientFirstName: user.firstName,
-        recipientLastName: user.lastName,
-        activationUrl: invitation.activationUrl,
-        template,
+      const suppliedIdempotencyKey =
+        request.headers.get("idempotency-key") ||
+        (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "");
+      const queued = await enqueueBackgroundJob({
+        kind: "bulk_invitation",
+        mode: "live",
+        sourceId: user.id,
+        createdBy: adminUserId,
+        idempotencyKey: `invitation:${user.id}:${suppliedIdempotencyKey || randomUUID()}`,
+        payload: { template, adminUserId, bulkInvite: false },
+        recipients: [
+          {
+            recipientKey: user.id,
+            userId: user.id,
+            email: user.email,
+            name: getUserDisplayName(user),
+            firstName: user.firstName,
+            lastName: user.lastName,
+          },
+        ],
       });
+      return NextResponse.json(
+        {
+          ok: true,
+          queued: true,
+          duplicate: queued.duplicate,
+          job: queued.job,
+          jobId: queued.job.id,
+          statusUrl: `/api/admin/jobs?jobId=${encodeURIComponent(queued.job.id)}`,
+          userId: user.id,
+          email: user.email,
+          emailType: type,
+        },
+        { status: 202 },
+      );
     } else if (type === "welcome") {
       if (user?.membershipStatus !== "active") {
         return NextResponse.json({ error: "Welcome emails can only be sent to active members" }, { status: 409 });
@@ -173,9 +198,6 @@ export async function POST(request: NextRequest) {
     });
 
     const sentAt = new Date().toISOString();
-    if (type === "invitation" && user?.id) {
-      await markInvitationEmailSent({ userId: user.id, adminUserId });
-    }
     await recordEmailEvent({
       userId: user?.id || null,
       email: to,
@@ -184,6 +206,8 @@ export async function POST(request: NextRequest) {
       status: "sent",
       providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
       markWelcome,
+    }).catch((projectionError) => {
+      console.error("Email was accepted by the provider but email-log projection failed", projectionError);
     });
 
     return NextResponse.json({
@@ -196,9 +220,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: any) {
     const errorMessage = typeof err?.message === "string" ? err.message : "Failed to send email";
-    if (err instanceof InvitationError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     try {
       const userId = typeof body?.userId === "string" ? body.userId : null;
       const email = typeof body?.email === "string" ? body.email : null;

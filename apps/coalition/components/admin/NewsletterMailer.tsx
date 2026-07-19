@@ -15,6 +15,11 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
+import {
+  BackgroundJobProgressPanel,
+  durableRequestIdempotency,
+  type BackgroundJobSummary,
+} from "@pgpz/ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +51,7 @@ type Newsletter = {
   preheader: string;
   body: string;
   previewText: string;
-  status: "draft" | "sent";
+  status: "draft" | "sending" | "sent";
   audience: "active_members";
   createdAt: string;
   updatedAt: string;
@@ -84,6 +89,9 @@ type NewsletterApiState = {
 
 type NewsletterResult = {
   ok: boolean;
+  queued?: boolean;
+  job?: BackgroundJobSummary;
+  statusUrl?: string;
   draft?: boolean;
   newsletter?: Newsletter;
   sendRun?: NewsletterSendRun;
@@ -95,6 +103,12 @@ type NewsletterResult = {
   sent?: number;
   failed?: number;
   failures?: Array<{ email: string; error: string }>;
+};
+
+type BackgroundJobView = {
+  job: BackgroundJobSummary;
+  statusUrl: string;
+  active: boolean;
 };
 
 const emptyForm = {
@@ -159,6 +173,7 @@ function NewsletterCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const sent = newsletter.status === "sent";
+  const sending = newsletter.status === "sending";
 
   return (
     <article className="overflow-hidden rounded-2xl border bg-white/95 shadow-sm">
@@ -172,14 +187,22 @@ function NewsletterCard({
               <span
                 className={cn(
                   "rounded-full px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em]",
-                  sent ? "bg-emerald-50 text-emerald-800" : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
+                  sent
+                    ? "bg-emerald-50 text-emerald-800"
+                    : sending
+                      ? "bg-sky-50 text-sky-800"
+                      : "bg-[var(--zcash-gold-soft)] text-[var(--zcash-gold-deep)]",
                 )}
               >
-                {sent ? "Published" : "Draft"}
+                {sent ? "Published" : sending ? "Sending" : "Draft"}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              {sent ? `Sent ${formatDateTime(newsletter.sentAt)}` : `Updated ${formatDateTime(newsletter.updatedAt)}`} · Everyone
+              {sent
+                ? `Sent ${formatDateTime(newsletter.sentAt)}`
+                : sending
+                  ? `Queued ${formatDateTime(newsletter.updatedAt)}`
+                  : `Updated ${formatDateTime(newsletter.updatedAt)}`} · Everyone
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -194,7 +217,7 @@ function NewsletterCard({
                 <CopyPlus className="h-4 w-4" />
                 Use as template
               </Button>
-            ) : (
+            ) : !sending ? (
               <>
                 <Button type="button" size="sm" variant="outline" onClick={() => onEdit(newsletter)}>
                   <Edit3 className="h-4 w-4" />
@@ -213,7 +236,7 @@ function NewsletterCard({
                   {isDeleting ? "Deleting" : "Delete"}
                 </Button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -426,6 +449,7 @@ export function NewsletterMailer() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<NewsletterResult | null>(null);
+  const [backgroundJob, setBackgroundJob] = useState<BackgroundJobView | null>(null);
 
   const drafts = useMemo(
     () => newsletters.filter((newsletter) => newsletter.status === "draft"),
@@ -579,27 +603,48 @@ export function NewsletterMailer() {
     setNotice(null);
     setResult(null);
     try {
+      const requestBody = {
+        action: "send",
+        id: form.id,
+        ...(draftSend
+          ? {
+              subject: form.subject,
+              preheader: form.preheader,
+              body: form.body,
+            }
+          : {}),
+        confirmSend: true,
+        audienceMode,
+        recipientIds:
+          audienceMode === "selected_members" ? selectedRecipientIds : undefined,
+        draftSend,
+      };
+      const durableRequest = draftSend
+        ? null
+        : await durableRequestIdempotency("newsletter.send", requestBody);
       const res = await fetch("/api/admin/newsletters", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "send",
-          id: form.id,
-          ...(draftSend
-            ? {
-                subject: form.subject,
-                preheader: form.preheader,
-                body: form.body,
-              }
-            : {}),
-          confirmSend: true,
-          audienceMode,
-          recipientIds: audienceMode === "selected_members" ? selectedRecipientIds : undefined,
-          draftSend,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(durableRequest ? { "Idempotency-Key": durableRequest.value } : {}),
+        },
+        body: JSON.stringify(requestBody),
       });
       const body = (await res.json().catch(() => ({}))) as NewsletterResult & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to send newsletter");
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest?.acknowledge();
+        setBackgroundJob({
+          job: body.job,
+          statusUrl: body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setConfirmSend(false);
+        setNotice(
+          `Newsletter queued for ${body.job.recipientCount} recipient${body.job.recipientCount === 1 ? "" : "s"}. Delivery will continue in the background.`,
+        );
+        return;
+      }
       setResult(body);
       setConfirmSend(false);
       setNotice(
@@ -652,19 +697,38 @@ export function NewsletterMailer() {
     setNotice(null);
     setResult(null);
     try {
+      const requestBody = {
+        action: "sendPrevious",
+        sendRunId: sendRun.id,
+        confirmSend: true,
+        recipientIds: selectedRecipientIds,
+        draftSend,
+      };
+      const durableRequest = draftSend
+        ? null
+        : await durableRequestIdempotency("newsletter.send-previous", requestBody);
       const res = await fetch("/api/admin/newsletters", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "sendPrevious",
-          sendRunId: sendRun.id,
-          confirmSend: true,
-          recipientIds: selectedRecipientIds,
-          draftSend,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(durableRequest ? { "Idempotency-Key": durableRequest.value } : {}),
+        },
+        body: JSON.stringify(requestBody),
       });
       const body = (await res.json().catch(() => ({}))) as NewsletterResult & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to send previous newsletter");
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest?.acknowledge();
+        setBackgroundJob({
+          job: body.job,
+          statusUrl: body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setNotice(
+          `Previous newsletter queued for ${body.job.recipientCount} selected recipient${body.job.recipientCount === 1 ? "" : "s"}. Delivery will continue in the background.`,
+        );
+        return;
+      }
       setResult(body);
       setNotice(
         body.draft
@@ -712,7 +776,7 @@ export function NewsletterMailer() {
   const trackedSendReady = !!form.id && !dirty && audienceReady;
   const draftReviewReady = draftSend && canSave && audienceMode === "selected_members" && audienceReady;
   const canConfirmSend = draftSend ? draftReviewReady : trackedSendReady;
-  const canSendNewsletter = canConfirmSend && confirmSend && !sending;
+  const canSendNewsletter = canConfirmSend && confirmSend && !sending && !backgroundJob?.active;
 
   const toggleRecipient = (recipientId: string) => {
     setSelectedRecipientIds((current) =>
@@ -767,6 +831,26 @@ export function NewsletterMailer() {
       {error ? (
         <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           {error}
+        </div>
+      ) : null}
+      {backgroundJob ? (
+        <div className="mt-5">
+          <BackgroundJobProgressPanel
+            key={backgroundJob.job.id}
+            initialJob={backgroundJob.job}
+            statusUrl={backgroundJob.statusUrl}
+            onTerminal={async (job) => {
+              setBackgroundJob((current) =>
+                current?.job.id === job.id ? { ...current, active: false } : current,
+              );
+              await loadState();
+              setNotice(
+                job.status === "completed"
+                  ? `Newsletter background job completed: ${job.sentCount} sent${job.skippedCount ? `, ${job.skippedCount} skipped` : ""}.`
+                  : `Newsletter background job finished with status ${job.status.replaceAll("_", " ")}: ${job.sentCount} sent, ${job.failedCount} failed${job.deliveryUnknownCount ? `, ${job.deliveryUnknownCount} needing review` : ""}.`,
+              );
+            }}
+          />
         </div>
       ) : null}
 
@@ -1084,7 +1168,9 @@ export function NewsletterMailer() {
                     sendRun={sendRun}
                     onUseAsTemplate={useAsTemplate}
                     onSendToSelected={sendPreviousNewsletter}
-                    canSendToSelected={audienceMode === "selected_members" && selectedRecipientIds.length > 0}
+                    canSendToSelected={
+                      audienceMode === "selected_members" && selectedRecipientIds.length > 0 && !backgroundJob?.active
+                    }
                     isSendingToSelected={!!sendingPrevious[sendRun.id]}
                   />
                 ))}

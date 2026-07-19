@@ -113,6 +113,7 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
 }
 
 export async function createNewsletterTrackingRecord({
+  trackingId: requestedTrackingId,
   newsletterId,
   sendRunId,
   messageType = "newsletter",
@@ -120,6 +121,7 @@ export async function createNewsletterTrackingRecord({
   userId,
   email,
 }: {
+  trackingId?: string | null;
   newsletterId: string;
   sendRunId?: string | null;
   messageType?: EmailMessageType;
@@ -128,11 +130,12 @@ export async function createNewsletterTrackingRecord({
   email: string;
 }) {
   const now = new Date().toISOString();
-  const trackingId = randomUUID();
+  const trackingId = normalizeTrackingId(requestedTrackingId || randomUUID());
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: {
+  try {
+    await documentClient.put({
+      TableName: TABLE_NAME,
+      Item: {
       ...trackingKey(trackingId),
       type: "EMAIL_TRACKING",
       trackingId,
@@ -157,8 +160,12 @@ export async function createNewsletterTrackingRecord({
       unsubscribedAt: null,
       GSI1PK: `NEWSLETTER_TRACKING#${newsletterId}`,
       GSI1SK: `${now}#${trackingId}`,
-    },
-  });
+      },
+      ConditionExpression: "attribute_not_exists(pk)",
+    });
+  } catch (error: any) {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+  }
 
   return { trackingId, sentAt: now };
 }
@@ -271,16 +278,24 @@ export async function bindNewsletterTrackingDestinations(
       canonicalDestinations.map((url) => clickDestinationDigest(normalizedTrackingId, url)),
     ),
   ];
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: trackingKey(normalizedTrackingId),
-    UpdateExpression: "SET allowedClickDestinationDigests = :digests",
-    ConditionExpression:
-      "attribute_exists(pk) AND attribute_not_exists(allowedClickDestinationDigests)",
-    ExpressionAttributeValues: {
-      ":digests": digests,
-    },
-  });
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: trackingKey(normalizedTrackingId),
+      UpdateExpression: "SET allowedClickDestinationDigests = :digests",
+      ConditionExpression:
+        "attribute_exists(pk) AND attribute_not_exists(allowedClickDestinationDigests)",
+      ExpressionAttributeValues: {
+        ":digests": digests,
+      },
+    });
+  } catch (error: any) {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+    const existing = await getNewsletterTrackingRecord(normalizedTrackingId);
+    const stored = [...(existing?.allowedClickDestinationDigests || [])].sort();
+    const requested = [...digests].sort();
+    if (JSON.stringify(stored) !== JSON.stringify(requested)) throw error;
+  }
   return digests;
 }
 

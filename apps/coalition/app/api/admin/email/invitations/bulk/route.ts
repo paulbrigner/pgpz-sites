@@ -1,23 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - nodemailer types not installed
-import nodemailer from "nodemailer";
 import { requireAdminSession } from "@/lib/admin/auth";
-import { buildEmailServerConfig } from "@/lib/admin/email-transport";
-import { recordEmailEvent } from "@/lib/admin/email-log";
 import { getInvitationEmailTemplate } from "@/lib/admin/invitation-template";
-import {
-  createInvitationActivationLink,
-  markInvitationEmailSent,
-} from "@/lib/admin/invitations";
 import { buildAdminRoster, type AdminMember } from "@/lib/admin/roster";
-import { EMAIL_FROM } from "@/lib/config";
-import { buildInvitationEmail } from "@/lib/system-email";
 import { getUserDisplayName } from "@/lib/user-display-name";
+import { enqueueBackgroundJob, type BackgroundJobMode } from "@/lib/admin/background-jobs";
 
 export const dynamic = "force-dynamic";
 
 const isOutstandingInviteableMember = (member: AdminMember) =>
+  member.accountStatus !== "deactivated" &&
   member.membershipStatus === "invited" &&
   !!member.email &&
   !member.emailSuppressed &&
@@ -38,17 +30,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "confirmSend must be true before bulk sending invitations" }, { status: 400 });
   }
 
-  const transportConfig = buildEmailServerConfig();
-  if (!transportConfig || !EMAIL_FROM) {
-    return NextResponse.json({ error: "Email provider not configured" }, { status: 500 });
-  }
-
   const roster = await buildAdminRoster({ statusFilter: "all" });
   const recipients = roster.members.filter(isOutstandingInviteableMember);
   if (!recipients.length) {
     return NextResponse.json({
       ok: true,
-      sent: 0,
+      queued: false,
       failed: 0,
       recipientCount: 0,
       failures: [],
@@ -56,66 +43,42 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const transporter = nodemailer.createTransport(transportConfig);
   const template = await getInvitationEmailTemplate();
-  const failures: Array<{ userId: string; email: string | null; error: string }> = [];
-  let sent = 0;
-
-  for (const member of recipients) {
-    const email = member.email || null;
-    try {
-      const invitation = await createInvitationActivationLink({ userId: member.id, adminUserId });
-      const built = buildInvitationEmail({
-        recipientName: getUserDisplayName(member),
-        recipientFirstName: member.firstName,
-        recipientLastName: member.lastName,
-        activationUrl: invitation.activationUrl,
-        template,
-      });
-      const sendResult = await transporter.sendMail({
-        to: email || "",
-        from: EMAIL_FROM,
-        subject: built.subject,
-        text: built.text,
-        html: built.html,
-      });
-
-      await markInvitationEmailSent({ userId: member.id, adminUserId });
-      sent += 1;
-      await recordEmailEvent({
-        userId: member.id,
-        email,
-        type: "invitation",
-        subject: built.subject,
-        status: "sent",
-        providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
-        metadata: {
-          bulkInvite: true,
-        },
-      });
-    } catch (err: any) {
-      const error = typeof err?.message === "string" ? err.message : "Failed to send invitation";
-      failures.push({ userId: member.id, email, error });
-      await recordEmailEvent({
-        userId: member.id,
-        email,
-        type: "invitation",
-        subject: template.subject,
-        status: "failed",
-        error,
-        metadata: {
-          bulkInvite: true,
-        },
-      }).catch(() => undefined);
-    }
-  }
+  const mode: BackgroundJobMode = body?.deliveryMode === "validate_only"
+    ? "validate_only"
+    : body?.deliveryMode === "smoke"
+      ? "smoke"
+      : "live";
+  const suppliedIdempotencyKey = request.headers.get("idempotency-key") ||
+    (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "");
+  const queued = await enqueueBackgroundJob({
+    kind: "bulk_invitation",
+    mode,
+    sourceId: null,
+    createdBy: adminUserId,
+    idempotencyKey: `bulk-invitation:${suppliedIdempotencyKey || randomUUID()}`,
+    payload: { template, adminUserId, bulkInvite: true },
+    recipients: recipients.map((member) => ({
+      recipientKey: member.id,
+      userId: member.id,
+      email: member.email,
+      name: getUserDisplayName(member),
+      firstName: member.firstName,
+      lastName: member.lastName,
+    })),
+  });
 
   return NextResponse.json({
-    ok: failures.length === 0,
-    sent,
-    failed: failures.length,
+    ok: true,
+    queued: true,
+    duplicate: queued.duplicate,
+    job: queued.job,
+    jobId: queued.job.id,
+    statusUrl: `/api/admin/jobs?jobId=${encodeURIComponent(queued.job.id)}`,
+    sent: 0,
+    failed: 0,
     recipientCount: recipients.length,
-    failures: failures.slice(0, 20),
+    failures: [],
     skipped: roster.members.length - recipients.length,
-  });
+  }, { status: 202 });
 }

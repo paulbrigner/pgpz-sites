@@ -19,6 +19,11 @@ import {
   UserCheck,
   UserPlus,
 } from "lucide-react";
+import {
+  BackgroundJobProgressPanel,
+  durableRequestIdempotency,
+  type BackgroundJobSummary,
+} from "@pgpz/ui";
 import { SensitiveDataText, useAdminSensitiveData } from "@/components/admin/sensitive-data";
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
 import { Button } from "@/components/ui/button";
@@ -49,6 +54,12 @@ type InvitationTemplateState = {
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
+};
+
+type BackgroundJobView = {
+  job: BackgroundJobSummary;
+  statusUrl: string;
+  active: boolean;
 };
 
 type SortKey = "firstName" | "lastName" | "company" | "joinedAt";
@@ -180,6 +191,8 @@ const statusLabel = (member: AdminMember) => {
 };
 
 const communitySyncLabel = (status: string | null) => {
+  if (status === "queued") return "Community sync queued";
+  if (status === "running") return "Community sync running";
   if (status === "created") return "Community created";
   if (status === "updated") return "Community updated";
   if (status === "already_active") return "Community synced";
@@ -190,7 +203,11 @@ const communitySyncLabel = (status: string | null) => {
 };
 
 const communitySyncIsHealthy = (status: string | null) =>
-  status === "created" || status === "updated" || status === "already_active";
+  status === "queued" ||
+  status === "running" ||
+  status === "created" ||
+  status === "updated" ||
+  status === "already_active";
 
 const memberNeedsAction = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return false;
@@ -246,6 +263,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [templateDraftEmail, setTemplateDraftEmail] = useState("");
   const [templateDraftSending, setTemplateDraftSending] = useState(false);
   const [bulkInviting, setBulkInviting] = useState(false);
+  const [bulkInvitationJob, setBulkInvitationJob] = useState<BackgroundJobView | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("lastName");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [actionsFirst, setActionsFirst] = useState(false);
@@ -385,14 +403,32 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     setNotice(null);
     setError(null);
     try {
+      const requestBody = { userId: member.id, type };
+      const durableRequest = type === "invitation"
+        ? await durableRequestIdempotency("invitation.send", requestBody)
+        : null;
       const res = await fetch("/api/admin/email/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: member.id, type }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(durableRequest ? { "Idempotency-Key": durableRequest.value } : {}),
+        },
+        body: JSON.stringify(requestBody),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || `Failed to send ${type} email`);
-      setNotice(`${type === "welcome" ? "Welcome" : "Invitation"} email sent to ${member.email || displayName(member)}.`);
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest?.acknowledge();
+        setBulkInvitationJob({
+          job: body.job,
+          statusUrl:
+            body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setNotice(`Invitation email queued for ${member.email || displayName(member)}.`);
+      } else {
+        setNotice(`Welcome email sent to ${member.email || displayName(member)}.`);
+      }
       await loadRoster();
     } catch (err: any) {
       setError(err?.message || `Failed to send ${type} email`);
@@ -412,17 +448,47 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     setNotice(null);
     setError(null);
     try {
+      const requestBody = { confirmSend: true };
+      const durableRequest = await durableRequestIdempotency(
+        "bulk-invitation.send",
+        {
+          ...requestBody,
+          recipientIds: bulkInviteableMembers.map((member) => member.id).sort(),
+        },
+      );
       const res = await fetch("/api/admin/email/invitations/bulk", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmSend: true }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": durableRequest.value,
+        },
+        body: JSON.stringify(requestBody),
       });
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        queued?: boolean;
+        job?: BackgroundJobSummary;
+        statusUrl?: string;
+        recipientCount?: number;
+      };
       if (!res.ok) throw new Error(body?.error || "Failed to send outstanding invitations");
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest.acknowledge();
+        setBulkInvitationJob({
+          job: body.job,
+          statusUrl: body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setNotice(
+          `Invitation delivery queued for ${body.job.recipientCount} outstanding member${body.job.recipientCount === 1 ? "" : "s"}. Delivery will continue in the background.`,
+        );
+        return;
+      }
+      durableRequest.acknowledge();
       setNotice(
-        body?.failed
-          ? `Sent ${body.sent || 0} invitation${body.sent === 1 ? "" : "s"}; ${body.failed} failed.`
-          : `Sent ${body.sent || 0} outstanding invitation${body.sent === 1 ? "" : "s"}.`,
+        body.recipientCount
+          ? `Invitation request completed for ${body.recipientCount} member${body.recipientCount === 1 ? "" : "s"}.`
+          : "No outstanding invitation emails were eligible to be queued.",
       );
       await loadRoster();
     } catch (err: any) {
@@ -700,10 +766,18 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       if (!res.ok) throw new Error(body?.error || "Failed to add invited member");
       const userId = body?.member?.id;
       if (createForm.sendInvitation && userId) {
+        const invitationRequest = { userId, type: "invitation" as const };
+        const durableRequest = await durableRequestIdempotency(
+          "invitation.send-created-member",
+          invitationRequest,
+        );
         const emailRes = await fetch("/api/admin/email/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, type: "invitation" }),
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": durableRequest.value,
+          },
+          body: JSON.stringify(invitationRequest),
         });
         const emailBody = await emailRes.json().catch(() => ({}));
         if (!emailRes.ok) {
@@ -711,10 +785,20 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             `Member was added, but the invitation email failed: ${emailBody?.error || emailRes.statusText}`,
           );
         }
+        if (emailRes.status === 202 && emailBody?.job) {
+          durableRequest.acknowledge();
+          setBulkInvitationJob({
+            job: emailBody.job,
+            statusUrl:
+              emailBody.statusUrl ||
+              `/api/admin/jobs?jobId=${encodeURIComponent(emailBody.job.id)}`,
+            active: true,
+          });
+        }
       }
       setNotice(
         createForm.sendInvitation
-          ? `Invited ${createForm.email.trim().toLowerCase()} and sent an activation email.`
+          ? `Invited ${createForm.email.trim().toLowerCase()} and queued an activation email.`
           : `Added ${createForm.email.trim().toLowerCase()} in invited state.`,
       );
       setCreateForm(emptyCreateForm);
@@ -901,12 +985,14 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
             <Button
               type="button"
               variant="outline"
-              disabled={!bulkInviteableMembers.length || bulkInviting}
+              disabled={!bulkInviteableMembers.length || bulkInviting || !!bulkInvitationJob?.active}
               isLoading={bulkInviting}
               onClick={inviteOutstandingMembers}
             >
               <MailPlus className="h-4 w-4" />
-              Invite outstanding ({bulkInviteableMembers.length})
+              {bulkInvitationJob?.active
+                ? "Invitations queued"
+                : `Invite outstanding (${bulkInviteableMembers.length})`}
             </Button>
             <Button type="button" onClick={() => setCreateOpen((open) => !open)}>
               <UserPlus className="h-4 w-4" />
@@ -1121,6 +1207,24 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
         </div>
+      ) : null}
+      {bulkInvitationJob ? (
+        <BackgroundJobProgressPanel
+          key={bulkInvitationJob.job.id}
+          initialJob={bulkInvitationJob.job}
+          statusUrl={bulkInvitationJob.statusUrl}
+          onTerminal={async (job) => {
+            setBulkInvitationJob((current) =>
+              current?.job.id === job.id ? { ...current, active: false } : current,
+            );
+            await loadRoster();
+            setNotice(
+              job.status === "completed"
+                ? `Invitation background job completed: ${job.sentCount} sent${job.skippedCount ? `, ${job.skippedCount} skipped` : ""}.`
+                : `Invitation background job finished with status ${job.status.replaceAll("_", " ")}: ${job.sentCount} sent, ${job.failedCount} failed${job.deliveryUnknownCount ? `, ${job.deliveryUnknownCount} needing review` : ""}.`,
+            );
+          }}
+        />
       ) : null}
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">

@@ -4,6 +4,8 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 export type EmailLogStatus = "queued" | "sent" | "failed";
 
 export interface EmailLogParams {
+  eventId?: string | null;
+  occurredAt?: string | null;
   userId?: string | null;
   email?: string | null;
   type: string;
@@ -270,12 +272,17 @@ export function groupPolicyUpdateEmailLogs(
 }
 
 export async function recordEmailEvent(params: EmailLogParams) {
-  const now = new Date().toISOString();
-  const logId = randomUUID();
+  const requestedTimestamp =
+    typeof params.occurredAt === "string" ? new Date(params.occurredAt) : null;
+  const now = requestedTimestamp && Number.isFinite(requestedTimestamp.getTime())
+    ? requestedTimestamp.toISOString()
+    : new Date().toISOString();
+  const eventId = typeof params.eventId === "string" ? params.eventId.trim() : "";
+  const logId = eventId || randomUUID();
   const userId = params.userId || null;
 
   const pk = userId ? `EMAIL_LOG#USER#${userId}` : "EMAIL_LOG#UNKNOWN";
-  const sk = `EMAIL_LOG#${now}#${logId}`;
+  const sk = eventId ? `EMAIL_LOG#EVENT#${eventId}` : `EMAIL_LOG#${now}#${logId}`;
 
   const item: Record<string, unknown> = {
     pk,
@@ -297,10 +304,20 @@ export async function recordEmailEvent(params: EmailLogParams) {
   item["GSI1PK"] = "EMAIL_LOG";
   item["GSI1SK"] = `${now}#${logId}`;
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: item,
-  });
+  try {
+    await documentClient.put({
+      TableName: TABLE_NAME,
+      Item: item,
+      ...(eventId
+        ? {
+            ConditionExpression: "attribute_not_exists(#pk)",
+            ExpressionAttributeNames: { "#pk": "pk" },
+          }
+        : {}),
+    });
+  } catch (error: any) {
+    if (!eventId || error?.name !== "ConditionalCheckFailedException") throw error;
+  }
 
   if (userId) {
     const updateParts = ["lastEmailSentAt = :now", "lastEmailType = :type"];
@@ -429,12 +446,45 @@ export async function recordPolicyUpdateSendRun({
     GSI1SK: `${now}#${sendRunId}`,
   };
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: item,
-  });
+  try {
+    await documentClient.put({
+      TableName: TABLE_NAME,
+      Item: item,
+      ConditionExpression: "attribute_not_exists(#pk)",
+      ExpressionAttributeNames: { "#pk": "pk" },
+    });
+  } catch (error: any) {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+  }
 
   return toPolicyUpdateSendHistoryItem(item)!;
+}
+
+export async function updatePolicyUpdateSendRunProgress({
+  sendRunId,
+  sentCount,
+  failedCount,
+  failurePreview,
+}: {
+  sendRunId: string;
+  sentCount: number;
+  failedCount: number;
+  failurePreview: Array<{ email: string; error: string }>;
+}) {
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: { pk: `POLICY_UPDATE_SEND#${sendRunId}`, sk: `POLICY_UPDATE_SEND#${sendRunId}` },
+    UpdateExpression:
+      "SET sentCount = :sentCount, failedCount = :failedCount, failurePreview = :failurePreview, lastEventAt = :now",
+    ConditionExpression: "attribute_exists(#pk)",
+    ExpressionAttributeNames: { "#pk": "pk" },
+    ExpressionAttributeValues: {
+      ":sentCount": sentCount,
+      ":failedCount": failedCount,
+      ":failurePreview": failurePreview.slice(0, 10),
+      ":now": new Date().toISOString(),
+    },
+  });
 }
 
 export async function listPolicyUpdateSendHistory(updates: PolicyUpdateHistoryContext[]) {

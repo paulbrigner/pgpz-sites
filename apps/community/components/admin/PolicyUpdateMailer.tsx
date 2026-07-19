@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, Trash2, UploadCloud, UsersRound } from "lucide-react";
+import {
+  BackgroundJobProgressPanel,
+  durableRequestIdempotency,
+  type BackgroundJobSummary,
+} from "@pgpz/ui";
 import { Button } from "@/components/ui/button";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
@@ -55,6 +60,9 @@ type AudienceRecipient = {
 
 type SendResult = {
   ok: boolean;
+  queued?: boolean;
+  job?: BackgroundJobSummary;
+  statusUrl?: string;
   title: string;
   draft?: boolean;
   recipientEmail?: string | null;
@@ -63,6 +71,12 @@ type SendResult = {
   failed: number;
   recipientCount: number;
   failures?: Array<{ email: string; error: string }>;
+};
+
+type BackgroundJobView = {
+  job: BackgroundJobSummary;
+  statusUrl: string;
+  active: boolean;
 };
 
 type UploadPrepareResponse = {
@@ -358,6 +372,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   const [draftSending, setDraftSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
+  const [sendNotice, setSendNotice] = useState<string | null>(null);
+  const [backgroundJob, setBackgroundJob] = useState<BackgroundJobView | null>(null);
 
   const selectedUpdate = useMemo(
     () => updates.find((update) => update.slug === selectedSlug) || updates[0] || null,
@@ -713,19 +729,42 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     setSending(true);
     setError(null);
     setResult(null);
+    setSendNotice(null);
     try {
+      const requestBody = {
+        slug: selectedUpdate.slug,
+        confirmSend: true,
+        audienceMode,
+        recipientIds:
+          audienceMode === "selected_members" ? selectedRecipientIds : undefined,
+      };
+      const durableRequest = await durableRequestIdempotency(
+        "policy-update.send",
+        requestBody,
+      );
       const res = await fetch("/api/admin/policy-updates", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug: selectedUpdate.slug,
-          confirmSend: true,
-          audienceMode,
-          recipientIds: audienceMode === "selected_members" ? selectedRecipientIds : undefined,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": durableRequest.value,
+        },
+        body: JSON.stringify(requestBody),
       });
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as SendResult & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to send policy update");
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest.acknowledge();
+        setBackgroundJob({
+          job: body.job,
+          statusUrl: body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setConfirmSend(false);
+        setSendNotice(
+          `${body.title || selectedUpdate.title} queued for ${body.job.recipientCount} recipient${body.job.recipientCount === 1 ? "" : "s"}. Delivery will continue in the background.`,
+        );
+        return;
+      }
       setResult(body);
       setConfirmSend(false);
       await loadState({ selectedSlugOverride: selectedUpdate.slug });
@@ -764,6 +803,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     setDraftSending(true);
     setError(null);
     setResult(null);
+    setSendNotice(null);
     try {
       const res = await fetch("/api/admin/policy-updates", {
         method: "POST",
@@ -803,19 +843,41 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     setSendingPrevious((current) => ({ ...current, [send.id]: true }));
     setError(null);
     setResult(null);
+    setSendNotice(null);
     try {
+      const requestBody = {
+        slug: send.updateSlug,
+        confirmSend: true,
+        audienceMode: "selected_members" as const,
+        recipientIds: selectedRecipientIds,
+      };
+      const durableRequest = await durableRequestIdempotency(
+        "policy-update.send-previous",
+        requestBody,
+      );
       const res = await fetch("/api/admin/policy-updates", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug: send.updateSlug,
-          confirmSend: true,
-          audienceMode: "selected_members",
-          recipientIds: selectedRecipientIds,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": durableRequest.value,
+        },
+        body: JSON.stringify(requestBody),
       });
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as SendResult & { error?: string };
       if (!res.ok) throw new Error(body?.error || "Failed to send previous policy update");
+      if (res.status === 202 && body.queued && body.job) {
+        durableRequest.acknowledge();
+        setBackgroundJob({
+          job: body.job,
+          statusUrl: body.statusUrl || `/api/admin/jobs?jobId=${encodeURIComponent(body.job.id)}`,
+          active: true,
+        });
+        setConfirmSend(false);
+        setSendNotice(
+          `${body.title || send.title} queued for ${body.job.recipientCount} selected recipient${body.job.recipientCount === 1 ? "" : "s"}. Delivery will continue in the background.`,
+        );
+        return;
+      }
       setResult(body);
       setConfirmSend(false);
       await loadState();
@@ -1386,7 +1448,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
-                  disabled={!confirmSend || sending || !audienceReady || !selectedCanSendMembers}
+                  disabled={!confirmSend || sending || !audienceReady || !selectedCanSendMembers || !!backgroundJob?.active}
                   onClick={sendUpdate}
                 >
                   {sending ? <MailCheck className="h-4 w-4 animate-pulse" /> : <Send className="h-4 w-4" />}
@@ -1400,6 +1462,29 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   Sends are logged per recipient in the email log table.
                 </p>
               </div>
+              {sendNotice ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  {sendNotice}
+                </div>
+              ) : null}
+              {backgroundJob ? (
+                <BackgroundJobProgressPanel
+                  key={backgroundJob.job.id}
+                  initialJob={backgroundJob.job}
+                  statusUrl={backgroundJob.statusUrl}
+                  onTerminal={async (job) => {
+                    setBackgroundJob((current) =>
+                      current?.job.id === job.id ? { ...current, active: false } : current,
+                    );
+                    await loadState();
+                    setSendNotice(
+                      job.status === "completed"
+                        ? `Policy update background job completed: ${job.sentCount} sent${job.skippedCount ? `, ${job.skippedCount} skipped` : ""}.`
+                        : `Policy update background job finished with status ${job.status.replaceAll("_", " ")}: ${job.sentCount} sent, ${job.failedCount} failed${job.deliveryUnknownCount ? `, ${job.deliveryUnknownCount} needing review` : ""}.`,
+                    );
+                  }}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="text-sm text-slate-600">No policy updates are configured.</div>
@@ -1433,7 +1518,9 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 key={send.id}
                 send={send}
                 onSendToSelected={sendPreviousUpdate}
-                canSendToSelected={audienceMode === "selected_members" && selectedRecipientIds.length > 0}
+                canSendToSelected={
+                  audienceMode === "selected_members" && selectedRecipientIds.length > 0 && !backgroundJob?.active
+                }
                 isSendingToSelected={!!sendingPrevious[send.id]}
               />
             ))}

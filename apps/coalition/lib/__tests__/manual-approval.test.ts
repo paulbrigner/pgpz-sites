@@ -3,17 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const dynamoMocks = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
+  transactWrite: vi.fn(),
 }));
 
-const syncMock = vi.hoisted(() => vi.fn());
+const jobMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  dispatch: vi.fn(),
+}));
 
 vi.mock("@/lib/dynamodb", () => ({
   documentClient: dynamoMocks,
   TABLE_NAME: "TestTable",
 }));
 
-vi.mock("@/lib/community-sync", () => ({
-  syncCoalitionMemberToCommunityById: syncMock,
+vi.mock("@/lib/admin/background-jobs", () => ({
+  prepareSingleRecipientBackgroundJob: jobMocks.prepare,
+  dispatchStagedBackgroundJob: jobMocks.dispatch,
 }));
 
 import { approveManualApproval, requestManualApproval } from "@/lib/manual-approval";
@@ -23,8 +28,15 @@ describe("manual approval admin flow", () => {
     dynamoMocks.get.mockReset();
     dynamoMocks.update.mockReset();
     dynamoMocks.update.mockResolvedValue({});
-    syncMock.mockReset();
-    syncMock.mockResolvedValue({ status: "created" });
+    dynamoMocks.transactWrite.mockReset();
+    dynamoMocks.transactWrite.mockResolvedValue({});
+    jobMocks.prepare.mockReset();
+    jobMocks.prepare.mockResolvedValue({
+      job: { id: "sync-job-1" },
+      transactItems: [{ Put: { TableName: "Jobs", Item: { pk: "job" } } }],
+    });
+    jobMocks.dispatch.mockReset();
+    jobMocks.dispatch.mockResolvedValue({ dispatched: 1 });
   });
 
   it("records a request only while the account remains active and uninvited", async () => {
@@ -71,7 +83,8 @@ describe("manual approval admin flow", () => {
 
     const result = await approveManualApproval({ userId: "user-1", adminUserId: "admin-1" });
 
-    expect(dynamoMocks.update).toHaveBeenCalledWith(
+    const update = dynamoMocks.transactWrite.mock.calls[0][0].TransactItems[0].Update;
+    expect(update).toEqual(
       expect.objectContaining({
         TableName: "TestTable",
         Key: { pk: "USER#user-1", sk: "USER#user-1" },
@@ -85,16 +98,18 @@ describe("manual approval admin flow", () => {
         }),
       }),
     );
-    expect(syncMock).toHaveBeenCalledWith({
-      userId: "user-1",
-      triggeredBy: "manual_approval",
-    });
+    expect(jobMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "community_sync",
+      payload: { triggeredBy: "manual_approval" },
+    }));
+    expect(jobMocks.dispatch).toHaveBeenCalledWith("sync-job-1");
     expect(result).toMatchObject({
       ok: true,
       userId: "user-1",
       membershipStatus: "active",
       membershipProvider: "manual",
       manualApprovalStatus: "approved",
+      communitySync: { status: "queued", jobId: "sync-job-1" },
     });
   });
 
@@ -113,7 +128,7 @@ describe("manual approval admin flow", () => {
       approveManualApproval({ userId: "user-3", adminUserId: "admin-1" }),
     ).rejects.toMatchObject({ message: "This account is deactivated.", status: 409 });
     expect(dynamoMocks.update).not.toHaveBeenCalled();
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.prepare).not.toHaveBeenCalled();
   });
 
   it("keeps admin-added invitees in the activation flow unless they have a pending manual request", async () => {
@@ -134,6 +149,6 @@ describe("manual approval admin flow", () => {
     });
 
     expect(dynamoMocks.update).not.toHaveBeenCalled();
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.prepare).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,7 @@ vi.mock("@/lib/community-sync", () => ({
 }));
 
 import {
+  claimInvitationEmailDelivery,
   createInvitationActivationLink,
   inspectInvitationActivationToken,
   markInvitationEmailSent,
@@ -87,6 +88,39 @@ describe("invitation activation link lifecycle", () => {
         ConditionExpression: expect.stringMatching(/#membershipStatus = :invited.*#accountStatus.*#deactivatedAt/),
       }),
     );
+  });
+
+  it("atomically claims invitation delivery only for an eligible unsent invitee", async () => {
+    await expect(
+      claimInvitationEmailDelivery({ userId: "user-1", deliveryJobId: "job-1" }),
+    ).resolves.toBe(true);
+
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Key: { pk: "USER#user-1", sk: "USER#user-1" },
+        UpdateExpression: expect.stringContaining("invitationEmailJobId = :deliveryJobId"),
+        ConditionExpression: expect.stringMatching(
+          /#membershipStatus = :invited.*#accountStatus.*#deactivatedAt.*invitationEmailSentAt.*emailSuppressed.*manualApprovalStatus.*invitationEmailJobId/,
+        ),
+        ExpressionAttributeValues: expect.objectContaining({
+          ":deliveryJobId": "job-1",
+          ":invited": "invited",
+          ":deactivated": "deactivated",
+          ":false": false,
+          ":manualPending": "pending",
+        }),
+      }),
+    );
+  });
+
+  it("reports an invitation delivery claim lost to a concurrent or ineligible state", async () => {
+    dynamoMocks.update.mockRejectedValueOnce({
+      name: "ConditionalCheckFailedException",
+    });
+
+    await expect(
+      claimInvitationEmailDelivery({ userId: "user-1", deliveryJobId: "job-1" }),
+    ).resolves.toBe(false);
   });
 
   it("validates a current token using reads only", async () => {

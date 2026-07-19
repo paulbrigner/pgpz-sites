@@ -6,7 +6,10 @@ import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { SITE_URL } from "@/lib/config";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
 import { normalizeXHandle } from "@/lib/x-handle";
-import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
+import {
+  dispatchStagedBackgroundJob,
+  prepareSingleRecipientBackgroundJob,
+} from "@/lib/admin/background-jobs";
 import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 import { claimEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 
@@ -180,9 +183,11 @@ export async function createInvitedMember(input: CreateInvitedMemberInput) {
 export async function createInvitationActivationLink({
   userId,
   adminUserId,
+  deliveryJobId,
 }: {
   userId: string;
   adminUserId?: string | null;
+  deliveryJobId?: string | null;
 }) {
   const id = userId.trim();
   if (!id) throw new InvitationError("User ID is required.");
@@ -238,12 +243,13 @@ export async function createInvitationActivationLink({
             UpdateExpression:
               "SET invitationStatus = :pending, invitationTokenHash = :tokenHash, invitationTokenCreatedAt = :now, invitationTokenCreatedBy = :adminUserId, updatedAt = :now",
             ConditionExpression:
-              "attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+              `attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)${deliveryJobId ? " AND #invitationEmailJobId = :deliveryJobId" : ""}`,
             ExpressionAttributeNames: {
               "#pk": "pk",
               "#membershipStatus": "membershipStatus",
               "#accountStatus": "accountStatus",
               "#deactivatedAt": "deactivatedAt",
+              ...(deliveryJobId ? { "#invitationEmailJobId": "invitationEmailJobId" } : {}),
             },
             ExpressionAttributeValues: {
               ":pending": "pending",
@@ -252,6 +258,7 @@ export async function createInvitationActivationLink({
               ":tokenHash": tokenHash,
               ":now": now,
               ":adminUserId": adminUserId || null,
+              ...(deliveryJobId ? { ":deliveryJobId": deliveryJobId } : {}),
             },
           },
         },
@@ -277,21 +284,84 @@ export async function createInvitationActivationLink({
   };
 }
 
+export async function claimInvitationEmailDelivery({
+  userId,
+  deliveryJobId,
+}: {
+  userId: string;
+  deliveryJobId: string;
+}) {
+  const now = new Date().toISOString();
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: userKey(userId),
+      UpdateExpression:
+        "SET invitationEmailJobId = :deliveryJobId, invitationEmailClaimedAt = if_not_exists(invitationEmailClaimedAt, :now), updatedAt = :now",
+      ConditionExpression:
+        "attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt) AND attribute_not_exists(invitationEmailSentAt) AND (attribute_not_exists(emailSuppressed) OR emailSuppressed = :false) AND (attribute_not_exists(manualApprovalStatus) OR manualApprovalStatus <> :manualPending) AND (attribute_not_exists(invitationEmailJobId) OR invitationEmailJobId = :deliveryJobId)",
+      ExpressionAttributeNames: {
+        "#pk": "pk",
+        "#membershipStatus": "membershipStatus",
+        "#accountStatus": "accountStatus",
+        "#deactivatedAt": "deactivatedAt",
+      },
+      ExpressionAttributeValues: {
+        ":deliveryJobId": deliveryJobId,
+        ":now": now,
+        ":invited": "invited",
+        ":deactivated": "deactivated",
+        ":false": false,
+        ":manualPending": "pending",
+      },
+    });
+    return true;
+  } catch (error: any) {
+    if (error?.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
+export async function releaseInvitationEmailDelivery({
+  userId,
+  deliveryJobId,
+}: {
+  userId: string;
+  deliveryJobId: string;
+}) {
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: userKey(userId),
+    UpdateExpression:
+      "SET updatedAt = :now REMOVE invitationEmailJobId, invitationEmailClaimedAt",
+    ConditionExpression:
+      "invitationEmailJobId = :deliveryJobId AND attribute_not_exists(invitationEmailSentAt)",
+    ExpressionAttributeValues: {
+      ":deliveryJobId": deliveryJobId,
+      ":now": new Date().toISOString(),
+    },
+  }).catch((error: any) => {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+  });
+}
+
 export async function markInvitationEmailSent({
   userId,
   adminUserId,
+  deliveryJobId,
 }: {
   userId: string;
   adminUserId?: string | null;
+  deliveryJobId?: string | null;
 }) {
   const now = new Date().toISOString();
   await documentClient.update({
     TableName: TABLE_NAME,
     Key: userKey(userId),
     UpdateExpression:
-      "SET invitationEmailSentAt = :now, invitationEmailSentBy = :adminUserId, invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now",
+      `SET invitationEmailSentAt = if_not_exists(invitationEmailSentAt, :now), invitationEmailSentBy = if_not_exists(invitationEmailSentBy, :adminUserId), invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now${deliveryJobId ? ", invitationEmailSentJobId = :deliveryJobId" : ""}${deliveryJobId ? " REMOVE invitationEmailJobId, invitationEmailClaimedAt" : ""}`,
     ConditionExpression:
-      "attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+      `attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)${deliveryJobId ? " AND (invitationEmailJobId = :deliveryJobId OR invitationEmailSentJobId = :deliveryJobId)" : ""}`,
     ExpressionAttributeNames: {
       "#pk": "pk",
       "#membershipStatus": "membershipStatus",
@@ -304,6 +374,7 @@ export async function markInvitationEmailSent({
       ":pending": "pending",
       ":invited": "invited",
       ":provider": "admin_invite",
+      ...(deliveryJobId ? { ":deliveryJobId": deliveryJobId } : {}),
     },
   });
   return now;
@@ -353,55 +424,64 @@ export async function acceptAuthenticatedInvitation({
   }
 
   const now = new Date().toISOString();
+  const invitationTokenHash = normalizeText(user.Item.invitationTokenHash);
+  const communitySyncJob = await prepareSingleRecipientBackgroundJob({
+    kind: "community_sync",
+    mode: "live",
+    sourceId: id,
+    createdBy: id,
+    idempotencyKey: `community-sync:invitation-acceptance:${id}:${randomUUID()}`,
+    payload: { triggeredBy: "authenticated_invitation_acceptance" },
+    recipients: [{ recipientKey: id, userId: id, email: normalizedEmail }],
+  });
   try {
-    await documentClient.update({
-      TableName: TABLE_NAME,
-      Key: userKey(id),
-      UpdateExpression:
-        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now REMOVE invitationTokenHash, invitationTokenCreatedAt, invitationTokenCreatedBy",
-      ConditionExpression:
-        "attribute_exists(#pk) AND #membershipStatus = :invited AND #invitationStatus = :pending AND #email = :email AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
-      ExpressionAttributeNames: {
-        "#pk": "pk",
-        "#membershipStatus": "membershipStatus",
-        "#invitationStatus": "invitationStatus",
-        "#email": "email",
-        "#accountStatus": "accountStatus",
-        "#deactivatedAt": "deactivatedAt",
-      },
-      ExpressionAttributeValues: {
-        ":active": "active",
-        ":invited": "invited",
-        ":provider": "admin_invite",
-        ":accepted": "accepted",
-        ":acceptedVia": "authenticated_session",
-        ":email": normalizedEmail,
-        ":deactivated": "deactivated",
-        ":now": now,
-      },
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(id),
+            UpdateExpression:
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationTokenHash, invitationTokenCreatedAt, invitationTokenCreatedBy, communitySyncError",
+            ConditionExpression:
+              "attribute_exists(#pk) AND #membershipStatus = :invited AND #invitationStatus = :pending AND #email = :email AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#membershipStatus": "membershipStatus",
+              "#invitationStatus": "invitationStatus",
+              "#email": "email",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":active": "active",
+              ":invited": "invited",
+              ":provider": "admin_invite",
+              ":accepted": "accepted",
+              ":acceptedVia": "authenticated_session",
+              ":email": normalizedEmail,
+              ":deactivated": "deactivated",
+              ":now": now,
+              ":queued": "queued",
+              ":syncMessage": "Community synchronization is queued.",
+            },
+          },
+        },
+        ...(invitationTokenHash
+          ? [{ Delete: { TableName: TABLE_NAME, Key: invitationKey(invitationTokenHash) } }]
+          : []),
+        ...communitySyncJob.transactItems,
+      ],
     });
   } catch (err: any) {
-    if (err?.name === "ConditionalCheckFailedException") {
+    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
       throw new InvitationError("This invitation is no longer available.", 409);
     }
     throw err;
   }
 
-  const invitationTokenHash = normalizeText(user.Item.invitationTokenHash);
-  if (invitationTokenHash) {
-    await documentClient.delete({
-      TableName: TABLE_NAME,
-      Key: invitationKey(invitationTokenHash),
-    }).catch((error) => {
-      // Membership is already active and read-only token validation will reject
-      // this record. Keep cross-site sync and the successful response moving.
-      console.error("Failed to remove consumed invitation token", error);
-    });
-  }
-
-  const communitySync = await syncCoalitionMemberToCommunityById({
-    userId: id,
-    triggeredBy: "authenticated_invitation_acceptance",
+  await dispatchStagedBackgroundJob(communitySyncJob.job.id).catch((error) => {
+    console.error("Community synchronization was staged but immediate dispatch failed", error);
   });
 
   return {
@@ -410,7 +490,11 @@ export async function acceptAuthenticatedInvitation({
     userId: id,
     email: normalizedEmail,
     activatedAt: now,
-    communitySync,
+    communitySync: {
+      status: "queued" as const,
+      jobId: communitySyncJob.job.id,
+      message: "Community synchronization is queued.",
+    },
   };
 }
 

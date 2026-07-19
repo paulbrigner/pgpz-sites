@@ -9,10 +9,11 @@
  */
 import {
   listActiveCoalitionMembersForCommunitySync,
-  syncCoalitionMemberToCommunityById,
   syncCoalitionMemberRecordToCommunity,
   type CommunitySyncStatus,
 } from "../lib/community-sync";
+import { enqueueBackgroundJob } from "../lib/admin/background-jobs";
+import { randomUUID } from "node:crypto";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -33,19 +34,46 @@ const emptySummary = (): Record<CommunitySyncStatus, number> => ({
 async function main() {
   const members = await listActiveCoalitionMembersForCommunitySync();
   const selected = Number.isFinite(limit) && limit && limit > 0 ? members.slice(0, limit) : members;
+  if (apply) {
+    if (!selected.length) {
+      console.log(JSON.stringify({ mode: "apply", queued: false, recipientCount: 0 }, null, json ? 2 : 0));
+      return;
+    }
+    const queued = await enqueueBackgroundJob({
+      kind: "community_sync",
+      mode: "live",
+      sourceId: "coalition-reconciliation",
+      createdBy: "coalition_reconciliation_cli",
+      idempotencyKey: `community-sync:reconciliation:${randomUUID()}`,
+      payload: { triggeredBy: "coalition_reconciliation" },
+      recipients: selected.map((member) => ({
+        recipientKey: member.id,
+        userId: member.id,
+        email: member.email,
+        name: member.name,
+        firstName: member.firstName,
+        lastName: member.lastName,
+      })),
+    });
+    const payload = {
+      mode: "apply",
+      queued: true,
+      jobId: queued.job.id,
+      recipientCount: selected.length,
+      status: queued.job.status,
+    };
+    console.log(json ? JSON.stringify(payload, null, 2) :
+      `Queued Coalition -> Community reconciliation job ${queued.job.id} for ${selected.length} members.`);
+    return;
+  }
   const summary = emptySummary();
   const results = [];
 
   for (const member of selected) {
-    const result = dryRun
-      ? await syncCoalitionMemberRecordToCommunity(member, {
-          dryRun,
-          triggeredBy: "coalition_reconciliation",
-        })
-      : await syncCoalitionMemberToCommunityById({
-          userId: member.id,
-          triggeredBy: "coalition_reconciliation",
-        });
+    const result = await syncCoalitionMemberRecordToCommunity(member, {
+      dryRun,
+      triggeredBy: "coalition_reconciliation",
+    });
     summary[result.status] += 1;
     results.push(result);
   }

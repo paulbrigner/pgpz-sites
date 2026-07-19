@@ -27,7 +27,7 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
   });
   assert.equal(plan.appId, "d2xb9ethk5a24j");
   assert.equal(plan.branchName, "main");
-  assert.equal(plan.permissionPolicy.Statement.length, 4);
+  assert.equal(plan.permissionPolicy.Statement.length, 6);
   assert.match(
     JSON.stringify(plan.permissionPolicy),
     /table\/PGPZCommunityNextAuth/,
@@ -41,6 +41,31 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
     "ses:SendRawEmail",
   ]);
   assert.doesNotMatch(JSON.stringify(plan.permissionPolicy), /dynamodb:DescribeTable/);
+  const jobsTable = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ApplicationBackgroundJobsTable",
+  );
+  assert.ok(jobsTable);
+  assert.deepEqual(jobsTable.Action, [
+    "dynamodb:GetItem",
+    "dynamodb:PutItem",
+    "dynamodb:Query",
+    "dynamodb:TransactWriteItems",
+    "dynamodb:UpdateItem",
+  ]);
+  assert.match(JSON.stringify(jobsTable.Resource), /table\/PGPZCommunityBackgroundJobs/);
+  assert.doesNotMatch(JSON.stringify(jobsTable.Resource), /PGPZCoalitionBackgroundJobs/);
+  const enqueue = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "EnqueueApplicationBackgroundJobs",
+  );
+  assert.deepEqual(enqueue, {
+    Sid: "EnqueueApplicationBackgroundJobs",
+    Effect: "Allow",
+    Action: ["sqs:SendMessage", "sqs:SendMessageBatch"],
+    Resource: [
+      "arn:aws:sqs:us-east-1:123456789012:pgpz-community-background-jobs",
+    ],
+  });
+  assert.doesNotMatch(JSON.stringify(enqueue), /ReceiveMessage|DeleteMessage/);
 });
 
 test("grants Coalition only the actions used by one-way Community sync", () => {
@@ -59,6 +84,15 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
     "dynamodb:TransactWriteItems",
     "dynamodb:UpdateItem",
   ]);
+  const jobsTable = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ApplicationBackgroundJobsTable",
+  );
+  assert.match(JSON.stringify(jobsTable.Resource), /table\/PGPZCoalitionBackgroundJobs/);
+  assert.doesNotMatch(JSON.stringify(jobsTable.Resource), /PGPZCommunityBackgroundJobs/);
+  assert.equal(
+    plan.backgroundJobsQueueArn,
+    "arn:aws:sqs:us-east-1:123456789012:pgpz-coalition-background-jobs",
+  );
 });
 
 test("rejects a display-name From value in the IAM condition", () => {

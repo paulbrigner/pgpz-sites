@@ -11,6 +11,13 @@ const trimBaseUrl = (value: string | undefined, fallback: string) => {
 
 export const AWS_REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
 export const NEXTAUTH_TABLE = process.env.NEXTAUTH_TABLE as string;
+export const BACKGROUND_JOBS_ENABLED = process.env.BACKGROUND_JOBS_ENABLED === "true";
+export const BACKGROUND_JOBS_TABLE = process.env.BACKGROUND_JOBS_TABLE as string | undefined;
+export const BACKGROUND_JOBS_QUEUE_URL = process.env.BACKGROUND_JOBS_QUEUE_URL as string | undefined;
+export const BACKGROUND_JOBS_INTERNAL_SECRET =
+  process.env.BACKGROUND_JOBS_INTERNAL_SECRET as string | undefined;
+export const BACKGROUND_JOB_SMOKE_ALLOWLIST =
+  process.env.BACKGROUND_JOB_SMOKE_ALLOWLIST as string | undefined;
 export const EMAIL_TRACKING_SECRET = process.env.EMAIL_TRACKING_SECRET as string | undefined;
 export const EMAIL_TRACKING_SECRET_PREVIOUS =
   process.env.EMAIL_TRACKING_SECRET_PREVIOUS as string | undefined;
