@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
-export type NewsletterStatus = "draft" | "sent";
+export type NewsletterStatus = "draft" | "sending" | "sent";
 
 export type NewsletterStats = {
   recipientCount: number;
@@ -33,6 +33,7 @@ export type AdminNewsletter = {
   updatedBy: string | null;
   sentAt: string | null;
   sentBy: string | null;
+  deliveryJobId: string | null;
   stats: NewsletterStats;
   failurePreview: Array<{ email: string; error: string }>;
 };
@@ -117,7 +118,12 @@ function toNewsletter(item: Record<string, any> | undefined | null): AdminNewsle
     preheader: textOrEmpty(item.preheader),
     body: textOrEmpty(item.body),
     previewText: textOrEmpty(item.previewText) || newsletterPreviewText(textOrEmpty(item.body)),
-    status: item.status === "sent" ? "sent" : "draft",
+    status:
+      item.status === "sent"
+        ? "sent"
+        : item.status === "sending"
+          ? "sending"
+          : "draft",
     audience: "active_members",
     createdAt: textOrEmpty(item.createdAt),
     updatedAt: textOrEmpty(item.updatedAt),
@@ -125,6 +131,7 @@ function toNewsletter(item: Record<string, any> | undefined | null): AdminNewsle
     updatedBy: textOrNull(item.updatedBy),
     sentAt: textOrNull(item.sentAt),
     sentBy: textOrNull(item.sentBy),
+    deliveryJobId: textOrNull(item.deliveryJobId),
     stats,
     failurePreview: normalizeFailurePreview(item.failurePreview),
   };
@@ -242,8 +249,8 @@ export async function saveNewsletterDraft(input: NewsletterDraftInput): Promise<
   const newsletterId = input.id?.trim() || randomUUID();
   const existing = input.id ? await getNewsletter(newsletterId) : null;
 
-  if (existing?.status === "sent") {
-    throw new Error("Sent newsletters cannot be edited. Create a new draft instead.");
+  if (existing && existing.status !== "draft") {
+    throw new Error("Queued or sent newsletters cannot be edited. Create a new draft instead.");
   }
 
   const createdAt = existing?.createdAt || now;
@@ -352,12 +359,49 @@ export async function recordNewsletterSendRun({
     GSI1SK: `${now}#${sendRunId}`,
   };
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: item,
-  });
+  try {
+    await documentClient.put({
+      TableName: TABLE_NAME,
+      Item: item,
+      ConditionExpression: "attribute_not_exists(#pk)",
+      ExpressionAttributeNames: { "#pk": "pk" },
+    });
+  } catch (error: any) {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+    const existing = await getNewsletterSendRun(sendRunId);
+    if (existing) return existing;
+    throw error;
+  }
 
   return toNewsletterSendRun(item)!;
+}
+
+export async function updateNewsletterSendRunProgress({
+  sendRunId,
+  sentCount,
+  failedCount,
+  failurePreview,
+}: {
+  sendRunId: string;
+  sentCount: number;
+  failedCount: number;
+  failurePreview: Array<{ email: string; error: string }>;
+}) {
+  const now = new Date().toISOString();
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: { pk: `NEWSLETTER_SEND#${sendRunId}`, sk: `NEWSLETTER_SEND#${sendRunId}` },
+    UpdateExpression:
+      "SET sentCount = :sentCount, failedCount = :failedCount, failurePreview = :failurePreview, lastEventAt = :now",
+    ConditionExpression: "attribute_exists(#pk)",
+    ExpressionAttributeNames: { "#pk": "pk" },
+    ExpressionAttributeValues: {
+      ":sentCount": sentCount,
+      ":failedCount": failedCount,
+      ":failurePreview": failurePreview.slice(0, 10),
+      ":now": now,
+    },
+  });
 }
 
 export async function deleteNewsletterDraft(newsletterId: string) {
@@ -383,6 +427,7 @@ export async function markNewsletterSent({
   sentCount,
   failedCount,
   failurePreview,
+  deliveryJobId,
 }: {
   newsletterId: string;
   adminUserId: string | null;
@@ -390,24 +435,73 @@ export async function markNewsletterSent({
   sentCount: number;
   failedCount: number;
   failurePreview: Array<{ email: string; error: string }>;
+  deliveryJobId?: string | null;
 }) {
   const now = new Date().toISOString();
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
-    UpdateExpression:
-      "SET #status = :status, sentAt = :now, sentBy = :adminUserId, updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, openCount = :zero, clickCount = :zero, unsubscribeCount = :zero, possibleForwardOpenCount = :zero, failurePreview = :failurePreview, GSI1SK = :gsi1sk",
-    ExpressionAttributeNames: { "#status": "status" },
-    ExpressionAttributeValues: {
-      ":status": "sent",
-      ":now": now,
-      ":adminUserId": adminUserId,
-      ":recipientCount": recipientCount,
-      ":sentCount": sentCount,
-      ":failedCount": failedCount,
-      ":zero": 0,
-      ":failurePreview": failurePreview.slice(0, 10),
-      ":gsi1sk": `${now}#${newsletterId}`,
-    },
-  });
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
+      UpdateExpression:
+        `SET #status = :status, sentAt = if_not_exists(sentAt, :now), sentBy = if_not_exists(sentBy, :adminUserId), updatedAt = :now, updatedBy = :adminUserId, recipientCount = :recipientCount, sentCount = :sentCount, failedCount = :failedCount, openCount = if_not_exists(openCount, :zero), clickCount = if_not_exists(clickCount, :zero), unsubscribeCount = if_not_exists(unsubscribeCount, :zero), possibleForwardOpenCount = if_not_exists(possibleForwardOpenCount, :zero), failurePreview = :failurePreview, GSI1SK = :gsi1sk${deliveryJobId ? ", deliveryJobId = :deliveryJobId" : ""}`,
+      ...(deliveryJobId
+        ? {
+            ConditionExpression:
+              "#status IN (:sending, :status) AND deliveryJobId = :deliveryJobId",
+          }
+        : {}),
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":status": "sent",
+        ":now": now,
+        ":adminUserId": adminUserId,
+        ":recipientCount": recipientCount,
+        ":sentCount": sentCount,
+        ":failedCount": failedCount,
+        ":zero": 0,
+        ":failurePreview": failurePreview.slice(0, 10),
+        ":gsi1sk": `${now}#${newsletterId}`,
+        ...(deliveryJobId ? { ":sending": "sending", ":deliveryJobId": deliveryJobId } : {}),
+      },
+    });
+    return true;
+  } catch (error: any) {
+    if (deliveryJobId && error?.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
+
+export async function claimNewsletterBackgroundDelivery({
+  newsletterId,
+  deliveryJobId,
+  adminUserId,
+}: {
+  newsletterId: string;
+  deliveryJobId: string;
+  adminUserId: string | null;
+}) {
+  const now = new Date().toISOString();
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: { pk: `NEWSLETTER#${newsletterId}`, sk: `NEWSLETTER#${newsletterId}` },
+      UpdateExpression:
+        "SET #status = :sending, deliveryJobId = :deliveryJobId, deliveryClaimedAt = if_not_exists(deliveryClaimedAt, :now), updatedAt = :now, updatedBy = :adminUserId",
+      ConditionExpression:
+        "attribute_exists(#pk) AND (#status = :draft OR ((#status = :sending OR #status = :sent) AND deliveryJobId = :deliveryJobId))",
+      ExpressionAttributeNames: { "#pk": "pk", "#status": "status" },
+      ExpressionAttributeValues: {
+        ":draft": "draft",
+        ":sending": "sending",
+        ":sent": "sent",
+        ":deliveryJobId": deliveryJobId,
+        ":now": now,
+        ":adminUserId": adminUserId,
+      },
+    });
+    return true;
+  } catch (error: any) {
+    if (error?.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
 }

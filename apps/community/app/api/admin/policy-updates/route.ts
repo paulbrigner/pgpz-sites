@@ -57,6 +57,11 @@ import {
   policyUpdateMarkdownFileName,
 } from "@/lib/policy-update-markdown";
 import { s3Client } from "@/lib/s3";
+import {
+  backgroundJobIdForIdempotencyKey,
+  enqueueBackgroundJob,
+  type BackgroundJobMode,
+} from "@/lib/admin/background-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +80,13 @@ async function requireAdminOrForbidden() {
 
 const adminUserIdFromSession = (session: any) =>
   typeof session?.user?.id === "string" ? session.user.id : null;
+
+const backgroundJobMode = (body: any): BackgroundJobMode =>
+  body?.deliveryMode === "validate_only"
+    ? "validate_only"
+    : body?.deliveryMode === "smoke"
+      ? "smoke"
+      : "live";
 
 type PolicyUpdateSendRecipient = Omit<PolicyUpdateRecipient, "id"> & {
   id: string | null;
@@ -850,6 +862,61 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+  }
+
+  if (!draftMode) {
+    const suppliedIdempotencyKey = request.headers.get("idempotency-key") ||
+      (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "");
+    const idempotencyKey = `policy-update:${update.slug}:${suppliedIdempotencyKey || randomUUID()}`;
+    const policyUpdateSendRunId = backgroundJobIdForIdempotencyKey(idempotencyKey);
+    await recordPolicyUpdateSendRun({
+      sendRunId: policyUpdateSendRunId,
+      update,
+      recipientCount: recipients.length,
+      sentCount: 0,
+      failedCount: 0,
+      failurePreview: [],
+      audienceMode,
+    });
+    const queued = await enqueueBackgroundJob({
+      kind: "policy_update",
+      mode: backgroundJobMode(body),
+      sourceId: update.slug,
+      createdBy: adminUserId,
+      idempotencyKey,
+      payload: {
+        update,
+        audienceMode,
+        emailAssetMaterializationId,
+      },
+      recipients: recipients.map((recipient) => ({
+        recipientKey: recipient.id || recipient.email,
+        userId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+      })),
+    });
+    return NextResponse.json({
+      ok: true,
+      queued: true,
+      duplicate: queued.duplicate,
+      slug: update.slug,
+      sendRunId: policyUpdateSendRunId,
+      job: queued.job,
+      jobId: queued.job.id,
+      statusUrl: `/api/admin/jobs?jobId=${encodeURIComponent(queued.job.id)}`,
+      title: update.title,
+      draft: false,
+      recipientEmail: null,
+      resolvedRecipientName: null,
+      audienceMode,
+      activeRecipientCount,
+      recipientCount: recipients.length,
+      sent: 0,
+      failed: 0,
+    }, { status: 202 });
   }
 
   const transporter = nodemailer.createTransport(transportConfig);

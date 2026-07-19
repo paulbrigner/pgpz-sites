@@ -1,8 +1,12 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { isAccountActive } from "@pgpz/core";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
-import { syncCoalitionMemberToCommunityById } from "@/lib/community-sync";
+import {
+  dispatchStagedBackgroundJob,
+  prepareSingleRecipientBackgroundJob,
+} from "@/lib/admin/background-jobs";
 
 export type ManualApprovalStatus = "none" | "pending" | "approved";
 
@@ -134,31 +138,53 @@ export async function approveManualApproval({
   }
 
   const now = new Date().toISOString();
+  const communitySyncJob = await prepareSingleRecipientBackgroundJob({
+    kind: "community_sync",
+    mode: "live",
+    sourceId: userId,
+    createdBy: adminUserId,
+    idempotencyKey: `community-sync:manual-approval:${userId}:${randomUUID()}`,
+    payload: { triggeredBy: "manual_approval" },
+    recipients: [{
+      recipientKey: userId,
+      userId,
+      email: (user.Item.email as string | undefined) || null,
+    }],
+  });
   try {
-    await documentClient.update({
-      TableName: TABLE_NAME,
-      Key: userKey(userId),
-      UpdateExpression:
-        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now REMOVE invitationStatus, invitationTokenCreatedAt, invitationTokenCreatedBy",
-      ConditionExpression:
-        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt) AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND (#manualApprovalStatus = :pending OR attribute_not_exists(#membershipStatus) OR #membershipStatus = :none)",
-      ExpressionAttributeNames: {
-        "#pk": "pk",
-        "#membershipStatus": "membershipStatus",
-        "#manualApprovalStatus": "manualApprovalStatus",
-        "#accountStatus": "accountStatus",
-        "#deactivatedAt": "deactivatedAt",
-      },
-      ExpressionAttributeValues: {
-        ":active": "active",
-        ":provider": "manual",
-        ":pending": "pending",
-        ":none": "none",
-        ":deactivated": "deactivated",
-        ":now": now,
-        ":approved": "approved",
-        ":adminUserId": adminUserId,
-      },
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(userId),
+            UpdateExpression:
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationStatus, invitationTokenCreatedAt, invitationTokenCreatedBy, communitySyncError",
+            ConditionExpression:
+              "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt) AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND (#manualApprovalStatus = :pending OR attribute_not_exists(#membershipStatus) OR #membershipStatus = :none)",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#membershipStatus": "membershipStatus",
+              "#manualApprovalStatus": "manualApprovalStatus",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":active": "active",
+              ":provider": "manual",
+              ":pending": "pending",
+              ":none": "none",
+              ":deactivated": "deactivated",
+              ":now": now,
+              ":approved": "approved",
+              ":adminUserId": adminUserId,
+              ":queued": "queued",
+              ":syncMessage": "Community synchronization is queued.",
+            },
+          },
+        },
+        ...communitySyncJob.transactItems,
+      ],
     });
   } catch (err: any) {
     if (err?.name === "ConditionalCheckFailedException") {
@@ -167,9 +193,8 @@ export async function approveManualApproval({
     throw err;
   }
 
-  const communitySync = await syncCoalitionMemberToCommunityById({
-    userId,
-    triggeredBy: "manual_approval",
+  await dispatchStagedBackgroundJob(communitySyncJob.job.id).catch((error) => {
+    console.error("Community synchronization was staged but immediate dispatch failed", error);
   });
 
   return {
@@ -181,6 +206,10 @@ export async function approveManualApproval({
     membershipVerifiedAt: now,
     manualApprovalStatus: "approved" as const,
     manualApprovalApprovedAt: now,
-    communitySync,
+    communitySync: {
+      status: "queued" as const,
+      jobId: communitySyncJob.job.id,
+      message: "Community synchronization is queued.",
+    },
   };
 }

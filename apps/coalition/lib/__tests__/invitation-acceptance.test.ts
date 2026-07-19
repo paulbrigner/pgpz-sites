@@ -4,17 +4,22 @@ const dynamoMocks = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
+  transactWrite: vi.fn(),
 }));
 
-const syncMock = vi.hoisted(() => vi.fn());
+const jobMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  dispatch: vi.fn(),
+}));
 
 vi.mock("@/lib/dynamodb", () => ({
   documentClient: dynamoMocks,
   TABLE_NAME: "TestTable",
 }));
 
-vi.mock("@/lib/community-sync", () => ({
-  syncCoalitionMemberToCommunityById: syncMock,
+vi.mock("@/lib/admin/background-jobs", () => ({
+  prepareSingleRecipientBackgroundJob: jobMocks.prepare,
+  dispatchStagedBackgroundJob: jobMocks.dispatch,
 }));
 
 import { acceptAuthenticatedInvitation } from "@/lib/admin/invitations";
@@ -24,7 +29,12 @@ describe("authenticated invitation acceptance", () => {
     vi.clearAllMocks();
     dynamoMocks.update.mockResolvedValue({});
     dynamoMocks.delete.mockResolvedValue({});
-    syncMock.mockResolvedValue({ status: "created" });
+    dynamoMocks.transactWrite.mockResolvedValue({});
+    jobMocks.prepare.mockResolvedValue({
+      job: { id: "sync-job-1" },
+      transactItems: [{ Put: { TableName: "Jobs", Item: { pk: "job" } } }],
+    });
+    jobMocks.dispatch.mockResolvedValue({ dispatched: 1 });
   });
 
   it("activates an invited user signed in with the same email", async () => {
@@ -44,7 +54,8 @@ describe("authenticated invitation acceptance", () => {
       email: "Invitee@Example.com",
     });
 
-    expect(dynamoMocks.update).toHaveBeenCalledWith(
+    const transaction = dynamoMocks.transactWrite.mock.calls[0][0].TransactItems;
+    expect(transaction[0].Update).toEqual(
       expect.objectContaining({
         TableName: "TestTable",
         Key: { pk: "USER#user-1", sk: "USER#user-1" },
@@ -57,22 +68,24 @@ describe("authenticated invitation acceptance", () => {
         }),
       }),
     );
-    expect(syncMock).toHaveBeenCalledWith({
-      userId: "user-1",
-      triggeredBy: "authenticated_invitation_acceptance",
-    });
-    expect(dynamoMocks.delete).toHaveBeenCalledWith({
+    expect(transaction[1].Delete).toEqual({
       TableName: "TestTable",
       Key: {
         pk: "INVITATION#current-token-hash",
         sk: "INVITATION#current-token-hash",
       },
     });
+    expect(jobMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "community_sync",
+      recipients: [expect.objectContaining({ userId: "user-1", email: "invitee@example.com" })],
+    }));
+    expect(jobMocks.dispatch).toHaveBeenCalledWith("sync-job-1");
     expect(result).toMatchObject({
       ok: true,
       status: "activated",
       userId: "user-1",
       email: "invitee@example.com",
+      communitySync: { status: "queued", jobId: "sync-job-1" },
     });
   });
 
@@ -95,7 +108,7 @@ describe("authenticated invitation acceptance", () => {
       status: 403,
     });
     expect(dynamoMocks.update).not.toHaveBeenCalled();
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.prepare).not.toHaveBeenCalled();
   });
 
   it("is idempotent for an already active member", async () => {
@@ -114,7 +127,7 @@ describe("authenticated invitation acceptance", () => {
       }),
     ).resolves.toMatchObject({ ok: true, status: "already_active" });
     expect(dynamoMocks.update).not.toHaveBeenCalled();
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.prepare).not.toHaveBeenCalled();
   });
 
   it("rejects a signed-in account without invited membership", async () => {
@@ -155,7 +168,7 @@ describe("authenticated invitation acceptance", () => {
       acceptAuthenticatedInvitation({ userId: "user-1", email: "invitee@example.com" }),
     ).rejects.toMatchObject({ message: "This account is deactivated.", status: 409 });
     expect(dynamoMocks.update).not.toHaveBeenCalled();
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.prepare).not.toHaveBeenCalled();
   });
 
   it("rejects a deactivation race at the atomic update boundary", async () => {
@@ -168,15 +181,15 @@ describe("authenticated invitation acceptance", () => {
         accountStatus: "active",
       },
     });
-    dynamoMocks.update.mockRejectedValueOnce({ name: "ConditionalCheckFailedException" });
+    dynamoMocks.transactWrite.mockRejectedValueOnce({ name: "TransactionCanceledException" });
 
     await expect(
       acceptAuthenticatedInvitation({ userId: "user-1", email: "invitee@example.com" }),
     ).rejects.toMatchObject({ message: "This invitation is no longer available.", status: 409 });
-    expect(syncMock).not.toHaveBeenCalled();
+    expect(jobMocks.dispatch).not.toHaveBeenCalled();
   });
 
-  it("keeps a successful activation moving if consumed-token cleanup must be retried", async () => {
+  it("keeps a successful activation durable if immediate queue dispatch must be retried", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     dynamoMocks.get.mockResolvedValue({
       Item: {
@@ -188,12 +201,13 @@ describe("authenticated invitation acceptance", () => {
         accountStatus: "active",
       },
     });
-    dynamoMocks.delete.mockRejectedValueOnce(new Error("temporary DynamoDB failure"));
+    jobMocks.dispatch.mockRejectedValueOnce(new Error("temporary SQS failure"));
 
     await expect(
       acceptAuthenticatedInvitation({ userId: "user-1", email: "invitee@example.com" }),
     ).resolves.toMatchObject({ ok: true, status: "activated" });
-    expect(syncMock).toHaveBeenCalledOnce();
+    expect(dynamoMocks.transactWrite).toHaveBeenCalledOnce();
+    expect(jobMocks.dispatch).toHaveBeenCalledOnce();
     consoleError.mockRestore();
   });
 });

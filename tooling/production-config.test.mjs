@@ -14,6 +14,11 @@ const validEnvironment = () => ({
   EMAIL_TRACKING_SECRET: "e".repeat(64),
   BETTER_AUTH_SECRET: "b".repeat(64),
   EMAIL_TRANSPORT: "ses",
+  BACKGROUND_JOBS_ENABLED: "true",
+  BACKGROUND_JOBS_TABLE: "PGPZCoalitionJobs",
+  BACKGROUND_JOBS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/pgpz-jobs",
+  BACKGROUND_JOBS_INTERNAL_SECRET: "j".repeat(64),
+  BACKGROUND_JOB_SMOKE_ALLOWLIST: "paul@paulbrigner.com,div@accrediv.com",
 });
 
 test("accepts the current 64-character production secret shape", () => {
@@ -21,6 +26,15 @@ test("accepts the current 64-character production secret shape", () => {
     validateBrandedProductionEnvironment(validEnvironment(), {
       applicationName: "coalition",
     }),
+  );
+});
+
+test("allows the durable-job application switch to remain off during cutover or rollback", () => {
+  assert.doesNotThrow(() =>
+    validateBrandedProductionEnvironment(
+      { ...validEnvironment(), BACKGROUND_JOBS_ENABLED: "false" },
+      { applicationName: "coalition" },
+    ),
   );
 });
 
@@ -78,6 +92,22 @@ test("requires the SES transport for production branded builds", () => {
         { applicationName: "coalition" },
       ),
     /EMAIL_TRANSPORT must be ses/,
+  );
+});
+
+test("fails closed when durable jobs or the administrator-only smoke guard are misconfigured", () => {
+  assert.throws(
+    () =>
+      validateBrandedProductionEnvironment(
+        {
+          ...validEnvironment(),
+          BACKGROUND_JOBS_ENABLED: "sometimes",
+          BACKGROUND_JOBS_INTERNAL_SECRET: "weak",
+          BACKGROUND_JOB_SMOKE_ALLOWLIST: "member@example.com",
+        },
+        { applicationName: "coalition" },
+      ),
+    /BACKGROUND_JOBS_INTERNAL_SECRET must contain at least 32 bytes[\s\S]*BACKGROUND_JOBS_ENABLED must be true or false[\s\S]*must contain only Paul and Div/,
   );
 });
 

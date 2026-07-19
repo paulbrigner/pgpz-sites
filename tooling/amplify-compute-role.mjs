@@ -3,6 +3,8 @@ export const AMPLIFY_COMPUTE_APPLICATIONS = Object.freeze({
     appId: "d2xb9ethk5a24j",
     branchName: "main",
     defaultTableName: "PGPZCommunityNextAuth",
+    backgroundJobsTableName: "PGPZCommunityBackgroundJobs",
+    backgroundJobsQueueName: "pgpz-community-background-jobs",
     roleName: "PgpzCommunityAmplifyMainCompute",
   }),
   coalition: Object.freeze({
@@ -10,6 +12,8 @@ export const AMPLIFY_COMPUTE_APPLICATIONS = Object.freeze({
     branchName: "main",
     defaultTableName: "PGPZCoalitionNextAuth",
     defaultAdditionalTableNames: ["PGPZCommunityNextAuth"],
+    backgroundJobsTableName: "PGPZCoalitionBackgroundJobs",
+    backgroundJobsQueueName: "pgpz-coalition-background-jobs",
     roleName: "PgpzCoalitionAmplifyMainCompute",
   }),
 });
@@ -26,6 +30,14 @@ const primaryDynamoActions = [
 ];
 
 const synchronizedDynamoActions = [
+  "dynamodb:Query",
+  "dynamodb:TransactWriteItems",
+  "dynamodb:UpdateItem",
+];
+
+const backgroundJobsDynamoActions = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
   "dynamodb:Query",
   "dynamodb:TransactWriteItems",
   "dynamodb:UpdateItem",
@@ -59,6 +71,8 @@ export function buildAmplifyComputePermissionPolicy({
   prefix,
   sesIdentityArn,
   fromAddress,
+  backgroundJobsTableName,
+  backgroundJobsQueueArn,
 }) {
   const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, "");
   if (!normalizedPrefix) throw new Error("prefix is required");
@@ -87,6 +101,22 @@ export function buildAmplifyComputePermissionPolicy({
             },
           ]
         : []),
+      {
+        Sid: "ApplicationBackgroundJobsTable",
+        Effect: "Allow",
+        Action: backgroundJobsDynamoActions,
+        Resource: tableResources({
+          accountId,
+          region,
+          tableName: backgroundJobsTableName,
+        }),
+      },
+      {
+        Sid: "EnqueueApplicationBackgroundJobs",
+        Effect: "Allow",
+        Action: ["sqs:SendMessage", "sqs:SendMessageBatch"],
+        Resource: [backgroundJobsQueueArn],
+      },
       {
         Sid: "ListPolicyUpdateObjects",
         Effect: "Allow",
@@ -149,6 +179,8 @@ export function buildAmplifyComputeRolePlan({
   const resolvedTableName = tableName || application.defaultTableName;
   const resolvedAdditionalTableNames =
     additionalTableNames || application.defaultAdditionalTableNames || [];
+  const backgroundJobsQueueArn =
+    `arn:aws:sqs:${region}:${accountId}:${application.backgroundJobsQueueName}`;
   const roleArn = `arn:aws:iam::${accountId}:role/${application.roleName}`;
   return {
     applicationName,
@@ -157,6 +189,8 @@ export function buildAmplifyComputeRolePlan({
     roleName: application.roleName,
     roleArn,
     inlinePolicyName: `${application.roleName}Policy`,
+    backgroundJobsTableName: application.backgroundJobsTableName,
+    backgroundJobsQueueArn,
     trustPolicy: buildAmplifyComputeTrustPolicy(),
     permissionPolicy: buildAmplifyComputePermissionPolicy({
       accountId,
@@ -167,6 +201,8 @@ export function buildAmplifyComputeRolePlan({
       prefix,
       sesIdentityArn,
       fromAddress,
+      backgroundJobsTableName: application.backgroundJobsTableName,
+      backgroundJobsQueueArn,
     }),
   };
 }

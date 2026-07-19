@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  backgroundJobIdForIdempotencyKey: vi.fn(),
   bindNewsletterTrackingDestinations: vi.fn(),
   buildNewsletterEmail: vi.fn(),
   createNewsletterTrackingRecord: vi.fn(),
   createTransport: vi.fn(),
   deleteNewsletterDraft: vi.fn(),
+  enqueueBackgroundJob: vi.fn(),
   findUserProfileByEmail: vi.fn(),
   getNewsletter: vi.fn(),
   getNewsletterSendRun: vi.fn(),
@@ -33,6 +35,11 @@ vi.mock("nodemailer", () => ({
 
 vi.mock("@/lib/admin/auth", () => ({
   requireAdminSession: mocks.requireAdminSession,
+}));
+
+vi.mock("@/lib/admin/background-jobs", () => ({
+  backgroundJobIdForIdempotencyKey: mocks.backgroundJobIdForIdempotencyKey,
+  enqueueBackgroundJob: mocks.enqueueBackgroundJob,
 }));
 
 vi.mock("@/lib/admin/email-transport", () => ({
@@ -130,6 +137,12 @@ describe("admin newsletter sends", () => {
     mocks.listPolicyUpdateRecipients.mockResolvedValue([recipient]);
     mocks.createNewsletterTrackingRecord.mockResolvedValue({ trackingId: "tracking-1" });
     mocks.recordNewsletterSendRun.mockResolvedValue({ id: "send-run-1" });
+    mocks.backgroundJobIdForIdempotencyKey.mockReturnValue("background-job-1");
+    mocks.enqueueBackgroundJob.mockResolvedValue({
+      duplicate: false,
+      job: { id: "background-job-1", status: "queued" },
+    });
+    mocks.getNewsletterSendRun.mockResolvedValue({ id: "background-job-1" });
     mocks.buildNewsletterEmail.mockImplementation((input, _recipient, _siteUrl, tracking) => ({
       subject: input.subject,
       text: "Plain text",
@@ -243,7 +256,7 @@ describe("admin newsletter sends", () => {
     expect(mocks.recordNewsletterSendRun).not.toHaveBeenCalled();
   });
 
-  it("keeps normal selected sends tracked and recorded", async () => {
+  it("queues normal selected sends without invoking the mail transport", async () => {
     const response = await postNewsletter({
       action: "send",
       id: "newsletter-1",
@@ -252,56 +265,47 @@ describe("admin newsletter sends", () => {
       recipientIds: ["user-1"],
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     const body = await response.json();
     expect(body).toMatchObject({
       ok: true,
-      draft: false,
-      sendRun: { id: "send-run-1" },
+      queued: true,
+      duplicate: false,
+      jobId: "background-job-1",
+      job: { id: "background-job-1", status: "queued" },
+      sendRun: { id: "background-job-1" },
       audienceMode: "selected_members",
       recipientCount: 1,
-      sent: 1,
+      sent: 0,
       failed: 0,
     });
-    expect(mocks.createNewsletterTrackingRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        newsletterId: "newsletter-1",
-        audienceMode: "selected_members",
-        userId: "user-1",
-        email: "paul@example.com",
-      }),
-    );
-    expect(mocks.buildNewsletterEmail.mock.calls[0][3]).toEqual({
-      trackingId: "tracking-1",
-      trackLinks: true,
-      includeOpenPixel: true,
-      includeUnsubscribe: true,
-    });
-    expect(mocks.markNewsletterTrackingSent).toHaveBeenCalledWith(
-      expect.objectContaining({ trackingId: "tracking-1", providerMessageId: "message-1" }),
-    );
-    expect(mocks.bindNewsletterTrackingDestinations).toHaveBeenCalledWith(
-      "tracking-1",
-      ["https://example.test/member-update"],
-    );
-    expect(mocks.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        headers: {
-          "List-Unsubscribe":
-            "<https://example.test/api/email/unsubscribe/tracking-1>",
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
-      }),
+    expect(mocks.backgroundJobIdForIdempotencyKey).toHaveBeenCalledWith(
+      expect.stringMatching(/^newsletter:send:/),
     );
     expect(mocks.recordNewsletterSendRun).toHaveBeenCalledWith(
       expect.objectContaining({
+        sendRunId: "background-job-1",
         newsletterId: "newsletter-1",
         audienceMode: "selected_members",
         recipientCount: 1,
-        sentCount: 1,
+        sentCount: 0,
         failedCount: 0,
       }),
     );
+    expect(mocks.enqueueBackgroundJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "newsletter",
+        mode: "live",
+        sourceId: "newsletter-1",
+        createdBy: "admin-1",
+        recipients: [expect.objectContaining({ userId: "user-1", email: "paul@example.com" })],
+      }),
+    );
+    expect(mocks.createTransport).not.toHaveBeenCalled();
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+    expect(mocks.createNewsletterTrackingRecord).not.toHaveBeenCalled();
+    expect(mocks.markNewsletterTrackingSent).not.toHaveBeenCalled();
+    expect(mocks.bindNewsletterTrackingDestinations).not.toHaveBeenCalled();
     expect(mocks.recordNewsletterDraftSend).not.toHaveBeenCalled();
   });
 });

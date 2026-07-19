@@ -24,12 +24,17 @@ level rather than app level when preview branches exist.
   application-specific access key is serialized into `.env.production`.
 - The compute role is attached to the production `main` branch only, not as an
   Amplify app default. Community and Coalition use distinct roles.
-- The role permits only the application's DynamoDB table and indexes, the
-  configured policy-update S3 prefix, and `ses:SendEmail` plus
+- The role permits only the application's primary DynamoDB table and indexes,
+  its isolated background-jobs table and indexes, send-only access to its
+  background-jobs SQS queue, the configured policy-update S3 prefix, and `ses:SendEmail` plus
   `ses:SendRawEmail` for the selected SES identity and exact From address.
   Nodemailer's SESv2 transport generates a MIME message and AWS authorizes that
   raw-content path with `ses:SendRawEmail`. Coalition additionally receives the smaller
   action set used by its one-way Community entitlement synchronization.
+  The role cannot receive from or delete messages in SQS and cannot access the
+  sibling application's background-job resources. See
+  `docs/durable-jobs-runbook.md` for the separately guarded infrastructure
+  cutover.
 
 Local and non-AWS development can explicitly use `EMAIL_TRANSPORT=smtp` with
 the existing `EMAIL_SERVER_*` settings. Local AWS access uses an SSO/profile,

@@ -13,6 +13,16 @@ frontend:
       commands:
         - env | grep -e NEXT_PUBLIC_SITE_URL >> .env.production || true
         - env | grep -e NEXTAUTH_TABLE >> .env.production
+        - 'test "${BACKGROUND_JOBS_ENABLED:-}" = "true" || test "${BACKGROUND_JOBS_ENABLED:-}" = "false"'
+        - env | grep -e '^BACKGROUND_JOBS_ENABLED=' >> .env.production
+        - 'test -n "${BACKGROUND_JOBS_TABLE:-}"'
+        - env | grep -e '^BACKGROUND_JOBS_TABLE=' >> .env.production
+        - 'test "${BACKGROUND_JOBS_QUEUE_URL:-}" != ""'
+        - env | grep -e '^BACKGROUND_JOBS_QUEUE_URL=' >> .env.production
+        - 'test "${#BACKGROUND_JOBS_INTERNAL_SECRET}" -ge 32'
+        - env | grep -e '^BACKGROUND_JOBS_INTERNAL_SECRET=' >> .env.production
+        - 'test "${BACKGROUND_JOB_SMOKE_ALLOWLIST:-}" = "paul@paulbrigner.com,div@accrediv.com"'
+        - env | grep -e '^BACKGROUND_JOB_SMOKE_ALLOWLIST=' >> .env.production
         - env | grep -e PGPZ_COMMUNITY_NEXTAUTH_TABLE >> .env.production || true
         - env | grep -e COMMUNITY_NEXTAUTH_TABLE >> .env.production || true
         - env | grep -e BETTER_AUTH_URL >> .env.production || true

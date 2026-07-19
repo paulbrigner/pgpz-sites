@@ -50,20 +50,28 @@
         "sha256": "be480fb795179c5e3594f548258f28b2f9d0298ca54157ee6b1640b08b5176a1"
       },
       {
+        "path": "app/api/admin/jobs/route.ts",
+        "sha256": "f273e64a24ba916cfbb6cf3fde0a506fa9e3ac8b2e8a38c5d52723da52f366af"
+      },
+      {
         "path": "app/api/admin/members/manual-approval/route.ts",
         "sha256": "d38b865c8adb7f163a7e2ba3b8981b84b9134b57c733f10eba73b9e16df467a5"
       },
       {
         "path": "app/api/admin/newsletters/route.test.ts",
-        "sha256": "dff82f83c9a402e7fdb34cedb34c36526cfd73cc27d56dd9766c63be0e79c580"
+        "sha256": "de60e51b7d41774d4c4fa6a41e605f2b54beb08a791de7fa29f30747020dae48"
       },
       {
         "path": "app/api/admin/newsletters/route.ts",
-        "sha256": "c062ef5bf94abfb5e5afd78fa18d8ecf5386c8f194a3a646be1362fd7100ff63"
+        "sha256": "b5016051aab7c5d3b7fa80742ffe059c0554b1f3c2e75a74103cfc184d17bb0d"
+      },
+      {
+        "path": "app/api/admin/policy-updates/route.test.ts",
+        "sha256": "7985f8800fa11b4737de425a7a3cb33526ef03f1f27cc58688195669189a91ef"
       },
       {
         "path": "app/api/admin/policy-updates/route.ts",
-        "sha256": "162b418bc0cd8899826cd26a86c42194c2f849904cbf2a82749d509b28de17ca"
+        "sha256": "e0bb36e3e47d4f029019527299c71bafa14c932d15b1551b7b6157cc4bb978cf"
       },
       {
         "path": "app/api/admin/users/adminize/route.ts",
@@ -171,7 +179,7 @@
       },
       {
         "path": "components/admin/NewsletterMailer.tsx",
-        "sha256": "babecb3eaed200d0d91a735ff561ffa75424551465800823a7f8cd3bc8df951b"
+        "sha256": "e866111428a85e90882831b743fb5e675563b4937ac57d3a009dab8eaea23faa"
       },
       {
         "path": "components/admin/sensitive-data.tsx",
@@ -224,6 +232,14 @@
       {
         "path": "lib/__tests__/aws-runtime.test.ts",
         "sha256": "869c99537a25b82a9dfcf97bb25fa0a562fda758411e0d3b192c28b326f84526"
+      },
+      {
+        "path": "lib/__tests__/background-jobs.test.ts",
+        "sha256": "afaa758bbee7d9479014e8f004af18253130f2be28924e424f0aa2f713163431"
+      },
+      {
+        "path": "lib/__tests__/email-background-job-processor.test.ts",
+        "sha256": "7e98db56f1491220e6b52b651392924410c6f0e5dc81df6ac621a61354d42d9a"
       },
       {
         "path": "lib/__tests__/better-auth-client-ip.test.ts",
@@ -282,12 +298,20 @@
         "sha256": "13f20e91f6c48243eecc41fa4db26487151dd59b9042afd823df91b2746606d5"
       },
       {
+        "path": "lib/admin/background-jobs.ts",
+        "sha256": "38091f88527eec41940ba3d16ea9ccdbead589db364775215785e1f2649734fc"
+      },
+      {
         "path": "lib/admin/email-log.ts",
-        "sha256": "5ccb906b1fce8fb8ab4d1a83fc7df0825145db40ea9c88bdc0d35c52b8997bd5"
+        "sha256": "fb5775dd4c7195d279024eee974aa64b981f23c471dcce663ddfcbba2f86c9f3"
+      },
+      {
+        "path": "lib/admin/email-background-job-processor.ts",
+        "sha256": "b37fd9a31caa6d53ba18b1d2903617cd0a0736166546608233df8bac641f9a42"
       },
       {
         "path": "lib/admin/email-tracking.ts",
-        "sha256": "11fdcb673b9a1ca8563566c69fa619c56ae27df9577ffb79484d14e0221b740b"
+        "sha256": "f1f279414f7527043070396b01caa3a94cd6e68e6776d7162aeb557e23c303dc"
       },
       {
         "path": "lib/admin/email-transport.ts",
@@ -303,7 +327,7 @@
       },
       {
         "path": "lib/admin/newsletters.ts",
-        "sha256": "40dd6a7ae5835c12e7ca50fff36690afcb5b12507496c04d2908a3525af083d1"
+        "sha256": "91907cb4c0936f298cadcb8e0190bef07156d3f83fa8c4babc04825beaee52f3"
       },
       {
         "path": "lib/admin/policy-update-email-assets.ts",
@@ -583,6 +607,8 @@
       "app/admin/admin-client.tsx",
       "app/admin/admin-console.tsx",
       "app/api/admin/email/send/route.ts",
+      "app/api/internal/background-jobs/process/route.ts",
+      "app/api/internal/background-jobs/reconcile/route.ts",
       "app/api/admin/members/route.ts",
       "app/api/profile/update/route.ts",
       "app/api/signup/pending/route.ts",

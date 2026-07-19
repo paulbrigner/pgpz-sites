@@ -27,6 +27,11 @@ import { recordEmailEvent } from "@/lib/admin/email-log";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { listUnsubscribeHeaders } from "@/lib/email-link-security";
 import { buildNewsletterEmail } from "@/lib/newsletter-email";
+import {
+  backgroundJobIdForIdempotencyKey,
+  enqueueBackgroundJob,
+  type BackgroundJobMode,
+} from "@/lib/admin/background-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +73,93 @@ function normalizeRecipientIds(value: unknown) {
         .filter(Boolean),
     ),
   );
+}
+
+function backgroundJobMode(body: any): BackgroundJobMode {
+  if (body?.deliveryMode === "validate_only") return "validate_only";
+  if (body?.deliveryMode === "smoke") return "smoke";
+  return "live";
+}
+
+function requestIdempotencyKey(request: NextRequest, body: any, action: string) {
+  const supplied = request.headers.get("idempotency-key") ||
+    (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "");
+  return `newsletter:${action}:${supplied || randomUUID()}`;
+}
+
+async function queueNewsletterSnapshot({
+  request,
+  body,
+  action,
+  snapshot,
+  recipients,
+  audienceMode,
+  activeRecipientCount,
+  adminUserId,
+  sourceSendRunId,
+  idempotencyKey: suppliedJobIdempotencyKey,
+}: {
+  request: NextRequest;
+  body: any;
+  action: string;
+  snapshot: NewsletterSnapshot;
+  recipients: NewsletterSendRecipient[];
+  audienceMode: NewsletterAudienceMode;
+  activeRecipientCount: number;
+  adminUserId: string | null;
+  sourceSendRunId?: string | null;
+  idempotencyKey?: string;
+}) {
+  const idempotencyKey =
+    suppliedJobIdempotencyKey || requestIdempotencyKey(request, body, action);
+  const jobId = backgroundJobIdForIdempotencyKey(idempotencyKey);
+  await recordNewsletterSendRun({
+    sendRunId: jobId,
+    newsletterId: snapshot.newsletterId,
+    newsletter: snapshot,
+    audienceMode,
+    adminUserId,
+    recipientCount: recipients.length,
+    sentCount: 0,
+    failedCount: 0,
+    failurePreview: [],
+  });
+  const queued = await enqueueBackgroundJob({
+    kind: "newsletter",
+    mode: backgroundJobMode(body),
+    sourceId: snapshot.newsletterId,
+    createdBy: adminUserId,
+    idempotencyKey,
+    payload: {
+      newsletterId: snapshot.newsletterId,
+      newsletter: snapshot,
+      audienceMode,
+      sourceSendRunId: sourceSendRunId || null,
+      adminUserId,
+    },
+    recipients: recipients.map((recipient) => ({
+      recipientKey: recipient.id || recipient.email,
+      userId: recipient.id,
+      email: recipient.email,
+      name: recipient.name,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+    })),
+  });
+  return NextResponse.json({
+    ok: true,
+    queued: true,
+    duplicate: queued.duplicate,
+    job: queued.job,
+    jobId: queued.job.id,
+    statusUrl: `/api/admin/jobs?jobId=${encodeURIComponent(queued.job.id)}`,
+    sendRun: await getNewsletterSendRun(queued.job.id),
+    audienceMode,
+    activeRecipientCount,
+    recipientCount: recipients.length,
+    sent: 0,
+    failed: 0,
+  }, { status: 202 });
 }
 
 async function resolveNewsletterAudience(body: any) {
@@ -456,6 +548,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Select at least one active member recipient." }, { status: 400 });
     }
 
+    if (!draftSend) {
+      return queueNewsletterSnapshot({
+        request,
+        body,
+        action,
+        snapshot,
+        recipients,
+        audienceMode: "selected_members",
+        activeRecipientCount,
+        adminUserId,
+        sourceSendRunId,
+      });
+    }
+
     const transporter = nodemailer.createTransport(transportConfig);
     const { sendRun, sent, failures } = await sendNewsletterSnapshot({
       snapshot,
@@ -486,6 +592,9 @@ export async function POST(request: NextRequest) {
     const draftSend = body?.draftSend === true;
     const draftPayloadProvided =
       typeof body?.subject === "string" || typeof body?.preheader === "string" || typeof body?.body === "string";
+    const durableIdempotencyKey = draftSend
+      ? null
+      : requestIdempotencyKey(request, body, action);
     if (!confirmSend) {
       return NextResponse.json({ error: "confirmSend must be true before sending a newsletter" }, { status: 400 });
     }
@@ -512,8 +621,17 @@ export async function POST(request: NextRequest) {
       if (!existingNewsletter) {
         return NextResponse.json({ error: "Newsletter not found" }, { status: 404 });
       }
-      if (existingNewsletter.status === "sent") {
-        return NextResponse.json({ error: "This newsletter has already been sent" }, { status: 409 });
+      const requestedJobId = durableIdempotencyKey
+        ? backgroundJobIdForIdempotencyKey(durableIdempotencyKey)
+        : null;
+      if (
+        existingNewsletter.status !== "draft" &&
+        existingNewsletter.deliveryJobId !== requestedJobId
+      ) {
+        return NextResponse.json(
+          { error: "This newsletter is already queued or has been sent" },
+          { status: 409 },
+        );
       }
       newsletter = existingNewsletter;
     }
@@ -534,6 +652,26 @@ export async function POST(request: NextRequest) {
     }
     if (!recipients.length) {
       return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
+    }
+
+    if (!draftSend) {
+      return queueNewsletterSnapshot({
+        request,
+        body,
+        action,
+        snapshot: {
+          newsletterId: newsletter.id,
+          subject: newsletter.subject,
+          preheader: newsletter.preheader,
+          body: newsletter.body,
+          previewText: newsletter.previewText,
+        },
+        recipients,
+        audienceMode,
+        activeRecipientCount,
+        adminUserId,
+        idempotencyKey: durableIdempotencyKey || undefined,
+      });
     }
 
     const transporter = nodemailer.createTransport(transportConfig);
