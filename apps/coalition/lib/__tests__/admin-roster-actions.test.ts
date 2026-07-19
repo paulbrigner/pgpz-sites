@@ -527,7 +527,7 @@ describe("admin roster account actions", () => {
     expect(dynamoMocks.update).not.toHaveBeenCalled();
   });
 
-  it("treats signed-in unapproved prospects as approval-ready in the admin roster", async () => {
+  it("treats only explicit access requests as approval-ready in the admin roster", async () => {
     dynamoMocks.scan.mockResolvedValueOnce({
       Items: [
         {
@@ -558,8 +558,8 @@ describe("admin roster account actions", () => {
 
     const roster = await buildAdminRoster({ statusFilter: "manual" });
 
-    expect(roster.meta.manualPending).toBe(2);
-    expect(roster.members.map((member) => member.id).sort()).toEqual(["pending-1", "prospect-1"]);
+    expect(roster.meta.manualPending).toBe(1);
+    expect(roster.members.map((member) => member.id)).toEqual(["pending-1"]);
   });
 
   it("normalizes policy interest groups in roster entries", async () => {

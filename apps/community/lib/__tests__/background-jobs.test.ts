@@ -23,7 +23,11 @@ vi.mock("@/lib/admin/email-transport", () => ({
 import {
   assertSmokeRecipient,
   isAuthorizedBackgroundJobRequest,
+  listBackgroundJobsPage,
   listBackgroundJobTasks,
+  listBackgroundJobTasksPage,
+  prepareSingleRecipientBackgroundJob,
+  reconcileBackgroundJobs,
   repairBuildingBackgroundJobSnapshot,
   releaseBackgroundJobTaskForRetry,
   retryBackgroundJob,
@@ -198,6 +202,106 @@ describe("durable background-job safety", () => {
         },
       }),
     );
+  });
+
+  it("exposes opaque cursors for recent and status-filtered job pages", async () => {
+    const lastKey = {
+      pk: "BACKGROUND_JOB#job-1",
+      sk: "BACKGROUND_JOB#job-1",
+      GSI1PK: "BACKGROUND_JOB",
+      GSI1SK: "2026-07-19T00:00:00.000Z#job-1",
+    };
+    dynamoMocks.query
+      .mockResolvedValueOnce({ Items: [jobItem], LastEvaluatedKey: lastKey })
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [jobItem] });
+
+    const first = await listBackgroundJobsPage({ limit: 10 });
+    expect(first.jobs).toHaveLength(1);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    await listBackgroundJobsPage({ limit: 10, cursor: first.nextCursor });
+    expect(dynamoMocks.query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        IndexName: "GSI1",
+        ExclusiveStartKey: lastKey,
+      }),
+    );
+
+    await listBackgroundJobsPage({ status: "needs_review", limit: 5 });
+    expect(dynamoMocks.query).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        IndexName: "GSI2",
+        ExpressionAttributeValues: {
+          ":pk": "BACKGROUND_JOB_STATUS#needs_review",
+        },
+      }),
+    );
+  });
+
+  it("queries a task status without draining the parent partition", async () => {
+    dynamoMocks.query.mockResolvedValueOnce({
+      Items: [taskItem({ status: "delivery_unknown" })],
+    });
+
+    const page = await listBackgroundJobTasksPage("job-1", {
+      status: "delivery_unknown",
+      limit: 20,
+    });
+    expect(page.tasks).toHaveLength(1);
+    expect(page.nextCursor).toBeNull();
+    expect(dynamoMocks.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        IndexName: "GSI2",
+        ExpressionAttributeValues: {
+          ":pk": "BACKGROUND_JOB#job-1#TASK_STATUS#delivery_unknown",
+        },
+      }),
+    );
+  });
+
+  it("reconciles from active status partitions instead of walking recent history", async () => {
+    dynamoMocks.query.mockResolvedValue({ Items: [] });
+
+    await expect(reconcileBackgroundJobs()).resolves.toEqual({
+      inspectedJobs: 0,
+      dispatched: 0,
+      deliveryUnknown: 0,
+    });
+    expect(dynamoMocks.query).toHaveBeenCalledTimes(4);
+    expect(
+      dynamoMocks.query.mock.calls.map(([input]) => ({
+        index: input.IndexName,
+        partition: input.ExpressionAttributeValues?.[":pk"],
+      })),
+    ).toEqual([
+      { index: "GSI2", partition: "BACKGROUND_JOB_STATUS#building" },
+      { index: "GSI2", partition: "BACKGROUND_JOB_STATUS#dispatch_pending" },
+      { index: "GSI2", partition: "BACKGROUND_JOB_STATUS#queued" },
+      { index: "GSI2", partition: "BACKGROUND_JOB_STATUS#running" },
+    ]);
+  });
+
+  it("stages status indexes and shorter recipient retention", async () => {
+    const staged = await prepareSingleRecipientBackgroundJob({
+      kind: "newsletter",
+      mode: "live",
+      idempotencyKey: "newsletter:retention-test",
+      payload: { subject: "Test" },
+      recipients: [recipient],
+    });
+    const [jobPut, taskPut, idempotencyPut] = staged.transactItems.map(
+      (entry) => entry.Put?.Item as Record<string, any>,
+    );
+
+    expect(jobPut.GSI1PK).toBe("BACKGROUND_JOB");
+    expect(jobPut.GSI2PK).toBe("BACKGROUND_JOB_STATUS#building");
+    expect(taskPut.GSI2PK).toBe(
+      `BACKGROUND_JOB#${staged.job.id}#TASK_STATUS#pending`,
+    );
+    expect(taskPut.expires).toBeLessThan(jobPut.expires);
+    expect(idempotencyPut.expires).toBe(jobPut.expires);
   });
 
   it("repairs a partially materialized building job from its durable audience manifest", async () => {

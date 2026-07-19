@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  BACKGROUND_JOB_STATUSES,
+  BACKGROUND_JOB_TASK_STATUSES,
+  type BackgroundJobStatus,
+  type BackgroundJobTaskStatus,
+} from "@pgpz/background-jobs";
 import { requireAdminSession } from "@/lib/admin/auth";
 import {
   cancelBackgroundJob,
   getBackgroundJob,
-  listBackgroundJobs,
+  listBackgroundJobsPage,
   listBackgroundJobTasks,
+  listBackgroundJobTasksPage,
   retryBackgroundJob,
 } from "@/lib/admin/background-jobs";
 
@@ -23,7 +30,59 @@ export async function GET(request: NextRequest) {
   const forbidden = await requireAdminOrForbidden();
   if (forbidden) return forbidden;
   const jobId = request.nextUrl.searchParams.get("jobId")?.trim();
-  if (!jobId) return NextResponse.json({ jobs: await listBackgroundJobs() });
+  if (!jobId) {
+    const statusValue = request.nextUrl.searchParams.get("status")?.trim() || null;
+    if (
+      statusValue &&
+      !(BACKGROUND_JOB_STATUSES as readonly string[]).includes(statusValue)
+    ) {
+      return NextResponse.json({ error: "Unknown background job status" }, { status: 400 });
+    }
+    try {
+      return NextResponse.json(
+        await listBackgroundJobsPage({
+          limit: Number(request.nextUrl.searchParams.get("limit") || 30),
+          cursor: request.nextUrl.searchParams.get("cursor"),
+          status: statusValue as BackgroundJobStatus | null,
+        }),
+      );
+    } catch (error: any) {
+      return NextResponse.json(
+        { error: error?.message || "Invalid background job page" },
+        { status: 400 },
+      );
+    }
+  }
+  const taskStatusValue = request.nextUrl.searchParams.get("taskStatus")?.trim() || null;
+  if (
+    taskStatusValue &&
+    !(BACKGROUND_JOB_TASK_STATUSES as readonly string[]).includes(taskStatusValue)
+  ) {
+    return NextResponse.json({ error: "Unknown background job task status" }, { status: 400 });
+  }
+  const includeTaskPage =
+    request.nextUrl.searchParams.get("includeTasks") === "true" ||
+    !!taskStatusValue ||
+    request.nextUrl.searchParams.has("taskCursor");
+  if (includeTaskPage) {
+    try {
+      const [job, page] = await Promise.all([
+        getBackgroundJob(jobId),
+        listBackgroundJobTasksPage(jobId, {
+          limit: Number(request.nextUrl.searchParams.get("taskLimit") || 50),
+          cursor: request.nextUrl.searchParams.get("taskCursor"),
+          status: taskStatusValue as BackgroundJobTaskStatus | null,
+        }),
+      ]);
+      if (!job) return NextResponse.json({ error: "Background job not found" }, { status: 404 });
+      return NextResponse.json({ job, ...page });
+    } catch (error: any) {
+      return NextResponse.json(
+        { error: error?.message || "Invalid background job task page" },
+        { status: 400 },
+      );
+    }
+  }
   const [job, tasks] = await Promise.all([
     getBackgroundJob(jobId),
     listBackgroundJobTasks(jobId),

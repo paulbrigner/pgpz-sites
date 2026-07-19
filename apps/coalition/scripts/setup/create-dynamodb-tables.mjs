@@ -125,11 +125,12 @@ async function ensureNextAuthTable() {
   if (existing) {
     const keyOk = hasKeySchema(existing, "pk", "sk");
     const gsiOk = hasGsi(existing, "GSI1", "GSI1PK", "GSI1SK");
-    if (!keyOk || !gsiOk) {
+    const userIdGsiOk = hasGsi(existing, "GSI2", "GSI2PK", "GSI2SK");
+    if (!keyOk || !gsiOk || !userIdGsiOk) {
       console.warn(
         [
           `Table ${nextAuthTable} exists but does not match the expected schema.`,
-          `Expected pk/sk keys and GSI1 (GSI1PK/GSI1SK).`,
+          `Expected pk/sk keys, GSI1 (GSI1PK/GSI1SK), and GSI2 (GSI2PK/GSI2SK).`,
         ].join(" "),
       );
     } else {
@@ -152,6 +153,8 @@ async function ensureNextAuthTable() {
         { AttributeName: "sk", AttributeType: "S" },
         { AttributeName: "GSI1PK", AttributeType: "S" },
         { AttributeName: "GSI1SK", AttributeType: "S" },
+        { AttributeName: "GSI2PK", AttributeType: "S" },
+        { AttributeName: "GSI2SK", AttributeType: "S" },
       ],
       GlobalSecondaryIndexes: [
         {
@@ -159,6 +162,14 @@ async function ensureNextAuthTable() {
           KeySchema: [
             { AttributeName: "GSI1PK", KeyType: "HASH" },
             { AttributeName: "GSI1SK", KeyType: "RANGE" },
+          ],
+          Projection: { ProjectionType: "ALL" },
+        },
+        {
+          IndexName: "GSI2",
+          KeySchema: [
+            { AttributeName: "GSI2PK", KeyType: "HASH" },
+            { AttributeName: "GSI2SK", KeyType: "RANGE" },
           ],
           Projection: { ProjectionType: "ALL" },
         },

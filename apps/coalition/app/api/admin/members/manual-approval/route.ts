@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin/auth";
-import { approveManualApproval, ManualApprovalError } from "@/lib/manual-approval";
+import {
+  approveManualApproval,
+  declineAccessApplication,
+  ManualApprovalError,
+} from "@/lib/manual-approval";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +20,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
-    const result = await approveManualApproval({ userId, adminUserId });
+    const action = body?.action;
+    if (action !== "approve" && action !== "decline") {
+      return NextResponse.json(
+        { error: 'Action must be either "approve" or "decline".' },
+        { status: 400 },
+      );
+    }
+
+    const result = action === "decline"
+      ? await declineAccessApplication({
+          userId,
+          adminUserId,
+          reason: typeof body?.reason === "string" ? body.reason : null,
+        })
+      : await approveManualApproval({ userId, adminUserId });
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof ManualApprovalError) {

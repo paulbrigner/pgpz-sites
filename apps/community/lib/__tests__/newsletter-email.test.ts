@@ -54,7 +54,7 @@ describe("buildNewsletterEmail", () => {
       'href="https://community.pgpz.org/api/email/click/track-123?url=https%3A%2F%2Fcommunity.pgpz.org',
     );
     expect(built.html).toContain("/api/email/unsubscribe/track-123");
-    expect(built.text).toContain("Unsubscribe: https://community.pgpz.org/api/email/unsubscribe/track-123");
+    expect(built.text).toContain("Unsubscribe from newsletters: https://community.pgpz.org/api/email/unsubscribe/track-123");
     expect(built.unsubscribeUrl).toBe("https://community.pgpz.org/api/email/unsubscribe/track-123");
   });
 });

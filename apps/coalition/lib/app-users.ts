@@ -370,6 +370,35 @@ export function appSessionUserFromRecord(user: RawAppUser) {
       typeof user.manualApprovalRequestedAt === "string" ? user.manualApprovalRequestedAt : null,
     manualApprovalApprovedAt:
       typeof user.manualApprovalApprovedAt === "string" ? user.manualApprovalApprovedAt : null,
+    applicationStatus:
+      user.applicationStatus === "requested" ||
+      user.applicationStatus === "approved" ||
+      user.applicationStatus === "declined" ||
+      user.applicationStatus === "withdrawn"
+        ? user.applicationStatus
+        : user.manualApprovalStatus === "pending"
+          ? "requested"
+          : user.manualApprovalStatus === "approved"
+            ? "approved"
+            : "none",
+    applicationRequestedAt:
+      typeof user.applicationRequestedAt === "string"
+        ? user.applicationRequestedAt
+        : typeof user.manualApprovalRequestedAt === "string"
+          ? user.manualApprovalRequestedAt
+          : null,
+    applicationApprovedAt:
+      typeof user.applicationApprovedAt === "string"
+        ? user.applicationApprovedAt
+        : typeof user.manualApprovalApprovedAt === "string"
+          ? user.manualApprovalApprovedAt
+          : null,
+    applicationDeclinedAt:
+      typeof user.applicationDeclinedAt === "string" ? user.applicationDeclinedAt : null,
+    applicationDeclineReason:
+      typeof user.applicationDeclineReason === "string" ? user.applicationDeclineReason : null,
+    applicationWithdrawnAt:
+      typeof user.applicationWithdrawnAt === "string" ? user.applicationWithdrawnAt : null,
     invitationStatus:
       user.invitationStatus === "accepted"
         ? "accepted"

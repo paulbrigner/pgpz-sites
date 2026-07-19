@@ -14,6 +14,7 @@ export function createFakeDocumentClient() {
     put: vi.fn(),
     query: vi.fn(),
     scan: vi.fn(),
+    transactWrite: vi.fn(),
     update: vi.fn(),
   };
 
@@ -21,18 +22,46 @@ export function createFakeDocumentClient() {
     vi.clearAllMocks();
     state.items.clear();
     state.queryPageSize = Number.POSITIVE_INFINITY;
-    client.put.mockImplementation(async ({ Item }) => {
+    client.put.mockImplementation(async ({ Item, ConditionExpression, ExpressionAttributeNames, ExpressionAttributeValues }) => {
+      const existing = state.items.get(storageKey(Item));
+      if (ConditionExpression === "attribute_not_exists(#pk)" && existing) {
+        const error = new Error("record exists");
+        error.name = "ConditionalCheckFailedException";
+        throw error;
+      }
+      const versionName = Object.entries(ExpressionAttributeNames || {}).find(
+        ([name]) => name === "#adapterVersion",
+      )?.[1] as string | undefined;
+      if (ConditionExpression?.includes("#adapterVersion = :previousVersion")) {
+        const expected = ExpressionAttributeValues?.[":previousVersion"];
+        if (!existing || existing[versionName || "adapterVersion"] !== expected) {
+          const error = new Error("record changed");
+          error.name = "ConditionalCheckFailedException";
+          throw error;
+        }
+      }
+      if (ConditionExpression?.includes("attribute_not_exists(#adapterVersion)") && existing?.adapterVersion !== undefined) {
+        const error = new Error("record changed");
+        error.name = "ConditionalCheckFailedException";
+        throw error;
+      }
       state.items.set(storageKey(Item), clone(Item));
       return {};
     });
     client.get.mockImplementation(async ({ Key }) => ({
       Item: state.items.has(storageKey(Key)) ? clone(state.items.get(storageKey(Key))) : undefined,
     }));
-    client.query.mockImplementation(async ({ ExpressionAttributeValues, ExclusiveStartKey }) => {
-      const partitionKey = ExpressionAttributeValues[":gsi1pk"];
+    client.query.mockImplementation(async ({
+      ExpressionAttributeNames,
+      ExpressionAttributeValues,
+      ExclusiveStartKey,
+    }) => {
+      const partitionAttribute = ExpressionAttributeNames["#indexpk"] || "GSI1PK";
+      const partitionKey = ExpressionAttributeValues[":indexpk"];
+      const sortAttribute = partitionAttribute === "GSI2PK" ? "GSI2SK" : "GSI1SK";
       const matching = Array.from(state.items.values())
-        .filter((item) => item.GSI1PK === partitionKey)
-        .sort((left, right) => String(left.GSI1SK).localeCompare(String(right.GSI1SK)));
+        .filter((item) => item[partitionAttribute] === partitionKey)
+        .sort((left, right) => String(left[sortAttribute]).localeCompare(String(right[sortAttribute])));
       const start = ExclusiveStartKey
         ? matching.findIndex((item) => storageKey(item) === storageKey(ExclusiveStartKey)) + 1
         : 0;
@@ -71,9 +100,114 @@ export function createFakeDocumentClient() {
       state.items.delete(key);
       return {};
     });
-    client.update.mockImplementation(async ({ Key, ExpressionAttributeValues }) => {
+    client.transactWrite.mockImplementation(async ({ TransactItems }) => {
+      const nextItems = new Map(
+        Array.from(state.items.entries()).map(([key, value]) => [key, clone(value)]),
+      );
+      const cancel = (message: string) => {
+        const error = new Error(message);
+        error.name = "TransactionCanceledException";
+        throw error;
+      };
+
+      for (const operation of TransactItems) {
+        if (operation.Put) {
+          const { Item, ConditionExpression, ExpressionAttributeValues } = operation.Put;
+          const key = storageKey(Item);
+          const current = nextItems.get(key);
+          if (ConditionExpression?.includes("attribute_not_exists(#pk)") && current) {
+            cancel("record exists");
+          }
+          if (
+            ConditionExpression?.includes("#adapterVersion = :previousVersion") &&
+            current?.adapterVersion !== ExpressionAttributeValues?.[":previousVersion"]
+          ) {
+            cancel("record changed");
+          }
+          if (
+            ConditionExpression?.includes("attribute_not_exists(#adapterVersion)") &&
+            current?.adapterVersion !== undefined
+          ) {
+            cancel("record changed");
+          }
+          if (
+            ConditionExpression?.includes("#email = :oldEmail") &&
+            current?.email !== ExpressionAttributeValues?.[":oldEmail"]
+          ) {
+            cancel("email changed");
+          }
+          nextItems.set(key, clone(Item));
+          continue;
+        }
+
+        if (operation.Update) {
+          const { Key, ExpressionAttributeValues, UpdateExpression } = operation.Update;
+          const key = storageKey(Key);
+          const current = nextItems.get(key) || { ...Key };
+          const appUserId = ExpressionAttributeValues?.[":appUserId"];
+          const betterAuthUserId = ExpressionAttributeValues?.[":betterAuthUserId"];
+          if (
+            (appUserId && current.appUserId && current.appUserId !== appUserId) ||
+            (betterAuthUserId && current.betterAuthUserId && current.betterAuthUserId !== betterAuthUserId)
+          ) {
+            cancel("ownership collision");
+          }
+          const updated = {
+            ...current,
+            ...(ExpressionAttributeValues?.[":type"] ? { type: ExpressionAttributeValues[":type"] } : {}),
+            ...(ExpressionAttributeValues?.[":email"] ? { email: ExpressionAttributeValues[":email"] } : {}),
+            ...(appUserId ? { appUserId } : {}),
+            ...(betterAuthUserId ? { betterAuthUserId } : {}),
+          };
+          if (UpdateExpression?.includes("REMOVE #betterAuthUserId")) {
+            delete updated.betterAuthUserId;
+          }
+          nextItems.set(key, updated);
+          continue;
+        }
+
+        if (operation.Delete) {
+          nextItems.delete(storageKey(operation.Delete.Key));
+        }
+      }
+
+      state.items.clear();
+      for (const [key, value] of nextItems) state.items.set(key, value);
+      return {};
+    });
+    client.update.mockImplementation(async ({
+      Key,
+      ConditionExpression,
+      ExpressionAttributeNames,
+      ExpressionAttributeValues,
+    }) => {
       const key = storageKey(Key);
       const current = state.items.get(key) || {};
+      if (ConditionExpression?.includes(":expectedId")) {
+        if (
+          current.id !== ExpressionAttributeValues[":expectedId"] ||
+          current.type !== ExpressionAttributeValues[":expectedType"]
+        ) {
+          const error = new Error("record changed");
+          error.name = "ConditionalCheckFailedException";
+          throw error;
+        }
+        const next = { ...current };
+        for (const [placeholder, field] of Object.entries(ExpressionAttributeNames || {})) {
+          if (placeholder.startsWith("#set")) {
+            const index = placeholder.slice("#set".length);
+            next[field as string] = ExpressionAttributeValues[`:set${index}`];
+          }
+          if (placeholder.startsWith("#increment")) {
+            const index = placeholder.slice("#increment".length);
+            next[field as string] = (Number(next[field as string]) || 0) +
+              Number(ExpressionAttributeValues[`:increment${index}`] || 0);
+          }
+        }
+        next.adapterVersion = (Number(next.adapterVersion) || 0) + 1;
+        state.items.set(key, next);
+        return { Attributes: clone(next) };
+      }
       const next = {
         ...current,
         ...Key,

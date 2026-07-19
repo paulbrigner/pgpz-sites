@@ -10,6 +10,7 @@ export type { BetterAuthRateLimitStorage } from "./rate-limit";
 export type {
   BetterAuthDynamoDBConfig,
   BetterAuthRateLimitDynamoDBConfig,
+  BetterAuthUserEmailOwnershipConfig,
   DynamoDBDocumentClientLike,
   DynamoDBItem,
 } from "./dynamodb-contract";

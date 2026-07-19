@@ -51,19 +51,15 @@
       },
       {
         "path": "app/api/admin/jobs/route.ts",
-        "sha256": "f273e64a24ba916cfbb6cf3fde0a506fa9e3ac8b2e8a38c5d52723da52f366af"
-      },
-      {
-        "path": "app/api/admin/members/manual-approval/route.ts",
-        "sha256": "d38b865c8adb7f163a7e2ba3b8981b84b9134b57c733f10eba73b9e16df467a5"
+        "sha256": "1007b9f347d0ad292b8ec3ab62c0234d20514fd170d3054f9e9679b14c75ea86"
       },
       {
         "path": "app/api/admin/newsletters/route.test.ts",
-        "sha256": "de60e51b7d41774d4c4fa6a41e605f2b54beb08a791de7fa29f30747020dae48"
+        "sha256": "d3cacc4ce57262727ac30c1a41191bd8b71a788b0add61b8359068e3fc83b9ab"
       },
       {
         "path": "app/api/admin/newsletters/route.ts",
-        "sha256": "b5016051aab7c5d3b7fa80742ffe059c0554b1f3c2e75a74103cfc184d17bb0d"
+        "sha256": "1b6c5bb244dbdb76fa5d798d634d2ff7fe529f6f5a2e105b15bda54d1cd98222"
       },
       {
         "path": "app/api/admin/policy-updates/route.test.ts",
@@ -107,11 +103,7 @@
       },
       {
         "path": "app/api/email/unsubscribe/[trackingId]/route.test.ts",
-        "sha256": "6cb092241739f0f10f70d9f55e082ab63870e69e0535f7e154500567621fe40e"
-      },
-      {
-        "path": "app/api/manual-approval/request/route.ts",
-        "sha256": "78e7596d4c244d127de9b9e0219b1c98c9f80ea245c56f9c07613e9017a6e4ae"
+        "sha256": "59bfc4a45dc583e978d8bb1c7b311d7d0342250317e497cb994ca556fa703429"
       },
       {
         "path": "app/api/policy-updates/[slug]/assets/[asset]/route.ts",
@@ -138,6 +130,14 @@
         "sha256": "13993d098b352f4f34e98cb07ddd614aeaf17c24a54cbbdf77ec0d1a84dc63c0"
       },
       {
+        "path": "app/api/profile/email-preferences/route.test.ts",
+        "sha256": "9f87da4c841974fece07f28266abacf4e172045d7f6d5ca96b513dcea07d032a"
+      },
+      {
+        "path": "app/api/profile/email-preferences/route.ts",
+        "sha256": "b9a4cead96edccd4719faf617b824dfe2b1a1dafbc1a62826a92ced30e616c99"
+      },
+      {
         "path": "app/api/profile/request-email-change/route.ts",
         "sha256": "7791c63bc53e98a8d538767f6ee70707a14cedb029c8764bccc33c94a6b08b4c"
       },
@@ -150,12 +150,12 @@
         "sha256": "05ad55796b1436248d474a22a93e2177370dbb6a48f4c871b054d25481d6dfef"
       },
       {
-        "path": "app/page.tsx",
-        "sha256": "0892a7829e95e1aa1c346e7a5a3720ab7a48ef77ed1fe19527ef87f023b96844"
+        "path": "app/providers.test.tsx",
+        "sha256": "527b1834426ff0e8bc1820de0bf73b0f49165f6be7996fa21e7492de7b2e0666"
       },
       {
         "path": "app/providers.tsx",
-        "sha256": "ff7eded26c8191512e84de6a3ac0e447fffc81926168dafa8f36e67f6f44aae5"
+        "sha256": "7e4a37067369b82cc7e9301b5456ae63b6e736370e2486b9af4c73662e386922"
       },
       {
         "path": "components.json",
@@ -235,7 +235,7 @@
       },
       {
         "path": "lib/__tests__/background-jobs.test.ts",
-        "sha256": "afaa758bbee7d9479014e8f004af18253130f2be28924e424f0aa2f713163431"
+        "sha256": "b41dce387c510f8f3dd7ee03b95930975a6541ef9e1a41e8b1e060398c893f78"
       },
       {
         "path": "lib/__tests__/email-background-job-processor.test.ts",
@@ -246,16 +246,16 @@
         "sha256": "780d29a535cab9d1ba35c8dc67969e9b6563b6b69bc96ce8398b8ea4636a065b"
       },
       {
-        "path": "lib/__tests__/better-auth-dynamodb-adapter.test.ts",
-        "sha256": "80c688ef1a80bd3776330a61a9a0aaf2e18f489b3f753c630879e58db2fcfa73"
-      },
-      {
-        "path": "lib/__tests__/better-auth-rate-limit.test.ts",
-        "sha256": "3cd547eb94adc79b42e046d4f88e1a4e13dd0c060089c71bc349356510a3f86c"
-      },
-      {
         "path": "lib/__tests__/email-log.test.ts",
         "sha256": "6423a477721d2c314e90b1b46bb8b125579d768a6cab731e5b3163e9945fbed6"
+      },
+      {
+        "path": "lib/__tests__/email-recipient-preferences.test.ts",
+        "sha256": "627e3fcae906a8324e58847b43230fd1bc928902da9392b7e7552c540a935f54"
+      },
+      {
+        "path": "lib/__tests__/email-preferences.test.ts",
+        "sha256": "3c1d16c7e079179af5c57b68938359e9afe39b96d58be04f587f43e41dcb7e25"
       },
       {
         "path": "lib/__tests__/email-link-security.test.ts",
@@ -267,7 +267,7 @@
       },
       {
         "path": "lib/__tests__/email-tracking-clicks.test.ts",
-        "sha256": "49ef014524a26ced3c63bbd4c352edc9df291cc5a2de5f27fd51b0540eb972b7"
+        "sha256": "c165ccb0ca4be8d8b0834f0de73cd7a4f20a26c47a77d5984a6e36bd6d8fb6c5"
       },
       {
         "path": "lib/__tests__/email-transport.test.ts",
@@ -299,7 +299,7 @@
       },
       {
         "path": "lib/admin/background-jobs.ts",
-        "sha256": "38091f88527eec41940ba3d16ea9ccdbead589db364775215785e1f2649734fc"
+        "sha256": "471ec4825d14b22faa3b726609a9a8b567de7f9314c59c4e53460057cdb6eff3"
       },
       {
         "path": "lib/admin/email-log.ts",
@@ -311,7 +311,7 @@
       },
       {
         "path": "lib/admin/email-tracking.ts",
-        "sha256": "f1f279414f7527043070396b01caa3a94cd6e68e6776d7162aeb557e23c303dc"
+        "sha256": "e2513dfdd9bf2845c959b7b717e4f862ceed51b16c7f79d033176c8b3f4d29f7"
       },
       {
         "path": "lib/admin/email-transport.ts",
@@ -350,14 +350,6 @@
         "sha256": "b2d1a81bbf1d9003c891a808bf37891fb44666c78c7d037a7409afdceb20f158"
       },
       {
-        "path": "lib/better-auth-dynamodb-adapter.ts",
-        "sha256": "202647d653e6245855caf8f6018299a29a68fd8d5817a48bb54a24a94428c314"
-      },
-      {
-        "path": "lib/better-auth-rate-limit.ts",
-        "sha256": "0507699764f89754ba7b46dfccada5db46bc7ffe4a92b06051290fb53e01e779"
-      },
-      {
         "path": "lib/better-auth-user-email.ts",
         "sha256": "cd7442a4052b0728b5287b4e93cdbe2f4e13c819d66a87ed8b5c83db07ee1844"
       },
@@ -382,6 +374,10 @@
         "sha256": "b13b8589b3b6f18bd9a6276e9690e4769b37c06950f98bc5e7ca5b784abf5c05"
       },
       {
+        "path": "lib/email-preferences.ts",
+        "sha256": "47ce2756deb62c31549a38063fcc069738cc7a8a48b70934b12350103ac4b2c7"
+      },
+      {
         "path": "lib/legacy-session-cookies.ts",
         "sha256": "d619a77cf1081000464787f75546619fc640bd408b230ccdd9bcc259ffb4664d"
       },
@@ -403,7 +399,7 @@
       },
       {
         "path": "lib/use-app-session.ts",
-        "sha256": "59ce994d60872bd33cb7c1f29423f7bbe4bab566a4671ae2f59e1c53d4527ff4"
+        "sha256": "d2cc74fe056c5201a7fe2853b3a5b73ff71096580867497849d5a86937db51eb"
       },
       {
         "path": "lib/user-display-name.ts",
@@ -607,12 +603,27 @@
       "app/admin/admin-client.tsx",
       "app/admin/admin-console.tsx",
       "app/api/admin/email/send/route.ts",
+      {
+        "path": "app/api/admin/members/manual-approval/route.ts",
+        "reason": "Coalition supports approve and decline actions for explicit access applications; Community retains its proof and manual-approval workflow."
+      },
       "app/api/internal/background-jobs/process/route.ts",
       "app/api/internal/background-jobs/reconcile/route.ts",
       "app/api/admin/members/route.ts",
+      {
+        "path": "app/api/manual-approval/request/route.ts",
+        "reason": "Coalition applications can be requested or withdrawn; Community exposes only its existing manual-approval request transition."
+      },
       "app/api/profile/update/route.ts",
       "app/api/signup/pending/route.ts",
-      "app/home-client.tsx",
+      {
+        "path": "app/home-client.tsx",
+        "reason": "Each branded app composes different member journeys and feature surfaces while consuming shared primitives."
+      },
+      {
+        "path": "app/page.tsx",
+        "reason": "Community server-renders published updates into its homepage; Coalition currently supplies its separate coalition workspace homepage."
+      },
       "app/settings/profile/page.tsx",
       "components/home/Skeletons.tsx",
       "components/site/main-nav.tsx",
@@ -710,6 +721,52 @@
           "app": "community",
           "path": "components/zec-shelf/ZecShelfClient.test.tsx",
           "import": "@pgpz/zec-shelf/client"
+        }
+      ]
+    },
+    {
+      "name": "auth-dynamodb",
+      "packagePath": "packages/auth-dynamodb",
+      "contentOwnership": "The package owns indexed Better Auth persistence, optimistic and atomic write semantics, injected identity-ownership transactions, durable rate limiting, and adapter contract tests. Each app injects its DynamoDB client, table, and email-ownership policy.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "src/index.ts",
+        "src/adapter.ts",
+        "src/dynamodb-contract.ts",
+        "src/rate-limit.ts",
+        "src/adapter.test.ts",
+        "src/dynamodb.integration.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [
+        "lib/better-auth-dynamodb-adapter.ts",
+        "lib/better-auth-rate-limit.ts"
+      ],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/better-auth.ts",
+          "lib/dynamodb.ts",
+          "lib/email-ownership.ts"
+        ],
+        "coalition": [
+          "lib/better-auth.ts",
+          "lib/dynamodb.ts",
+          "lib/email-ownership.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/better-auth.ts",
+          "import": "@pgpz/auth-dynamodb"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/better-auth.ts",
+          "import": "@pgpz/auth-dynamodb"
         }
       ]
     }

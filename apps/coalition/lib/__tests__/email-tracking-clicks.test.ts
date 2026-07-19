@@ -3,7 +3,9 @@ import { createHmac } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  transactWrite: vi.fn(),
   update: vi.fn(),
+  unsubscribeMemberFromEmailCategory: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -18,8 +20,12 @@ vi.mock("@/lib/dynamodb", () => ({
   documentClient: {
     get: mocks.get,
     put: vi.fn(),
+    transactWrite: mocks.transactWrite,
     update: mocks.update,
   },
+}));
+vi.mock("@/lib/email-preferences", () => ({
+  unsubscribeMemberFromEmailCategory: mocks.unsubscribeMemberFromEmailCategory,
 }));
 
 const trackingItem = (allowedClickDestinationDigests: string[]) => ({
@@ -37,6 +43,8 @@ describe("stored tracked-click destinations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.update.mockResolvedValue({});
+    mocks.transactWrite.mockResolvedValue({});
+    mocks.unsubscribeMemberFromEmailCategory.mockResolvedValue(true);
   });
 
   it("binds an immutable destination digest set to the tracking record", async () => {
@@ -115,5 +123,95 @@ describe("stored tracked-click destinations", () => {
     const recorded = await recordNewsletterClick("tracking-1", allowedUrl);
     expect(recorded?.lastClickedUrl).toBe(allowedUrl);
     expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
+  it("unsubscribes the category stored on the tracking record", async () => {
+    const { recordNewsletterUnsubscribe } = await import("@/lib/admin/email-tracking");
+    mocks.get.mockResolvedValue({
+      Item: {
+        ...trackingItem([]),
+        userId: "member-1",
+        sendRunId: "send-run-1",
+        unsubscribedAt: null,
+      },
+    });
+
+    await recordNewsletterUnsubscribe("tracking-1");
+
+    expect(mocks.unsubscribeMemberFromEmailCategory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "member-1",
+        category: "policy_update",
+      }),
+    );
+    expect(mocks.unsubscribeMemberFromEmailCategory.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.transactWrite.mock.invocationCallOrder[0],
+    );
+    expect(mocks.transactWrite).toHaveBeenCalledWith({
+      TransactItems: [
+        expect.objectContaining({
+          Update: expect.objectContaining({
+            ConditionExpression: expect.stringContaining("attribute_not_exists(#unsubscribedAt)"),
+          }),
+        }),
+        expect.objectContaining({
+          Update: expect.objectContaining({
+            Key: {
+              pk: "POLICY_UPDATE_SEND#send-run-1",
+              sk: "POLICY_UPDATE_SEND#send-run-1",
+            },
+            ExpressionAttributeNames: { "#unsubscribeCount": "unsubscribeCount" },
+          }),
+        }),
+      ],
+    });
+  });
+
+  it("leaves tracking retryable when the member preference update fails", async () => {
+    const { recordNewsletterUnsubscribe } = await import("@/lib/admin/email-tracking");
+    mocks.get.mockResolvedValue({
+      Item: { ...trackingItem([]), userId: "member-1", unsubscribedAt: null },
+    });
+    mocks.unsubscribeMemberFromEmailCategory.mockRejectedValueOnce(new Error("DynamoDB unavailable"));
+
+    await expect(recordNewsletterUnsubscribe("tracking-1")).rejects.toThrow("DynamoDB unavailable");
+    expect(mocks.transactWrite).not.toHaveBeenCalled();
+
+    mocks.unsubscribeMemberFromEmailCategory.mockResolvedValue(true);
+    await expect(recordNewsletterUnsubscribe("tracking-1")).resolves.toMatchObject({
+      trackingId: "tracking-1",
+      unsubscribedAt: expect.any(String),
+    });
+    expect(mocks.transactWrite).toHaveBeenCalledOnce();
+  });
+
+  it("treats a concurrent winning unsubscribe as idempotent without a second count", async () => {
+    const { recordNewsletterUnsubscribe } = await import("@/lib/admin/email-tracking");
+    mocks.get
+      .mockResolvedValueOnce({
+        Item: {
+          ...trackingItem([]),
+          userId: "member-1",
+          sendRunId: "send-run-1",
+          unsubscribedAt: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          ...trackingItem([]),
+          userId: "member-1",
+          sendRunId: "send-run-1",
+          unsubscribedAt: "2026-07-19T13:00:00.000Z",
+        },
+      });
+    const canceled = new Error("another request won");
+    canceled.name = "TransactionCanceledException";
+    mocks.transactWrite.mockRejectedValueOnce(canceled);
+
+    await expect(recordNewsletterUnsubscribe("tracking-1")).resolves.toMatchObject({
+      unsubscribedAt: "2026-07-19T13:00:00.000Z",
+    });
+    expect(mocks.transactWrite).toHaveBeenCalledOnce();
+    expect(mocks.get.mock.calls[1][0]).toEqual(expect.objectContaining({ ConsistentRead: true }));
   });
 });

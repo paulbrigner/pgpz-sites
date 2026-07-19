@@ -173,6 +173,7 @@ describe("admin newsletter sends", () => {
       failed: 0,
     });
     expect(body.sendRun).toBeUndefined();
+    expect(mocks.listPolicyUpdateRecipients).toHaveBeenCalledWith("newsletter");
     expect(mocks.sendMail).toHaveBeenCalledWith(expect.objectContaining({ subject: "[Draft] Test Newsletter" }));
     expect(mocks.buildNewsletterEmail.mock.calls[0][3]).toBeUndefined();
     expect(mocks.createNewsletterTrackingRecord).not.toHaveBeenCalled();

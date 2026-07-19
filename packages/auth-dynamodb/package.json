@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:integration": "vitest run src/dynamodb.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,8 +17,10 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.1089.0",
+    "@aws-sdk/lib-dynamodb": "3.1089.0",
     "@types/node": "^24.2.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.6"
   }
 }

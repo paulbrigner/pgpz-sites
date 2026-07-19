@@ -15,6 +15,7 @@ vi.mock("@/lib/admin/email-tracking", () => ({
 const tracking = {
   trackingId: "tracking-1",
   newsletterId: "newsletter-1",
+  messageType: "newsletter",
   unsubscribedAt: null,
 };
 
@@ -56,6 +57,19 @@ describe("email unsubscribe route", () => {
     expect(mocks.recordNewsletterUnsubscribe).not.toHaveBeenCalled();
   });
 
+  it("binds confirmation copy to the tracked message category", async () => {
+    mocks.getNewsletterTrackingRecord.mockResolvedValueOnce({
+      ...tracking,
+      messageType: "policy_update",
+    });
+
+    const response = await getUnsubscribe();
+    const body = await response.text();
+
+    expect(body).toContain("policy updates");
+    expect(body).not.toContain("member emails");
+  });
+
   it("suppresses mail after an explicit browser confirmation POST", async () => {
     const response = await postUnsubscribe("confirm=unsubscribe");
 
@@ -85,5 +99,19 @@ describe("email unsubscribe route", () => {
 
     expect(response.status).toBe(404);
     expect(mocks.recordNewsletterUnsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes transient lookup and preference failures from unknown links", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.getNewsletterTrackingRecord.mockRejectedValueOnce(new Error("DynamoDB unavailable"));
+    const getResponse = await getUnsubscribe();
+    expect(getResponse.status).toBe(503);
+    expect(getResponse.headers.get("retry-after")).toBe("30");
+
+    mocks.recordNewsletterUnsubscribe.mockRejectedValueOnce(new Error("DynamoDB unavailable"));
+    const postResponse = await postUnsubscribe("confirm=unsubscribe");
+    expect(postResponse.status).toBe(503);
+    expect(await postResponse.text()).toContain("No preference was changed");
+    consoleError.mockRestore();
   });
 });

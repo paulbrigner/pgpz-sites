@@ -349,6 +349,8 @@ export function appSessionUserFromRecord(user: RawAppUser) {
       typeof user.membershipProofPostUrl === "string" ? user.membershipProofPostUrl : null,
     membershipProofPostId:
       typeof user.membershipProofPostId === "string" ? user.membershipProofPostId : null,
+    membershipProofHandle:
+      typeof user.membershipProofHandle === "string" ? user.membershipProofHandle : null,
     proofRetentionPolicy:
       typeof user.proofRetentionPolicy === "string" ? user.proofRetentionPolicy : null,
     manualApprovalStatus:

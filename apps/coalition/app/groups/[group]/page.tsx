@@ -9,6 +9,7 @@ import {
   policyInterestGroupOptions,
   policyInterestGroupPath,
 } from "@/lib/policy-interest-groups";
+import GroupWorkspace from "./group-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,7 @@ export default async function PolicyGroupPage({ params }: Props) {
           </div>
         </article>
       </section>
+      <GroupWorkspace groupId={group.id} />
     </div>
   );
 }

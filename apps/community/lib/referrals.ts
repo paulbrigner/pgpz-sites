@@ -7,6 +7,7 @@ import { SITE_URL } from "@/lib/config";
 import { normalizeEmail } from "@/lib/app-users";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import { normalizeReferralCode } from "@/lib/referral-code";
+import { canAccessMemberFeatures } from "@pgpz/core";
 
 type RawUser = Record<string, any> & {
   id?: string;
@@ -44,6 +45,12 @@ type ReferralCreditRecord = {
   pendingSignupCreatedAt: string | null;
 };
 
+export type ReferralMemberCreditPreview = {
+  displayLabel: "New member";
+  membershipStatus: "active" | "none";
+  creditedAt: string;
+};
+
 export type ReferralCreditPreview = {
   referredUserId: string;
   referredEmail: string | null;
@@ -57,7 +64,7 @@ export type ReferralMemberSummary = {
   referralUrl: string;
   creditedSignupCount: number;
   activeRecruitCount: number;
-  recentCredits: ReferralCreditPreview[];
+  recentCredits: ReferralMemberCreditPreview[];
 };
 
 export type ReferralLeaderboardEntry = {
@@ -105,6 +112,9 @@ const isConditionalFailure = (err: unknown) =>
   err instanceof ConditionalCheckFailedException ||
   (err as any)?.name === "ConditionalCheckFailedException";
 
+const isTransactionCancellation = (err: unknown) =>
+  (err as any)?.name === "TransactionCanceledException";
+
 const referralUrlForCode = (code: string) => {
   const url = new URL("/", SITE_URL || "https://community.pgpz.org");
   url.searchParams.set("ref", code);
@@ -117,7 +127,11 @@ const generateReferralCode = (userId: string, attempt: number) =>
     .digest("hex")
     .slice(0, 12);
 
-async function getUser(userId: string, projection?: string): Promise<RawUser | null> {
+async function getUser(
+  userId: string,
+  projection?: string,
+  consistentRead = false,
+): Promise<RawUser | null> {
   const trimmedUserId = typeof userId === "string" ? userId.trim() : "";
   if (!trimmedUserId) return null;
   const res = await documentClient.get({
@@ -125,6 +139,7 @@ async function getUser(userId: string, projection?: string): Promise<RawUser | n
     Key: userKey(trimmedUserId),
     ...(projection ? { ProjectionExpression: projection } : {}),
     ...(projection?.includes("#name") ? { ExpressionAttributeNames: { "#name": "name" } } : {}),
+    ...(consistentRead ? { ConsistentRead: true } : {}),
   });
   return (res.Item as RawUser | undefined) || null;
 }
@@ -151,9 +166,10 @@ async function upsertReferralCodeRecord(user: RawUser, code: string) {
 export async function ensureReferralCodeForUser(userId: string) {
   const user = await getUser(
     userId,
-    "id, email, #name, firstName, lastName, referralCode",
+    "id, email, #name, firstName, lastName, referralCode, accountStatus, deactivatedAt, membershipStatus",
   );
   if (!user?.id) throw new Error("User not found.");
+  if (!canAccessMemberFeatures(user)) throw new Error("Active membership is required.");
 
   const existingCode = normalizeReferralCode(user.referralCode || "");
   if (existingCode) {
@@ -190,12 +206,16 @@ export async function ensureReferralCodeForUser(userId: string) {
   throw new Error("Could not assign a referral code.");
 }
 
-export async function findReferralOwnerByCode(code: string): Promise<ReferralCodeRecord | null> {
+export async function findReferralOwnerByCode(
+  code: string,
+  consistentRead = false,
+): Promise<ReferralCodeRecord | null> {
   const normalizedCode = normalizeReferralCode(code);
   if (!normalizedCode) return null;
   const res = await documentClient.get({
     TableName: TABLE_NAME,
     Key: referralCodeKey(normalizedCode),
+    ...(consistentRead ? { ConsistentRead: true } : {}),
   });
   const item = res.Item as any;
   if (!item || item.type !== "REFERRAL_CODE" || !item.userId) return null;
@@ -242,6 +262,14 @@ export async function creditReferralSignup({
   if (!owner?.userId) return { credited: false as const, reason: "unknown_referral_code" };
   if (owner.userId === referredUserId) return { credited: false as const, reason: "self_referral" };
 
+  const ownerUser = await getUser(
+    owner.userId,
+    "id, email, #name, firstName, lastName, accountStatus, deactivatedAt, membershipStatus",
+  );
+  if (!canAccessMemberFeatures(ownerUser)) {
+    return { credited: false as const, reason: "ineligible_referrer" };
+  }
+
   const normalizedReferredEmail = normalizeEmail(referredEmail);
   if (owner.email && normalizedReferredEmail && normalizeEmail(owner.email) === normalizedReferredEmail) {
     return { credited: false as const, reason: "self_referral_email" };
@@ -260,8 +288,8 @@ export async function creditReferralSignup({
     type: "REFERRAL_CREDIT",
     referralCode: normalizedCode,
     referrerUserId: owner.userId,
-    referrerEmail: owner.email,
-    referrerName: owner.name,
+    referrerEmail: normalizeEmail(ownerUser?.email) || owner.email,
+    referrerName: ownerUser ? getUserDisplayName(ownerUser) : owner.name,
     referredUserId,
     referredEmail: normalizedReferredEmail || normalizeEmail(referredUser?.email) || null,
     referredName: textOrNull(referredName),
@@ -271,44 +299,120 @@ export async function creditReferralSignup({
   };
 
   try {
-    await documentClient.put({
-      TableName: TABLE_NAME,
-      Item: {
-        ...referralCreditKey(referredUserId),
-        ...credit,
-        GSI1PK: `REFERRER#${owner.userId}`,
-        GSI1SK: `REFERRAL_CREDIT#${now}#${referredUserId}`,
-      },
-      ConditionExpression: "attribute_not_exists(#pk)",
-      ExpressionAttributeNames: { "#pk": "pk" },
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: TABLE_NAME,
+            Key: referralCodeKey(normalizedCode),
+            ConditionExpression:
+              "attribute_exists(#pk) AND #type = :type AND #userId = :ownerUserId",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#type": "type",
+              "#userId": "userId",
+            },
+            ExpressionAttributeValues: {
+              ":type": "REFERRAL_CODE",
+              ":ownerUserId": owner.userId,
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: {
+              ...referralCreditKey(referredUserId),
+              ...credit,
+              GSI1PK: `REFERRER#${owner.userId}`,
+              GSI1SK: `REFERRAL_CREDIT#${now}#${referredUserId}`,
+            },
+            ConditionExpression: "attribute_not_exists(#pk)",
+            ExpressionAttributeNames: { "#pk": "pk" },
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(referredUserId),
+            UpdateExpression:
+              "SET referredByUserId = :referrerUserId, referredByCode = :code, referralCreditedAt = :now, updatedAt = :now",
+            ConditionExpression:
+              "attribute_exists(#pk) AND (attribute_not_exists(#referredByUserId) OR #referredByUserId = :empty OR attribute_type(#referredByUserId, :nullType)) AND (attribute_not_exists(#referralCreditedAt) OR #referralCreditedAt = :empty OR attribute_type(#referralCreditedAt, :nullType))",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#referredByUserId": "referredByUserId",
+              "#referralCreditedAt": "referralCreditedAt",
+            },
+            ExpressionAttributeValues: {
+              ":referrerUserId": owner.userId,
+              ":code": normalizedCode,
+              ":now": now,
+              ":empty": "",
+              ":nullType": "NULL",
+            },
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(owner.userId),
+            UpdateExpression:
+              "SET referralLastCreditAt = :now ADD referralCreditCount :one",
+            ConditionExpression:
+              "attribute_exists(#pk) AND #membershipStatus = :active AND (attribute_not_exists(#accountStatus) OR #accountStatus = :active OR #accountStatus = :empty OR attribute_type(#accountStatus, :nullType)) AND (attribute_not_exists(#deactivatedAt) OR #deactivatedAt = :empty OR attribute_type(#deactivatedAt, :nullType))",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#membershipStatus": "membershipStatus",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":now": now,
+              ":one": 1,
+              ":active": "active",
+              ":empty": "",
+              ":nullType": "NULL",
+            },
+          },
+        },
+      ],
     });
   } catch (err) {
-    if (isConditionalFailure(err)) return { credited: false as const, reason: "already_credited" };
+    if (!isConditionalFailure(err) && !isTransactionCancellation(err)) throw err;
+
+    const [existingCredit, currentOwner, currentReferred, currentCodeOwner] = await Promise.all([
+      documentClient.get({
+        TableName: TABLE_NAME,
+        Key: referralCreditKey(referredUserId),
+        ConsistentRead: true,
+      }),
+      getUser(
+        owner.userId,
+        "id, accountStatus, deactivatedAt, membershipStatus",
+        true,
+      ),
+      getUser(
+        referredUserId,
+        "id, createdAt, referredByUserId, referralCreditedAt",
+        true,
+      ),
+      findReferralOwnerByCode(normalizedCode, true),
+    ]);
+    if (existingCredit.Item) {
+      return { credited: false as const, reason: "already_credited" };
+    }
+    if (currentCodeOwner?.userId !== owner.userId) {
+      return { credited: false as const, reason: "unknown_referral_code" };
+    }
+    if (!canAccessMemberFeatures(currentOwner)) {
+      return { credited: false as const, reason: "ineligible_referrer" };
+    }
+    if (!eligibleNewSignup(currentReferred, pendingSignupCreatedAt)) {
+      return { credited: false as const, reason: "not_new_signup" };
+    }
     throw err;
   }
-
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: userKey(referredUserId),
-    UpdateExpression:
-      "SET referredByUserId = :referrerUserId, referredByCode = :code, referralCreditedAt = :now, updatedAt = :now",
-    ExpressionAttributeValues: {
-      ":referrerUserId": owner.userId,
-      ":code": normalizedCode,
-      ":now": now,
-    },
-  });
-
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: userKey(owner.userId),
-    UpdateExpression:
-      "SET referralLastCreditAt = :now ADD referralCreditCount :one",
-    ExpressionAttributeValues: {
-      ":now": now,
-      ":one": 1,
-    },
-  });
 
   return { credited: true as const, credit };
 }
@@ -397,9 +501,13 @@ export async function getReferralSummaryForUser(userId: string): Promise<Referra
     }),
   );
 
-  const recentCredits = credits.slice(0, 5).map((credit) =>
-    creditPreview(credit, referredUsers.get(credit.referredUserId)),
-  );
+  const recentCredits = credits.slice(0, 5).map((credit) => ({
+    displayLabel: "New member" as const,
+    membershipStatus: referredUsers.get(credit.referredUserId)?.membershipStatus === "active"
+      ? "active" as const
+      : "none" as const,
+    creditedAt: credit.creditedAt,
+  }));
   const activeRecruitCount = credits.filter((credit) =>
     referredUsers.get(credit.referredUserId)?.membershipStatus === "active"
   ).length;
