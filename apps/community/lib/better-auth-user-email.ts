@@ -2,6 +2,14 @@ import "server-only";
 
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { normalizeEmail, userKey } from "@/lib/app-users";
+import {
+  assertCompatibleEmailOwnership,
+  claimEmailOwnershipTransactionItem,
+  emailOwnershipKey,
+  EmailOwnershipCollisionError,
+  releaseEmailOwnershipTransactionItem,
+  type EmailOwnershipRecord,
+} from "@/lib/email-ownership";
 
 const BETTER_AUTH_USER_TYPE = "BETTER_AUTH#better_auth_users";
 const BETTER_AUTH_SESSION_TYPE = "BETTER_AUTH#better_auth_sessions";
@@ -54,6 +62,29 @@ export class BetterAuthEmailCollisionError extends Error {
   constructor() {
     super("That email is already in use.");
     this.name = "BetterAuthEmailCollisionError";
+  }
+}
+
+async function getEmailOwnership(email: string): Promise<EmailOwnershipRecord | null> {
+  const result = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: emailOwnershipKey(email),
+    ConsistentRead: true,
+  });
+  return (result.Item as EmailOwnershipRecord | undefined) || null;
+}
+
+function assertOwnership(
+  ownership: EmailOwnershipRecord | null,
+  bindings: { appUserId?: string; betterAuthUserId?: string },
+) {
+  try {
+    assertCompatibleEmailOwnership(ownership, bindings);
+  } catch (error) {
+    if (error instanceof EmailOwnershipCollisionError) {
+      throw new BetterAuthEmailCollisionError();
+    }
+    throw error;
   }
 }
 
@@ -244,58 +275,117 @@ export async function updateAppAndBetterAuthUserEmail({
       ...additional.values,
     },
   };
+  const sourceOwnership = await getEmailOwnership(normalizedOldEmail);
+  if (!normalizedBetterAuthUserId && sourceOwnership?.betterAuthUserId) {
+    normalizedBetterAuthUserId = sourceOwnership.betterAuthUserId;
+  }
   if (!normalizedBetterAuthUserId) {
     const sourceUsers = await findBetterAuthUsersByEmail(normalizedOldEmail);
     if (sourceUsers.length > 1) {
       throw new Error("Multiple Better Auth accounts match the current email.");
     }
     normalizedBetterAuthUserId = sourceUsers[0]?.id || "";
-    if (!normalizedBetterAuthUserId) {
-      if (additionalTransactItems.length) {
-        await documentClient.transactWrite({
-          TransactItems: [...additionalTransactItems, { Update: appUpdate }],
-        });
-      } else {
-        await documentClient.update(appUpdate);
-      }
-      return { betterAuthUpdated: false };
+  }
+
+  assertOwnership(sourceOwnership, {
+    appUserId,
+    ...(normalizedBetterAuthUserId ? { betterAuthUserId: normalizedBetterAuthUserId } : {}),
+  });
+  const targetOwnership = await getEmailOwnership(normalizedNewEmail);
+  assertOwnership(targetOwnership, {
+    appUserId,
+    ...(normalizedBetterAuthUserId ? { betterAuthUserId: normalizedBetterAuthUserId } : {}),
+  });
+
+  if (!normalizedBetterAuthUserId) {
+    const transactItems: any[] = [
+      ...additionalTransactItems,
+      claimEmailOwnershipTransactionItem({
+        tableName: TABLE_NAME,
+        email: normalizedNewEmail,
+        appUserId,
+        now,
+      }),
+      { Update: appUpdate },
+    ];
+    if (normalizedOldEmail !== normalizedNewEmail) {
+      transactItems.push(
+        releaseEmailOwnershipTransactionItem({
+          tableName: TABLE_NAME,
+          email: normalizedOldEmail,
+          appUserId,
+        }),
+      );
     }
+    try {
+      await documentClient.transactWrite({ TransactItems: transactItems });
+    } catch (error) {
+      const currentTarget = await getEmailOwnership(normalizedNewEmail);
+      assertOwnership(currentTarget, { appUserId });
+      throw error;
+    }
+    return { betterAuthUpdated: false };
   }
   const targetUsers = await findBetterAuthUsersByEmail(normalizedNewEmail);
   if (targetUsers.some((user) => user.id !== normalizedBetterAuthUserId)) {
     throw new BetterAuthEmailCollisionError();
   }
 
-  await documentClient.transactWrite({
-    TransactItems: [
-      ...additionalTransactItems,
-      {
-        Update: appUpdate,
-      },
-      {
-        Update: {
-          TableName: TABLE_NAME,
-          Key: betterAuthUserKey(normalizedBetterAuthUserId),
-          UpdateExpression:
-            "SET #email = :newEmail, #gsi1pk = :betterAuthGsi, #gsi1sk = :betterAuthUserId, #updatedAt = :updatedAt",
-          ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
-          ExpressionAttributeNames: {
-            "#pk": "pk",
-            "#email": "email",
-            "#gsi1pk": "GSI1PK",
-            "#gsi1sk": "GSI1SK",
-            "#updatedAt": "updatedAt",
-          },
-          ExpressionAttributeValues: {
-            ":oldEmail": normalizedOldEmail,
-            ":newEmail": normalizedNewEmail,
-            ":betterAuthGsi": `${BETTER_AUTH_USER_TYPE}#email#${normalizedNewEmail}`,
-            ":betterAuthUserId": normalizedBetterAuthUserId,
-            ":updatedAt": now,
-          },
+  const transactItems: any[] = [
+    ...additionalTransactItems,
+    claimEmailOwnershipTransactionItem({
+      tableName: TABLE_NAME,
+      email: normalizedNewEmail,
+      appUserId,
+      betterAuthUserId: normalizedBetterAuthUserId,
+      now,
+    }),
+    {
+      Update: appUpdate,
+    },
+    {
+      Update: {
+        TableName: TABLE_NAME,
+        Key: betterAuthUserKey(normalizedBetterAuthUserId),
+        UpdateExpression:
+          "SET #email = :newEmail, #gsi1pk = :betterAuthGsi, #gsi1sk = :betterAuthUserId, #updatedAt = :updatedAt",
+        ConditionExpression: "attribute_exists(#pk) AND #email = :oldEmail",
+        ExpressionAttributeNames: {
+          "#pk": "pk",
+          "#email": "email",
+          "#gsi1pk": "GSI1PK",
+          "#gsi1sk": "GSI1SK",
+          "#updatedAt": "updatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":oldEmail": normalizedOldEmail,
+          ":newEmail": normalizedNewEmail,
+          ":betterAuthGsi": `${BETTER_AUTH_USER_TYPE}#email#${normalizedNewEmail}`,
+          ":betterAuthUserId": normalizedBetterAuthUserId,
+          ":updatedAt": now,
         },
       },
-    ],
-  });
+    },
+  ];
+  if (normalizedOldEmail !== normalizedNewEmail) {
+    transactItems.push(
+      releaseEmailOwnershipTransactionItem({
+        tableName: TABLE_NAME,
+        email: normalizedOldEmail,
+        appUserId,
+        betterAuthUserId: normalizedBetterAuthUserId,
+      }),
+    );
+  }
+  try {
+    await documentClient.transactWrite({ TransactItems: transactItems });
+  } catch (error) {
+    const currentTarget = await getEmailOwnership(normalizedNewEmail);
+    assertOwnership(currentTarget, {
+      appUserId,
+      betterAuthUserId: normalizedBetterAuthUserId,
+    });
+    throw error;
+  }
   return { betterAuthUpdated: true };
 }

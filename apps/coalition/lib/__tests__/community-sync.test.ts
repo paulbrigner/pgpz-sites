@@ -6,6 +6,7 @@ const dynamoMocks = vi.hoisted(() => ({
   update: vi.fn(),
   get: vi.fn(),
   scan: vi.fn(),
+  transactWrite: vi.fn(),
 }));
 
 vi.mock("@/lib/dynamodb", () => ({
@@ -52,9 +53,11 @@ describe("coalition to community sync", () => {
     dynamoMocks.update.mockReset();
     dynamoMocks.get.mockReset();
     dynamoMocks.scan.mockReset();
+    dynamoMocks.transactWrite.mockReset();
     dynamoMocks.query.mockResolvedValue({ Items: [] });
     dynamoMocks.put.mockResolvedValue({});
     dynamoMocks.update.mockResolvedValue({});
+    dynamoMocks.transactWrite.mockResolvedValue({});
   });
 
   it("creates a community member when none exists", async () => {
@@ -65,7 +68,19 @@ describe("coalition to community sync", () => {
 
     expect(result.status).toBe("created");
     expect(result.email).toBe("member@example.com");
-    expect(dynamoMocks.put).toHaveBeenCalledWith(
+    const transactItems = dynamoMocks.transactWrite.mock.calls[0][0].TransactItems;
+    expect(transactItems[0].Update).toMatchObject({
+      TableName: "CommunityTable",
+      Key: {
+        pk: "EMAIL_OWNERSHIP#member@example.com",
+        sk: "EMAIL_OWNERSHIP#member@example.com",
+      },
+      ExpressionAttributeValues: expect.objectContaining({
+        ":email": "member@example.com",
+        ":appUserId": expect.any(String),
+      }),
+    });
+    expect(transactItems[1].Put).toEqual(
       expect.objectContaining({
         TableName: "CommunityTable",
         Item: expect.objectContaining({
@@ -79,6 +94,19 @@ describe("coalition to community sync", () => {
         }),
       }),
     );
+  });
+
+  it("fails closed when another writer wins the community email claim", async () => {
+    dynamoMocks.transactWrite.mockRejectedValueOnce({ name: "TransactionCanceledException" });
+
+    const result = await syncCoalitionMemberRecordToCommunity(activeCoalitionMember(), {
+      now: "2026-06-25T12:00:00.000Z",
+      triggeredBy: "test",
+    });
+
+    expect(result.status).toBe("conflict");
+    expect(result.message).toContain("email ownership changed");
+    expect(dynamoMocks.put).not.toHaveBeenCalled();
   });
 
   it("activates and marks an existing community member without sending welcome", async () => {

@@ -13,7 +13,8 @@ Application identity, profiles, membership, referrals or invitations, and admini
 - The auth route normalizes CloudFront's immutable `CloudFront-Viewer-Address` into an internal bare-IP header. A single-value `X-Forwarded-For` remains a fail-closed fallback; spoofable multi-hop chains are rejected rather than trusted.
 - Adapter, concurrency, session, and provider-telemetry tests cover the cutover contract.
 - New access-log events identify Better Auth. Historical or unattributed events remain visible in the Admin Access Log.
-- Profile email changes atomically update the application user and Better Auth user/index. Email-change tokens retain the existing `VT#...` key shape.
+- Profile email changes atomically update the normalized-email ownership claim, application user, Better Auth user/index, and token consumption. Email-change tokens retain the existing `VT#...` key shape.
+- Every normalized email has one durable `EMAIL_OWNERSHIP#...` item. It can bind independent application and Better Auth IDs and is maintained in the same transaction as identity creation, email movement, or deletion. Use the root `docs/email-ownership-and-identity-reconciliation.md` runbook for backfill and audit ordering.
 
 The single existing GSI cannot simultaneously index session/account ownership and their hot unique keys. Session-by-user, account-by-user, arbitrary admin lists, and bulk predicates retain a compatibility scan path; interactive sign-in and session-token lookups must not scan. A future `GSI2` or materialized owner index can remove those remaining administrative scans.
 

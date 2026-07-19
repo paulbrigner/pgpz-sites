@@ -5,6 +5,7 @@ import {
   type DynamoRecordKey,
   updateAppAndBetterAuthUserEmail,
 } from "@/lib/better-auth-user-email";
+import { releaseEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { normalizePolicyInterestGroups, type PolicyInterestGroupId } from "@/lib/policy-interest-groups";
@@ -894,6 +895,14 @@ export async function deleteDeactivatedAdminMember({
       },
     });
   }
+  finalDeletes.push(
+    releaseEmailOwnershipTransactionItem({
+      tableName: TABLE_NAME,
+      email: normalizeEmail(user.email),
+      appUserId: user.id!,
+      betterAuthUserId: artifacts.betterAuthUserId,
+    }),
+  );
 
   try {
     await documentClient.transactWrite({ TransactItems: finalDeletes });

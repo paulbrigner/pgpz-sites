@@ -271,12 +271,31 @@ describe("admin roster account actions", () => {
             },
           }),
         }),
+        expect.objectContaining({
+          Delete: expect.objectContaining({
+            Key: {
+              pk: "EMAIL_OWNERSHIP#member@example.com",
+              sk: "EMAIL_OWNERSHIP#member@example.com",
+            },
+          }),
+        }),
       ]),
     );
-    expect(result.deletedItemCount).toBe(6);
+    expect(result.deletedItemCount).toBe(7);
   });
 
   it("updates admin-edited email and auth lookup keys together", async () => {
+    dynamoMocks.get
+      .mockResolvedValueOnce({
+        Item: {
+          id: "user-1",
+          email: "member@example.com",
+          isAdmin: false,
+          membershipStatus: "active",
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
     dynamoMocks.query
       .mockResolvedValueOnce({ Items: [] })
       .mockResolvedValueOnce({
@@ -316,8 +335,8 @@ describe("admin roster account actions", () => {
       })
     );
     const request = dynamoMocks.transactWrite.mock.calls[0][0];
-    expect(request.TransactItems).toHaveLength(2);
-    expect(request.TransactItems[0].Update).toEqual(
+    expect(request.TransactItems).toHaveLength(4);
+    expect(request.TransactItems[1].Update).toEqual(
       expect.objectContaining({
         Key: { pk: "USER#user-1", sk: "USER#user-1" },
         ExpressionAttributeValues: expect.objectContaining({
@@ -328,7 +347,7 @@ describe("admin roster account actions", () => {
         }),
       }),
     );
-    expect(request.TransactItems[1].Update.Key).toEqual({
+    expect(request.TransactItems[2].Update.Key).toEqual({
       pk: "BETTER_AUTH#better_auth_users#better-user-1",
       sk: "BETTER_AUTH#better_auth_users#better-user-1",
     });

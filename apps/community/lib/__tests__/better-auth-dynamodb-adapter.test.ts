@@ -8,6 +8,7 @@ const db = vi.hoisted(() => ({
   put: vi.fn(),
   query: vi.fn(),
   scan: vi.fn(),
+  transactWrite: vi.fn(),
   update: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock("@/lib/dynamodb", () => ({
     put: db.put,
     query: db.query,
     scan: db.scan,
+    transactWrite: db.transactWrite,
     update: db.update,
   },
 }));
@@ -76,6 +78,51 @@ describe("Better Auth DynamoDB adapter contract", () => {
       db.items.delete(key);
       return {};
     });
+    db.transactWrite.mockImplementation(async ({ TransactItems }) => {
+      const nextItems = new Map(Array.from(db.items.entries()).map(([key, value]) => [key, clone(value)]));
+      for (const operation of TransactItems) {
+        if (operation.Update) {
+          const { Key, ExpressionAttributeValues } = operation.Update;
+          const key = storageKey(Key);
+          const current = nextItems.get(key) || { ...Key };
+          const appUserId = ExpressionAttributeValues?.[":appUserId"];
+          const betterAuthUserId = ExpressionAttributeValues?.[":betterAuthUserId"];
+          if (
+            (appUserId && current.appUserId && current.appUserId !== appUserId) ||
+            (betterAuthUserId && current.betterAuthUserId && current.betterAuthUserId !== betterAuthUserId)
+          ) {
+            const error = new Error("claim collision");
+            error.name = "TransactionCanceledException";
+            throw error;
+          }
+          const updated = {
+            ...current,
+            ...(ExpressionAttributeValues?.[":type"] ? { type: ExpressionAttributeValues[":type"] } : {}),
+            ...(ExpressionAttributeValues?.[":email"] ? { email: ExpressionAttributeValues[":email"] } : {}),
+            ...(appUserId ? { appUserId } : {}),
+            ...(betterAuthUserId ? { betterAuthUserId } : {}),
+          };
+          if (operation.Update.UpdateExpression?.includes("REMOVE #betterAuthUserId")) {
+            delete updated.betterAuthUserId;
+          }
+          nextItems.set(key, updated);
+        } else if (operation.Put) {
+          const key = storageKey(operation.Put.Item);
+          const exists = nextItems.has(key);
+          if (operation.Put.ConditionExpression === "attribute_not_exists(#pk)" && exists) {
+            const error = new Error("record exists");
+            error.name = "TransactionCanceledException";
+            throw error;
+          }
+          nextItems.set(key, clone(operation.Put.Item));
+        } else if (operation.Delete) {
+          nextItems.delete(storageKey(operation.Delete.Key));
+        }
+      }
+      db.items.clear();
+      for (const [key, value] of nextItems) db.items.set(key, value);
+      return {};
+    });
   });
 
   it("maps logical models through the Better Auth factory and hides storage fields", async () => {
@@ -101,7 +148,7 @@ describe("Better Auth DynamoDB adapter contract", () => {
     });
     expect(created).toHaveProperty("createdAt", expect.any(Date));
     expect(created).toHaveProperty("updatedAt", expect.any(Date));
-    expect(Array.from(db.items.values())[0]).toMatchObject({
+    expect(Array.from(db.items.values()).find((item) => item.type === "BETTER_AUTH#better_auth_users")).toMatchObject({
       pk: "BETTER_AUTH#better_auth_users#user-1",
       type: "BETTER_AUTH#better_auth_users",
       GSI1PK: "BETTER_AUTH#better_auth_users#email#member@example.test",
@@ -115,6 +162,7 @@ describe("Better Auth DynamoDB adapter contract", () => {
       model: "better_auth_users",
       data: { id: "user-1", email: "member@example.test" },
     });
+    vi.clearAllMocks();
 
     const found = await adapter.findOne<Record<string, any>>({
       model: "better_auth_users",
@@ -252,6 +300,88 @@ describe("Better Auth DynamoDB adapter contract", () => {
       where: [{ field: "email", value: "new@example.test" }],
     });
     expect(db.items.size).toBe(0);
+  });
+
+  it("requires the source ownership claim before a Better Auth email move", async () => {
+    const { createBetterAuthAdapterImplementation } = await import("@/lib/better-auth-dynamodb-adapter");
+    const adapter = createBetterAuthAdapterImplementation();
+    await adapter.create({
+      model: "better_auth_users",
+      data: { id: "user-1", email: "old@example.test" },
+    });
+    db.items.delete("EMAIL_OWNERSHIP#old@example.test|EMAIL_OWNERSHIP#old@example.test");
+
+    await expect(
+      adapter.update({
+        model: "better_auth_users",
+        where: [{ field: "email", value: "old@example.test" }],
+        update: { email: "new@example.test" },
+      }),
+    ).rejects.toThrow("must be backfilled");
+
+    expect(
+      await adapter.findOne<Record<string, any>>({
+        model: "better_auth_users",
+        where: [{ field: "email", value: "old@example.test" }],
+      }),
+    ).toMatchObject({ id: "user-1" });
+  });
+
+  it("atomically rejects two Better Auth users racing for the same normalized email", async () => {
+    const { EmailOwnershipCollisionError } = await import("@/lib/email-ownership");
+    const { createBetterAuthAdapterImplementation } = await import("@/lib/better-auth-dynamodb-adapter");
+    const adapter = createBetterAuthAdapterImplementation();
+
+    await adapter.create({
+      model: "better_auth_users",
+      data: { id: "user-1", email: "Member@Example.Test" },
+    });
+    await expect(
+      adapter.create({
+        model: "better_auth_users",
+        data: { id: "user-2", email: "member@example.test" },
+      }),
+    ).rejects.toBeInstanceOf(EmailOwnershipCollisionError);
+
+    const users = Array.from(db.items.values()).filter(
+      (item) => item.type === "BETTER_AUTH#better_auth_users",
+    );
+    expect(users).toHaveLength(1);
+    expect(Array.from(db.items.values())).toContainEqual(
+      expect.objectContaining({
+        type: "EMAIL_OWNERSHIP",
+        email: "member@example.test",
+        betterAuthUserId: "user-1",
+      }),
+    );
+  });
+
+  it("deletes a Better Auth identity while preserving its app-owned email claim", async () => {
+    const { createBetterAuthAdapterImplementation } = await import("@/lib/better-auth-dynamodb-adapter");
+    const adapter = createBetterAuthAdapterImplementation();
+    await adapter.create({
+      model: "better_auth_users",
+      data: { id: "better-user-1", email: "member@example.test" },
+    });
+    const claimKey = "EMAIL_OWNERSHIP#member@example.test|EMAIL_OWNERSHIP#member@example.test";
+    db.items.set(claimKey, {
+      ...db.items.get(claimKey),
+      appUserId: "app-user-1",
+    });
+
+    await adapter.delete({
+      model: "better_auth_users",
+      where: [{ field: "id", value: "better-user-1" }],
+    });
+
+    expect(Array.from(db.items.values())).not.toContainEqual(
+      expect.objectContaining({ type: "BETTER_AUTH#better_auth_users" }),
+    );
+    expect(db.items.get(claimKey)).toMatchObject({
+      type: "EMAIL_OWNERSHIP",
+      appUserId: "app-user-1",
+    });
+    expect(db.items.get(claimKey)).not.toHaveProperty("betterAuthUserId");
   });
 
   it("consumes a verification only once and refuses unsafe empty single-record mutations", async () => {

@@ -218,6 +218,10 @@
         "sha256": "42b0dbb03b873b3539bb3fe79c13a38b1f61404c150585c202ed420cd0c5316b"
       },
       {
+        "path": "lib/__tests__/app-users-email-ownership.test.ts",
+        "sha256": "ccd96e8fed79401e35f67e7c5007d819c25bcb1bddeb41494b91e495c2192526"
+      },
+      {
         "path": "lib/__tests__/aws-runtime.test.ts",
         "sha256": "869c99537a25b82a9dfcf97bb25fa0a562fda758411e0d3b192c28b326f84526"
       },
@@ -227,7 +231,7 @@
       },
       {
         "path": "lib/__tests__/better-auth-dynamodb-adapter.test.ts",
-        "sha256": "e75a810211e77f5bc7db82d60d82313cdd614d28a0d4606875f51c01bcef4e28"
+        "sha256": "80c688ef1a80bd3776330a61a9a0aaf2e18f489b3f753c630879e58db2fcfa73"
       },
       {
         "path": "lib/__tests__/better-auth-rate-limit.test.ts",
@@ -240,6 +244,10 @@
       {
         "path": "lib/__tests__/email-link-security.test.ts",
         "sha256": "bac6c85aa5327ba0a4445999cfa10c5b077aebd094b6791f0f98c536c37d0593"
+      },
+      {
+        "path": "lib/__tests__/email-ownership.test.ts",
+        "sha256": "307c79916f94ace8caa97d2583700e67382183ea8227581d37bf5df6edce03c5"
       },
       {
         "path": "lib/__tests__/email-tracking-clicks.test.ts",
@@ -319,7 +327,7 @@
       },
       {
         "path": "lib/better-auth-dynamodb-adapter.ts",
-        "sha256": "0ccaed4f8452a09822ebc8455fc2819c17776e0fa1f678dd81dbf7e6d1b3aa3b"
+        "sha256": "202647d653e6245855caf8f6018299a29a68fd8d5817a48bb54a24a94428c314"
       },
       {
         "path": "lib/better-auth-rate-limit.ts",
@@ -327,7 +335,7 @@
       },
       {
         "path": "lib/better-auth-user-email.ts",
-        "sha256": "8e760fba02982b3a2e49c810646ffa9137df49da0cb871622f9a949083bd6e20"
+        "sha256": "cd7442a4052b0728b5287b4e93cdbe2f4e13c819d66a87ed8b5c83db07ee1844"
       },
       {
         "path": "lib/aws-runtime.ts",
@@ -344,6 +352,10 @@
       {
         "path": "lib/email-link-security.ts",
         "sha256": "a3fc7d1cd82e35c80b1cf00d6e0cfee654f25ca954ed623c591918ae2e81ca1f"
+      },
+      {
+        "path": "lib/email-ownership.ts",
+        "sha256": "b13b8589b3b6f18bd9a6276e9690e4769b37c06950f98bc5e7ca5b784abf5c05"
       },
       {
         "path": "lib/legacy-session-cookies.ts",
