@@ -6,7 +6,7 @@ describe("resolveSiteUrl", () => {
     expect(
       resolveSiteUrl({
         nextPublicSiteUrl: "https://coalition.pgpz.org",
-        nextAuthUrl: "https://localhost:3000",
+        betterAuthUrl: "https://localhost:3000",
         nodeEnv: "production",
       }),
     ).toBe("https://coalition.pgpz.org");
@@ -16,7 +16,7 @@ describe("resolveSiteUrl", () => {
     expect(
       resolveSiteUrl({
         nextPublicSiteUrl: "https://localhost:3000",
-        nextAuthUrl: null,
+        betterAuthUrl: null,
         nodeEnv: "production",
       }),
     ).toBe(DEFAULT_SITE_URL);
@@ -26,7 +26,7 @@ describe("resolveSiteUrl", () => {
     expect(
       resolveSiteUrl({
         nextPublicSiteUrl: "http://localhost:3000",
-        nextAuthUrl: null,
+        betterAuthUrl: null,
         nodeEnv: "development",
       }),
     ).toBe("http://localhost:3000");

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/config", () => ({
   EMAIL_TRACKING_SECRET: "test-email-tracking-secret",
+  EMAIL_TRACKING_SECRET_PREVIOUS: undefined,
   BETTER_AUTH_SECRET: undefined,
   NEXTAUTH_SECRET: undefined,
 }));

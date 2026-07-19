@@ -9,28 +9,21 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateBrandedProductionEnvironment } from "./production-config.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const sharedKeys = [
   "NEXT_PUBLIC_SITE_URL",
-  "NEXTAUTH_URL",
   "NEXTAUTH_TABLE",
-  "NEXTAUTH_SECRET",
   "BETTER_AUTH_URL",
   "BETTER_AUTH_SECRET",
   "BETTER_AUTH_TRUSTED_ORIGINS",
   "EMAIL_TRACKING_SECRET",
+  "EMAIL_TRACKING_SECRET_PREVIOUS",
+  "EMAIL_TRANSPORT",
   "REGION_AWS",
   "AWS_REGION",
-  "PGPZ_AWS_ACCESS_KEY_ID",
-  "PGPZ_AWS_SECRET_ACCESS_KEY",
-  "EMAIL_SERVER",
-  "EMAIL_SERVER_HOST",
-  "EMAIL_SERVER_PORT",
-  "EMAIL_SERVER_USER",
-  "EMAIL_SERVER_PASSWORD",
-  "EMAIL_SERVER_SECURE",
   "EMAIL_FROM",
   "CLOUDFRONT_DOMAIN",
   "KEY_PAIR_ID",
@@ -49,7 +42,10 @@ const applications = {
       "REGION_AWS",
       "X_BEARER_TOKEN",
       "EMAIL_FROM",
+      "BETTER_AUTH_SECRET",
       "EMAIL_TRACKING_SECRET",
+      "EMAIL_TRANSPORT",
+      "SOCIAL_PROOF_AUTOVERIFY_SECRET",
     ],
     keys: [
       ...sharedKeys,
@@ -67,6 +63,7 @@ const applications = {
       "X_PROOF_AUTOVERIFY_GROUP_SIZE",
       "X_PROOF_AUTOVERIFY_MAX_ATTEMPTS",
       "SOCIAL_PROOF_AUTOVERIFY_SECRET",
+      "SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS",
       "AUTOVERIFY_URL",
       "MEMBERSHIP_PROOF_RETENTION_POLICY",
       "MICROLINK_API_KEY",
@@ -74,7 +71,14 @@ const applications = {
   },
   coalition: {
     output: "apps/coalition/.env.production",
-    required: ["NEXTAUTH_TABLE", "REGION_AWS", "EMAIL_FROM", "EMAIL_TRACKING_SECRET"],
+    required: [
+      "NEXTAUTH_TABLE",
+      "REGION_AWS",
+      "EMAIL_FROM",
+      "BETTER_AUTH_SECRET",
+      "EMAIL_TRACKING_SECRET",
+      "EMAIL_TRANSPORT",
+    ],
     keys: [
       ...sharedKeys,
       "PGPZ_COMMUNITY_NEXTAUTH_TABLE",
@@ -124,6 +128,15 @@ if (missing.length > 0) {
     `Missing required ${applicationName} environment variables: ${missing.join(", ")}`,
   );
   process.exit(1);
+}
+
+if (applicationName === "community" || applicationName === "coalition") {
+  try {
+    validateBrandedProductionEnvironment(process.env, { applicationName });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 const values = application.keys.flatMap((key) => {

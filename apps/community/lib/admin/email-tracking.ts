@@ -2,7 +2,12 @@ import "server-only";
 
 import { createHmac, randomUUID } from "crypto";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
-import { getEmailTrackingSecret, safeHttpDestination } from "@/lib/email-link-security";
+import {
+  emailTrackingDigest,
+  emailTrackingDigestCandidates,
+  getEmailTrackingSecret,
+  safeHttpDestination,
+} from "@/lib/email-link-security";
 
 export type EmailMessageType = "newsletter" | "policy_update";
 export type EmailTrackingAudienceMode = "all_active_members" | "selected_members";
@@ -246,9 +251,7 @@ export async function recordNewsletterOpen(trackingId: string, clientInfo?: Trac
 }
 
 function clickDestinationDigest(trackingId: string, url: string) {
-  return createHmac("sha256", getEmailTrackingSecret())
-    .update(JSON.stringify(["email-click-destination-v1", trackingId, url]))
-    .digest("hex");
+  return emailTrackingDigest("email-click-destination-v1", [trackingId, url]);
 }
 
 export async function bindNewsletterTrackingDestinations(
@@ -314,8 +317,11 @@ export async function recordNewsletterClick(trackingId: string, url: string) {
   if (!tracking) return null;
   const canonicalUrl = safeHttpDestination(url);
   if (!canonicalUrl) return null;
-  const digest = clickDestinationDigest(tracking.trackingId, canonicalUrl);
-  if (!tracking.allowedClickDestinationDigests.includes(digest)) return null;
+  const digestMatches = emailTrackingDigestCandidates(
+    "email-click-destination-v1",
+    [tracking.trackingId, canonicalUrl],
+  ).some((digest) => tracking.allowedClickDestinationDigests.includes(digest));
+  if (!digestMatches) return null;
   return recordBoundNewsletterClick(tracking, canonicalUrl);
 }
 

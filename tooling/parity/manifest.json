@@ -91,7 +91,7 @@
       },
       {
         "path": "app/api/email/click/[trackingId]/route.test.ts",
-        "sha256": "92a4dd34eef3feb6552285b5f3de3e891a99fc914c6ddfd72122a246d28eb462"
+        "sha256": "f98b1628d43989a2e54a3f8848d3249a1c94d2ad06d2575238987a97bad4f28f"
       },
       {
         "path": "app/api/email/open/[trackingId]/route.ts",
@@ -115,7 +115,7 @@
       },
       {
         "path": "app/api/policy-updates/[slug]/email-assets/[asset]/route.test.ts",
-        "sha256": "a2a57d780e5274721814096cfa196dd666e4789049bf5c72a8b0dd9dfebbb17e"
+        "sha256": "4c0402a2f027283bd8ed1ea1dc70f764a85083ba1142aebf70d13d064724b0df"
       },
       {
         "path": "app/api/policy-updates/[slug]/pdf/route.ts",
@@ -218,6 +218,10 @@
         "sha256": "42b0dbb03b873b3539bb3fe79c13a38b1f61404c150585c202ed420cd0c5316b"
       },
       {
+        "path": "lib/__tests__/aws-runtime.test.ts",
+        "sha256": "869c99537a25b82a9dfcf97bb25fa0a562fda758411e0d3b192c28b326f84526"
+      },
+      {
         "path": "lib/__tests__/better-auth-client-ip.test.ts",
         "sha256": "780d29a535cab9d1ba35c8dc67969e9b6563b6b69bc96ce8398b8ea4636a065b"
       },
@@ -235,11 +239,15 @@
       },
       {
         "path": "lib/__tests__/email-link-security.test.ts",
-        "sha256": "0a7ecbfe34e221f2da03f2067b5ed6996629ba914e258485a78305588fab6651"
+        "sha256": "bac6c85aa5327ba0a4445999cfa10c5b077aebd094b6791f0f98c536c37d0593"
       },
       {
         "path": "lib/__tests__/email-tracking-clicks.test.ts",
-        "sha256": "39a3a0f9eb38f6c61a9f5d0e99918fb6c105f62a4c863cad47b7188a64571bf8"
+        "sha256": "49ef014524a26ced3c63bbd4c352edc9df291cc5a2de5f27fd51b0540eb972b7"
+      },
+      {
+        "path": "lib/__tests__/email-transport.test.ts",
+        "sha256": "c8bf99de8c398a57567e3ec5ec072a0304c76c1de136feff2d36637484928c96"
       },
       {
         "path": "lib/__tests__/nodemailer-security.test.ts",
@@ -271,11 +279,11 @@
       },
       {
         "path": "lib/admin/email-tracking.ts",
-        "sha256": "ede8895bfaae9292d2c5b810f7886766a119e5e45651ca29d1ac04b6e3a070df"
+        "sha256": "11fdcb673b9a1ca8563566c69fa619c56ae27df9577ffb79484d14e0221b740b"
       },
       {
         "path": "lib/admin/email-transport.ts",
-        "sha256": "59d1730312d0c91fbeb415a7e23d16231dad1c89a302446bc90cdf30bad05d29"
+        "sha256": "0f809f6bb5cd2174fb3bde9d602bdb0328eaac0a990004df8cde0cbfb2b298f2"
       },
       {
         "path": "lib/admin/member-preview-server.ts",
@@ -322,16 +330,20 @@
         "sha256": "8e760fba02982b3a2e49c810646ffa9137df49da0cb871622f9a949083bd6e20"
       },
       {
+        "path": "lib/aws-runtime.ts",
+        "sha256": "bcf65a5db641612f98c0c1db9fab6fb1cf7e52f94584fe26842aadc55d0793db"
+      },
+      {
         "path": "lib/cloudFrontSigner.ts",
         "sha256": "a39555811f74082ee1b771020ec52270df96754e2cadec359d6cfd0a08cd0d64"
       },
       {
         "path": "lib/dynamodb.ts",
-        "sha256": "f4625f2389bb7ba06e23d39987aef843196861ca2b3b14cedee754ad950f455f"
+        "sha256": "79809b49005d712b66c9f3ba134d094452cefe1f76ba8d54267dc21d1ea13f99"
       },
       {
         "path": "lib/email-link-security.ts",
-        "sha256": "1c5f5afe5662bb5546140e0cb9d9472d643b503dd9bc2ea625a3785663e6c65d"
+        "sha256": "a3fc7d1cd82e35c80b1cf00d6e0cfee654f25ca954ed623c591918ae2e81ca1f"
       },
       {
         "path": "lib/legacy-session-cookies.ts",
@@ -351,7 +363,7 @@
       },
       {
         "path": "lib/s3.ts",
-        "sha256": "7ca620ea9f95f9cce50dacccdb0bc75fdcaa70b08a45614b7e567f0d24e54e92"
+        "sha256": "8b411945abb04c781963121de9cf2cf5386f56855c15c27fc5945f6e2817615c"
       },
       {
         "path": "lib/use-app-session.ts",

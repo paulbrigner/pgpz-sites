@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
 import {
   buildPolicyUpdateEmailAssetPath,
   buildTrackedClickUrl,
   listUnsubscribeHeaders,
   resolveEmailTrackingSecret,
+  resolveEmailTrackingSecrets,
+  signEmailTrackingValues,
+  verifyEmailTrackingValues,
   verifyPolicyUpdateEmailAsset,
   verifyTrackedClickDestination,
 } from "@/lib/email-link-security";
@@ -17,13 +21,101 @@ describe("email link security", () => {
         nodeEnv: "production",
       }),
     ).toThrow("EMAIL_TRACKING_SECRET is required in production");
-    expect(
+    expect(() =>
       resolveEmailTrackingSecret({
-        emailTrackingSecret: "dedicated-secret",
+        emailTrackingSecret: "too-short",
         fallbackSecret: null,
         nodeEnv: "production",
       }),
-    ).toBe("dedicated-secret");
+    ).toThrow("must contain at least 32 bytes");
+    expect(
+      resolveEmailTrackingSecret({
+        emailTrackingSecret: "dedicated-secret-at-least-32-characters",
+        fallbackSecret: null,
+        nodeEnv: "production",
+      }),
+    ).toBe("dedicated-secret-at-least-32-characters");
+  });
+
+  it("uses the current key for signing and the previous key only for verification", () => {
+    const currentSecret = "current-email-tracking-secret-at-least-32-chars";
+    const previousSecret = "previous-email-tracking-secret-at-least-32-chars";
+    const purpose = "email-click-v1";
+    const values = ["tracking-1", "https://example.test/"];
+    const currentSignature = signEmailTrackingValues({
+      secret: currentSecret,
+      purpose,
+      values,
+    });
+    const previousSignature = signEmailTrackingValues({
+      secret: previousSecret,
+      purpose,
+      values,
+    });
+
+    expect(currentSignature).toMatch(/^h1\.[A-Za-z0-9_-]{12}\./);
+    expect(
+      verifyEmailTrackingValues({
+        signature: currentSignature,
+        currentSecret,
+        previousSecret,
+        purpose,
+        values,
+      }),
+    ).toBe(true);
+    expect(
+      verifyEmailTrackingValues({
+        signature: previousSignature,
+        currentSecret,
+        previousSecret,
+        purpose,
+        values,
+      }),
+    ).toBe(true);
+    expect(
+      verifyEmailTrackingValues({
+        signature: previousSignature,
+        currentSecret,
+        purpose,
+        values,
+      }),
+    ).toBe(false);
+  });
+
+  it("verifies pre-version legacy signatures during a one-key rotation window", () => {
+    const previousSecret = "previous-email-tracking-secret-at-least-32-chars";
+    const purpose = "policy-update-email-asset-v2";
+    const values = ["materialization-1", "update-1", "chart.png"];
+    const legacySignature = createHmac("sha256", previousSecret)
+      .update(JSON.stringify([purpose, ...values]))
+      .digest("base64url");
+
+    expect(
+      verifyEmailTrackingValues({
+        signature: legacySignature,
+        currentSecret: "current-email-tracking-secret-at-least-32-chars",
+        previousSecret,
+        purpose,
+        values,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects weak or duplicate production rotation keys", () => {
+    expect(() =>
+      resolveEmailTrackingSecrets({
+        currentSecret: "current-email-tracking-secret-at-least-32-chars",
+        previousSecret: "weak",
+        nodeEnv: "production",
+      }),
+    ).toThrow("EMAIL_TRACKING_SECRET_PREVIOUS must contain at least 32 bytes");
+    expect(() =>
+      resolveEmailTrackingSecrets({
+        currentSecret: "same-email-tracking-secret-at-least-32-characters",
+        previousSecret: "same-email-tracking-secret-at-least-32-characters",
+        nodeEnv: "production",
+      }),
+    ).toThrow("must differ");
   });
 
   it("keeps local and test environments usable without production fallback behavior", () => {

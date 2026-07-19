@@ -11,6 +11,11 @@ export type {
   AccountCapabilitySubject,
 } from "./account-capabilities";
 export {
+  MINIMUM_PRODUCTION_SIGNING_SECRET_BYTES,
+  resolveSigningSecret,
+} from "./signing-secrets";
+export type { SigningSecretOptions } from "./signing-secrets";
+export {
   MEMBERSHIP_MODES,
   SITE_FEATURES,
   assertSiteConfig,

@@ -20,13 +20,15 @@ The single existing GSI cannot simultaneously index session/account ownership an
 ## Required production configuration
 
 - `BETTER_AUTH_URL`
-- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_SECRET` (at least 32 bytes)
 - `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE` (legacy variable name for the shared application table)
-- `EMAIL_TRACKING_SECRET` (required in production)
-- the existing AWS, SMTP, and site URL variables
+- `EMAIL_TRACKING_SECRET` (at least 32 bytes)
+- optional `EMAIL_TRACKING_SECRET_PREVIOUS` (at least 32 bytes, verification only)
+- `EMAIL_TRANSPORT=ses`
+- the branch-level Amplify SSR Compute role and existing site URL variables
 
-`NEXTAUTH_URL` and `NEXTAUTH_SECRET` may remain temporarily as inert compatibility values. Production email tracking does not fall back to either authentication secret; configure a stable `EMAIL_TRACKING_SECRET` explicitly before removing legacy variables.
+`NEXTAUTH_URL`, `NEXTAUTH_SECRET`, static AWS access keys, and SES SMTP credentials are no longer serialized into the production runtime. Follow the repository-root signing-secret and compute-role runbook for cutover and rollback.
 
 ## Pre-deployment criteria
 
@@ -37,7 +39,7 @@ All criteria must pass in both applications:
 3. Durable rate-limit tests prove that separate storage instances share one atomic counter and enforce the configured maximum.
 4. The DynamoDB table and `GSI1` are `ACTIVE`, and TTL on `expires` is `ENABLED`.
 5. Amplify has non-default Better Auth URL, secret, and trusted-origin values for each canonical domain.
-6. `EMAIL_TRACKING_SECRET` is configured explicitly and remains stable so signed links, email assets, and email-open fingerprints continue to validate.
+6. Current and optional previous email-tracking secrets pass the production validator; saved links verify across a rehearsed current/previous-key swap.
 7. Amplify provides a usable client IP; there is no evidence that unrelated visitors collapse into one rate-limit bucket.
 8. A rollback commit is identified before deployment.
 
