@@ -45,13 +45,14 @@ Active members can manage topic-group selections from `/groups`. Each topic has 
 
 - `NEXT_PUBLIC_SITE_URL`
 - `BETTER_AUTH_URL`
-- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_SECRET` (at least 32 bytes)
 - `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE`
-- `EMAIL_TRACKING_SECRET` (required in production)
+- `EMAIL_TRACKING_SECRET` (at least 32 bytes in production)
+- `EMAIL_TRACKING_SECRET_PREVIOUS` (optional verification-only rotation key)
+- `EMAIL_TRANSPORT=ses` in production
 - `REGION_AWS`
-- `EMAIL_SERVER_HOST`
-- `EMAIL_SERVER_PORT`
-- `EMAIL_SERVER_USER`
-- `EMAIL_SERVER_PASSWORD`
 - `EMAIL_FROM`
+
+Production DynamoDB, S3, and SESv2 access comes from the branch-level Amplify
+SSR Compute role. `EMAIL_SERVER_*` is a local/non-AWS SMTP fallback only.

@@ -70,12 +70,13 @@ Optional:
 - `X_PROOF_AUTOVERIFY_BATCH_SIZE`
 - `X_PROOF_AUTOVERIFY_GROUP_SIZE`
 - `X_PROOF_AUTOVERIFY_MAX_ATTEMPTS`
-- `SOCIAL_PROOF_AUTOVERIFY_SECRET`
+- `SOCIAL_PROOF_AUTOVERIFY_SECRET` (required in production, at least 32 bytes)
+- `SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS` (optional verification-only rotation key)
 - `MEMBERSHIP_PROOF_RETENTION_POLICY`
 
 ## Background Verification
 
-The protected endpoint is `POST /api/social-proof/x/autoverify`. It requires `Authorization: Bearer <SOCIAL_PROOF_AUTOVERIFY_SECRET>` or `x-pgpz-autoverify-secret`.
+The protected endpoint is `POST /api/social-proof/x/autoverify`. It requires `Authorization: Bearer <SOCIAL_PROOF_AUTOVERIFY_SECRET>` or `x-pgpz-autoverify-secret`. During a rotation, the application accepts the current and one previous secret, while the trigger sends only its current value. Deploy the application with `current=new` and `previous=old` before updating the trigger to the new value; remove the previous value after the trigger and its retry window are verified.
 
 Each run scans a capped batch of pending challenge records, groups several exact challenge-code searches into one X API recent-search request, and backs off each challenge after misses. Defaults are conservative:
 

@@ -1,9 +1,9 @@
 const endpoint = process.env.AUTOVERIFY_URL || "https://community.pgpz.org/api/social-proof/x/autoverify";
-const secret = process.env.SOCIAL_PROOF_AUTOVERIFY_SECRET || "";
+const secret = process.env.SOCIAL_PROOF_AUTOVERIFY_SECRET?.trim() || "";
 
 export const handler = async () => {
-  if (!secret) {
-    throw new Error("SOCIAL_PROOF_AUTOVERIFY_SECRET is required");
+  if (Buffer.byteLength(secret, "utf8") < 32) {
+    throw new Error("SOCIAL_PROOF_AUTOVERIFY_SECRET must contain at least 32 bytes");
   }
 
   const res = await fetch(endpoint, {

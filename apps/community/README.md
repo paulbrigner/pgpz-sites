@@ -35,27 +35,31 @@ From the monorepo root, copy `apps/community/.env.example` to
 ```bash
 NEXT_PUBLIC_SITE_URL=https://community.pgpz.org
 REGION_AWS=us-east-1
-PGPZ_AWS_ACCESS_KEY_ID=...
-PGPZ_AWS_SECRET_ACCESS_KEY=...
 NEXTAUTH_TABLE=PGPZCommunityNextAuth
 BETTER_AUTH_URL=https://community.pgpz.org
 BETTER_AUTH_SECRET=...
 BETTER_AUTH_TRUSTED_ORIGINS=https://community.pgpz.org
 EMAIL_TRACKING_SECRET=...
+EMAIL_TRACKING_SECRET_PREVIOUS=
 X_BEARER_TOKEN=...
 X_API_BASE_URL=https://api.x.com/2
 X_API_TIMEOUT_MS=15000
 X_PROOF_RATE_LIMIT_WINDOW_MINUTES=15
 X_PROOF_CHALLENGE_RATE_LIMIT=10
 X_PROOF_VERIFY_RATE_LIMIT=6
-EMAIL_SERVER_HOST=email-smtp.us-east-1.amazonaws.com
+SOCIAL_PROOF_AUTOVERIFY_SECRET=...
+SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS=
+EMAIL_TRANSPORT=smtp
+EMAIL_SERVER_HOST=localhost
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER=...
 EMAIL_SERVER_PASSWORD=...
 EMAIL_FROM="PGPZ Community <no-reply@community.pgpz.org>"
 ```
 
-`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. `EMAIL_TRACKING_SECRET` is required in production and does not fall back to an authentication secret there. It may initially retain the former `NEXTAUTH_SECRET` value for fingerprint continuity, but must remain stable because it also signs tracked links and email-only assets.
+`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Production requires `BETTER_AUTH_SECRET` and `EMAIL_TRACKING_SECRET` values of at least 32 bytes, plus `EMAIL_TRANSPORT=ses`. `EMAIL_TRACKING_SECRET_PREVIOUS` is verification-only during a reversible one-key rotation window. Production DynamoDB, S3, and SESv2 clients use the Amplify SSR Compute role through the AWS SDK default credential chain; SMTP remains available only for local/non-AWS development.
+
+Follow the repository-root [signing-secret and compute-role cutover runbook](../../docs/secrets-and-compute-role-cutover.md) before changing production credentials or rotating a tracking secret.
 
 See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
 

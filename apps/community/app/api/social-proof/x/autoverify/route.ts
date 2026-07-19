@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SOCIAL_PROOF_AUTOVERIFY_SECRET } from "@/lib/config";
+import {
+  SOCIAL_PROOF_AUTOVERIFY_SECRET,
+  SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS,
+} from "@/lib/config";
+import {
+  isAutoverifySecretAuthorized,
+  resolveAutoverifySecrets,
+} from "@/lib/autoverify-secret";
 import { autoVerifyPendingXProofs } from "@/lib/social-proof";
 
 export const dynamic = "force-dynamic";
@@ -9,20 +16,33 @@ const bearerToken = (value: string | null) => {
   return match?.[1]?.trim() || null;
 };
 
-const authorized = (request: NextRequest) => {
-  if (!SOCIAL_PROOF_AUTOVERIFY_SECRET) return false;
+const configuredSecrets = () => resolveAutoverifySecrets({
+  currentSecret: SOCIAL_PROOF_AUTOVERIFY_SECRET,
+  previousSecret: SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS,
+  nodeEnv: process.env.NODE_ENV,
+});
+
+const authorized = (
+  request: NextRequest,
+  secrets: ReturnType<typeof configuredSecrets>,
+) => {
   const supplied =
     bearerToken(request.headers.get("authorization")) ||
     request.headers.get("x-pgpz-autoverify-secret")?.trim() ||
     "";
-  return supplied === SOCIAL_PROOF_AUTOVERIFY_SECRET;
+  return isAutoverifySecretAuthorized({
+    suppliedSecret: supplied,
+    currentSecret: secrets.current,
+    previousSecret: secrets.previous,
+  });
 };
 
 export async function POST(request: NextRequest) {
-  if (!SOCIAL_PROOF_AUTOVERIFY_SECRET) {
+  const secrets = configuredSecrets();
+  if (!secrets.current) {
     return NextResponse.json({ error: "Auto-verification is not configured" }, { status: 503 });
   }
-  if (!authorized(request)) {
+  if (!authorized(request, secrets)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHmac } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/config", () => ({
   EMAIL_TRACKING_SECRET: "test-email-tracking-secret",
+  EMAIL_TRACKING_SECRET_PREVIOUS: "previous-test-email-tracking-secret",
   BETTER_AUTH_SECRET: undefined,
   NEXTAUTH_SECRET: undefined,
 }));
@@ -91,5 +93,27 @@ describe("stored tracked-click destinations", () => {
     await expect(
       bindNewsletterTrackingDestinations("tracking-2", ["mailto:user@example.com"]),
     ).rejects.toThrow("absolute HTTP(S) URLs");
+  });
+
+  it("accepts a destination digest stored before a secret rotation", async () => {
+    const { recordNewsletterClick } = await import("@/lib/admin/email-tracking");
+    const allowedUrl = "https://external.example/historical";
+    const previousDigest = createHmac(
+      "sha256",
+      "previous-test-email-tracking-secret",
+    )
+      .update(
+        JSON.stringify([
+          "email-click-destination-v1",
+          "tracking-1",
+          allowedUrl,
+        ]),
+      )
+      .digest("hex");
+    mocks.get.mockResolvedValue({ Item: trackingItem([previousDigest]) });
+
+    const recorded = await recordNewsletterClick("tracking-1", allowedUrl);
+    expect(recorded?.lastClickedUrl).toBe(allowedUrl);
+    expect(mocks.update).toHaveBeenCalledOnce();
   });
 });

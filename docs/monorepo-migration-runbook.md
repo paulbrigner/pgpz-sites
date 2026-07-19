@@ -32,11 +32,12 @@ Required variables retain the existing single-app build behavior:
 
 Community additionally permits its X/social-proof settings and the optional
 `MICROLINK_API_KEY`. Coalition additionally permits the two Community-table
-aliases used by its synchronization path. Shared mail, Better Auth, AWS,
+aliases used by its synchronization path. Shared Better Auth, SESv2 mode,
 CloudFront, and policy-upload variables are allowlisted for both apps without
-copying one application's values into the other. Existing `NEXTAUTH_URL`,
-`AWS_REGION`, and content-bucket aliases are also retained when present so the
-workspace move does not silently drop supported legacy configuration names.
+copying one application's values into the other. `AWS_REGION` and
+content-bucket aliases are retained when present. Static AWS keys, SMTP
+credentials, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` are intentionally excluded;
+see [`secrets-and-compute-role-cutover.md`](secrets-and-compute-role-cutover.md).
 
 The July 2026 Community Amplify inventory also contains five legacy generation
 keys that are not referenced anywhere in the imported application and are
@@ -49,8 +50,8 @@ intentionally not serialized by the monorepo build:
 - `VENICE_API_KEY`
 
 Record these as deliberately retired—not unexplained omissions—when completing
-the pre-cutover environment diff. Do not delete them from the existing Amplify
-application until the rollback observation window has closed.
+the pre-cutover environment diff. They can be deleted with the credential
+cleanup after the compute-role cutover gates and rollback rehearsal pass.
 
 ## Pre-cutover gates
 

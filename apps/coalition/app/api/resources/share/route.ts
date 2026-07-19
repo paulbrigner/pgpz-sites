@@ -3,48 +3,14 @@ import { canAccessMemberFeatures } from "@pgpz/core";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
-import {
-  EMAIL_FROM,
-  EMAIL_SERVER,
-  EMAIL_SERVER_HOST,
-  EMAIL_SERVER_PASSWORD,
-  EMAIL_SERVER_PORT,
-  EMAIL_SERVER_SECURE,
-  EMAIL_SERVER_USER,
-} from "@/lib/config";
+import { EMAIL_FROM } from "@/lib/config";
 import { resolveAppSession } from "@/lib/app-session";
 import { recordEmailEvent } from "@/lib/admin/email-log";
+import { buildEmailServerConfig } from "@/lib/admin/email-transport";
 
 export const dynamic = "force-dynamic";
 
 const RESOURCE_INBOX = "admin@pgpz.org";
-
-const buildEmailServerConfig = () => {
-  if (EMAIL_SERVER_HOST) {
-    return {
-      host: EMAIL_SERVER_HOST,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  if (EMAIL_SERVER && EMAIL_SERVER.includes("://")) return EMAIL_SERVER as any;
-  if (EMAIL_SERVER) {
-    return {
-      host: EMAIL_SERVER,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 587,
-      secure: EMAIL_SERVER_SECURE === "true",
-      auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
-          : undefined,
-    } as any;
-  }
-  return null;
-};
 
 const sanitizeLine = (value: unknown, maxLength: number) =>
   typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, maxLength) : "";
