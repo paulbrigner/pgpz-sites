@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  bindNewsletterTrackingDestinations: vi.fn(),
   buildNewsletterEmail: vi.fn(),
   createNewsletterTrackingRecord: vi.fn(),
   createTransport: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock("@/lib/admin/newsletters", () => ({
 }));
 
 vi.mock("@/lib/admin/email-tracking", () => ({
+  bindNewsletterTrackingDestinations: mocks.bindNewsletterTrackingDestinations,
   createNewsletterTrackingRecord: mocks.createNewsletterTrackingRecord,
   markNewsletterTrackingSent: mocks.markNewsletterTrackingSent,
 }));
@@ -73,6 +75,16 @@ vi.mock("@/lib/admin/email-log", () => ({
 vi.mock("@/lib/config", () => ({
   EMAIL_FROM: "admin@pgpz.org",
   SITE_URL: "https://example.test",
+}));
+
+vi.mock("@/lib/email-link-security", () => ({
+  listUnsubscribeHeaders: (url: string | null | undefined) =>
+    url
+      ? {
+          "List-Unsubscribe": `<${url}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
+      : undefined,
 }));
 
 vi.mock("@/lib/newsletter-email", () => ({
@@ -118,10 +130,12 @@ describe("admin newsletter sends", () => {
     mocks.listPolicyUpdateRecipients.mockResolvedValue([recipient]);
     mocks.createNewsletterTrackingRecord.mockResolvedValue({ trackingId: "tracking-1" });
     mocks.recordNewsletterSendRun.mockResolvedValue({ id: "send-run-1" });
-    mocks.buildNewsletterEmail.mockImplementation((input) => ({
+    mocks.buildNewsletterEmail.mockImplementation((input, _recipient, _siteUrl, tracking) => ({
       subject: input.subject,
       text: "Plain text",
       html: "<p>HTML</p>",
+      unsubscribeUrl: tracking ? "https://example.test/api/email/unsubscribe/tracking-1" : null,
+      trackedDestinations: tracking ? ["https://example.test/member-update"] : [],
     }));
   });
 
@@ -265,6 +279,19 @@ describe("admin newsletter sends", () => {
     });
     expect(mocks.markNewsletterTrackingSent).toHaveBeenCalledWith(
       expect.objectContaining({ trackingId: "tracking-1", providerMessageId: "message-1" }),
+    );
+    expect(mocks.bindNewsletterTrackingDestinations).toHaveBeenCalledWith(
+      "tracking-1",
+      ["https://example.test/member-update"],
+    );
+    expect(mocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: {
+          "List-Unsubscribe":
+            "<https://example.test/api/email/unsubscribe/tracking-1>",
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+      }),
     );
     expect(mocks.recordNewsletterSendRun).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -1,4 +1,5 @@
 import type { AdminNewsletter } from "@/lib/admin/newsletters";
+import { buildTrackedClickUrl } from "@/lib/email-link-security";
 import { getUserGreetingName } from "@/lib/user-display-name";
 import {
   brandedEmailColors as colors,
@@ -21,10 +22,19 @@ export type NewsletterEmailTracking = {
   trackLinks?: boolean;
   includeOpenPixel?: boolean;
   includeUnsubscribe?: boolean;
+  onTrackedDestination?: (destination: string) => void;
 };
 
-const trackedClickUrl = (baseUrl: string, trackingId: string, href: string) =>
-  `${baseUrl}/api/email/click/${encodeURIComponent(trackingId)}?url=${encodeURIComponent(href)}`;
+const trackedClickUrl = (
+  baseUrl: string,
+  trackingId: string,
+  href: string,
+  tracking?: NewsletterEmailTracking,
+) => {
+  const trackedUrl = buildTrackedClickUrl(baseUrl, trackingId, href);
+  tracking?.onTrackedDestination?.(new URL(trackedUrl).searchParams.get("url")!);
+  return trackedUrl;
+};
 
 const trackingOpenPixel = (baseUrl: string, trackingId: string) =>
   `<img src="${escapeHtml(`${baseUrl}/api/email/open/${encodeURIComponent(trackingId)}.png`)}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;opacity:0;" />`;
@@ -38,7 +48,7 @@ const autolinkHtml = (value: string, baseUrl: string, tracking?: NewsletterEmail
       const trailing = part.slice(href.length);
       const linkHref =
         tracking?.trackLinks && tracking.trackingId
-          ? trackedClickUrl(baseUrl, tracking.trackingId, href)
+          ? trackedClickUrl(baseUrl, tracking.trackingId, href, tracking)
           : href;
       return `<a href="${escapeHtml(linkHref)}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(href)}</a>${escapeHtml(trailing)}`;
     })
@@ -71,20 +81,29 @@ export function buildNewsletterEmail(
   tracking?: NewsletterEmailTracking,
 ) {
   const portalUrl = normalizeBaseUrl(baseUrl);
+  const trackedDestinations = new Set<string>();
+  const emailTracking = tracking
+    ? {
+        ...tracking,
+        onTrackedDestination: (destination: string) => trackedDestinations.add(destination),
+      }
+    : undefined;
   const name = getUserGreetingName(recipient);
   const subject = newsletter.subject;
   const preheader = newsletter.preheader || newsletter.body.replace(/\s+/g, " ").trim().slice(0, 160);
-  const bodyHtml = renderBodyHtml(newsletter.body, portalUrl, tracking);
+  const bodyHtml = renderBodyHtml(newsletter.body, portalUrl, emailTracking);
   const coalitionLinkHref =
-    tracking?.trackLinks && tracking.trackingId
-      ? trackedClickUrl(portalUrl, tracking.trackingId, portalUrl)
+    emailTracking?.trackLinks && emailTracking.trackingId
+      ? trackedClickUrl(portalUrl, emailTracking.trackingId, portalUrl, emailTracking)
       : portalUrl;
   const unsubscribeUrl =
-    tracking?.includeUnsubscribe && tracking.trackingId
-      ? `${portalUrl}/api/email/unsubscribe/${encodeURIComponent(tracking.trackingId)}`
+    emailTracking?.includeUnsubscribe && emailTracking.trackingId
+      ? `${portalUrl}/api/email/unsubscribe/${encodeURIComponent(emailTracking.trackingId)}`
       : null;
   const openPixel =
-    tracking?.includeOpenPixel && tracking.trackingId ? trackingOpenPixel(portalUrl, tracking.trackingId) : "";
+    emailTracking?.includeOpenPixel && emailTracking.trackingId
+      ? trackingOpenPixel(portalUrl, emailTracking.trackingId)
+      : "";
   const unsubscribeHtml = unsubscribeUrl
     ? ` <a href="${escapeHtml(unsubscribeUrl)}" style="color:${colors.goldDeep};">Unsubscribe from member emails</a>.`
     : ` To stop receiving member updates, contact <a href="mailto:admin@pgpz.org" style="color:${colors.goldDeep};">admin@pgpz.org</a>.`;
@@ -139,5 +158,5 @@ export function buildNewsletterEmail(
     unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
   ].join("\n");
 
-  return { subject, html, text, preheader };
+  return { subject, html, text, preheader, unsubscribeUrl, trackedDestinations: [...trackedDestinations] };
 }

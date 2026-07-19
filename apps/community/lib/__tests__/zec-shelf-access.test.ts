@@ -18,4 +18,18 @@ describe("ZEC Shelf access", () => {
     expect(canViewZecShelf(null)).toBe(false);
     expect(canViewZecShelf({ membershipStatus: "none", isAdmin: false })).toBe(false);
   });
+
+  it.each([
+    { accountStatus: "deactivated", membershipStatus: "active", isAdmin: false },
+    { accountStatus: "deactivated", membershipStatus: "none", isAdmin: true },
+    {
+      accountStatus: "active",
+      deactivatedAt: "2026-07-19T00:00:00.000Z",
+      membershipStatus: "active",
+      isAdmin: true,
+    },
+  ])("rejects stale member and admin flags on deactivated accounts", (user) => {
+    expect(canViewZecShelf(user)).toBe(false);
+    expect(canManageZecShelf(user)).toBe(false);
+  });
 });

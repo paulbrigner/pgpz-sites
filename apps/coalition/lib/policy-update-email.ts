@@ -5,6 +5,10 @@ import type {
   PolicyUpdateSection,
   PolicyUpdateTable,
 } from "@/lib/policy-updates";
+import {
+  buildPolicyUpdateEmailAssetPath,
+  buildTrackedClickUrl,
+} from "@/lib/email-link-security";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
   isPolicyUpdateSocialPostSection,
@@ -34,30 +38,46 @@ export type PolicyUpdateEmailTracking = {
   trackLinks?: boolean;
   includeOpenPixel?: boolean;
   includeUnsubscribe?: boolean;
+  emailAssetMaterializationId?: string | null;
+  onTrackedDestination?: (destination: string) => void;
 };
 
 export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
   `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
 
-const trackedClickUrl = (baseUrl: string, trackingId: string, href: string) =>
-  `${baseUrl}/api/email/click/${encodeURIComponent(trackingId)}?url=${encodeURIComponent(href)}`;
+const trackedClickUrl = (
+  baseUrl: string,
+  trackingId: string,
+  href: string,
+  tracking?: PolicyUpdateEmailTracking,
+) => {
+  const destination = new URL(href, baseUrl).toString();
+  const trackedUrl = buildTrackedClickUrl(baseUrl, trackingId, destination);
+  tracking?.onTrackedDestination?.(new URL(trackedUrl).searchParams.get("url")!);
+  return trackedUrl;
+};
 
 const trackingOpenPixel = (baseUrl: string, trackingId: string) =>
   `<img src="${escapeHtml(`${baseUrl}/api/email/open/${encodeURIComponent(trackingId)}.png`)}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;opacity:0;" />`;
 
 const trackedHref = (baseUrl: string, href: string, tracking?: PolicyUpdateEmailTracking) =>
-  tracking?.trackLinks && tracking.trackingId ? trackedClickUrl(baseUrl, tracking.trackingId, href) : href;
+  tracking?.trackLinks && tracking.trackingId
+    ? trackedClickUrl(baseUrl, tracking.trackingId, href, tracking)
+    : href;
 
 const absoluteUrl = (baseUrl: string, href: string) => {
   if (/^https?:\/\//i.test(href)) return href;
   return `${baseUrl}${href.startsWith("/") ? "" : "/"}${href}`;
 };
 
-const emailImageSrc = (src: string) => {
+const emailImageSrc = (src: string, materializationId?: string | null) => {
   const clean = src.split("?")[0] || src;
   const match = clean.match(/^\/api\/policy-updates\/([^/]+)\/assets\/([^/]+)$/i);
   if (!match) return src;
-  return `/api/policy-updates/${match[1]}/email-assets/${match[2]}`;
+  if (!materializationId) {
+    throw new Error("Policy update email assets must be materialized before rendering");
+  }
+  return buildPolicyUpdateEmailAssetPath(match[1], match[2], materializationId);
 };
 
 const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
@@ -198,7 +218,10 @@ const renderImageHtml = ({
 }) => {
   const href = policyUpdateImageHref(image, imageHrefFallback);
   const trackedImageHref = href ? trackedHref(baseUrl, href, tracking) : null;
-  const imageSrc = absoluteUrl(baseUrl, emailImageSrc(image.src));
+  const imageSrc = absoluteUrl(
+    baseUrl,
+    emailImageSrc(image.src, tracking?.emailAssetMaterializationId),
+  );
   const width = Number.isFinite(Number(image.width)) && Number(image.width) > 0 ? Number(image.width) : 640;
   const height = Number.isFinite(Number(image.height)) && Number(image.height) > 0 ? Number(image.height) : undefined;
   const maxWidth = isSocial ? 640 : width <= 500 && height && height <= 500 ? 240 : 640;
@@ -308,18 +331,27 @@ export function buildPolicyUpdateEmail(
   tracking?: PolicyUpdateEmailTracking,
 ) {
   const base = normalizeBaseUrl(baseUrl);
+  const trackedDestinations = new Set<string>();
+  const emailTracking = tracking
+    ? {
+        ...tracking,
+        onTrackedDestination: (destination: string) => trackedDestinations.add(destination),
+      }
+    : undefined;
   const sections = normalizePolicyUpdateSectionLayout(update.sections);
   const portalUrl = buildPolicyUpdatePortalUrl(update, base);
   const archiveUrl = `${base}/updates`;
-  const portalLinkHref = trackedHref(base, portalUrl, tracking);
-  const archiveLinkHref = trackedHref(base, archiveUrl, tracking);
-  const coalitionLinkHref = trackedHref(base, base, tracking);
+  const portalLinkHref = trackedHref(base, portalUrl, emailTracking);
+  const archiveLinkHref = trackedHref(base, archiveUrl, emailTracking);
+  const coalitionLinkHref = trackedHref(base, base, emailTracking);
   const unsubscribeUrl =
-    tracking?.includeUnsubscribe && tracking.trackingId
-      ? `${base}/api/email/unsubscribe/${encodeURIComponent(tracking.trackingId)}`
+    emailTracking?.includeUnsubscribe && emailTracking.trackingId
+      ? `${base}/api/email/unsubscribe/${encodeURIComponent(emailTracking.trackingId)}`
       : null;
   const openPixel =
-    tracking?.includeOpenPixel && tracking.trackingId ? trackingOpenPixel(base, tracking.trackingId) : "";
+    emailTracking?.includeOpenPixel && emailTracking.trackingId
+      ? trackingOpenPixel(base, emailTracking.trackingId)
+      : "";
   const name = getUserGreetingName(recipient);
   const subject = update.emailSubject;
   const intro = policyUpdateEmailIntro(update);
@@ -372,7 +404,7 @@ export function buildPolicyUpdateEmail(
                 </table>
               </td>
             </tr>
-            ${sections.map((section) => renderSectionHtml(section, base, tracking)).join("")}
+            ${sections.map((section) => renderSectionHtml(section, base, emailTracking)).join("")}
             <tr>
               <td style="padding:0 30px 26px;">
                 ${renderForwardedEmailCoalitionCta({ portalUrl: base, href: coalitionLinkHref })}
@@ -422,5 +454,13 @@ export function buildPolicyUpdateEmail(
     unsubscribeUrl ? `Unsubscribe: ${unsubscribeUrl}` : "To stop receiving member updates, contact admin@pgpz.org.",
   ].join("\n");
 
-  return { subject, html, text, portalUrl, archiveUrl };
+  return {
+    subject,
+    html,
+    text,
+    portalUrl,
+    archiveUrl,
+    unsubscribeUrl,
+    trackedDestinations: [...trackedDestinations],
+  };
 }

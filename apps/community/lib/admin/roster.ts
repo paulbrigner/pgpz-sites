@@ -1,5 +1,10 @@
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
+import {
+  collectAccountLifecycleArtifacts,
+  type DynamoRecordKey,
+  updateAppAndBetterAuthUserEmail,
+} from "@/lib/better-auth-user-email";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
 
 type RawUser = {
@@ -35,6 +40,7 @@ type RawUser = {
   manualApprovalRequestedAt?: string | null;
   manualApprovalApprovedAt?: string | null;
   manualApprovalApprovedBy?: string | null;
+  invitationTokenHash?: string | null;
   adminNotes?: string | null;
   adminNotesUpdatedAt?: string | null;
   adminNotesUpdatedBy?: string | null;
@@ -156,6 +162,13 @@ const userKey = (userId: string) => ({ pk: `USER#${userId}`, sk: `USER#${userId}
 
 const confirmationTarget = (user: RawUser) => textOrNull(user.email) || textOrNull(user.id) || "";
 
+const outstandingInvitationKey = (user: RawUser): DynamoRecordKey | null => {
+  const tokenHash = textOrNull(user.invitationTokenHash);
+  return tokenHash
+    ? { pk: `INVITATION#${tokenHash}`, sk: `INVITATION#${tokenHash}` }
+    : null;
+};
+
 async function findUserByEmail(email: string) {
   const res = await documentClient.query({
     TableName: TABLE_NAME,
@@ -181,6 +194,45 @@ const assertAnyConfirmation = (confirmation: unknown, expected: string[]) => {
   }
 };
 
+const uniqueKeys = (keys: DynamoRecordKey[]) =>
+  [...new Map(keys.map((key) => [`${key.pk}\u0000${key.sk}`, key])).values()];
+
+async function deleteKeysInBatches(keys: DynamoRecordKey[]) {
+  for (let index = 0; index < keys.length; index += 25) {
+    let pending = keys.slice(index, index + 25).map((key) => ({ DeleteRequest: { Key: key } }));
+    for (let attempt = 0; pending.length && attempt < 6; attempt += 1) {
+      const result = await documentClient.batchWrite({
+        RequestItems: { [TABLE_NAME]: pending },
+      });
+      pending = (result.UnprocessedItems?.[TABLE_NAME] || []) as typeof pending;
+    }
+    if (pending.length) {
+      throw new Error("DynamoDB did not complete account cleanup. Retry the action.");
+    }
+  }
+}
+
+const revocationDeletes = (keys: DynamoRecordKey[]) =>
+  uniqueKeys(keys).map((key) => ({ Delete: { TableName: TABLE_NAME, Key: key } }));
+
+const lifecycleRemoveExpression = [
+  "membershipProvider",
+  "membershipVerifiedAt",
+  "membershipProofPostUrl",
+  "membershipProofPostId",
+  "membershipProofHandle",
+  "proofRetentionPolicy",
+  "manualApprovalRequestedAt",
+  "manualApprovalApprovedAt",
+  "manualApprovalApprovedBy",
+  "invitationStatus",
+  "invitationTokenHash",
+  "invitationTokenCreatedAt",
+  "invitationTokenCreatedBy",
+  "invitationAcceptedAt",
+  "invitationAcceptedVia",
+].join(", ");
+
 async function getUserForAdminAction(userId: string) {
   const trimmedUserId = userId.trim();
   if (!trimmedUserId) throw new AdminMemberActionError("User ID is required.", 400);
@@ -188,6 +240,7 @@ async function getUserForAdminAction(userId: string) {
   const res = await documentClient.get({
     TableName: TABLE_NAME,
     Key: userKey(trimmedUserId),
+    ConsistentRead: true,
   });
 
   const user = res.Item as RawUser | undefined;
@@ -307,34 +360,50 @@ export async function updateAdminMemberProfile({
   const linkedinUrl = normalizeLinkedinUrl(profile.linkedinUrl);
   const name = `${firstName} ${lastName}`.trim();
   const now = new Date().toISOString();
-  const emailAuditExpression = emailChanged
-    ? ", adminEmailUpdatedAt = :now, adminEmailUpdatedBy = :adminUserId, previousEmail = :previousEmail"
-    : "";
 
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` },
-    UpdateExpression:
-      `SET email = :email, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk, firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId${emailAuditExpression}`,
-    ConditionExpression: "attribute_exists(#pk)",
-    ExpressionAttributeNames: {
-      "#pk": "pk",
-      "#name": "name",
-    },
-    ExpressionAttributeValues: {
-      ":email": email,
-      ":gsi1pk": `USER#${email}`,
-      ":gsi1sk": `USER#${email}`,
-      ":firstName": firstName,
-      ":lastName": lastName,
-      ":name": name,
-      ":xHandle": xHandle || null,
-      ":linkedinUrl": linkedinUrl || null,
-      ":now": now,
-      ":adminUserId": adminUserId,
-      ...(emailChanged ? { ":previousEmail": textOrNull(user.email) } : {}),
-    },
-  });
+  if (emailChanged) {
+    await updateAppAndBetterAuthUserEmail({
+      appUserId: trimmedUserId,
+      oldEmail: normalizeEmail(user.email),
+      newEmail: email,
+      appUserAttributes: {
+        firstName,
+        lastName,
+        name,
+        xHandle: xHandle || null,
+        linkedinUrl: linkedinUrl || null,
+        adminProfileUpdatedAt: now,
+        adminProfileUpdatedBy: adminUserId,
+        adminEmailUpdatedAt: now,
+        adminEmailUpdatedBy: adminUserId,
+        previousEmail: textOrNull(user.email),
+      },
+    });
+  } else {
+    await documentClient.update({
+      TableName: TABLE_NAME,
+      Key: { pk: `USER#${trimmedUserId}`, sk: `USER#${trimmedUserId}` },
+      UpdateExpression:
+        "SET email = :email, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk, firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now, adminProfileUpdatedAt = :now, adminProfileUpdatedBy = :adminUserId",
+      ConditionExpression: "attribute_exists(#pk)",
+      ExpressionAttributeNames: {
+        "#pk": "pk",
+        "#name": "name",
+      },
+      ExpressionAttributeValues: {
+        ":email": email,
+        ":gsi1pk": `USER#${email}`,
+        ":gsi1sk": `USER#${email}`,
+        ":firstName": firstName,
+        ":lastName": lastName,
+        ":name": name,
+        ":xHandle": xHandle || null,
+        ":linkedinUrl": linkedinUrl || null,
+        ":now": now,
+        ":adminUserId": adminUserId,
+      },
+    });
+  }
 
   return {
     ok: true,
@@ -389,37 +458,65 @@ export async function updateAdminMemberAdminAccess({
   if (!target) throw new AdminMemberActionError("User not found.", 404);
   assertConfirmation(confirmation, `${isAdmin ? "MAKE ADMIN" : "REMOVE ADMIN"} ${target}`);
 
+  let alternativeActiveAdmin: RawUser | null = null;
   if (!isAdmin) {
     const users = await scanUsers();
-    const activeAdminCount = users.filter(
+    alternativeActiveAdmin = users.find(
       (candidate) =>
+        !!candidate.id &&
+        candidate.id !== user.id &&
         candidate.isAdmin === true &&
         candidate.accountStatus !== "deactivated" &&
         !candidate.deactivatedAt,
-    ).length;
-    if (activeAdminCount <= 1) {
+    ) || null;
+    if (!alternativeActiveAdmin?.id) {
       throw new AdminMemberActionError("At least one active administrator is required.", 409);
     }
   }
 
   const now = new Date().toISOString();
-  try {
-    await documentClient.update({
-      TableName: TABLE_NAME,
-      Key: userKey(user.id!),
-      UpdateExpression:
-        "SET isAdmin = :isAdmin, adminAccessUpdatedAt = :now, adminAccessUpdatedBy = :adminUserId, updatedAt = :now",
-      ConditionExpression: "attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :currentIsAdmin)",
-      ExpressionAttributeNames: { "#pk": "pk" },
-      ExpressionAttributeValues: {
-        ":isAdmin": isAdmin,
-        ":currentIsAdmin": currentIsAdmin,
-        ":now": now,
-        ":adminUserId": adminUserId,
+  const targetUpdate = {
+    TableName: TABLE_NAME,
+    Key: userKey(user.id!),
+    UpdateExpression:
+      "SET isAdmin = :isAdmin, adminAccessUpdatedAt = :now, adminAccessUpdatedBy = :adminUserId, updatedAt = :now",
+    ConditionExpression:
+      `attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :currentIsAdmin)${isAdmin ? " AND (attribute_not_exists(#accountStatus) OR #accountStatus = :activeAccount) AND attribute_not_exists(#deactivatedAt)" : ""}`,
+    ExpressionAttributeNames: {
+      "#pk": "pk",
+      ...(isAdmin ? { "#accountStatus": "accountStatus", "#deactivatedAt": "deactivatedAt" } : {}),
+    },
+    ExpressionAttributeValues: {
+      ":isAdmin": isAdmin,
+      ":currentIsAdmin": currentIsAdmin,
+      ":now": now,
+      ":adminUserId": adminUserId,
+      ...(isAdmin ? { ":activeAccount": "active" } : {}),
+    },
+  };
+  const transactItems: any[] = [];
+  if (alternativeActiveAdmin?.id) {
+    transactItems.push({
+      ConditionCheck: {
+        TableName: TABLE_NAME,
+        Key: userKey(alternativeActiveAdmin.id),
+        ConditionExpression:
+          "attribute_exists(#pk) AND isAdmin = :isAdmin AND (attribute_not_exists(#accountStatus) OR #accountStatus = :activeAccount) AND attribute_not_exists(#deactivatedAt)",
+        ExpressionAttributeNames: {
+          "#pk": "pk",
+          "#accountStatus": "accountStatus",
+          "#deactivatedAt": "deactivatedAt",
+        },
+        ExpressionAttributeValues: { ":isAdmin": true, ":activeAccount": "active" },
       },
     });
+  }
+  transactItems.push({ Update: targetUpdate });
+
+  try {
+    await documentClient.transactWrite({ TransactItems: transactItems });
   } catch (err: any) {
-    if (err?.name === "ConditionalCheckFailedException") {
+    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
       throw new AdminMemberActionError("Administrator access changed. Refresh and try again.", 409);
     }
     throw err;
@@ -488,20 +585,52 @@ export async function deactivateAdminMember({
   assertAnyConfirmation(confirmation, ["DEACTIVATE", `DEACTIVATE ${target}`]);
 
   const now = new Date().toISOString();
-  await documentClient.update({
+  const artifacts = await collectAccountLifecycleArtifacts({
+    appUserId: user.id!,
+    email: normalizeEmail(user.email),
+  });
+  const update = {
     TableName: TABLE_NAME,
     Key: userKey(user.id!),
     UpdateExpression:
-      "SET accountStatus = :accountStatus, deactivatedAt = :now, deactivatedBy = :adminUserId, membershipStatus = :membershipStatus, emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now",
+      `SET accountStatus = :accountStatus, deactivatedAt = :now, deactivatedBy = :adminUserId, membershipStatus = :membershipStatus, manualApprovalStatus = :manualNone, emailSuppressed = :suppressed, emailSuppressedAt = :now, emailSuppressedReason = :reason, emailSuppressedBy = :adminUserId, updatedAt = :now REMOVE ${lifecycleRemoveExpression}`,
+    ConditionExpression:
+      "attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :notAdmin)",
+    ExpressionAttributeNames: { "#pk": "pk" },
     ExpressionAttributeValues: {
       ":accountStatus": "deactivated",
       ":now": now,
       ":adminUserId": adminUserId,
       ":membershipStatus": "none",
+      ":manualNone": "none",
       ":suppressed": true,
       ":reason": "account_deactivated",
+      ":notAdmin": false,
     },
-  });
+  };
+
+  const invitationKey = outstandingInvitationKey(user);
+  const revocableKeys = invitationKey
+    ? [...artifacts.revocableKeys, invitationKey]
+    : artifacts.revocableKeys;
+  const deletes = revocationDeletes(revocableKeys);
+  try {
+    if (deletes.length <= 99) {
+      await documentClient.transactWrite({
+        TransactItems: [{ Update: update }, ...deletes],
+      });
+    } else {
+      // The account state changes first so capability checks block access even
+      // if an unusually large cleanup must be retried.
+      await documentClient.update(update);
+      await deleteKeysInBatches(revocableKeys);
+    }
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
+      throw new AdminMemberActionError("This account changed. Refresh and try again.", 409);
+    }
+    throw err;
+  }
 
   return {
     ok: true,
@@ -514,6 +643,90 @@ export async function deactivateAdminMember({
     emailSuppressedAt: now,
     emailSuppressedReason: "account_deactivated",
     emailSuppressedBy: adminUserId,
+    revokedSessionCount: artifacts.sessionKeys.length,
+    revokedInvitationCount: uniqueKeys([
+      ...artifacts.invitationKeys,
+      ...(invitationKey ? [invitationKey] : []),
+    ]).length,
+  };
+}
+
+export async function reactivateAdminMember({
+  userId,
+  adminUserId,
+  confirmation,
+}: {
+  userId: string;
+  adminUserId: string | null;
+  confirmation: string;
+}) {
+  const user = await getUserForAdminAction(userId);
+  assertNonAdminDestructiveTarget(user, adminUserId);
+  const target = confirmationTarget(user);
+  if (!target) throw new AdminMemberActionError("User not found.", 404);
+  assertConfirmation(confirmation, `REACTIVATE ${target}`);
+  if (user.accountStatus !== "deactivated" && !user.deactivatedAt) {
+    throw new AdminMemberActionError("This account is already active.", 409);
+  }
+
+  const artifacts = await collectAccountLifecycleArtifacts({
+    appUserId: user.id!,
+    email: normalizeEmail(user.email),
+  });
+  const now = new Date().toISOString();
+  const update = {
+    TableName: TABLE_NAME,
+    Key: userKey(user.id!),
+    UpdateExpression:
+      `SET accountStatus = :active, membershipStatus = :membershipNone, manualApprovalStatus = :manualNone, emailSuppressed = :notSuppressed, reactivatedAt = :now, reactivatedBy = :adminUserId, updatedAt = :now REMOVE deactivatedAt, deactivatedBy, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, ${lifecycleRemoveExpression}`,
+    ConditionExpression:
+      "attribute_exists(#pk) AND (#accountStatus = :deactivated OR attribute_exists(#deactivatedAt)) AND (attribute_not_exists(isAdmin) OR isAdmin = :notAdmin)",
+    ExpressionAttributeNames: {
+      "#pk": "pk",
+      "#accountStatus": "accountStatus",
+      "#deactivatedAt": "deactivatedAt",
+    },
+    ExpressionAttributeValues: {
+      ":active": "active",
+      ":deactivated": "deactivated",
+      ":membershipNone": "none",
+      ":manualNone": "none",
+      ":notSuppressed": false,
+      ":notAdmin": false,
+      ":now": now,
+      ":adminUserId": adminUserId,
+    },
+  };
+
+  const invitationKey = outstandingInvitationKey(user);
+  const revocableKeys = invitationKey
+    ? [...artifacts.revocableKeys, invitationKey]
+    : artifacts.revocableKeys;
+  const deletes = revocationDeletes(revocableKeys);
+  try {
+    if (deletes.length <= 99) {
+      await documentClient.transactWrite({ TransactItems: [...deletes, { Update: update }] });
+    } else {
+      // Cleanup happens while the account is still deactivated; only then is
+      // the account made sign-in eligible again.
+      await deleteKeysInBatches(revocableKeys);
+      await documentClient.update(update);
+    }
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
+      throw new AdminMemberActionError("This account changed. Refresh and try again.", 409);
+    }
+    throw err;
+  }
+
+  return {
+    ok: true,
+    userId: user.id!,
+    accountStatus: "active" as const,
+    membershipStatus: "none" as const,
+    manualApprovalStatus: "none" as const,
+    reactivatedAt: now,
+    reactivatedBy: adminUserId,
   };
 }
 
@@ -535,7 +748,7 @@ export async function deleteDeactivatedAdminMember({
     throw new AdminMemberActionError("Deactivate this user before deleting them.", 409);
   }
 
-  const items: Array<{ pk: string; sk: string }> = [];
+  const appItems: DynamoRecordKey[] = [];
   let ExclusiveStartKey: Record<string, any> | undefined;
   do {
     const res = await documentClient.query({
@@ -547,26 +760,96 @@ export async function deleteDeactivatedAdminMember({
     });
     for (const item of res.Items || []) {
       if (typeof item.pk === "string" && typeof item.sk === "string") {
-        items.push({ pk: item.pk, sk: item.sk });
+        appItems.push({ pk: item.pk, sk: item.sk });
       }
     }
     ExclusiveStartKey = res.LastEvaluatedKey as any;
   } while (ExclusiveStartKey);
 
-  for (let index = 0; index < items.length; index += 25) {
-    await documentClient.batchWrite({
-      RequestItems: {
-        [TABLE_NAME]: items.slice(index, index + 25).map((key) => ({
-          DeleteRequest: { Key: key },
-        })),
+  const rootKey = userKey(user.id!);
+  let artifacts = await collectAccountLifecycleArtifacts({
+    appUserId: user.id!,
+    email: normalizeEmail(user.email),
+  });
+  const appDependents = appItems.filter(
+    (key) => key.pk !== rootKey.pk || key.sk !== rootKey.sk,
+  );
+  const deletedDependentKeys = new Set<string>();
+  const deleteDependents = async (keys: DynamoRecordKey[]) => {
+    const unique = uniqueKeys(keys);
+    await deleteKeysInBatches(unique);
+    for (const key of unique) deletedDependentKeys.add(`${key.pk}\u0000${key.sk}`);
+  };
+  const invitationKey = outstandingInvitationKey(user);
+  await deleteDependents([
+    ...appDependents,
+    ...artifacts.deletableDependentKeys,
+    ...(invitationKey ? [invitationKey] : []),
+  ]);
+
+  // Re-read before deleting the identity roots. If cleanup raced an in-flight
+  // auth write, retry its dependents while the application account is still
+  // deactivated and therefore cannot authorize a session.
+  for (let pass = 0; pass < 2; pass += 1) {
+    artifacts = await collectAccountLifecycleArtifacts({
+      appUserId: user.id!,
+      email: normalizeEmail(user.email),
+    });
+    if (!artifacts.deletableDependentKeys.length) break;
+    await deleteDependents(artifacts.deletableDependentKeys);
+  }
+  artifacts = await collectAccountLifecycleArtifacts({
+    appUserId: user.id!,
+    email: normalizeEmail(user.email),
+  });
+  if (artifacts.deletableDependentKeys.length) {
+    throw new Error("Account dependencies are still changing. Retry deletion.");
+  }
+
+  const finalDeletes: any[] = [
+    {
+      Delete: {
+        TableName: TABLE_NAME,
+        Key: rootKey,
+        ConditionExpression:
+          "attribute_exists(#pk) AND (#accountStatus = :deactivated OR attribute_exists(#deactivatedAt)) AND (attribute_not_exists(isAdmin) OR isAdmin = :notAdmin)",
+        ExpressionAttributeNames: {
+          "#pk": "pk",
+          "#accountStatus": "accountStatus",
+          "#deactivatedAt": "deactivatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":deactivated": "deactivated",
+          ":notAdmin": false,
+        },
+      },
+    },
+  ];
+  if (artifacts.betterAuthUserKey) {
+    finalDeletes.push({
+      Delete: {
+        TableName: TABLE_NAME,
+        Key: artifacts.betterAuthUserKey,
+        ConditionExpression: "attribute_exists(#pk) AND #email = :email",
+        ExpressionAttributeNames: { "#pk": "pk", "#email": "email" },
+        ExpressionAttributeValues: { ":email": normalizeEmail(user.email) },
       },
     });
+  }
+
+  try {
+    await documentClient.transactWrite({ TransactItems: finalDeletes });
+  } catch (err: any) {
+    if (err?.name === "ConditionalCheckFailedException" || err?.name === "TransactionCanceledException") {
+      throw new AdminMemberActionError("This account changed. Refresh and try again.", 409);
+    }
+    throw err;
   }
 
   return {
     ok: true,
     userId: user.id!,
-    deletedItemCount: items.length,
+    deletedItemCount: deletedDependentKeys.size + finalDeletes.length,
   };
 }
 

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { recordNewsletterUnsubscribe } from "@/lib/admin/email-tracking";
+import {
+  getNewsletterTrackingRecord,
+  recordNewsletterUnsubscribe,
+} from "@/lib/admin/email-tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +10,7 @@ type Props = {
   params: Promise<{ trackingId: string }>;
 };
 
-const htmlPage = (title: string, body: string) => `<!doctype html>
+const htmlPage = (title: string, body: string, confirm = false) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -50,6 +53,17 @@ const htmlPage = (title: string, body: string) => `<!doctype html>
         color: #8a5a00;
         font-weight: 700;
       }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        background: #f5a800;
+        color: #1e1e1e;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 800;
+        padding: 12px 18px;
+      }
     </style>
   </head>
   <body>
@@ -57,12 +71,59 @@ const htmlPage = (title: string, body: string) => `<!doctype html>
       <div class="eyebrow">PGPZ Community</div>
       <h1>${title}</h1>
       <p>${body}</p>
+      ${
+        confirm
+          ? '<form method="post"><button type="submit" name="confirm" value="unsubscribe">Confirm unsubscribe</button></form>'
+          : ""
+      }
       <p><a href="https://community.pgpz.org">Return to PGPZ Community</a></p>
     </main>
   </body>
 </html>`;
 
 export async function GET(_request: NextRequest, { params }: Props) {
+  const { trackingId } = await params;
+  const tracking = await getNewsletterTrackingRecord(trackingId).catch((err) => {
+    console.error("Newsletter unsubscribe lookup failed", err);
+    return null;
+  });
+
+  if (!tracking) {
+    return new NextResponse(
+      htmlPage(
+        "Unsubscribe link not found",
+        "We could not find this unsubscribe link. Please contact admin@pgpz.org and we will help.",
+      ),
+      {
+        status: 404,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      },
+    );
+  }
+
+  const alreadyUnsubscribed = !!tracking.unsubscribedAt;
+  return new NextResponse(
+    htmlPage(
+      alreadyUnsubscribed ? "Already unsubscribed" : "Confirm unsubscribe",
+      alreadyUnsubscribed
+        ? "This email address is already suppressed for future PGPZ Community member emails. Your community account and member access are unchanged."
+        : "Confirm that you want to stop future PGPZ Community member emails. Your community account and member access will remain unchanged.",
+      !alreadyUnsubscribed,
+    ),
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    },
+  );
+}
+
+export async function POST(request: NextRequest, { params }: Props) {
+  const body = new URLSearchParams(await request.text());
+  const isOneClick = body.get("List-Unsubscribe") === "One-Click";
+  const isBrowserConfirmation = body.get("confirm") === "unsubscribe";
+  if (!isOneClick && !isBrowserConfirmation) {
+    return NextResponse.json({ error: "Invalid unsubscribe confirmation" }, { status: 400 });
+  }
+
   const { trackingId } = await params;
   const tracking = await recordNewsletterUnsubscribe(trackingId).catch((err) => {
     console.error("Newsletter unsubscribe tracking failed", err);

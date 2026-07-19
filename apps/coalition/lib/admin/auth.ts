@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { canAccessAdminFeatures } from "@pgpz/core";
 import { resolveAppSession, type AppSession } from "@/lib/app-session";
 
 export class AdminAccessError extends Error {
@@ -11,7 +12,7 @@ export class AdminAccessError extends Error {
 
 export async function getAdminSession(): Promise<AppSession | null> {
   const session = await resolveAppSession();
-  if (!session?.user?.isAdmin) return null;
+  if (!canAccessAdminFeatures(session?.user)) return null;
   return session;
 }
 
@@ -24,5 +25,5 @@ export async function requireAdminSession(): Promise<AppSession> {
 }
 
 export function isAdminSession(session: AppSession | null | undefined): boolean {
-  return !!session?.user?.isAdmin;
+  return canAccessAdminFeatures(session?.user);
 }

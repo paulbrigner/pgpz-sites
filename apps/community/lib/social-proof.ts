@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { isAccountActive } from "@pgpz/core";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   MEMBERSHIP_PROOF_RETENTION_POLICY,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/config";
 
 export type MembershipStatus = "active" | "none";
+type MembershipActivationState = MembershipStatus | "deactivated";
 
 export type SocialProofRecord = {
   userId: string;
@@ -182,6 +184,7 @@ const buildSuggestedPost = (challenge: string) =>
 
 export async function createXChallenge(userId: string) {
   if (!userId) throw new SocialProofError("Unauthorized", 401);
+  await assertUserCanActivateMembership(userId);
 
   const now = new Date();
   const existing = await getLatestPendingChallenge(userId);
@@ -477,19 +480,23 @@ async function searchXPostsForChallenges(challenges: string[]): Promise<XSearchC
   return candidates;
 }
 
-async function getUserMembershipStatus(userId: string): Promise<MembershipStatus | null> {
+async function getUserMembershipStatus(userId: string): Promise<MembershipActivationState | null> {
   const user = await documentClient.get({
     TableName: TABLE_NAME,
     Key: userKey(userId),
-    ProjectionExpression: "membershipStatus",
+    ProjectionExpression: "membershipStatus, accountStatus, deactivatedAt",
   });
   if (!user.Item) return null;
+  if (!isAccountActive(user.Item)) return "deactivated";
   return user.Item.membershipStatus === "active" ? "active" : "none";
 }
 
 async function assertUserCanActivateMembership(userId: string) {
   const membershipStatus = await getUserMembershipStatus(userId);
   if (membershipStatus === null) throw new SocialProofError("User not found.", 404);
+  if (membershipStatus === "deactivated") {
+    throw new SocialProofError("This account is deactivated.", 409);
+  }
   if (membershipStatus === "active") {
     throw new SocialProofError("Membership is already active.", 409);
   }
@@ -634,10 +641,15 @@ async function verifyXProofCandidate({
             UpdateExpression:
               "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :verifiedAt, membershipProofPostUrl = :postUrl, membershipProofPostId = :postId, membershipProofHandle = :handle, xHandle = :handle, xProfileUrl = :profileUrl, proofRetentionPolicy = :policy, manualApprovalStatus = :manualNone, manualApprovalUpdatedAt = :verifiedAt",
             ConditionExpression:
-              "attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active",
-            ExpressionAttributeNames: { "#membershipStatus": "membershipStatus" },
+              "(attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+            ExpressionAttributeNames: {
+              "#membershipStatus": "membershipStatus",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
             ExpressionAttributeValues: {
               ":active": "active",
+              ":deactivated": "deactivated",
               ":provider": "x",
               ":verifiedAt": verifiedAt,
               ":postUrl": canonicalPostUrl,
@@ -828,7 +840,11 @@ async function verifyChallengeFromSearch({
 
 export async function findAndVerifyXProof(userId: string) {
   if (!userId) throw new SocialProofError("Unauthorized", 401);
-  if (await getUserMembershipStatus(userId) === "active") {
+  const membershipStatus = await getUserMembershipStatus(userId);
+  if (membershipStatus === "deactivated") {
+    throw new SocialProofError("This account is deactivated.", 409);
+  }
+  if (membershipStatus === "active") {
     return { status: "already_active" as const, message: "Membership is already active." };
   }
 
@@ -938,11 +954,15 @@ export async function autoVerifyPendingXProofs(options: {
   const eligibleChallenges: ChallengeRecord[] = [];
   for (const challenge of challenges) {
     const membershipStatus = await getUserMembershipStatus(challenge.userId);
-    if (membershipStatus === "active" || membershipStatus === null) {
+    if (membershipStatus === "active" || membershipStatus === "deactivated" || membershipStatus === null) {
       summary.alreadyActive += membershipStatus === "active" ? 1 : 0;
       const status = membershipStatus === "active" ? "already_active" : "error";
-      const message = membershipStatus === "active" ? "Membership is already active." : "User record was not found.";
-      if (membershipStatus === null) summary.errors += 1;
+      const message = membershipStatus === "active"
+        ? "Membership is already active."
+        : membershipStatus === "deactivated"
+          ? "Account is deactivated."
+          : "User record was not found.";
+      if (membershipStatus !== "active") summary.errors += 1;
       await closeChallengeAutoVerify({ challenge, status, message });
       summary.results.push({
         userId: challenge.userId,

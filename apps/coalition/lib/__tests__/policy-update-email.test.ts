@@ -69,6 +69,7 @@ describe("buildPolicyUpdateEmail", () => {
       },
       { email: "paul@example.com", firstName: "Paul" },
       "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
     );
 
     expect(built.html).toContain(
@@ -140,10 +141,11 @@ describe("buildPolicyUpdateEmail", () => {
       },
       { email: "paul@example.com", firstName: "Paul" },
       "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
     );
 
     expect(built.html).toContain(
-      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png"',
+      'src="https://coalition.pgpz.org/api/policy-updates/test-upload/email-assets/x-josh-swihart.png?v=materialization-1&amp;sig=',
     );
     expect(built.html).not.toContain("Embedded X post screenshot from the source memo.");
     expect(built.html).not.toContain("cid:");
@@ -179,6 +181,7 @@ describe("buildPolicyUpdateEmail", () => {
       },
       { email: "paul@example.com", firstName: "Paul" },
       "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
     );
 
     expect(built.html).toContain(">Relevant Posts</h2>");
@@ -215,6 +218,7 @@ describe("buildPolicyUpdateEmail", () => {
       },
       { email: "paul@example.com", firstName: "Paul" },
       "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
     );
 
     expect(built.html).toContain('href="https://x.com/SummerMersinger/status/2069562907621536034"');
@@ -235,6 +239,7 @@ describe("buildPolicyUpdateEmail", () => {
         trackLinks: true,
         includeOpenPixel: true,
         includeUnsubscribe: true,
+        emailAssetMaterializationId: "materialization-1",
       },
     );
 
@@ -242,7 +247,11 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.html).toContain(
       "/api/email/click/policy-track-123?url=https%3A%2F%2Fcoalition.pgpz.org%2Fupdates%2F2026-06-08-weekly-policy-memo",
     );
+    expect(built.html).toContain("&amp;sig=");
     expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
     expect(built.text).toContain("Unsubscribe: https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123");
+    expect(built.unsubscribeUrl).toBe(
+      "https://coalition.pgpz.org/api/email/unsubscribe/policy-track-123",
+    );
   });
 });

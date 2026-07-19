@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canAccessMemberFeatures } from "@pgpz/core";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - nodemailer types not installed
 import nodemailer from "nodemailer";
@@ -13,7 +14,6 @@ import {
 } from "@/lib/config";
 import { resolveAppSession } from "@/lib/app-session";
 import { recordEmailEvent } from "@/lib/admin/email-log";
-import { getUserMembershipStatus } from "@/lib/membership-status";
 
 export const dynamic = "force-dynamic";
 
@@ -71,8 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sign in before sharing a resource." }, { status: 401 });
   }
 
-  const membership = await getUserMembershipStatus(userId);
-  if (membership.membershipStatus !== "active") {
+  if (!canAccessMemberFeatures(session?.user)) {
     return NextResponse.json({ error: "Active coalition membership is required." }, { status: 403 });
   }
 

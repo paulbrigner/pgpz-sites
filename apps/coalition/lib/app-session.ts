@@ -1,5 +1,6 @@
 import "server-only";
 
+import { accountCapabilitiesFor, type AccountCapabilities } from "@pgpz/core";
 import { headers } from "next/headers";
 import { auth } from "@/lib/better-auth";
 import { withTrustedBetterAuthClientIp } from "@/lib/better-auth-client-ip";
@@ -13,6 +14,7 @@ export type AuthSessionProvider = "better-auth";
 
 export type AppSession = {
   user: ReturnType<typeof appSessionUserFromRecord>;
+  capabilities: AccountCapabilities;
   authUserId: string;
   authProvider: AuthSessionProvider;
 };
@@ -32,9 +34,13 @@ export async function resolveAppSession(requestHeaders?: Headers): Promise<AppSe
     preferredUserId: betterAuthUserId,
     name: typeof betterAuthSession?.user?.name === "string" ? betterAuthSession.user.name : null,
   });
+  const user = appSessionUserFromRecord(appUser);
+  const capabilities = accountCapabilitiesFor(user);
+  if (!capabilities.accountActive) return null;
 
   return {
-    user: appSessionUserFromRecord(appUser),
+    user,
+    capabilities,
     authUserId: betterAuthUserId,
     authProvider: "better-auth",
   };

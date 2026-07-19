@@ -17,6 +17,7 @@ import {
   saveNewsletterDraft,
 } from "@/lib/admin/newsletters";
 import {
+  bindNewsletterTrackingDestinations,
   createNewsletterTrackingRecord,
   markNewsletterTrackingSent,
 } from "@/lib/admin/email-tracking";
@@ -24,6 +25,7 @@ import { listPolicyUpdateRecipients, type PolicyUpdateRecipient } from "@/lib/ad
 import { findUserProfileByEmail, getUserProfileDisplayName } from "@/lib/admin/user-profile";
 import { recordEmailEvent } from "@/lib/admin/email-log";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
+import { listUnsubscribeHeaders } from "@/lib/email-link-security";
 import { buildNewsletterEmail } from "@/lib/newsletter-email";
 
 export const dynamic = "force-dynamic";
@@ -153,12 +155,19 @@ async function sendNewsletterSnapshot({
         : undefined,
     );
     try {
+      if (tracking) {
+        await bindNewsletterTrackingDestinations(
+          tracking.trackingId,
+          built.trackedDestinations,
+        );
+      }
       const sendResult = await transporter.sendMail({
         to: recipient.email,
         from: EMAIL_FROM,
         subject: draftSend ? `[Draft] ${built.subject}` : built.subject,
         text: built.text,
         html: built.html,
+        headers: listUnsubscribeHeaders(built.unsubscribeUrl),
       });
       if (tracking) {
         await markNewsletterTrackingSent({
@@ -349,6 +358,7 @@ export async function POST(request: NextRequest) {
         subject: `[Draft] ${built.subject}`,
         text: built.text,
         html: built.html,
+        headers: listUnsubscribeHeaders(built.unsubscribeUrl),
       });
 
       await recordEmailEvent({

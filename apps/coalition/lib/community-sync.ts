@@ -256,11 +256,14 @@ async function updateCommunityMember({
   const expressionAttributeNames: Record<string, string> = {
     "#pk": "pk",
     "#name": "name",
+    "#accountStatus": "accountStatus",
+    "#deactivatedAt": "deactivatedAt",
   };
   const expressionAttributeValues: Record<string, any> = {
     ":active": "active",
     ":provider": "coalition_sync",
     ":accountActive": "active",
+    ":deactivated": "deactivated",
     ":manualNone": "none",
     ":verifiedAt": source.membershipVerifiedAt || now,
     ":now": now,
@@ -313,14 +316,29 @@ async function updateCommunityMember({
     expressionAttributeValues[":emailSuppressedBy"] = source.emailSuppressedBy || triggeredBy;
   }
 
-  await documentClient.update({
-    TableName: COMMUNITY_TABLE_NAME,
-    Key: userKey(communityUserId),
-    UpdateExpression: `SET ${setParts.join(", ")}`,
-    ConditionExpression: "attribute_exists(#pk)",
-    ExpressionAttributeNames: expressionAttributeNames,
-    ExpressionAttributeValues: expressionAttributeValues,
-  });
+  try {
+    await documentClient.update({
+      TableName: COMMUNITY_TABLE_NAME,
+      Key: userKey(communityUserId),
+      UpdateExpression: `SET ${setParts.join(", ")}`,
+      ConditionExpression:
+        "attribute_exists(#pk) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
+    });
+  } catch (error: any) {
+    if (error?.name === "ConditionalCheckFailedException") {
+      return result({
+        status: "conflict",
+        source,
+        communityUserId,
+        email,
+        message: "Community member was deactivated during sync; leaving for manual review.",
+        dryRun,
+      });
+    }
+    throw error;
+  }
 
   return result({
     status: alreadyActive ? "already_active" : "updated",

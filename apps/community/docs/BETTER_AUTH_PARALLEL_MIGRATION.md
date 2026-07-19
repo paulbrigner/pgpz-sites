@@ -23,10 +23,10 @@ The single existing GSI cannot simultaneously index session/account ownership an
 - `BETTER_AUTH_SECRET`
 - `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE` (legacy variable name for the shared application table)
-- `EMAIL_TRACKING_SECRET`, or the existing `NEXTAUTH_SECRET` during the compatibility window
+- `EMAIL_TRACKING_SECRET` (required in production)
 - the existing AWS, SMTP, and site URL variables
 
-`NEXTAUTH_URL` and `NEXTAUTH_SECRET` may remain temporarily as inert compatibility values. Email tracking continues to prefer `EMAIL_TRACKING_SECRET`, then the existing `NEXTAUTH_SECRET`, so fingerprint continuity is preserved. Before deleting `NEXTAUTH_SECRET`, set `EMAIL_TRACKING_SECRET` to the same value.
+`NEXTAUTH_URL` and `NEXTAUTH_SECRET` may remain temporarily as inert compatibility values. Production email tracking does not fall back to either authentication secret; configure a stable `EMAIL_TRACKING_SECRET` explicitly before removing legacy variables.
 
 ## Pre-deployment criteria
 
@@ -37,7 +37,7 @@ All criteria must pass in both applications:
 3. Durable rate-limit tests prove that separate storage instances share one atomic counter and enforce the configured maximum.
 4. The DynamoDB table and `GSI1` are `ACTIVE`, and TTL on `expires` is `ENABLED`.
 5. Amplify has non-default Better Auth URL, secret, and trusted-origin values for each canonical domain.
-6. `EMAIL_TRACKING_SECRET` matches the prior `NEXTAUTH_SECRET`, or `NEXTAUTH_SECRET` remains available to the build, so email-open fingerprints do not reset.
+6. `EMAIL_TRACKING_SECRET` is configured explicitly and remains stable so signed links, email assets, and email-open fingerprints continue to validate.
 7. Amplify provides a usable client IP; there is no evidence that unrelated visitors collapse into one rate-limit bucket.
 8. A rollback commit is identified before deployment.
 

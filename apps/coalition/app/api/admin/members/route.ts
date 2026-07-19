@@ -7,6 +7,7 @@ import {
   deactivateAdminMember,
   deleteDeactivatedAdminMember,
   optOutAdminMemberEmail,
+  reactivateAdminMember,
   updateAdminMemberAdminAccess,
   updateAdminMemberNotes,
   updateAdminMemberProfile,
@@ -92,6 +93,10 @@ export async function PATCH(request: NextRequest) {
     }
     if (action === "deactivate") {
       const result = await deactivateAdminMember({ userId, adminUserId, confirmation });
+      return NextResponse.json(result);
+    }
+    if (action === "reactivate") {
+      const result = await reactivateAdminMember({ userId, adminUserId, confirmation });
       return NextResponse.json(result);
     }
     if (action === "set_admin") {

@@ -63,6 +63,7 @@ jobs:
       BETTER_AUTH_SECRET: ci-only-better-auth-secret-at-least-32-characters
       BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000
       BETTER_AUTH_URL: http://localhost:3000
+      EMAIL_TRACKING_SECRET: ci-only-email-tracking-secret-at-least-32-characters
       EMAIL_FROM: PGPZ CI <ci@example.invalid>
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       REGION_AWS: us-east-1

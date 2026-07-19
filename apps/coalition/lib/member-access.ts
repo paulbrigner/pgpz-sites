@@ -1,3 +1,4 @@
+import { canAccessMemberFeatures } from "@pgpz/core";
 import { resolveAppSession } from "@/lib/app-session";
 
 export async function getMemberAccess() {
@@ -13,7 +14,7 @@ export async function getMemberAccess() {
     session,
     user,
     authenticated: !!user,
-    isMember: user?.membershipStatus === "active",
+    isMember: canAccessMemberFeatures(user),
     displayName,
   };
 }

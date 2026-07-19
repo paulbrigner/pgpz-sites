@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canAccessMemberFeatures } from "@pgpz/core";
 import { getSignedUrl } from "@/lib/cloudFrontSigner";
 import {
   CLOUDFRONT_DOMAIN,
@@ -24,7 +25,7 @@ export async function GET(
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.membershipStatus !== "active") {
+  if (!canAccessMemberFeatures(session.user)) {
     return NextResponse.json({ error: "Membership required" }, { status: 403 });
   }
 

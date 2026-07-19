@@ -45,6 +45,7 @@ export type UploadedPolicyUpdateRecord = {
   publishedBy: string | null;
   unpublishedOn: string | null;
   unpublishedBy: string | null;
+  publicEmailAssetMaterializationId: string | null;
   keyTakeaways: string[];
   actionItems: string[];
   sections: PolicyUpdateSection[];
@@ -69,6 +70,7 @@ export type SaveUploadedPolicyUpdateInput = Omit<
   | "publishedBy"
   | "unpublishedOn"
   | "unpublishedBy"
+  | "publicEmailAssetMaterializationId"
   | "keyTakeaways"
   | "actionItems"
   | "sections"
@@ -394,6 +396,7 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
     publishedBy: textOrNull(item.publishedBy),
     unpublishedOn: textOrNull(item.unpublishedOn),
     unpublishedBy: textOrNull(item.unpublishedBy),
+    publicEmailAssetMaterializationId: textOrNull(item.publicEmailAssetMaterializationId),
     keyTakeaways: textArrayOrFallback(item.keyTakeaways, defaultContent.keyTakeaways),
     actionItems: textArrayOrFallback(item.actionItems, defaultContent.actionItems),
     sections: sectionArrayOrFallback(item.sections, defaultContent.sections),
@@ -517,6 +520,7 @@ export async function saveUploadedPolicyUpdate(
     publishedBy: input.publishedBy || null,
     unpublishedOn: input.unpublishedOn || null,
     unpublishedBy: input.unpublishedBy || null,
+    publicEmailAssetMaterializationId: null,
     keyTakeaways: input.keyTakeaways?.length ? input.keyTakeaways : defaultContent.keyTakeaways,
     actionItems: input.actionItems?.length ? input.actionItems : defaultContent.actionItems,
     sections: input.sections?.length ? input.sections : defaultContent.sections,
@@ -721,7 +725,11 @@ export async function listPublishedPolicyUpdateRecords() {
     .sort((a, b) => (b.publishedOn || b.uploadedAt).localeCompare(a.publishedOn || a.uploadedAt));
 }
 
-export async function publishUploadedPolicyUpdate(slug: string, adminUserId: string | null) {
+export async function publishUploadedPolicyUpdate(
+  slug: string,
+  adminUserId: string | null,
+  publicEmailAssetMaterializationId: string | null,
+) {
   const record = await getUploadedPolicyUpdateRecord(slug);
   if (!record) return null;
 
@@ -733,12 +741,13 @@ export async function publishUploadedPolicyUpdate(slug: string, adminUserId: str
       sk: `POLICY_UPDATE_UPLOAD#${record.slug}`,
     },
     UpdateExpression:
-      "SET visibilityStatus = :status, publishedOn = :now, publishedBy = :adminUserId, unpublishedOn = :nullValue, unpublishedBy = :nullValue",
+      "SET visibilityStatus = :status, publishedOn = :now, publishedBy = :adminUserId, unpublishedOn = :nullValue, unpublishedBy = :nullValue, publicEmailAssetMaterializationId = :publicEmailAssetMaterializationId",
     ExpressionAttributeValues: {
       ":status": "published",
       ":now": now,
       ":adminUserId": adminUserId,
       ":nullValue": null,
+      ":publicEmailAssetMaterializationId": publicEmailAssetMaterializationId,
     },
   });
 

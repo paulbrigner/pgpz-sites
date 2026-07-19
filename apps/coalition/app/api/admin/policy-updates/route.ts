@@ -20,6 +20,7 @@ import {
   summarizePolicyUpdateEmailStats,
 } from "@/lib/admin/email-log";
 import {
+  bindNewsletterTrackingDestinations,
   createNewsletterTrackingRecord,
   markNewsletterTrackingSent,
 } from "@/lib/admin/email-tracking";
@@ -29,6 +30,8 @@ import {
   getUserProfileDisplayName,
 } from "@/lib/admin/user-profile";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
+import { listUnsubscribeHeaders } from "@/lib/email-link-security";
+import { materializePolicyUpdateEmailAssets } from "@/lib/admin/policy-update-email-assets";
 import {
   createPolicyUpdateUploadSlug,
   deleteDraftUploadedPolicyUpdateRecord,
@@ -746,10 +749,32 @@ export async function POST(request: NextRequest) {
     if (!slug) {
       return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
     }
-    const upload =
-      body.action === "publishUpdate"
-        ? await publishUploadedPolicyUpdate(slug, adminUserId)
-        : await unpublishUploadedPolicyUpdate(slug, adminUserId);
+    let upload;
+    if (body.action === "publishUpdate") {
+      const draft = await getUploadedPolicyUpdateRecord(slug);
+      if (!draft) {
+        return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+      }
+      try {
+        const materialization = await materializePolicyUpdateEmailAssets({
+          upload: draft,
+          purpose: "publish",
+          createdBy: adminUserId,
+        });
+        upload = await publishUploadedPolicyUpdate(
+          slug,
+          adminUserId,
+          materialization?.materializationId || null,
+        );
+      } catch (err: any) {
+        return NextResponse.json(
+          { error: err?.message || "Failed to materialize policy update email assets" },
+          { status: 500 },
+        );
+      }
+    } else {
+      upload = await unpublishUploadedPolicyUpdate(slug, adminUserId);
+    }
     if (!upload) {
       return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
     }
@@ -810,6 +835,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
   }
 
+  let emailAssetMaterializationId: string | null = null;
+  if (uploadedRecord) {
+    try {
+      const materialization = await materializePolicyUpdateEmailAssets({
+        upload: uploadedRecord,
+        purpose: "send",
+        createdBy: adminUserId,
+      });
+      emailAssetMaterializationId = materialization?.materializationId || null;
+    } catch (err: any) {
+      return NextResponse.json(
+        { error: err?.message || "Failed to materialize policy update email assets" },
+        { status: 500 },
+      );
+    }
+  }
+
   const transporter = nodemailer.createTransport(transportConfig);
   const emailType = `policy_update_${update.category}${draftMode ? "_draft" : ""}`;
   const policyUpdateSendRunId = draftMode ? null : randomUUID();
@@ -836,22 +878,30 @@ export async function POST(request: NextRequest) {
         lastName: recipient.lastName,
       },
       SITE_URL,
-      tracking
+      tracking || emailAssetMaterializationId
         ? {
-            trackingId: tracking.trackingId,
-            trackLinks: true,
-            includeOpenPixel: true,
-            includeUnsubscribe: true,
+            trackingId: tracking?.trackingId,
+            trackLinks: !!tracking,
+            includeOpenPixel: !!tracking,
+            includeUnsubscribe: !!tracking,
+            emailAssetMaterializationId,
           }
         : undefined,
     );
     try {
+      if (tracking) {
+        await bindNewsletterTrackingDestinations(
+          tracking.trackingId,
+          built.trackedDestinations,
+        );
+      }
       const sendResult = await transporter.sendMail({
         to: recipient.email,
         from: EMAIL_FROM,
         subject: built.subject,
         text: built.text,
         html: built.html,
+        headers: listUnsubscribeHeaders(built.unsubscribeUrl),
       });
       if (tracking) {
         await markNewsletterTrackingSent({

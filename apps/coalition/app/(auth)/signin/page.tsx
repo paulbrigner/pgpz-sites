@@ -173,7 +173,7 @@ function EmailSignIn({
 
   const isSignup = mode === "signup";
   const showSentState = sentVisible || !!message;
-  const activatedInvite = reason === "invitation-activated";
+  const pendingInvite = reason === "invitation-pending";
   const expiredInvite = reason === "invitation-expired";
   const invalidInvite = reason === "invitation-invalid";
 
@@ -255,15 +255,15 @@ function EmailSignIn({
           <h1 className="text-3xl font-semibold text-[var(--brand-ink)]">
             {isSignup
               ? "Request access with email"
-              : activatedInvite
-                ? "Account activated"
+              : pendingInvite
+                ? "Accept your invitation"
                 : reason === "email-updated"
                   ? "Sign in with your new email"
                   : "Sign in"}
           </h1>
           <p className="text-sm leading-6 text-slate-600">
-            {activatedInvite
-              ? "Your coalition account is active. Use your email to receive a secure sign-in link."
+            {pendingInvite
+              ? "Sign in with the invited email address. You will explicitly accept the invitation from the Coalition home page."
               : "We use email magic links for account access and a short profile to set up your coalition access request."}
           </p>
         </div>
@@ -277,12 +277,12 @@ function EmailSignIn({
           </Alert>
         ) : null}
 
-        {activatedInvite ? (
+        {pendingInvite ? (
           <Alert className="mt-5">
             <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>Account activated</AlertTitle>
+            <AlertTitle>Invitation ready</AlertTitle>
             <AlertDescription>
-              Your coalition membership is active. Send yourself a secure link below to sign in.
+              Signing in does not activate membership. After sign-in, select “Accept invitation” to confirm.
             </AlertDescription>
           </Alert>
         ) : null}

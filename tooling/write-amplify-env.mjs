@@ -44,7 +44,13 @@ const sharedKeys = [
 const applications = {
   community: {
     output: "apps/community/.env.production",
-    required: ["NEXTAUTH_TABLE", "REGION_AWS", "X_BEARER_TOKEN", "EMAIL_FROM"],
+    required: [
+      "NEXTAUTH_TABLE",
+      "REGION_AWS",
+      "X_BEARER_TOKEN",
+      "EMAIL_FROM",
+      "EMAIL_TRACKING_SECRET",
+    ],
     keys: [
       ...sharedKeys,
       "X_BEARER_TOKEN",
@@ -68,7 +74,7 @@ const applications = {
   },
   coalition: {
     output: "apps/coalition/.env.production",
-    required: ["NEXTAUTH_TABLE", "REGION_AWS", "EMAIL_FROM"],
+    required: ["NEXTAUTH_TABLE", "REGION_AWS", "EMAIL_FROM", "EMAIL_TRACKING_SECRET"],
     keys: [
       ...sharedKeys,
       "PGPZ_COMMUNITY_NEXTAUTH_TABLE",
@@ -112,7 +118,7 @@ if (!application) {
   process.exit(2);
 }
 
-const missing = application.required.filter((key) => process.env[key] === undefined);
+const missing = application.required.filter((key) => !process.env[key]?.trim());
 if (missing.length > 0) {
   console.error(
     `Missing required ${applicationName} environment variables: ${missing.join(", ")}`,

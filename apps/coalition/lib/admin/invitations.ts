@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { isAccountActive } from "@pgpz/core";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { SITE_URL } from "@/lib/config";
 import { isValidEmail, normalizeEmail } from "@/lib/admin/email-transport";
@@ -170,12 +171,18 @@ export async function createInvitationActivationLink({
     TableName: TABLE_NAME,
     Key: userKey(id),
     ProjectionExpression:
-      "id, email, membershipStatus, invitationStatus, firstName, lastName, #name",
+      "id, email, membershipStatus, invitationStatus, firstName, lastName, #name, accountStatus, deactivatedAt",
     ExpressionAttributeNames: { "#name": "name" },
   });
   if (!user.Item?.id) throw new InvitationError("Member not found.", 404);
+  if (!isAccountActive(user.Item)) {
+    throw new InvitationError("This account is deactivated.", 409);
+  }
   if (user.Item.membershipStatus === "active") {
     throw new InvitationError("This member is already active.", 409);
+  }
+  if (user.Item.membershipStatus !== "invited") {
+    throw new InvitationError("This member is not eligible for an invitation link.", 409);
   }
 
   const now = new Date().toISOString();
@@ -184,31 +191,58 @@ export async function createInvitationActivationLink({
   const tokenHash = hashToken(token);
   const activationUrl = `${SITE_URL.replace(/\/+$/, "")}/api/invitations/activate?token=${encodeURIComponent(token)}`;
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: {
-      ...invitationKey(tokenHash),
-      type: "INVITATION_TOKEN",
-      tokenHash,
-      userId: id,
-      email: typeof user.Item.email === "string" ? user.Item.email : null,
-      createdAt: now,
-      createdBy: adminUserId || null,
-      expires,
-    },
-  });
-
-  await documentClient.update({
-    TableName: TABLE_NAME,
-    Key: userKey(id),
-    UpdateExpression:
-      "SET invitationStatus = :pending, invitationTokenCreatedAt = :now, invitationTokenCreatedBy = :adminUserId, updatedAt = :now",
-    ExpressionAttributeValues: {
-      ":pending": "pending",
-      ":now": now,
-      ":adminUserId": adminUserId || null,
-    },
-  });
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: {
+              ...invitationKey(tokenHash),
+              type: "INVITATION_TOKEN",
+              tokenHash,
+              userId: id,
+              email: typeof user.Item.email === "string" ? user.Item.email : null,
+              createdAt: now,
+              createdBy: adminUserId || null,
+              expires,
+            },
+            ConditionExpression: "attribute_not_exists(#pk)",
+            ExpressionAttributeNames: { "#pk": "pk" },
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(id),
+            UpdateExpression:
+              "SET invitationStatus = :pending, invitationTokenHash = :tokenHash, invitationTokenCreatedAt = :now, invitationTokenCreatedBy = :adminUserId, updatedAt = :now",
+            ConditionExpression:
+              "attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#membershipStatus": "membershipStatus",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":pending": "pending",
+              ":invited": "invited",
+              ":deactivated": "deactivated",
+              ":tokenHash": tokenHash,
+              ":now": now,
+              ":adminUserId": adminUserId || null,
+            },
+          },
+        },
+      ],
+    });
+  } catch (error: any) {
+    if (error?.name === "TransactionCanceledException") {
+      throw new InvitationError("This member is no longer eligible for an invitation link.", 409);
+    }
+    throw error;
+  }
 
   return {
     activationUrl,
@@ -236,6 +270,14 @@ export async function markInvitationEmailSent({
     Key: userKey(userId),
     UpdateExpression:
       "SET invitationEmailSentAt = :now, invitationEmailSentBy = :adminUserId, invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now",
+    ConditionExpression:
+      "attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+    ExpressionAttributeNames: {
+      "#pk": "pk",
+      "#membershipStatus": "membershipStatus",
+      "#accountStatus": "accountStatus",
+      "#deactivatedAt": "deactivatedAt",
+    },
     ExpressionAttributeValues: {
       ":now": now,
       ":adminUserId": adminUserId || null,
@@ -264,10 +306,10 @@ export async function acceptAuthenticatedInvitation({
     TableName: TABLE_NAME,
     Key: userKey(id),
     ProjectionExpression:
-      "id, email, membershipStatus, invitationStatus, accountStatus, deactivatedAt",
+      "id, email, membershipStatus, invitationStatus, invitationTokenHash, accountStatus, deactivatedAt",
   });
   if (!user.Item?.id) throw new InvitationError("Member not found.", 404);
-  if (user.Item.accountStatus === "deactivated" || user.Item.deactivatedAt) {
+  if (!isAccountActive(user.Item)) {
     throw new InvitationError("This account is deactivated.", 409);
   }
   if (normalizeEmail(user.Item.email) !== normalizedEmail) {
@@ -286,6 +328,9 @@ export async function acceptAuthenticatedInvitation({
   if (user.Item.membershipStatus !== "invited") {
     throw new InvitationError("This account does not have a pending invitation.", 409);
   }
+  if (user.Item.invitationStatus !== "pending") {
+    throw new InvitationError("This invitation is no longer available.", 409);
+  }
 
   const now = new Date().toISOString();
   try {
@@ -293,13 +338,16 @@ export async function acceptAuthenticatedInvitation({
       TableName: TABLE_NAME,
       Key: userKey(id),
       UpdateExpression:
-        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now",
+        "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now REMOVE invitationTokenHash, invitationTokenCreatedAt, invitationTokenCreatedBy",
       ConditionExpression:
-        "attribute_exists(#pk) AND #membershipStatus = :invited AND #email = :email",
+        "attribute_exists(#pk) AND #membershipStatus = :invited AND #invitationStatus = :pending AND #email = :email AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
       ExpressionAttributeNames: {
         "#pk": "pk",
         "#membershipStatus": "membershipStatus",
+        "#invitationStatus": "invitationStatus",
         "#email": "email",
+        "#accountStatus": "accountStatus",
+        "#deactivatedAt": "deactivatedAt",
       },
       ExpressionAttributeValues: {
         ":active": "active",
@@ -308,6 +356,7 @@ export async function acceptAuthenticatedInvitation({
         ":accepted": "accepted",
         ":acceptedVia": "authenticated_session",
         ":email": normalizedEmail,
+        ":deactivated": "deactivated",
         ":now": now,
       },
     });
@@ -316,6 +365,18 @@ export async function acceptAuthenticatedInvitation({
       throw new InvitationError("This invitation is no longer available.", 409);
     }
     throw err;
+  }
+
+  const invitationTokenHash = normalizeText(user.Item.invitationTokenHash);
+  if (invitationTokenHash) {
+    await documentClient.delete({
+      TableName: TABLE_NAME,
+      Key: invitationKey(invitationTokenHash),
+    }).catch((error) => {
+      // Membership is already active and read-only token validation will reject
+      // this record. Keep cross-site sync and the successful response moving.
+      console.error("Failed to remove consumed invitation token", error);
+    });
   }
 
   const communitySync = await syncCoalitionMemberToCommunityById({
@@ -333,7 +394,7 @@ export async function acceptAuthenticatedInvitation({
   };
 }
 
-export async function activateInvitation(token: string) {
+export async function inspectInvitationActivationToken(token: string) {
   const trimmed = token.trim();
   if (!trimmed) throw new InvitationError("Invitation token is required.", 400);
 
@@ -345,50 +406,30 @@ export async function activateInvitation(token: string) {
   const item = tokenRecord.Item as any;
   if (!item?.userId) throw new InvitationError("Invitation link not found.", 404);
   if (typeof item.expires === "number" && item.expires < Math.floor(Date.now() / 1000)) {
-    await documentClient.delete({ TableName: TABLE_NAME, Key: invitationKey(tokenHash) });
     throw new InvitationError("This invitation link has expired.", 410);
   }
 
-  const now = new Date().toISOString();
-  await documentClient.update({
+  const user = await documentClient.get({
     TableName: TABLE_NAME,
     Key: userKey(String(item.userId)),
-    UpdateExpression:
-      "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, updatedAt = :now",
-    ConditionExpression:
-      "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active)",
-    ExpressionAttributeNames: {
-      "#pk": "pk",
-      "#membershipStatus": "membershipStatus",
-    },
-    ExpressionAttributeValues: {
-      ":active": "active",
-      ":provider": "admin_invite",
-      ":accepted": "accepted",
-      ":now": now,
-    },
-  }).catch((err: any) => {
-    if (err?.name === "ConditionalCheckFailedException") {
-      throw new InvitationError("This invitation has already been activated.", 409);
-    }
-    throw err;
+    ProjectionExpression:
+      "id, email, membershipStatus, invitationStatus, invitationTokenHash, accountStatus, deactivatedAt",
   });
-
-  await documentClient.delete({
-    TableName: TABLE_NAME,
-    Key: invitationKey(tokenHash),
-  });
-
-  const communitySync = await syncCoalitionMemberToCommunityById({
-    userId: String(item.userId),
-    triggeredBy: "invitation_activation",
-  });
+  const invitedUser = user.Item;
+  if (!invitedUser?.id || !isAccountActive(invitedUser)) {
+    throw new InvitationError("This invitation is no longer available.", 409);
+  }
+  if (
+    invitedUser.membershipStatus !== "invited" ||
+    invitedUser.invitationStatus !== "pending" ||
+    normalizeEmail(invitedUser.email) !== normalizeEmail(item.email) ||
+    (normalizeText(invitedUser.invitationTokenHash) && invitedUser.invitationTokenHash !== tokenHash)
+  ) {
+    throw new InvitationError("This invitation is no longer available.", 409);
+  }
 
   return {
-    ok: true,
+    status: "ready" as const,
     userId: String(item.userId),
-    email: typeof item.email === "string" ? item.email : null,
-    activatedAt: now,
-    communitySync,
   };
 }

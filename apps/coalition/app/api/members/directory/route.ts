@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canAccessMemberFeatures } from "@pgpz/core";
 import { resolveAppSession } from "@/lib/app-session";
 import { listActiveMemberDirectory } from "@/lib/admin/roster";
 
@@ -10,7 +11,7 @@ export async function GET() {
   if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (user.membershipStatus !== "active") {
+  if (!canAccessMemberFeatures(user)) {
     return NextResponse.json({ error: "Active membership required" }, { status: 403 });
   }
 
