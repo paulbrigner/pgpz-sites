@@ -40,13 +40,17 @@ export async function findAppUserByEmail(email: string): Promise<RawAppUser | nu
   return (res.Items?.[0] as RawAppUser | undefined) || null;
 }
 
-export async function getAppUserById(userId: string): Promise<RawAppUser | null> {
+export async function getAppUserById(
+  userId: string,
+  options: { consistentRead?: boolean } = {},
+): Promise<RawAppUser | null> {
   const trimmedUserId = typeof userId === "string" ? userId.trim() : "";
   if (!trimmedUserId) return null;
 
   const res = await documentClient.get({
     TableName: TABLE_NAME,
     Key: userKey(trimmedUserId),
+    ...(options.consistentRead ? { ConsistentRead: true } : {}),
   });
 
   return (res.Item as RawAppUser | undefined) || null;

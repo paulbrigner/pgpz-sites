@@ -55,15 +55,15 @@
       },
       {
         "path": "app/api/admin/newsletters/route.test.ts",
-        "sha256": "51be0e540d4e87bfb6250f1bd565fb401076e215d6f6d6fa9ee7b38217c79235"
+        "sha256": "dff82f83c9a402e7fdb34cedb34c36526cfd73cc27d56dd9766c63be0e79c580"
       },
       {
         "path": "app/api/admin/newsletters/route.ts",
-        "sha256": "3de973d0327bbb63b17c063356cc0c675740cb4fe2039deee08ce1ebd361ceed"
+        "sha256": "c062ef5bf94abfb5e5afd78fa18d8ecf5386c8f194a3a646be1362fd7100ff63"
       },
       {
         "path": "app/api/admin/policy-updates/route.ts",
-        "sha256": "110d44850a9939ad6753ff90ffe29d8d1cd6f318fb2b5c078695aed1fdca56b0"
+        "sha256": "162b418bc0cd8899826cd26a86c42194c2f849904cbf2a82749d509b28de17ca"
       },
       {
         "path": "app/api/admin/users/adminize/route.ts",
@@ -87,11 +87,19 @@
       },
       {
         "path": "app/api/content/[file]/route.ts",
-        "sha256": "1e7a50bbd404a4b57c183b890b6f811912950bcd6ade8b7b07c7e9fa8ee5d813"
+        "sha256": "59264149746d8d3ee3355101cf4bc300adbf1e6c709ebde738321d24f4fa7adf"
+      },
+      {
+        "path": "app/api/email/click/[trackingId]/route.test.ts",
+        "sha256": "92a4dd34eef3feb6552285b5f3de3e891a99fc914c6ddfd72122a246d28eb462"
       },
       {
         "path": "app/api/email/open/[trackingId]/route.ts",
         "sha256": "e2fa24459667061ce5917d798e5681b1644b36da8cc81e5d507ac1ed9cbc6581"
+      },
+      {
+        "path": "app/api/email/unsubscribe/[trackingId]/route.test.ts",
+        "sha256": "6cb092241739f0f10f70d9f55e082ab63870e69e0535f7e154500567621fe40e"
       },
       {
         "path": "app/api/manual-approval/request/route.ts",
@@ -103,7 +111,11 @@
       },
       {
         "path": "app/api/policy-updates/[slug]/email-assets/[asset]/route.ts",
-        "sha256": "fe764f030b0ce3f890daf157971c6a0d5ed3cf9f1335b1715b3aad5992576430"
+        "sha256": "f28b153880061beee18a11c8b920c1efacb63c7a76e3ce84f0a5fe92d9e5da9e"
+      },
+      {
+        "path": "app/api/policy-updates/[slug]/email-assets/[asset]/route.test.ts",
+        "sha256": "a2a57d780e5274721814096cfa196dd666e4789049bf5c72a8b0dd9dfebbb17e"
       },
       {
         "path": "app/api/policy-updates/[slug]/pdf/route.ts",
@@ -111,7 +123,11 @@
       },
       {
         "path": "app/api/profile/confirm-email-change/route.ts",
-        "sha256": "7e663970e5feb46bdb4e336c9562c02e8582054ea16d4be0bc348dd58ee23065"
+        "sha256": "591992438d2f1dc2731dd1118eed8a9457ef60f72cb740aebeb87a57cf6cab10"
+      },
+      {
+        "path": "app/api/profile/confirm-email-change/route.test.ts",
+        "sha256": "13993d098b352f4f34e98cb07ddd614aeaf17c24a54cbbdf77ec0d1a84dc63c0"
       },
       {
         "path": "app/api/profile/request-email-change/route.ts",
@@ -195,7 +211,7 @@
       },
       {
         "path": "lib/__tests__/app-session.test.ts",
-        "sha256": "5f98df2a9523cf0dc03ab0ab84940cb3a15c2a605935262297ce86d522b4460e"
+        "sha256": "0791e986d72f5327f2feced022bed0e6ff47a514e47420a06661ee0a02f2b495"
       },
       {
         "path": "lib/__tests__/aws-s3-sdk.test.ts",
@@ -218,8 +234,20 @@
         "sha256": "6423a477721d2c314e90b1b46bb8b125579d768a6cab731e5b3163e9945fbed6"
       },
       {
+        "path": "lib/__tests__/email-link-security.test.ts",
+        "sha256": "0a7ecbfe34e221f2da03f2067b5ed6996629ba914e258485a78305588fab6651"
+      },
+      {
+        "path": "lib/__tests__/email-tracking-clicks.test.ts",
+        "sha256": "39a3a0f9eb38f6c61a9f5d0e99918fb6c105f62a4c863cad47b7188a64571bf8"
+      },
+      {
         "path": "lib/__tests__/nodemailer-security.test.ts",
         "sha256": "a26a2aa41a4934663ee0316f1acf36ac03bdf2b41c32c452fb4f7416120bb7af"
+      },
+      {
+        "path": "lib/__tests__/policy-update-email-assets.test.ts",
+        "sha256": "2971604f6294b22d315f30af193a2385f12e837c9cf98ed85962202ebcb346b2"
       },
       {
         "path": "lib/__tests__/policy-update-subject.test.ts",
@@ -235,7 +263,7 @@
       },
       {
         "path": "lib/admin/auth.ts",
-        "sha256": "3d977aa49224d146de2f5401c90e6a905c15745f05b89d27dbf4c763f70570e7"
+        "sha256": "13f20e91f6c48243eecc41fa4db26487151dd59b9042afd823df91b2746606d5"
       },
       {
         "path": "lib/admin/email-log.ts",
@@ -243,7 +271,7 @@
       },
       {
         "path": "lib/admin/email-tracking.ts",
-        "sha256": "fe36f0a5b797a149e2e283f91d5ec13feca7b41984f8fb10453f5bcc13843896"
+        "sha256": "ede8895bfaae9292d2c5b810f7886766a119e5e45651ca29d1ac04b6e3a070df"
       },
       {
         "path": "lib/admin/email-transport.ts",
@@ -262,8 +290,12 @@
         "sha256": "40dd6a7ae5835c12e7ca50fff36690afcb5b12507496c04d2908a3525af083d1"
       },
       {
+        "path": "lib/admin/policy-update-email-assets.ts",
+        "sha256": "2a936e3062ad69d42acf21fef6554f05ff05d08d5a5e200e62a8f3d4dd10bf0e"
+      },
+      {
         "path": "lib/app-session.ts",
-        "sha256": "d06caed6f7375ff376b2b89031f1a573cf553861c65ba6cb25309bf2304e5051"
+        "sha256": "9555112f84abc29dcc1daa06cebd0851ed0891c5c0b23a3ea3c51068c2a073ca"
       },
       {
         "path": "lib/better-auth-client-ip.ts",
@@ -287,7 +319,7 @@
       },
       {
         "path": "lib/better-auth-user-email.ts",
-        "sha256": "1c62483828ba5dce66fce904138511620cc18d63ca28c46ec5fc7a4036d9dd91"
+        "sha256": "8e760fba02982b3a2e49c810646ffa9137df49da0cb871622f9a949083bd6e20"
       },
       {
         "path": "lib/cloudFrontSigner.ts",
@@ -298,16 +330,20 @@
         "sha256": "f4625f2389bb7ba06e23d39987aef843196861ca2b3b14cedee754ad950f455f"
       },
       {
+        "path": "lib/email-link-security.ts",
+        "sha256": "1c5f5afe5662bb5546140e0cb9d9472d643b503dd9bc2ea625a3785663e6c65d"
+      },
+      {
         "path": "lib/legacy-session-cookies.ts",
         "sha256": "d619a77cf1081000464787f75546619fc640bd408b230ccdd9bcc259ffb4664d"
       },
       {
         "path": "lib/member-access.ts",
-        "sha256": "6f125f16dec4a467e193d8a87f77bf1a42309b3bb9efd2052d67888930436f81"
+        "sha256": "b52163a997b6152a077aa3548d65fb738620574bd7c44175d90a12cd44130a29"
       },
       {
         "path": "lib/policy-update-access.ts",
-        "sha256": "208635e196a99b8087691d10789ebbb1c58c4bdae548cb49cb39e861a1b23fc7"
+        "sha256": "39b8b998c8ff19074c9109d935efa4fca10fef60325866f730b134b03d23e6ab"
       },
       {
         "path": "lib/policy-update-subject.ts",
@@ -532,6 +568,7 @@
       "components/site/main-nav.tsx",
       "lib/__tests__/account-signin-eligibility.test.ts",
       "lib/__tests__/admin-roster-actions.test.ts",
+      "lib/__tests__/manual-approval.test.ts",
       "lib/__tests__/system-email.test.ts",
       "lib/account-signin-eligibility.ts",
       "lib/admin/roster.ts",

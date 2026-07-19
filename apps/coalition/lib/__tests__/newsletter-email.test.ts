@@ -49,10 +49,12 @@ describe("buildNewsletterEmail", () => {
     expect(built.html).toContain(
       "/api/email/click/track-123?url=https%3A%2F%2Fcoalition.pgpz.org%2Fupdates",
     );
+    expect(built.html).toContain("&amp;sig=");
     expect(built.html).toContain(
-      'href="https://coalition.pgpz.org/api/email/click/track-123?url=https%3A%2F%2Fcoalition.pgpz.org"',
+      'href="https://coalition.pgpz.org/api/email/click/track-123?url=https%3A%2F%2Fcoalition.pgpz.org',
     );
     expect(built.html).toContain("/api/email/unsubscribe/track-123");
     expect(built.text).toContain("Unsubscribe: https://coalition.pgpz.org/api/email/unsubscribe/track-123");
+    expect(built.unsubscribeUrl).toBe("https://coalition.pgpz.org/api/email/unsubscribe/track-123");
   });
 });

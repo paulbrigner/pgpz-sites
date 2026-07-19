@@ -48,7 +48,7 @@ Active members can manage topic-group selections from `/groups`. Each topic has 
 - `BETTER_AUTH_SECRET`
 - `BETTER_AUTH_TRUSTED_ORIGINS`
 - `NEXTAUTH_TABLE`
-- `EMAIL_TRACKING_SECRET` (or the legacy `NEXTAUTH_SECRET` during migration)
+- `EMAIL_TRACKING_SECRET` (required in production)
 - `REGION_AWS`
 - `EMAIL_SERVER_HOST`
 - `EMAIL_SERVER_PORT`

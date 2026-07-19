@@ -123,6 +123,26 @@ describe("coalition to community sync", () => {
     expect(dynamoMocks.update).not.toHaveBeenCalled();
   });
 
+  it("treats a deactivation race at the update condition as a conflict", async () => {
+    dynamoMocks.query.mockResolvedValueOnce({
+      Items: [{ id: "community-user-1", email: "member@example.com", membershipStatus: "none" }],
+    });
+    dynamoMocks.update.mockRejectedValueOnce({ name: "ConditionalCheckFailedException" });
+
+    const result = await syncCoalitionMemberRecordToCommunity(activeCoalitionMember(), {
+      now: "2026-06-25T12:00:00.000Z",
+      triggeredBy: "test",
+    });
+
+    expect(result.status).toBe("conflict");
+    expect(result.message).toContain("deactivated during sync");
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ConditionExpression: expect.stringMatching(/#accountStatus.*#deactivatedAt/),
+      }),
+    );
+  });
+
   it("skips coalition members without valid email", async () => {
     const result = await syncCoalitionMemberRecordToCommunity(activeCoalitionMember({ email: "not-an-email" }), {
       now: "2026-06-25T12:00:00.000Z",

@@ -99,10 +99,10 @@ const displayName = (member: AdminMember) =>
 
 const memberActionTarget = (member: AdminMember) => member.email || member.id;
 
-const memberActionConfirmationPhrase = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "DELETE") =>
+const memberActionConfirmationPhrase = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "REACTIVATE" | "DELETE") =>
   verb === "DEACTIVATE" ? "DEACTIVATE" : `${verb} ${memberActionTarget(member)}`;
 
-const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "DELETE") => {
+const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVATE" | "REACTIVATE" | "DELETE") => {
   const phrase = memberActionConfirmationPhrase(member, verb);
   const entered = window.prompt(`Type ${phrase} to continue.`);
   return entered === phrase ? phrase : null;
@@ -460,6 +460,31 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       await loadRoster();
     } catch (err: any) {
       setError(err?.message || "Failed to deactivate user");
+    } finally {
+      setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
+    }
+  };
+
+  const reactivateMember = async (member: AdminMember) => {
+    const confirmation = promptForMemberAction(member, "REACTIVATE");
+    if (!confirmation) return;
+
+    const actionKey = `${member.id}:reactivate`;
+    setMemberActionLoading((current) => ({ ...current, [actionKey]: true }));
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id, action: "reactivate", confirmation }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Failed to reactivate user");
+      setNotice(`User reactivated for ${member.email || displayName(member)}. Membership remains unverified.`);
+      await loadRoster();
+    } catch (err: any) {
+      setError(err?.message || "Failed to reactivate user");
     } finally {
       setMemberActionLoading((current) => ({ ...current, [actionKey]: false }));
     }
@@ -945,6 +970,16 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Button
                                 size="sm"
+                                variant="outline"
+                                disabled={!deactivated || member.isAdmin || memberActionLoading[`${member.id}:reactivate`]}
+                                isLoading={!!memberActionLoading[`${member.id}:reactivate`]}
+                                onClick={() => reactivateMember(member)}
+                              >
+                                <RefreshCcw className="h-4 w-4" />
+                                Reactivate sign-in
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="destructive"
                                 disabled={deactivated || member.isAdmin || memberActionLoading[`${member.id}:deactivate`]}
                                 isLoading={!!memberActionLoading[`${member.id}:deactivate`]}
@@ -964,6 +999,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                                 Delete user
                               </Button>
                             </div>
+                            {deactivated ? (
+                              <p className="mt-2 text-xs text-slate-600">
+                                Reactivation restores sign-in only. Membership must be approved or verified again.
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                         <div className="space-y-3">

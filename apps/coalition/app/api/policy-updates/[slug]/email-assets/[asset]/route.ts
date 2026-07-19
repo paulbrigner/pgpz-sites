@@ -1,6 +1,11 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
+import {
+  getPolicyUpdateEmailAssetMaterialization,
+  materializedPolicyUpdateEmailAssetKey,
+} from "@/lib/admin/policy-update-email-assets";
 import { getUploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
+import { verifyPolicyUpdateEmailAsset } from "@/lib/email-link-security";
 import { s3Client } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
@@ -15,28 +20,8 @@ function contentTypeForAsset(asset: string) {
   return "image/png";
 }
 
-function assetObjectKey(pdfObjectKey: string, asset: string) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/assets/${asset}`);
-}
-
-function referencedEmailAssetNames(upload: NonNullable<Awaited<ReturnType<typeof getUploadedPolicyUpdateRecord>>>) {
-  const names = new Set<string>();
-  for (const section of upload.sections) {
-    for (const image of section.images || []) {
-      const rawName = image.src.split("?")[0]?.split("/").filter(Boolean).pop();
-      if (!rawName) continue;
-      try {
-        names.add(decodeURIComponent(rawName));
-      } catch {
-        names.add(rawName);
-      }
-    }
-  }
-  return names;
-}
-
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string; asset: string }> },
 ) {
   const { slug, asset } = await params;
@@ -44,16 +29,50 @@ export async function GET(
     return NextResponse.json({ error: "Unknown policy update email asset" }, { status: 404 });
   }
 
-  const upload = await getUploadedPolicyUpdateRecord(slug);
-  if (!upload || !referencedEmailAssetNames(upload).has(asset)) {
+  const requestUrl = new URL(request.url);
+  const requestedMaterializationId = requestUrl.searchParams.get("v")?.trim() || null;
+  let publicEmailAsset = false;
+  let materializationId = requestedMaterializationId;
+
+  if (!materializationId) {
+    const upload = await getUploadedPolicyUpdateRecord(slug);
+    materializationId = upload?.publicEmailAssetMaterializationId || null;
+    publicEmailAsset = !!materializationId;
+  }
+  if (!materializationId) {
+    return NextResponse.json({ error: "Unknown policy update email asset" }, { status: 404 });
+  }
+
+  const materialization = await getPolicyUpdateEmailAssetMaterialization(materializationId);
+  const objectKey = materialization
+    ? materializedPolicyUpdateEmailAssetKey(materialization, asset)
+    : null;
+  if (
+    !materialization ||
+    materialization.slug !== slug ||
+    !objectKey ||
+    (publicEmailAsset && materialization.purpose !== "publish")
+  ) {
+    return NextResponse.json({ error: "Unknown policy update email asset" }, { status: 404 });
+  }
+
+  if (
+    requestedMaterializationId &&
+    !verifyPolicyUpdateEmailAsset({
+      materializationId,
+      slug,
+      asset,
+      signature: requestUrl.searchParams.get("sig"),
+    })
+  ) {
     return NextResponse.json({ error: "Unknown policy update email asset" }, { status: 404 });
   }
 
   try {
     const s3Object = await s3Client.send(
       new GetObjectCommand({
-        Bucket: upload.s3Bucket,
-        Key: assetObjectKey(upload.s3Key, asset),
+        Bucket: materialization.s3Bucket,
+        Key: objectKey,
       }),
     );
 
@@ -69,7 +88,10 @@ export async function GET(
     return new Response(body, {
       headers: {
         "Content-Type": contentTypeForAsset(asset),
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+        "Cache-Control":
+          publicEmailAsset
+            ? "public, max-age=300, stale-while-revalidate=86400"
+            : "private, no-store, max-age=0",
       },
     });
   } catch (err: any) {

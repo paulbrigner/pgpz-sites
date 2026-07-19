@@ -64,7 +64,26 @@ describe("Better Auth-only app sessions", () => {
       authProvider: "better-auth",
       authUserId: "better-user-1",
       user: appUser,
+      capabilities: {
+        accountActive: true,
+        member: true,
+        admin: false,
+        protectedContent: true,
+      },
     });
+  });
+
+  it.each([
+    { ...appUser, accountStatus: "deactivated" },
+    { ...appUser, accountStatus: "active", deactivatedAt: "2026-07-19T00:00:00.000Z" },
+  ])("does not resolve an application session for a deactivated account", async (deactivatedUser) => {
+    mocks.getBetterAuthSession.mockResolvedValue({
+      user: { id: "better-user-1", email: "member@example.test" },
+    });
+    mocks.ensureAppUserForEmail.mockResolvedValue(deactivatedUser);
+    const { resolveAppSession } = await import("@/lib/app-session");
+
+    await expect(resolveAppSession(new Headers())).resolves.toBeNull();
   });
 
   it("uses the current request headers when none are supplied", async () => {

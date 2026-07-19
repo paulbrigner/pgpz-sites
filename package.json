@@ -22,7 +22,7 @@
     "start:reference": "npm run start --workspace=apps/reference",
     "storybook:community": "npm run storybook --workspace=apps/community",
     "storybook:coalition": "npm run storybook --workspace=apps/coalition",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && npm run test:policy-update-email-asset-backfill",
     "typecheck": "npm run typecheck:community && npm run typecheck:coalition && npm run typecheck:workspaces",
     "typecheck:community": "npm exec --workspace=apps/community -- tsc --noEmit --pretty false",
     "typecheck:coalition": "npm exec --workspace=apps/coalition -- tsc --noEmit --pretty false",
@@ -32,6 +32,8 @@
     "history:verify": "node scripts/verify-history-import.mjs",
     "parity:check": "node tooling/parity/check.mjs",
     "boundaries:check": "node tooling/workspace-boundaries/check.mjs",
+    "migrate:policy-update-email-assets": "node tooling/backfill-policy-update-email-assets.mjs",
+    "test:policy-update-email-asset-backfill": "node --test tooling/backfill-policy-update-email-assets.test.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high",
     "check": "npm run history:verify && npm run parity:check && npm run boundaries:check && npm run typecheck && npm test && npm run lint",
     "build": "npm run build:community && npm run build:coalition && npm run build:reference"

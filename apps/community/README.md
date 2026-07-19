@@ -55,7 +55,7 @@ EMAIL_SERVER_PASSWORD=...
 EMAIL_FROM="PGPZ Community <no-reply@community.pgpz.org>"
 ```
 
-`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Set `EMAIL_TRACKING_SECRET` to the former `NEXTAUTH_SECRET` value when removing that legacy environment variable so historical email-open fingerprints remain comparable.
+`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. `EMAIL_TRACKING_SECRET` is required in production and does not fall back to an authentication secret there. It may initially retain the former `NEXTAUTH_SECRET` value for fingerprint continuity, but must remain stable because it also signs tracked links and email-only assets.
 
 See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
 

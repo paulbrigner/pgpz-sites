@@ -1,8 +1,8 @@
 import "server-only";
 
 import { createHmac, randomUUID } from "crypto";
-import { BETTER_AUTH_SECRET, EMAIL_TRACKING_SECRET, NEXTAUTH_SECRET } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { getEmailTrackingSecret, safeHttpDestination } from "@/lib/email-link-security";
 
 export type EmailMessageType = "newsletter" | "policy_update";
 export type EmailTrackingAudienceMode = "all_active_members" | "selected_members";
@@ -33,6 +33,7 @@ export type NewsletterTrackingRecord = {
   lastClickedAt: string | null;
   lastClickedUrl: string | null;
   clickCount: number;
+  allowedClickDestinationDigests: string[];
   unsubscribedAt: string | null;
 };
 
@@ -64,10 +65,7 @@ function openClientFingerprint(clientInfo?: TrackingClientInfo | null) {
 
   if (!material.trim()) return null;
 
-  return createHmac(
-    "sha256",
-    EMAIL_TRACKING_SECRET || NEXTAUTH_SECRET || BETTER_AUTH_SECRET || "pgpz-email-tracking",
-  )
+  return createHmac("sha256", getEmailTrackingSecret())
     .update(material)
     .digest("hex")
     .slice(0, 32);
@@ -100,6 +98,11 @@ function toTrackingRecord(item: Record<string, any> | undefined | null): Newslet
     lastClickedAt: typeof item.lastClickedAt === "string" ? item.lastClickedAt : null,
     lastClickedUrl: typeof item.lastClickedUrl === "string" ? item.lastClickedUrl : null,
     clickCount: Number(item.clickCount || 0),
+    allowedClickDestinationDigests: Array.isArray(item.allowedClickDestinationDigests)
+      ? item.allowedClickDestinationDigests.filter(
+          (value: unknown): value is string => typeof value === "string",
+        )
+      : [],
     unsubscribedAt: typeof item.unsubscribedAt === "string" ? item.unsubscribedAt : null,
   };
 }
@@ -242,10 +245,46 @@ export async function recordNewsletterOpen(trackingId: string, clientInfo?: Trac
   };
 }
 
-export async function recordNewsletterClick(trackingId: string, url: string) {
-  const tracking = await getNewsletterTrackingRecord(trackingId);
-  if (!tracking) return null;
+function clickDestinationDigest(trackingId: string, url: string) {
+  return createHmac("sha256", getEmailTrackingSecret())
+    .update(JSON.stringify(["email-click-destination-v1", trackingId, url]))
+    .digest("hex");
+}
 
+export async function bindNewsletterTrackingDestinations(
+  trackingId: string,
+  destinations: string[],
+) {
+  const normalizedTrackingId = normalizeTrackingId(trackingId);
+  const canonicalDestinations = destinations.map((url) => {
+    const canonical = safeHttpDestination(url);
+    if (!canonical) {
+      throw new Error("Tracked click destinations must be absolute HTTP(S) URLs");
+    }
+    return canonical;
+  });
+  const digests = [
+    ...new Set(
+      canonicalDestinations.map((url) => clickDestinationDigest(normalizedTrackingId, url)),
+    ),
+  ];
+  await documentClient.update({
+    TableName: TABLE_NAME,
+    Key: trackingKey(normalizedTrackingId),
+    UpdateExpression: "SET allowedClickDestinationDigests = :digests",
+    ConditionExpression:
+      "attribute_exists(pk) AND attribute_not_exists(allowedClickDestinationDigests)",
+    ExpressionAttributeValues: {
+      ":digests": digests,
+    },
+  });
+  return digests;
+}
+
+async function recordBoundNewsletterClick(
+  tracking: NewsletterTrackingRecord,
+  url: string,
+) {
   const now = new Date().toISOString();
   const firstClick = !tracking.firstClickedAt;
 
@@ -268,6 +307,24 @@ export async function recordNewsletterClick(trackingId: string, url: string) {
   }
 
   return { ...tracking, firstClickedAt: tracking.firstClickedAt || now, lastClickedAt: now, lastClickedUrl: url };
+}
+
+export async function recordNewsletterClick(trackingId: string, url: string) {
+  const tracking = await getNewsletterTrackingRecord(trackingId);
+  if (!tracking) return null;
+  const canonicalUrl = safeHttpDestination(url);
+  if (!canonicalUrl) return null;
+  const digest = clickDestinationDigest(tracking.trackingId, canonicalUrl);
+  if (!tracking.allowedClickDestinationDigests.includes(digest)) return null;
+  return recordBoundNewsletterClick(tracking, canonicalUrl);
+}
+
+export async function recordLegacyNewsletterSameSiteClick(trackingId: string, url: string) {
+  const tracking = await getNewsletterTrackingRecord(trackingId);
+  if (!tracking) return null;
+  const canonicalUrl = safeHttpDestination(url);
+  if (!canonicalUrl) return null;
+  return recordBoundNewsletterClick(tracking, canonicalUrl);
 }
 
 export async function recordNewsletterUnsubscribe(trackingId: string) {

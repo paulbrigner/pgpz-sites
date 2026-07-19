@@ -16,7 +16,7 @@ vi.mock("@/lib/community-sync", () => ({
   syncCoalitionMemberToCommunityById: syncMock,
 }));
 
-import { approveManualApproval } from "@/lib/manual-approval";
+import { approveManualApproval, requestManualApproval } from "@/lib/manual-approval";
 
 describe("manual approval admin flow", () => {
   beforeEach(() => {
@@ -25,6 +25,39 @@ describe("manual approval admin flow", () => {
     dynamoMocks.update.mockResolvedValue({});
     syncMock.mockReset();
     syncMock.mockResolvedValue({ status: "created" });
+  });
+
+  it("records a request only while the account remains active and uninvited", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        membershipStatus: "none",
+        manualApprovalStatus: "none",
+        accountStatus: "active",
+      },
+    });
+
+    await expect(requestManualApproval("user-1")).resolves.toMatchObject({
+      status: "requested",
+      manualApprovalStatus: "pending",
+    });
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ConditionExpression: expect.stringMatching(/#membershipStatus = :none.*#accountStatus.*#deactivatedAt/),
+      }),
+    );
+  });
+
+  it.each([
+    { accountStatus: "deactivated", membershipStatus: "none" },
+    { accountStatus: "active", deactivatedAt: "2026-07-19T00:00:00.000Z", membershipStatus: "none" },
+  ])("rejects manual approval requests for deactivated accounts", async (item) => {
+    dynamoMocks.get.mockResolvedValue({ Item: item });
+
+    await expect(requestManualApproval("user-1")).rejects.toMatchObject({
+      message: "This account is deactivated.",
+      status: 409,
+    });
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
   });
 
   it("approves a signed-in unapproved prospect even without a pending request marker", async () => {
@@ -63,6 +96,24 @@ describe("manual approval admin flow", () => {
       membershipProvider: "manual",
       manualApprovalStatus: "approved",
     });
+  });
+
+  it("rejects admin approval for a deactivated account", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        id: "user-3",
+        email: "deactivated@example.com",
+        membershipStatus: "none",
+        manualApprovalStatus: "pending",
+        accountStatus: "deactivated",
+      },
+    });
+
+    await expect(
+      approveManualApproval({ userId: "user-3", adminUserId: "admin-1" }),
+    ).rejects.toMatchObject({ message: "This account is deactivated.", status: 409 });
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
+    expect(syncMock).not.toHaveBeenCalled();
   });
 
   it("keeps admin-added invitees in the activation flow unless they have a pending manual request", async () => {
