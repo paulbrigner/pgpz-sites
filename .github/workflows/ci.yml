@@ -31,7 +31,7 @@ jobs:
           cache: npm
       - name: Install workspace dependencies
         run: npm ci
-      - name: Reject high or critical production dependency advisories
+      - name: Reject moderate or higher production dependency advisories
         run: npm run audit:production
       - name: Verify imported history baseline
         run: npm run history:verify
