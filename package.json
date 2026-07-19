@@ -10,6 +10,11 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "next": {
+      "postcss": "8.5.10"
+    }
+  },
   "scripts": {
     "dev:community": "npm run dev --workspace=apps/community",
     "dev:coalition": "npm run dev --workspace=apps/coalition",
