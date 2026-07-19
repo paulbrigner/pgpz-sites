@@ -36,7 +36,10 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
     JSON.stringify(plan.permissionPolicy),
     /table\/PGPZCoalitionNextAuth/,
   );
-  assert.deepEqual(plan.permissionPolicy.Statement.at(-1).Action, ["ses:SendEmail"]);
+  assert.deepEqual(plan.permissionPolicy.Statement.at(-1).Action, [
+    "ses:SendEmail",
+    "ses:SendRawEmail",
+  ]);
   assert.doesNotMatch(JSON.stringify(plan.permissionPolicy), /dynamodb:DescribeTable/);
 });
 

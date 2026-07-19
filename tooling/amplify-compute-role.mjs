@@ -111,7 +111,10 @@ export function buildAmplifyComputePermissionPolicy({
       {
         Sid: "SendApplicationEmail",
         Effect: "Allow",
-        Action: ["ses:SendEmail"],
+        // Nodemailer's SESv2 transport submits the generated MIME message as
+        // raw content. SES authorizes that path with SendRawEmail even though
+        // the SDK command class is SendEmailCommand.
+        Action: ["ses:SendEmail", "ses:SendRawEmail"],
         Resource: [sesIdentityArn],
         Condition: {
           StringEquals: { "ses:FromAddress": fromAddress },
