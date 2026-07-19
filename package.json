@@ -39,7 +39,7 @@
     "boundaries:check": "node tooling/workspace-boundaries/check.mjs",
     "migrate:policy-update-email-assets": "node tooling/backfill-policy-update-email-assets.mjs",
     "test:policy-update-email-asset-backfill": "node --test tooling/backfill-policy-update-email-assets.test.mjs",
-    "audit:production": "npm audit --omit=dev --audit-level=high",
+    "audit:production": "npm audit --omit=dev --audit-level=moderate",
     "check": "npm run history:verify && npm run parity:check && npm run boundaries:check && npm run typecheck && npm test && npm run lint",
     "build": "npm run build:community && npm run build:coalition && npm run build:reference"
   }
