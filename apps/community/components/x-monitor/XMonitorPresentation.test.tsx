@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActivityTrendsResponse, FeedItem, WindowSummary } from "@pgpz/x-monitor-core/contracts";
@@ -65,15 +65,23 @@ describe("Community X Monitor presentation", () => {
     expect(screen.getByRole("link", { name: "Reset" })).toHaveAttribute("href", "/x-monitor");
     expect(screen.queryByText(/Command or Control/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Debate topics/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Historical investor/i)).not.toBeInTheDocument();
   });
 
   it("makes semantic search explicit and requires a natural-language prompt", async () => {
     const user = userEvent.setup();
     render(<XMonitorFilters query={parseCommunityXMonitorQuery({})} />);
 
-    expect(screen.getByRole("radio", { name: "keyword" })).toBeChecked();
-    await user.click(screen.getByRole("radio", { name: "semantic" }));
-    expect(screen.getByRole("radio", { name: "semantic" })).toBeChecked();
+    const semanticSwitch = screen.getByRole("switch", { name: "Semantic search" });
+    expect(semanticSwitch).not.toBeChecked();
+    expect(semanticSwitch).toHaveAttribute("name", "search_mode");
+    expect(semanticSwitch).toHaveAttribute("value", "semantic");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    await user.click(screen.getByText("Keyword"));
+    await user.click(screen.getByText("Semantic"));
+    expect(semanticSwitch).not.toBeChecked();
+    await user.click(semanticSwitch);
+    expect(semanticSwitch).toBeChecked();
     expect(screen.getByRole("searchbox", { name: "Describe what you want to find" }))
       .toBeRequired();
     expect(screen.getByText("Finds and ranks posts with similar meaning.")).toBeInTheDocument();
@@ -83,12 +91,12 @@ describe("Community X Monitor presentation", () => {
     const reset = screen.getByRole("link", { name: "Reset" });
     reset.addEventListener("click", (event) => event.preventDefault(), { once: true });
     await user.click(reset);
-    expect(screen.getByRole("radio", { name: "keyword" })).toBeChecked();
+    expect(semanticSwitch).not.toBeChecked();
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("checkbox", { name: "Ecosystem" })).not.toBeChecked();
   });
 
-  it("maps legacy investor posts to Influencer and derives a canonical X link", () => {
+  it("maps legacy investor posts to Influencer and groups post actions without engagement counts", () => {
     render(
       <XMonitorFeed
         items={[FEED_ITEM]}
@@ -97,8 +105,16 @@ describe("Community X Monitor presentation", () => {
       />,
     );
     expect(screen.getByText("Influencer")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open original post on X" }))
-      .toHaveAttribute("href", "https://x.com/i/status/1234567890123456789");
+    const xLink = screen.getByRole("link", { name: "Open original post on X" });
+    const detailLink = screen.getByRole("link", { name: "Post details" });
+    expect(xLink).toHaveAttribute("href", "https://x.com/i/status/1234567890123456789");
+    expect(xLink.parentElement).toBe(detailLink.parentElement);
+    expect(xLink.compareDocumentPosition(detailLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const card = detailLink.closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card!).queryByText("2")).not.toBeInTheDocument();
+    expect(within(card!).queryByText("3")).not.toBeInTheDocument();
+    expect(within(card!).queryByText("4")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Load older posts" }).getAttribute("href"))
       .toContain("q=privacy");
   });
