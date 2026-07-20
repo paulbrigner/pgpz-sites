@@ -1,6 +1,7 @@
 import type {
   FeedQuery,
   WatchTierFilter,
+  XMonitorSearchMode,
   XMonitorTrendRangeKey,
 } from "@pgpz/x-monitor-core/contracts";
 
@@ -31,6 +32,7 @@ export type CommunityXMonitorQuery = {
   feed: FeedQuery;
   handle: string;
   q: string;
+  searchMode: XMonitorSearchMode;
   significantMode: "significant" | "all";
   themes: CommunityXMonitorTheme[];
   tiers: CommunityXMonitorTier[];
@@ -63,7 +65,10 @@ function selectedValues<const T extends readonly string[]>(
 export function parseCommunityXMonitorQuery(
   params: CommunityXMonitorSearchParams,
 ): CommunityXMonitorQuery {
-  const q = bounded(first(params.q), 200);
+  const searchMode: XMonitorSearchMode = first(params.search_mode) === "semantic"
+    ? "semantic"
+    : "keyword";
+  const q = bounded(first(params.q), searchMode === "semantic" ? 500 : 200);
   const rawHandle = bounded(first(params.handle).replace(/^@+/, ""), 15);
   const handle = /^[A-Za-z0-9_]{1,15}$/.test(rawHandle) ? rawHandle : "";
   const significantMode = first(params.significant) === "all" ? "all" : "significant";
@@ -93,10 +98,11 @@ export function parseCommunityXMonitorQuery(
         : undefined,
       themes: themes.length > 0 ? themes : undefined,
       limit: 24,
-      cursor: cursor || undefined,
+      cursor: searchMode === "keyword" ? cursor || undefined : undefined,
     },
     handle,
     q,
+    searchMode,
     significantMode,
     themes,
     tiers,
@@ -109,15 +115,24 @@ export function buildCommunityXMonitorHref(
   cursor?: string | null,
 ): string {
   const params = new URLSearchParams();
+  if (query.searchMode === "semantic") params.set("search_mode", "semantic");
   if (query.q) params.set("q", query.q);
   if (query.handle) params.set("handle", query.handle);
   if (query.significantMode === "all") params.set("significant", "all");
   query.tiers.forEach((tier) => params.append("tier", tier));
   query.themes.forEach((theme) => params.append("theme", theme));
   if (query.trendRange !== "7d") params.set("trend_range", query.trendRange);
-  if (cursor) params.set("cursor", cursor);
+  if (cursor && query.searchMode === "keyword") params.set("cursor", cursor);
   const serialized = params.toString();
   return serialized ? `/x-monitor?${serialized}` : "/x-monitor";
+}
+
+export function communityXMonitorActivityFeedQuery(
+  query: CommunityXMonitorQuery,
+): FeedQuery {
+  return query.searchMode === "semantic"
+    ? { ...query.feed, q: undefined, cursor: undefined }
+    : { ...query.feed, cursor: undefined };
 }
 
 function searchParamsRecord(searchParams: URLSearchParams): CommunityXMonitorSearchParams {
@@ -131,10 +146,30 @@ function searchParamsRecord(searchParams: URLSearchParams): CommunityXMonitorSea
   return result;
 }
 
+export function safeCommunityXMonitorReturnHref(value: string | undefined): string {
+  const fallback = "/x-monitor";
+  const raw = String(value || "").trim();
+  if (!raw || raw.length > 4_000) return fallback;
+
+  try {
+    const base = new URL("https://community.pgpz.org");
+    const parsed = new URL(raw, base);
+    if (parsed.origin !== base.origin || parsed.pathname !== "/x-monitor") return fallback;
+    const query = parseCommunityXMonitorQuery(searchParamsRecord(parsed.searchParams));
+    const canonical = buildCommunityXMonitorHref(query, query.feed.cursor);
+    const hash = parsed.hash === "#x-monitor-feed" || parsed.hash === "#x-monitor-activity"
+      ? parsed.hash
+      : "";
+    return `${canonical}${hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Build an allowlisted upstream query for the member BFF. Unknown parameters,
- * privileged search modes, debate filters, and caller-controlled limits never
- * cross the Community-to-X-Monitor trust boundary.
+ * semantic POST requests, debate filters, and caller-controlled limits never
+ * cross this GET-only Community-to-X-Monitor proxy boundary.
  */
 export function buildCommunityXMonitorProxySearch(
   requestUrl: string,
@@ -152,7 +187,9 @@ export function buildCommunityXMonitorProxySearch(
     return outgoing;
   }
 
-  const query = parseCommunityXMonitorQuery(searchParamsRecord(incoming));
+  const proxyParams = searchParamsRecord(incoming);
+  delete proxyParams.search_mode;
+  const query = parseCommunityXMonitorQuery(proxyParams);
   if (query.q) outgoing.set("q", query.q);
   if (query.handle) outgoing.set("handle", query.handle);
   if (query.feed.significant !== undefined) {

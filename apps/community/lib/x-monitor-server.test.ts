@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import {
   CommunityXMonitorConfigurationError,
   proxyCommunityXMonitorRead,
+  queryCommunityXMonitorSemantic,
   readCommunityXMonitorConfiguration,
 } from "./x-monitor-server";
 
@@ -126,5 +127,39 @@ describe("Community X Monitor server boundary", () => {
       "upstream path is not allowed",
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("posts bounded semantic queries with only the configured client credential", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({
+      items: [{ status_id: "123", score: 0.8 }],
+      model: "text-embedding-bge-m3",
+      retrieved_count: 1,
+    }));
+
+    const response = await queryCommunityXMonitorSemantic({
+      q: "privacy as a useful product feature",
+      tiers: ["ecosystem"],
+      themes: ["Product / ecosystem"],
+      significant: true,
+      limit: 999,
+    });
+    expect(response.next_cursor).toBeNull();
+    expect(response.items).toHaveLength(1);
+
+    const [input, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(input)).toBe("https://monitor.example/v1/query/semantic");
+    expect(init?.method).toBe("POST");
+    expect(init?.redirect).toBe("manual");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("x-xmonitor-client-id")).toBe("pgpz-community");
+    expect(headers.get("x-xmonitor-client-secret")).toBe("s".repeat(43));
+    expect(headers.has("cookie")).toBe(false);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      query_text: "privacy as a useful product feature",
+      tiers: ["ecosystem"],
+      themes: ["Product / ecosystem"],
+      significant: true,
+      limit: 24,
+    });
   });
 });

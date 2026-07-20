@@ -5,6 +5,7 @@ import {
   type XMonitorFetch,
   type XMonitorReadClient,
 } from "@pgpz/x-monitor-core/read-client";
+import type { FeedQuery, FeedResponse } from "@pgpz/x-monitor-core/contracts";
 import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
 
 const CLIENT_ID_HEADER = "x-xmonitor-client-id";
@@ -110,6 +111,51 @@ export function createCommunityXMonitorClient(): XMonitorReadClient {
     fetch: timeoutFetch(configuration.timeoutMs),
     headers: requestHeaders(configuration),
   });
+}
+
+export async function queryCommunityXMonitorSemantic(query: FeedQuery): Promise<FeedResponse> {
+  const configuration = readCommunityXMonitorConfiguration();
+  const queryText = String(query.q || "").trim().slice(0, 500);
+  if (!queryText) return { items: [], next_cursor: null };
+
+  const upstreamUrl = new URL(`${configuration.baseUrl}/query/semantic`);
+  const headers = requestHeaders(configuration);
+  headers.set("accept", "application/json");
+  headers.set("content-type", "application/json");
+
+  const controller = new AbortController();
+  const semanticTimeoutMs = Math.min(30_000, Math.max(20_000, configuration.timeoutMs));
+  const timeout = setTimeout(() => controller.abort(), semanticTimeoutMs);
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: "POST",
+      cache: "no-store",
+      redirect: "manual",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        query_text: queryText,
+        tiers: query.tiers,
+        themes: query.themes,
+        handle: query.handle,
+        significant: query.significant,
+        limit: Math.min(24, Math.max(1, query.limit || 24)),
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!upstream.ok || (upstream.status >= 300 && upstream.status < 400)) {
+    throw new Error("X Monitor semantic search failed");
+  }
+
+  const payload = await upstream.json().catch(() => null) as { items?: unknown } | null;
+  if (!payload || !Array.isArray(payload.items)) {
+    throw new Error("X Monitor semantic search returned an invalid response");
+  }
+  return { items: payload.items as FeedResponse["items"], next_cursor: null };
 }
 
 export async function proxyCommunityXMonitorRead(
