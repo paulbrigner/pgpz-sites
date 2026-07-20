@@ -1393,21 +1393,38 @@ export async function markBackgroundJobTaskProjectionCompleted(
     status: "sent",
     updatedAt: now,
   });
-  await documentClient.update({
-    TableName: tableName,
-    Key: taskKey(jobId, taskId),
-    UpdateExpression:
-      "SET projectionCompletedAt = if_not_exists(projectionCompletedAt, :now), updatedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
-    ConditionExpression: "#status = :sent",
-    ExpressionAttributeNames: { "#status": "status" },
-    ExpressionAttributeValues: {
-      ":sent": "sent",
-      ":now": now,
-      ":gsi2pk": statusIndex.GSI2PK,
-      ":gsi2sk": statusIndex.GSI2SK,
-      ":expires": backgroundJobExpiration("task", now),
-    },
-  });
+  try {
+    await documentClient.update({
+      TableName: tableName,
+      Key: taskKey(jobId, taskId),
+      UpdateExpression:
+        "SET #projectionCompletedAt = :now, updatedAt = :now, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, expires = :expires",
+      ConditionExpression:
+        "#status = :sent AND (attribute_not_exists(#projectionCompletedAt) OR attribute_type(#projectionCompletedAt, :nullType))",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#projectionCompletedAt": "projectionCompletedAt",
+      },
+      ExpressionAttributeValues: {
+        ":sent": "sent",
+        ":nullType": "NULL",
+        ":now": now,
+        ":gsi2pk": statusIndex.GSI2PK,
+        ":gsi2sk": statusIndex.GSI2SK,
+        ":expires": backgroundJobExpiration("task", now),
+      },
+    });
+  } catch (error: any) {
+    if (error?.name !== "ConditionalCheckFailedException") throw error;
+    const current = await documentClient.get({
+      TableName: tableName,
+      Key: taskKey(jobId, taskId),
+      ConsistentRead: true,
+    });
+    const task = toTask(current.Item);
+    if (task?.status === "sent" && task.projectionCompletedAt) return;
+    throw error;
+  }
 }
 
 export async function cancelBackgroundJob(jobId: string) {
