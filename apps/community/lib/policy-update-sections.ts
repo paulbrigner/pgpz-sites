@@ -20,6 +20,10 @@ export function splitPolicyUpdateSocialPostHeading(heading: string): PolicyUpdat
   };
 }
 
+export function isPolicyUpdateActionItemSection(section: Pick<PolicyUpdateSection, "heading">) {
+  return /^Action Items?:?$/i.test(section.heading.trim());
+}
+
 export function isPolicyUpdateSocialPostSection(
   section: Pick<PolicyUpdateSection, "heading" | "images"> &
     Partial<Pick<PolicyUpdateSection, "body" | "bodyAfterBullets" | "bullets" | "progressItems" | "table">>,

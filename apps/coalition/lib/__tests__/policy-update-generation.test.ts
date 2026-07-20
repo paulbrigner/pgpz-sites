@@ -5,7 +5,11 @@ vi.mock("@/lib/s3", () => ({
   s3Client: { send: vi.fn() },
 }));
 
-import { sourcePolicyUpdateContent } from "@/lib/admin/policy-update-generation";
+import {
+  mergeExtractedImagesIntoContent,
+  sourcePolicyUpdateContent,
+  xImageRole,
+} from "@/lib/admin/policy-update-generation";
 
 const record = {
   category: "weekly",
@@ -18,6 +22,40 @@ const record = {
 } as any;
 
 describe("sourcePolicyUpdateContent", () => {
+  it("keeps singular Relevant Post screenshots with their preceding policy sections", () => {
+    const adamHref = "https://x.com/adam_minehardt/status/2077430678350598447?s=20";
+    const danteHref = "https://x.com/ddisparte/status/2077096525599998319?s=20";
+    const pageText = "Action Item: No action item. Relevant Post:";
+    const adamRole = xImageRole({ href: adamHref, pageText, documentSocialIndex: 2 });
+    const danteRole = xImageRole({ href: danteHref, pageText, documentSocialIndex: 3 });
+
+    expect(adamRole).toBe("notable-posts");
+    expect(danteRole).toBe("notable-posts");
+
+    const merged = mergeExtractedImagesIntoContent(
+      {
+        summary: "Two policy developments.",
+        emailPreheader: "Two policy developments.",
+        keyTakeaways: [],
+        actionItems: [],
+        sections: [
+          { heading: "CLARITY Act", body: ["CLARITY analysis."] },
+          { heading: "Action Item", body: ["Call your senators.", "Relevant Post:"] },
+          { heading: "U.S.-UK tokenized finance", body: ["Tokenized finance analysis."] },
+          { heading: "Action Item", body: ["No action item.", "Relevant Post:"] },
+        ],
+      },
+      [
+        { src: "/assets/x-adam.png", alt: "Adam X post screenshot", href: adamHref, page: 4, role: adamRole },
+        { src: "/assets/x-dante.png", alt: "Dante X post screenshot", href: danteHref, page: 5, role: danteRole },
+      ],
+    );
+
+    expect(merged.sections[1].images?.map((image) => image.href)).toEqual([adamHref]);
+    expect(merged.sections[3].images?.map((image) => image.href)).toEqual([danteHref]);
+    expect(merged.sections.some((section) => /^Notable Post/.test(section.heading))).toBe(false);
+  });
+
   it("isolates the weekly memo title and first-page bullets from the June 22 PDF text shape", () => {
     const content = sourcePolicyUpdateContent(record, {
       text: `

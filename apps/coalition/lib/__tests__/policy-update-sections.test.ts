@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPolicyUpdateActionItemSection,
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
   policyUpdateSectionHeadingLink,
@@ -7,6 +8,12 @@ import {
 } from "@/lib/policy-update-sections";
 
 describe("policy update section helpers", () => {
+  it("recognizes action item sections that should stay attached to the preceding policy topic", () => {
+    expect(isPolicyUpdateActionItemSection({ heading: "Action Item" })).toBe(true);
+    expect(isPolicyUpdateActionItemSection({ heading: "Action Items:" })).toBe(true);
+    expect(isPolicyUpdateActionItemSection({ heading: "Policy development" })).toBe(false);
+  });
+
   it("splits X Post of the Week headings into label and title", () => {
     expect(
       splitPolicyUpdateSocialPostHeading(
@@ -57,6 +64,21 @@ describe("policy update section helpers", () => {
         ],
       }),
     ).toBe(true);
+  });
+
+  it("keeps action item sections with relevant-post screenshots in document order", () => {
+    expect(
+      isPolicyUpdateSocialPostSection({
+        heading: "Action Item",
+        body: ["Call your Senator's office to advocate for the passage of the CLARITY Act."],
+        images: [
+          {
+            src: "/assets/x-adam-minehardt.png",
+            alt: "Adam Minehardt X post screenshot",
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("links main policy headings from matching section links", () => {

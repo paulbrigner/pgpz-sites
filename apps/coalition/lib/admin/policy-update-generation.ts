@@ -1179,7 +1179,7 @@ function xAssetName(href: string, index: number) {
   }
 }
 
-function xImageRole({
+export function xImageRole({
   href,
   pageText,
   documentSocialIndex,
@@ -1192,9 +1192,8 @@ function xImageRole({
   if (/\bjswihart\b/.test(text)) return "x-post-of-the-week";
   if (/\bwarrendavidson\b/.test(text)) return "notable-post";
   if (/\bjbsdc\b|\baustincampbell\b/.test(text)) return "notable-posts";
-  if (/\bx post of the week\b/i.test(pageText)) return "x-post-of-the-week";
-  if (/\bnotable posts\b/i.test(pageText)) return "notable-posts";
-  if (/\bnotable post\b/i.test(pageText)) return "notable-post";
+  const contextRole = contextualImageRole(pageText);
+  if (contextRole) return contextRole;
   if (documentSocialIndex === 1) return "x-post-of-the-week";
   if (documentSocialIndex === 2) return "notable-post";
   return "notable-posts";
@@ -1733,7 +1732,7 @@ function appendImageToNextMatchingSection(
   return true;
 }
 
-function mergeExtractedImagesIntoContent(
+export function mergeExtractedImagesIntoContent(
   content: GeneratedPolicyUpdateContent,
   images: ExtractedPolicyUpdateImage[],
 ): GeneratedPolicyUpdateContent {
@@ -1764,7 +1763,7 @@ function mergeExtractedImagesIntoContent(
     }
 
     if (image.role === "notable-post") {
-      if (!appendImageToNextMatchingSection(sections, image, /^Notable Post\b/i)) {
+      if (!appendImageToNextMatchingSection(sections, image, /\bRelevant Posts?\b|^Notable Post\b/i)) {
         sections.push({ heading: "Notable Post", body: [], images: [image] });
       }
       continue;
