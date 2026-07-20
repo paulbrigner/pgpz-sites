@@ -80,6 +80,33 @@ describe("buildPolicyUpdateEmail", () => {
     );
   });
 
+  it("keeps action items visually attached to the preceding policy section", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        sections: [
+          { heading: "First policy development", body: ["First analysis."] },
+          { heading: "Action Item", body: ["Take the first action."] },
+          { heading: "Second policy development", body: ["Second analysis."] },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    const containerStyleBefore = (heading: string) => {
+      const headingIndex = built.html.indexOf(`>${heading}</h2>`);
+      expect(headingIndex).toBeGreaterThan(-1);
+      const containerIndex = built.html.lastIndexOf('<div style="', headingIndex);
+      return built.html.slice(containerIndex, built.html.indexOf('">', containerIndex) + 2);
+    };
+
+    expect(containerStyleBefore("Action Item")).not.toContain("border-top");
+    expect(containerStyleBefore("Second policy development")).toContain("border-top");
+  });
+
   it("renders policy update tables in HTML and text email bodies", () => {
     if (!specialUpdate) throw new Error("Missing special update fixture");
 

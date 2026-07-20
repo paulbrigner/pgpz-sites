@@ -20,10 +20,23 @@ export function splitPolicyUpdateSocialPostHeading(heading: string): PolicyUpdat
   };
 }
 
+export function isPolicyUpdateActionItemSection(section: Pick<PolicyUpdateSection, "heading">) {
+  return /^Action Items?:?$/i.test(section.heading.trim());
+}
+
 export function isPolicyUpdateSocialPostSection(
-  section: Pick<PolicyUpdateSection, "heading" | "images">,
+  section: Pick<PolicyUpdateSection, "heading" | "images"> &
+    Partial<Pick<PolicyUpdateSection, "body" | "bodyAfterBullets" | "bullets" | "table">>,
 ) {
   if (splitPolicyUpdateSocialPostHeading(section.heading)) return true;
+
+  const hasNarrativeContent =
+    !!section.body?.length ||
+    !!section.bodyAfterBullets?.length ||
+    !!section.bullets?.length ||
+    !!section.table;
+
+  if (hasNarrativeContent) return false;
 
   return (
     section.images?.some((image) =>

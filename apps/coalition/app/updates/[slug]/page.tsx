@@ -12,6 +12,7 @@ import { isEffectiveAdmin } from "@/lib/admin/member-preview";
 import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
+  isPolicyUpdateActionItemSection,
   isPolicyUpdateSocialPostSection,
   policyUpdateSectionHeadingLink,
   splitPolicyUpdateSocialPostHeading,
@@ -450,7 +451,7 @@ export default async function UpdateDetailPage({ params }: Props) {
           <div className="space-y-8">
             {update.sections.map((section, index) => (
               <Fragment key={`${section.heading}-${index}`}>
-                {index > 0 ? (
+                {index > 0 && !isPolicyUpdateActionItemSection(section) ? (
                   <hr className="border-0 border-t border-[rgba(245,168,0,0.34)]" aria-hidden="true" />
                 ) : null}
                 <PolicyUpdateSectionBlock section={section} />

@@ -11,6 +11,7 @@ import {
 } from "@/lib/email-link-security";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
+  isPolicyUpdateActionItemSection,
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
   policyUpdateSectionHeadingLink,
@@ -294,6 +295,7 @@ const renderSectionHtml = (
   tracking: PolicyUpdateEmailTracking | undefined,
 ) => {
   const isSocial = isPolicyUpdateSocialPostSection(section);
+  const showTopBorder = !isPolicyUpdateActionItemSection(section);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
   const imagesHtml = renderSectionImages({
@@ -311,7 +313,7 @@ const renderSectionHtml = (
 
   return `<tr>
               <td style="padding:0 30px 22px;">
-                <div style="border-top:1px solid rgba(245,168,0,0.34);padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
+                <div style="${showTopBorder ? "border-top:1px solid rgba(245,168,0,0.34);" : ""}padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
                   ${renderSectionHeading(section, baseUrl, tracking)}
                   ${isSocial ? imagesHtml : ""}
                   ${renderParagraphs(section.body, section.links, baseUrl, tracking)}

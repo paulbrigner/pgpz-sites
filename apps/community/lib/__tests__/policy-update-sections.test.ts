@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isPolicyUpdateActionItemSection,
   isPolicyUpdateSocialPostSection,
   normalizePolicyUpdateSectionLayout,
   policyUpdateSectionHeadingLink,
@@ -7,6 +8,12 @@ import {
 } from "@/lib/policy-update-sections";
 
 describe("policy update section helpers", () => {
+  it("recognizes action item sections that should stay attached to the preceding policy topic", () => {
+    expect(isPolicyUpdateActionItemSection({ heading: "Action Item" })).toBe(true);
+    expect(isPolicyUpdateActionItemSection({ heading: "Action Items:" })).toBe(true);
+    expect(isPolicyUpdateActionItemSection({ heading: "Policy development" })).toBe(false);
+  });
+
   it("splits X Post of the Week headings into label and title", () => {
     expect(
       splitPolicyUpdateSocialPostHeading(
