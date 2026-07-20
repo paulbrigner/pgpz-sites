@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommunityXMonitorHref,
   buildCommunityXMonitorProxySearch,
+  communityXMonitorActivityFeedQuery,
   parseCommunityXMonitorQuery,
+  safeCommunityXMonitorReturnHref,
 } from "./x-monitor-query";
 
 describe("Community X Monitor query", () => {
@@ -16,6 +18,34 @@ describe("Community X Monitor query", () => {
       cursor: undefined,
     });
     expect(query.trendRange).toBe("7d");
+    expect(query.searchMode).toBe("keyword");
+  });
+
+  it("preserves bounded semantic prompts while dropping semantic pagination", () => {
+    const query = parseCommunityXMonitorQuery({
+      search_mode: "semantic",
+      q: "x".repeat(700),
+      cursor: "should-not-survive",
+      tier: "ecosystem",
+      theme: "Product / ecosystem",
+    });
+    expect(query.searchMode).toBe("semantic");
+    expect(query.q).toHaveLength(500);
+    expect(query.feed.cursor).toBeUndefined();
+    const url = new URL(
+      buildCommunityXMonitorHref(query, "older"),
+      "https://community.pgpz.org",
+    );
+    expect(url.searchParams.get("search_mode")).toBe("semantic");
+    expect(url.searchParams.has("cursor")).toBe(false);
+    expect(url.searchParams.getAll("tier")).toEqual(["ecosystem"]);
+    expect(url.searchParams.getAll("theme")).toEqual(["Product / ecosystem"]);
+    expect(communityXMonitorActivityFeedQuery(query)).toMatchObject({
+      q: undefined,
+      cursor: undefined,
+      tiers: ["ecosystem"],
+      themes: ["Product / ecosystem"],
+    });
   });
 
   it("bounds text, validates handles, and ignores unsupported ranges", () => {
@@ -86,5 +116,18 @@ describe("Community X Monitor query", () => {
         ),
       ),
     ).toEqual({ limit: "20" });
+  });
+
+  it("canonicalizes safe detail return links and rejects external destinations", () => {
+    expect(safeCommunityXMonitorReturnHref(
+      "/x-monitor?q=privacy&cursor=older&unknown=ignored#x-monitor-feed",
+    )).toBe("/x-monitor?q=privacy&cursor=older#x-monitor-feed");
+    expect(safeCommunityXMonitorReturnHref(
+      "/x-monitor?search_mode=semantic&q=privacy&cursor=ignored#x-monitor-feed",
+    )).toBe("/x-monitor?search_mode=semantic&q=privacy#x-monitor-feed");
+    expect(safeCommunityXMonitorReturnHref("https://evil.example/x-monitor"))
+      .toBe("/x-monitor");
+    expect(safeCommunityXMonitorReturnHref("//evil.example/x-monitor"))
+      .toBe("/x-monitor");
   });
 });

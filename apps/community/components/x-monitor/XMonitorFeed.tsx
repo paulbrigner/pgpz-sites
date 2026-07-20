@@ -25,9 +25,15 @@ function tierLabel(value: string | null): string | null {
 export function XMonitorPostCard({
   item,
   linkToDetail = true,
+  returnHref,
+  semanticScoreDescriptionId,
+  showSemanticScore = false,
 }: {
   item: FeedItem;
   linkToDetail?: boolean;
+  returnHref?: string;
+  semanticScoreDescriptionId?: string;
+  showSemanticScore?: boolean;
 }) {
   const label = tierLabel(item.watch_tier);
   const canonicalPostUrl = /^[0-9]{1,32}$/.test(item.status_id)
@@ -54,6 +60,15 @@ export function XMonitorPostCard({
             {item.is_significant ? (
               <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-[var(--brand-teal)]">
                 Significant
+              </span>
+            ) : null}
+            {showSemanticScore && typeof item.score === "number" && Number.isFinite(item.score) ? (
+              <span
+                aria-describedby={semanticScoreDescriptionId}
+                aria-label={`Semantic match score ${item.score.toFixed(2)}`}
+                className="rounded-full bg-blue-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[var(--brand-denim)]"
+              >
+                Match {item.score.toFixed(2)}
               </span>
             ) : null}
           </div>
@@ -90,7 +105,9 @@ export function XMonitorPostCard({
         {linkToDetail ? (
           <Link
             className="ml-auto font-semibold text-[var(--brand-denim)] hover:underline"
-            href={`/x-monitor/posts/${encodeURIComponent(item.status_id)}`}
+            href={returnHref
+              ? `/x-monitor/posts/${encodeURIComponent(item.status_id)}?return_to=${encodeURIComponent(returnHref)}`
+              : `/x-monitor/posts/${encodeURIComponent(item.status_id)}`}
           >
             Post details
           </Link>
@@ -109,29 +126,62 @@ export function XMonitorFeed({
   nextCursor: string | null;
   query: CommunityXMonitorQuery;
 }) {
+  const semanticScoreDescriptionId = query.searchMode === "semantic"
+    ? "x-monitor-semantic-score-help"
+    : undefined;
+  const returnHref = `${buildCommunityXMonitorHref(query, query.feed.cursor)}#x-monitor-feed`;
+
   return (
-    <section className="space-y-4" aria-labelledby="x-monitor-feed-title">
+    <section
+      className="scroll-mt-24 space-y-4"
+      id="x-monitor-feed"
+      aria-labelledby="x-monitor-feed-title"
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="section-eyebrow text-[var(--brand-denim)]">Monitored feed</p>
+          <p className="section-eyebrow text-[var(--brand-denim)]">
+            {query.searchMode === "semantic" ? "Semantic search" : "Monitored feed"}
+          </p>
           <h2 id="x-monitor-feed-title" className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">
-            {query.significantMode === "significant" ? "Significant posts" : "All captured posts"}
+            {query.searchMode === "semantic"
+              ? "Semantic matches"
+              : query.significantMode === "significant" ? "Significant posts" : "All captured posts"}
           </h2>
+          {query.searchMode === "semantic" && query.q ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Matches for “{query.q}”.{" "}
+              <span id={semanticScoreDescriptionId}>
+                Match scores show closeness in meaning; higher is closer.
+              </span>
+            </p>
+          ) : null}
         </div>
         <p className="text-sm text-slate-500">{items.length} posts on this page</p>
       </div>
 
       {items.length > 0 ? (
         <div className="space-y-4">
-          {items.map((item) => <XMonitorPostCard item={item} key={item.status_id} />)}
+          {items.map((item) => (
+            <XMonitorPostCard
+              item={item}
+              key={item.status_id}
+              returnHref={returnHref}
+              semanticScoreDescriptionId={semanticScoreDescriptionId}
+              showSemanticScore={query.searchMode === "semantic"}
+            />
+          ))}
         </div>
       ) : (
         <div className="muted-card p-8 text-center text-sm text-slate-600">
-          No captured posts match these filters.
+          {query.searchMode === "semantic" && !query.q
+            ? "Enter a semantic prompt to find meaning-based matches."
+            : query.searchMode === "semantic"
+              ? "No captured posts matched this semantic prompt."
+              : "No captured posts match these filters."}
         </div>
       )}
 
-      {nextCursor ? (
+      {nextCursor && query.searchMode === "keyword" ? (
         <div className="flex justify-center pt-2">
           <Link
             className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--brand-ink)] px-6 text-sm font-semibold text-[var(--zcash-gold)] transition hover:bg-[var(--brand-coal)]"

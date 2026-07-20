@@ -6,15 +6,17 @@
 `/x-monitor`. It includes:
 
 - generated conversation summaries;
-- keyword, X-handle, watch-list, and theme filtering;
+- keyword or meaning-based semantic search, plus X-handle, watch-list, and
+  theme filtering;
 - significant or all-post feed views;
 - activity-volume trends for 24 hours, 7 days, 30 days, or 90 days;
 - pagination and captured-post detail pages.
 
-It intentionally excludes semantic Answer Mode, Compose, email, schedules,
-capture-plan controls, ingestion, and operational endpoints. Those capabilities
-still require the privileged zodldashboard viewer boundary and must not receive
-the Community read credential.
+It intentionally excludes Answer Mode, Compose, email, schedules, capture-plan
+controls, ingestion, and operational endpoints. Those capabilities still
+require the privileged zodldashboard viewer boundary and must not receive the
+Community read credential. Semantic retrieval returns at most 24 ranked posts
+and does not expose Answer Mode or pagination.
 
 This is an intentional product divergence. `apps/coalition` does not expose X
 Monitor.
@@ -27,8 +29,8 @@ Monitor.
   `npm run xmonitor:verify-vendor` to verify the recorded file hashes.
 - `apps/community/lib/x-monitor-server.ts` is the only Community module that
   reads the backend client secret. It injects the credential into outbound
-  requests, sets a bounded timeout, disables caching and redirects, and permits
-  only the five integrated read paths.
+  requests, sets bounded timeouts, disables caching and redirects, and permits
+  only the five integrated GET paths plus the dedicated semantic-query POST.
 - Community presents the current `teammate` list as **Zodl Team** and folds
   historical `investor` records into **Influencer**. It intentionally exposes
   theme filters but no debate-topic filter or debate-focused chart.
@@ -41,6 +43,21 @@ Monitor.
 - The page server-renders through the same server-only client. The credential is
   never available to browser JavaScript or included in a `NEXT_PUBLIC_`
   variable.
+- The backend creates semantic embeddings with its own provider credential.
+  Community never receives the Venice key or the broader
+  `XMONITOR_USER_PROXY_SECRET`. Semantic requests accept only bounded text and
+  allowlisted feed filters; caller-supplied vectors are rejected.
+- Community hashes the stable member ID for per-member semantic budgets and
+  deduplicates identical normalized prompt/filter requests for five minutes in
+  the private application DynamoDB table. Cache hits do not consume semantic
+  quota or create another embedding.
+- Uncached semantic requests are limited to 10 per member per five minutes and
+  50 per member per day. Community-wide and backend-client ceilings are 120 per
+  five minutes and 1,000 per day. Keyword search is not subject to these
+  semantic limits.
+- The backend applies its client budget atomically before calling the embedding
+  provider, has an independent semantic-client kill switch, and emits
+  prompt-free CloudWatch usage metrics.
 
 ## Runtime configuration
 
@@ -56,9 +73,19 @@ XMONITOR_READ_TIMEOUT_MS=10000
 ```
 
 The backend Secrets Manager document at `xmonitor/rds/app` must contain the
-same independent secret under `read_clients.pgpz-community`, without modifying
-any existing client entries. The backend caches valid client configuration for
-five minutes.
+same independent secret and explicit capabilities under
+`read_clients.pgpz-community`, without modifying any existing client entries:
+
+```json
+{
+  "secrets": ["<same independent secret>"],
+  "capabilities": ["read", "semantic:query"]
+}
+```
+
+Legacy array entries remain read-only. The backend caches valid client
+configuration for five minutes. Apply backend migration
+`033_xmonitor_semantic_client_usage.sql` before adding the semantic capability.
 
 Never configure `XMONITOR_USER_PROXY_SECRET` in Community. Never put the read
 secret, the API base URL, or the client ID in a public variable. Only the
@@ -68,7 +95,8 @@ state as the server.
 ## Rotation
 
 1. Generate a new independent secret and append it to the backend
-   `read_clients.pgpz-community` array, preserving the current secret.
+   `read_clients.pgpz-community.secrets` array, preserving the current secret
+   and both capabilities.
 2. Wait for the five-minute backend cache window and verify the new credential.
 3. replace `XMONITOR_READ_CLIENT_SECRET` in the Community Amplify environment
    without changing unrelated variables, then deploy and smoke-test.
@@ -97,6 +125,12 @@ Production smoke checks must confirm:
 
 - unsigned and invalid direct backend reads return `401`;
 - `pgpz-community` and the existing `zodldashboard` clients can read the feed;
+- only the semantic-capable `pgpz-community` client can call semantic query;
+- cached identical Community searches do not create duplicate backend calls,
+  and exhausted client budgets return `429` before embedding work;
+- existing viewer-proxy semantic search in zodldashboard remains healthy;
+- the Community semantic client still cannot call Compose, email, schedules,
+  ingestion, operations, or access-control endpoints;
 - anonymous Community API requests return `401`;
 - `/x-monitor` redirects anonymous viewers to sign-in;
 - active members and administrators can load the page and detail routes;

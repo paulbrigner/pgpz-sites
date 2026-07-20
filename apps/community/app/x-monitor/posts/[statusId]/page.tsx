@@ -7,6 +7,10 @@ import { XMonitorPostCard } from "@/components/x-monitor/XMonitorFeed";
 import { getMemberAccess } from "@/lib/member-access";
 import { canAccessCommunityXMonitor } from "@/lib/x-monitor-access";
 import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
+import {
+  safeCommunityXMonitorReturnHref,
+  type CommunityXMonitorSearchParams,
+} from "@/lib/x-monitor-query";
 import { createCommunityXMonitorClient } from "@/lib/x-monitor-server";
 
 export const dynamic = "force-dynamic";
@@ -47,15 +51,25 @@ function MembershipRequired() {
 
 export default async function XMonitorPostPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ statusId: string }>;
+  searchParams?: Promise<CommunityXMonitorSearchParams>;
 }) {
   if (!isCommunityXMonitorEnabled()) notFound();
   const { statusId } = await params;
   if (!/^[0-9]{1,32}$/.test(statusId?.trim() || "")) notFound();
 
+  const rawSearchParams = (await searchParams) || {};
+  const rawReturnTo = Array.isArray(rawSearchParams.return_to)
+    ? rawSearchParams.return_to[0]
+    : rawSearchParams.return_to;
+  const returnHref = safeCommunityXMonitorReturnHref(rawReturnTo);
+  const detailPath = `/x-monitor/posts/${encodeURIComponent(statusId)}`;
+  const callbackPath = rawReturnTo
+    ? `${detailPath}?return_to=${encodeURIComponent(returnHref)}`
+    : detailPath;
   const access = await getMemberAccess();
-  const callbackPath = `/x-monitor/posts/${encodeURIComponent(statusId)}`;
   if (!access.authenticated) {
     redirect(`/signin?callbackUrl=${encodeURIComponent(callbackPath)}`);
   }
@@ -74,7 +88,7 @@ export default async function XMonitorPostPage({
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-5 pb-14">
         <Button variant="outline" asChild>
-          <Link href="/x-monitor">
+          <Link href={returnHref}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to X Monitor
           </Link>
@@ -106,7 +120,7 @@ export default async function XMonitorPostPage({
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-5 pb-14">
       <div>
         <Button variant="outline" asChild>
-          <Link href="/x-monitor">
+          <Link href={returnHref}>
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to X Monitor
           </Link>

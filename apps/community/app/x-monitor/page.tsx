@@ -14,11 +14,20 @@ import { XMonitorSummaries } from "@/components/x-monitor/XMonitorSummaries";
 import { getMemberAccess } from "@/lib/member-access";
 import { canAccessCommunityXMonitor } from "@/lib/x-monitor-access";
 import {
+  buildCommunityXMonitorHref,
+  communityXMonitorActivityFeedQuery,
   parseCommunityXMonitorQuery,
   type CommunityXMonitorSearchParams,
 } from "@/lib/x-monitor-query";
 import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
-import { createCommunityXMonitorClient } from "@/lib/x-monitor-server";
+import {
+  createCommunityXMonitorClient,
+} from "@/lib/x-monitor-server";
+import {
+  CommunityXMonitorSemanticBusyError,
+  CommunityXMonitorSemanticLimitError,
+  queryCommunityXMonitorSemanticForMember,
+} from "@/lib/x-monitor-semantic-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,13 +63,45 @@ function MembershipRequired() {
   );
 }
 
-function UnavailableNotice() {
+function UnavailableNotice({ anchor = false }: { anchor?: boolean }) {
   return (
-    <section className="muted-card p-6" role="status">
+    <section
+      className={`muted-card p-6${anchor ? " scroll-mt-24" : ""}`}
+      id={anchor ? "x-monitor-feed" : undefined}
+      role="status"
+    >
       <h2 className="text-lg font-semibold text-[var(--brand-ink)]">X Monitor is temporarily unavailable</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         The Community site could not reach the protected read service. No credentials or private
         member information were exposed. Please try again shortly.
+      </p>
+    </section>
+  );
+}
+
+function SemanticLimitNotice() {
+  return (
+    <section className="muted-card scroll-mt-24 p-6" id="x-monitor-feed" role="status">
+      <h2 className="text-lg font-semibold text-[var(--brand-ink)]">
+        Semantic search limit reached
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        Semantic search has a usage limit to protect the shared service. Please wait and try again;
+        keyword search remains available now.
+      </p>
+    </section>
+  );
+}
+
+function SemanticBusyNotice() {
+  return (
+    <section className="muted-card scroll-mt-24 p-6" id="x-monitor-feed" role="status">
+      <h2 className="text-lg font-semibold text-[var(--brand-ink)]">
+        Semantic search is already running
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        An identical search is still being prepared. Please retry in a moment;
+        keyword search remains available now.
       </p>
     </section>
   );
@@ -86,19 +127,36 @@ export default async function XMonitorPage({
   let summaries: WindowSummary[] = [];
   let trends: ActivityTrendsResponse | null = null;
   let configurationAvailable = true;
+  let semanticBusy = false;
+  let semanticLimitReached = false;
 
   try {
     const client = createCommunityXMonitorClient();
+    const feedRequest = query.searchMode === "semantic"
+      ? queryCommunityXMonitorSemanticForMember(query.feed, access.user?.id || "")
+      : client.feed(query.feed);
     const [feedResult, summaryResult, trendsResult] = await Promise.allSettled([
-      client.feed(query.feed),
+      feedRequest,
       client.latestSummaries(),
-      client.activityTrends(query.feed, {
-        searchMode: "keyword",
+      client.activityTrends(communityXMonitorActivityFeedQuery(query), {
+        searchMode: query.searchMode,
         trendRange: query.trendRange,
       }),
     ]);
 
     if (feedResult.status === "fulfilled") feed = feedResult.value;
+    if (
+      feedResult.status === "rejected" &&
+      feedResult.reason instanceof CommunityXMonitorSemanticLimitError
+    ) {
+      semanticLimitReached = true;
+    }
+    if (
+      feedResult.status === "rejected" &&
+      feedResult.reason instanceof CommunityXMonitorSemanticBusyError
+    ) {
+      semanticBusy = true;
+    }
     if (summaryResult.status === "fulfilled") summaries = summaryResult.value.items;
     if (trendsResult.status === "fulfilled") trends = trendsResult.value;
   } catch {
@@ -135,7 +193,7 @@ export default async function XMonitorPage({
         </div>
       </section>
 
-      <XMonitorFilters query={query} />
+      <XMonitorFilters key={buildCommunityXMonitorHref(query)} query={query} />
 
       {!configurationAvailable ? <UnavailableNotice /> : null}
 
@@ -143,10 +201,14 @@ export default async function XMonitorPage({
         <>
           <XMonitorSummaries summaries={summaries} />
           <XMonitorActivity query={query} trends={trends} />
-          {feed ? (
+          {semanticBusy ? (
+            <SemanticBusyNotice />
+          ) : semanticLimitReached ? (
+            <SemanticLimitNotice />
+          ) : feed ? (
             <XMonitorFeed items={feed.items} nextCursor={feed.next_cursor} query={query} />
           ) : (
-            <UnavailableNotice />
+            <UnavailableNotice anchor />
           )}
         </>
       ) : null}

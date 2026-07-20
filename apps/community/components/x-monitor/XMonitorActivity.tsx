@@ -13,9 +13,11 @@ const ranges: Array<{ key: XMonitorTrendRangeKey; label: string }> = [
   { key: "90d", label: "90 days" },
 ];
 
+const ACTIVITY_ANCHOR = "x-monitor-activity";
+
 function rangeHref(query: CommunityXMonitorQuery, range: XMonitorTrendRangeKey): string {
   const next = { ...query, trendRange: range };
-  return buildCommunityXMonitorHref(next);
+  return `${buildCommunityXMonitorHref(next)}#${ACTIVITY_ANCHOR}`;
 }
 
 function formatScopeDate(value: string): string {
@@ -38,7 +40,7 @@ export function XMonitorActivity({
 }) {
   if (!trends) {
     return (
-      <section className="muted-card p-6">
+      <section className="muted-card scroll-mt-24 p-6" id={ACTIVITY_ANCHOR}>
         <p className="section-eyebrow text-[var(--brand-denim)]">Activity trends</p>
         <p className="mt-3 text-sm text-slate-600">Activity data is temporarily unavailable.</p>
       </section>
@@ -53,7 +55,11 @@ export function XMonitorActivity({
     : [];
 
   return (
-    <section className="glass-surface p-6" aria-labelledby="x-monitor-activity-title">
+    <section
+      className="glass-surface scroll-mt-24 p-6"
+      id={ACTIVITY_ANCHOR}
+      aria-labelledby="x-monitor-activity-title"
+    >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="section-eyebrow text-[var(--brand-denim)]">Activity trends</p>
@@ -63,10 +69,17 @@ export function XMonitorActivity({
           <p className="mt-2 text-xs text-slate-500">
             {formatScopeDate(trends.scope.since)} to {formatScopeDate(trends.scope.until)} ET · {trends.scope.bucket_hours}-hour buckets
           </p>
+          {query.searchMode === "semantic" && !trends.scope.text_filter_applied && query.q ? (
+            <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-500">
+              The semantic prompt is not applied to this volume chart; selected watch-list, theme,
+              account, and feed filters are applied.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Activity range">
           {ranges.map((range) => (
             <Link
+              aria-current={range.key === query.trendRange ? "page" : undefined}
               className={
                 range.key === query.trendRange
                   ? "rounded-full bg-[var(--brand-ink)] px-3 py-1.5 text-xs font-semibold text-[var(--zcash-gold)]"
