@@ -26,6 +26,7 @@ import {
   listBackgroundJobsPage,
   listBackgroundJobTasks,
   listBackgroundJobTasksPage,
+  markBackgroundJobTaskProjectionCompleted,
   prepareSingleRecipientBackgroundJob,
   reconcileBackgroundJobs,
   repairBuildingBackgroundJobSnapshot,
@@ -329,6 +330,53 @@ describe("durable background-job safety", () => {
       update: { sections: [{ heading: "Action Item" }] },
     });
     expect(taskPut.recipient.metadata).toEqual({});
+  });
+
+  it("replaces a DynamoDB NULL projection-completion placeholder", async () => {
+    await markBackgroundJobTaskProjectionCompleted("job-1", "task-1");
+
+    expect(dynamoMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Key: { pk: "BACKGROUND_JOB#job-1", sk: "TASK#task-1" },
+        UpdateExpression: expect.stringContaining(
+          "SET #projectionCompletedAt = :now",
+        ),
+        ConditionExpression:
+          "#status = :sent AND (attribute_not_exists(#projectionCompletedAt) OR attribute_type(#projectionCompletedAt, :nullType))",
+        ExpressionAttributeValues: expect.objectContaining({
+          ":sent": "sent",
+          ":nullType": "NULL",
+        }),
+      }),
+    );
+    expect(dynamoMocks.update.mock.calls[0][0].UpdateExpression).not.toContain(
+      "if_not_exists(#projectionCompletedAt",
+    );
+  });
+
+  it("preserves an existing projection-completion timestamp", async () => {
+    const completedAt = "2026-07-20T23:00:00.000Z";
+    const conditionalFailure = Object.assign(new Error("already completed"), {
+      name: "ConditionalCheckFailedException",
+    });
+    dynamoMocks.update.mockRejectedValueOnce(conditionalFailure);
+    dynamoMocks.get.mockResolvedValueOnce({
+      Item: taskItem({
+        status: "sent",
+        projectionCompletedAt: completedAt,
+      }),
+    });
+
+    await expect(
+      markBackgroundJobTaskProjectionCompleted("job-1", "task-1"),
+    ).resolves.toBeUndefined();
+
+    expect(dynamoMocks.update).toHaveBeenCalledTimes(1);
+    expect(dynamoMocks.get).toHaveBeenCalledWith({
+      TableName: "JobsTable",
+      Key: { pk: "BACKGROUND_JOB#job-1", sk: "TASK#task-1" },
+      ConsistentRead: true,
+    });
   });
 
   it("repairs a partially materialized building job from its durable audience manifest", async () => {
