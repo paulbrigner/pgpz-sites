@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, Heart, MessageCircle, Repeat2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import type { FeedItem } from "@pgpz/x-monitor-core/contracts";
 import type { CommunityXMonitorQuery } from "@/lib/x-monitor-query";
 import { buildCommunityXMonitorHref } from "@/lib/x-monitor-query";
@@ -74,17 +74,31 @@ export function XMonitorPostCard({
           </div>
           <p className="mt-1 text-xs text-slate-500">{formatDate(item.discovered_at)} ET</p>
         </div>
-        {canonicalPostUrl ? (
-          <a
-            aria-label="Open original post on X"
-            className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--brand-denim)] hover:underline"
-            href={canonicalPostUrl}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            View on X
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
+        {canonicalPostUrl || linkToDetail ? (
+          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+            {canonicalPostUrl ? (
+              <a
+                aria-label="Open original post on X"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-denim)] hover:underline"
+                href={canonicalPostUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                View on X
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            ) : null}
+            {linkToDetail ? (
+              <Link
+                className="text-xs font-semibold text-[var(--brand-denim)] hover:underline"
+                href={returnHref
+                  ? `/x-monitor/posts/${encodeURIComponent(item.status_id)}?return_to=${encodeURIComponent(returnHref)}`
+                  : `/x-monitor/posts/${encodeURIComponent(item.status_id)}`}
+              >
+                Post details
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -97,22 +111,6 @@ export function XMonitorPostCard({
           {item.significance_reason}
         </p>
       ) : null}
-
-      <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" aria-hidden="true" />{item.likes.toLocaleString()}</span>
-        <span className="inline-flex items-center gap-1"><Repeat2 className="h-3.5 w-3.5" aria-hidden="true" />{item.reposts.toLocaleString()}</span>
-        <span className="inline-flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />{item.replies.toLocaleString()}</span>
-        {linkToDetail ? (
-          <Link
-            className="ml-auto font-semibold text-[var(--brand-denim)] hover:underline"
-            href={returnHref
-              ? `/x-monitor/posts/${encodeURIComponent(item.status_id)}?return_to=${encodeURIComponent(returnHref)}`
-              : `/x-monitor/posts/${encodeURIComponent(item.status_id)}`}
-          >
-            Post details
-          </Link>
-        ) : null}
-      </div>
     </article>
   );
 }

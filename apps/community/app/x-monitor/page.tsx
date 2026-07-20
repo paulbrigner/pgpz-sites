@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, LockKeyhole, ShieldCheck } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import type {
   ActivityTrendsResponse,
@@ -72,8 +72,7 @@ function UnavailableNotice({ anchor = false }: { anchor?: boolean }) {
     >
       <h2 className="text-lg font-semibold text-[var(--brand-ink)]">X Monitor is temporarily unavailable</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        The Community site could not reach the protected read service. No credentials or private
-        member information were exposed. Please try again shortly.
+        Fresh X Monitor data is not available right now. Please try again shortly.
       </p>
     </section>
   );
@@ -168,27 +167,12 @@ export default async function XMonitorPage({
       <section className="community-hero">
         <div className="community-hero__frame">
           <div className="max-w-3xl space-y-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="section-eyebrow text-white/70">PGPZ member intelligence</p>
-              <span className="rounded-full border border-[rgba(245,168,0,0.45)] bg-[rgba(245,168,0,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
-                Read only
-              </span>
-            </div>
+            <p className="section-eyebrow text-white/70">PGPZ member intelligence</p>
             <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">X Monitor</h1>
             <p className="max-w-2xl text-base leading-7 text-white/78">
-              Follow focused Zcash conversation on X through captured posts, generated summaries,
-              and activity trends—without exposing the monitoring backend or its credentials.
+              Explore the Zcash conversation on X through focused posts, concise summaries, and
+              activity trends organized for the PGPZ community.
             </p>
-            <div className="flex flex-wrap gap-3 text-sm text-[var(--zcash-gold-soft)]">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1">
-                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Member-only access
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1">
-                <Activity className="h-4 w-4" aria-hidden="true" />
-                Live read service
-              </span>
-            </div>
           </div>
         </div>
       </section>

@@ -5,8 +5,11 @@ import React, {
   type ButtonHTMLAttributes,
   type CSSProperties,
   type FormEvent,
+  useCallback,
+  useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -14,6 +17,8 @@ import {
   ArrowDownToLine,
   ArrowUp,
   ArrowUpToLine,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Library,
   Pencil,
@@ -215,6 +220,10 @@ export function ZecShelfClient({
   const [editing, setEditing] = useState<ZecShelfResource | null>(null);
   const [checking, setChecking] = useState<string | "all" | null>(null);
   const [error, setError] = useState("");
+  const categoryScrollerRef = useRef<HTMLDivElement>(null);
+  const previousCategoriesRef = useRef<HTMLButtonElement>(null);
+  const moreCategoriesRef = useRef<HTMLButtonElement>(null);
+  const [categoryScroll, setCategoryScroll] = useState({ canScrollLeft: false, canScrollRight: false });
   const generatedId = useId().replace(/:/g, "");
   const datalistId = `zec-shelf-categories-${generatedId}`;
   const headingId = `zec-shelf-heading-${generatedId}`;
@@ -225,6 +234,51 @@ export function ZecShelfClient({
     () => ["All resources", ...Array.from(new Set(resources.map((item) => item.category)))],
     [resources],
   );
+
+  const updateCategoryScroll = useCallback(() => {
+    const scroller = categoryScrollerRef.current;
+    if (!scroller) return;
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const nextScroll = {
+      canScrollLeft: scroller.scrollLeft > 4,
+      canScrollRight: scroller.scrollLeft < maxScrollLeft - 4,
+    };
+    const focusPrevious = document.activeElement === moreCategoriesRef.current && !nextScroll.canScrollRight;
+    const focusMore = document.activeElement === previousCategoriesRef.current && !nextScroll.canScrollLeft;
+    setCategoryScroll(nextScroll);
+    if (focusPrevious || focusMore) {
+      window.requestAnimationFrame(() => {
+        (focusPrevious ? previousCategoriesRef.current : moreCategoriesRef.current)?.focus();
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    updateCategoryScroll();
+    const scroller = categoryScrollerRef.current;
+    const resizeObserver = scroller && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(updateCategoryScroll)
+      : null;
+    if (scroller) resizeObserver?.observe(scroller);
+    window.addEventListener("resize", updateCategoryScroll);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateCategoryScroll);
+    };
+  }, [categories, updateCategoryScroll]);
+
+  function scrollCategories(direction: -1 | 1) {
+    const scroller = categoryScrollerRef.current;
+    if (!scroller) return;
+    const distance = Math.max(220, Math.round(scroller.clientWidth * 0.65));
+    if (typeof scroller.scrollBy === "function") {
+      scroller.scrollBy({ left: direction * distance, behavior: "smooth" });
+      return;
+    }
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    scroller.scrollLeft = Math.min(maxScrollLeft, Math.max(0, scroller.scrollLeft + direction * distance));
+    updateCategoryScroll();
+  }
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -370,22 +424,62 @@ export function ZecShelfClient({
             <span className="sr-only">Search resources</span>
             <input className="min-w-0 flex-1 bg-transparent text-sm text-[var(--zec-shelf-ink)] outline-none placeholder:text-slate-400" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search ZEC Shelf…" />
           </label>
-          <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by category">
-            {categories.map((item) => (
-              <button
-                type="button"
-                key={item}
-                className={cn(
-                  "shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition",
-                  item === category
-                    ? "border-[var(--zec-shelf-ink)] bg-[var(--zec-shelf-ink)] text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-[var(--zec-shelf-accent)] hover:text-[var(--zec-shelf-secondary)]",
-                )}
-                onClick={() => setCategory(item)}
-              >
-                {item}
-              </button>
-            ))}
+          <div className="relative min-w-0">
+            <div
+              ref={categoryScrollerRef}
+              className="flex gap-2 overflow-x-auto pb-2 pr-20 [scrollbar-color:var(--zec-shelf-accent)_transparent] [scrollbar-width:thin]"
+              role="group"
+              aria-label="Filter by category"
+              onScroll={updateCategoryScroll}
+            >
+              {categories.map((item) => (
+                <button
+                  type="button"
+                  key={item}
+                  className={cn(
+                    "shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition",
+                    item === category
+                      ? "border-[var(--zec-shelf-ink)] bg-[var(--zec-shelf-ink)] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-[var(--zec-shelf-accent)] hover:text-[var(--zec-shelf-secondary)]",
+                  )}
+                  onClick={() => setCategory(item)}
+                  aria-pressed={item === category}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            {categoryScroll.canScrollLeft ? (
+              <>
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-white via-white/90 to-transparent" />
+                <button
+                  ref={previousCategoriesRef}
+                  type="button"
+                  aria-label="Show previous categories"
+                  title="Show previous categories"
+                  className="absolute left-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-[var(--zec-shelf-secondary)] shadow-md transition hover:border-[var(--zec-shelf-accent)] hover:text-[var(--zec-shelf-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zec-shelf-focus-ring)]"
+                  onClick={() => scrollCategories(-1)}
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
+            {categoryScroll.canScrollRight ? (
+              <>
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-white via-white/95 to-transparent" />
+                <button
+                  ref={moreCategoriesRef}
+                  type="button"
+                  aria-label="Show more categories"
+                  title="Show more categories"
+                  className="absolute right-1 top-1/2 inline-flex h-9 -translate-y-1/2 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-[var(--zec-shelf-secondary)] shadow-md transition hover:border-[var(--zec-shelf-accent)] hover:text-[var(--zec-shelf-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zec-shelf-focus-ring)]"
+                  onClick={() => scrollCategories(1)}
+                >
+                  More
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
 

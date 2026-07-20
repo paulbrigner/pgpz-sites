@@ -27,27 +27,68 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
           >
             {searchMode === "semantic" ? "Describe what you want to find" : "Search posts"}
           </label>
-          <div aria-label="Search mode" className="flex flex-wrap gap-1.5" role="radiogroup">
-            {(["keyword", "semantic"] as const).map((mode) => (
-              <label className="cursor-pointer" key={mode}>
-                <input
-                  checked={searchMode === mode}
-                  className="peer sr-only"
-                  name="search_mode"
-                  onChange={() => {
-                    setSearchMode(mode);
-                    if (mode === "keyword") {
-                      setQueryText((current) => current.slice(0, 200));
-                    }
-                  }}
-                  type="radio"
-                  value={mode}
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Search mode
+            </span>
+            <span
+              aria-hidden="true"
+              className={`select-none text-xs transition ${
+                searchMode === "keyword"
+                  ? "font-semibold text-[var(--brand-ink)]"
+                  : "font-medium text-slate-500"
+              }`}
+            >
+              Keyword
+            </span>
+            <label className="inline-flex cursor-pointer items-center">
+              <input
+                aria-describedby="x-monitor-search-mode-description"
+                aria-label="Semantic search"
+                checked={searchMode === "semantic"}
+                className="peer sr-only"
+                name="search_mode"
+                onChange={(event) => {
+                  const mode = event.currentTarget.checked ? "semantic" : "keyword";
+                  setSearchMode(mode);
+                  if (mode === "keyword") {
+                    setQueryText((current) => current.slice(0, 200));
+                  }
+                }}
+                role="switch"
+                type="checkbox"
+                value="semantic"
+              />
+              <span
+                aria-hidden="true"
+                className={`relative h-6 w-11 shrink-0 rounded-full border transition peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(245,168,0,0.18)] ${
+                  searchMode === "semantic"
+                    ? "border-[var(--zcash-gold)] bg-[rgba(245,168,0,0.24)]"
+                    : "border-slate-500 bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full border shadow-sm transition-transform ${
+                    searchMode === "semantic"
+                      ? "translate-x-5 border-[var(--brand-ink)] bg-[var(--brand-ink)]"
+                      : "translate-x-0 border-slate-500 bg-white"
+                  }`}
                 />
-                <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold capitalize text-slate-600 transition hover:border-[var(--zcash-gold)] peer-checked:border-[var(--brand-ink)] peer-checked:bg-[var(--brand-ink)] peer-checked:text-[var(--zcash-gold)] peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(245,168,0,0.18)]">
-                  {mode}
-                </span>
-              </label>
-            ))}
+              </span>
+            </label>
+            <span
+              aria-hidden="true"
+              className={`select-none text-xs transition ${
+                searchMode === "semantic"
+                  ? "font-semibold text-[var(--brand-ink)]"
+                  : "font-medium text-slate-500"
+              }`}
+            >
+              Semantic
+            </span>
+            <span className="sr-only" id="x-monitor-search-mode-description">
+              Off selects keyword search. On selects semantic search.
+            </span>
           </div>
         </div>
         <div className="relative block">
@@ -163,10 +204,6 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
             ))}
           </div>
         </fieldset>
-
-        <p className="text-xs leading-5 text-slate-500 md:col-span-2">
-          Select any combination. Historical investor-list posts are included with Influencer.
-        </p>
       </div>
 
       <input name="trend_range" type="hidden" value={query.trendRange} />
