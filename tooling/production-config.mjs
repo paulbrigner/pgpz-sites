@@ -73,6 +73,40 @@ export function validateBrandedProductionEnvironment(
         "SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS must differ from SOCIAL_PROOF_AUTOVERIFY_SECRET",
       );
     }
+
+    const xMonitorFlag = environment.NEXT_PUBLIC_XMONITOR_ENABLED?.trim().toLowerCase();
+    if (xMonitorFlag && !new Set(["true", "false"]).has(xMonitorFlag)) {
+      issues.push("NEXT_PUBLIC_XMONITOR_ENABLED must be true or false");
+    }
+    if (xMonitorFlag === "true") {
+      let readApiUrl;
+      try {
+        readApiUrl = new URL(environment.XMONITOR_READ_API_BASE_URL?.trim() || "");
+      } catch {
+        readApiUrl = null;
+      }
+      if (
+        !readApiUrl ||
+        readApiUrl.protocol !== "https:" ||
+        readApiUrl.username ||
+        readApiUrl.password ||
+        readApiUrl.search ||
+        readApiUrl.hash
+      ) {
+        issues.push("XMONITOR_READ_API_BASE_URL must be a credential-free HTTPS URL");
+      }
+      if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(environment.XMONITOR_READ_CLIENT_ID?.trim() || "")) {
+        issues.push("XMONITOR_READ_CLIENT_ID is invalid");
+      }
+      validateSigningSecret(environment, "XMONITOR_READ_CLIENT_SECRET", issues);
+      const configuredTimeout = environment.XMONITOR_READ_TIMEOUT_MS?.trim();
+      if (configuredTimeout) {
+        const timeout = Number(configuredTimeout);
+        if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 30_000) {
+          issues.push("XMONITOR_READ_TIMEOUT_MS must be an integer from 1000 to 30000");
+        }
+      }
+    }
   }
 
   if (trackingSecret && previousTrackingSecret === trackingSecret) {

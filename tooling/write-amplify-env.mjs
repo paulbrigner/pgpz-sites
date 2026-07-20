@@ -59,6 +59,11 @@ const applications = {
     ],
     keys: [
       ...sharedKeys,
+      "NEXT_PUBLIC_XMONITOR_ENABLED",
+      "XMONITOR_READ_API_BASE_URL",
+      "XMONITOR_READ_CLIENT_ID",
+      "XMONITOR_READ_CLIENT_SECRET",
+      "XMONITOR_READ_TIMEOUT_MS",
       "X_BEARER_TOKEN",
       "XMON_X_API_BEARER_TOKEN",
       "X_API_BASE_URL",

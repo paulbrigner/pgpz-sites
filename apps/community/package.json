@@ -26,6 +26,7 @@
     "@pgpz/core": "0.1.0",
     "@pgpz/background-jobs": "0.1.0",
     "@pgpz/ui": "0.1.0",
+    "@pgpz/x-monitor-core": "0.1.0",
     "@pgpz/zec-shelf": "0.1.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-navigation-menu": "^1.2.14",

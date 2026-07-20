@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Eye, Loader2, Menu, X } from "lucide-react";
+import { Activity, Eye, Loader2, Menu, X } from "lucide-react";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAppSession } from "@/lib/use-app-session";
 import { useAdminViewMode } from "@/components/admin/AdminViewMode";
+import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
   const path = pathname || "/";
@@ -27,6 +28,8 @@ export function MainNav() {
   const { data: session, status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
   const isMember = session?.capabilities.member === true;
+  const canAccessXMonitor = session?.capabilities.protectedContent === true;
+  const xMonitorEnabled = isCommunityXMonitorEnabled();
   const { actualIsAdmin, effectiveIsAdmin: isAdmin, viewAsMember, setViewAsMember } = useAdminViewMode();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -74,6 +77,9 @@ export function MainNav() {
         { key: "home", label: "Home", href: "/" },
         { key: "updates", label: "Updates", href: "/updates" },
         { key: "zec-shelf", label: "ZEC Shelf", href: "/zec-shelf" },
+        ...(xMonitorEnabled && canAccessXMonitor
+          ? [{ key: "x-monitor", label: "X Monitor", href: "/x-monitor" }]
+          : []),
         ...(isMember
           ? [{ key: "invite", label: "Invite", href: "/settings/profile#member-recruitment" }]
           : []),
@@ -152,6 +158,17 @@ export function MainNav() {
               <NavigationMenuItem>
                 <NavigationMenuLink className={linkClasses} asChild>
                   <Link href="/zec-shelf">ZEC Shelf</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && xMonitorEnabled && canAccessXMonitor ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={linkClasses} asChild>
+                  <Link href="/x-monitor">
+                    <Activity className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    X Monitor
+                  </Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}

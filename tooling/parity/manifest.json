@@ -769,6 +769,58 @@
           "import": "@pgpz/auth-dynamodb"
         }
       ]
+    },
+    {
+      "name": "x-monitor-core",
+      "packagePath": "packages/x-monitor-core",
+      "contentOwnership": "The package owns the pinned provider-neutral read contracts and URL client extracted from zodldashboard. Community owns Better Auth authorization, the server-only credential adapter, explicit read-only BFF routes, and its native presentation. Privileged Answer, Compose, email, scheduling, capture, and operations behavior remains outside this package.",
+      "adoption": {
+        "community": "active",
+        "coalition": "not-enabled-intentional"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "vendor-manifest.json",
+        "src/index.ts",
+        "src/contracts.ts",
+        "src/read-client.ts",
+        "src/read-client.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/x-monitor-access.ts",
+          "lib/x-monitor-api.ts",
+          "lib/x-monitor-public.ts",
+          "lib/x-monitor-query.ts",
+          "lib/x-monitor-server.ts",
+          "app/x-monitor/page.tsx",
+          "app/x-monitor/posts/[statusId]/page.tsx",
+          "app/api/x-monitor/feed/route.ts",
+          "app/api/x-monitor/author-locations/route.ts",
+          "app/api/x-monitor/trends/route.ts",
+          "app/api/x-monitor/window-summaries/latest/route.ts",
+          "app/api/x-monitor/posts/[statusId]/route.ts",
+          "components/x-monitor/XMonitorActivity.tsx",
+          "components/x-monitor/XMonitorFeed.tsx",
+          "components/x-monitor/XMonitorFilters.tsx",
+          "components/x-monitor/XMonitorSummaries.tsx"
+        ],
+        "coalition": []
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/x-monitor-server.ts",
+          "import": "@pgpz/x-monitor-core/read-client"
+        },
+        {
+          "app": "community",
+          "path": "app/x-monitor/page.tsx",
+          "import": "@pgpz/x-monitor-core/contracts"
+        }
+      ]
     }
   ]
 }

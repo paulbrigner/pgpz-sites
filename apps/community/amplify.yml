@@ -33,6 +33,16 @@ frontend:
         - 'test "${EMAIL_TRANSPORT:-}" = "ses"'
         - env | grep -e EMAIL_TRANSPORT >> .env.production
         - env | grep -e REGION_AWS >> .env.production
+        - 'test -z "${NEXT_PUBLIC_XMONITOR_ENABLED:-}" || test "${NEXT_PUBLIC_XMONITOR_ENABLED}" = "true" || test "${NEXT_PUBLIC_XMONITOR_ENABLED}" = "false"'
+        - env | grep -e '^NEXT_PUBLIC_XMONITOR_ENABLED=' >> .env.production || true
+        - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || test -n "${XMONITOR_READ_API_BASE_URL:-}"'
+        - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || case "${XMONITOR_READ_API_BASE_URL}" in https://*) true ;; *) false ;; esac'
+        - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || test -n "${XMONITOR_READ_CLIENT_ID:-}"'
+        - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || test "${#XMONITOR_READ_CLIENT_SECRET}" -ge 32'
+        - env | grep -e '^XMONITOR_READ_API_BASE_URL=' >> .env.production || true
+        - env | grep -e '^XMONITOR_READ_CLIENT_ID=' >> .env.production || true
+        - env | grep -e '^XMONITOR_READ_CLIENT_SECRET=' >> .env.production || true
+        - env | grep -e '^XMONITOR_READ_TIMEOUT_MS=' >> .env.production || true
         - env | grep -e X_BEARER_TOKEN >> .env.production
         - env | grep -e XMON_X_API_BEARER_TOKEN >> .env.production || true
         - env | grep -e X_API_BASE_URL >> .env.production || true
