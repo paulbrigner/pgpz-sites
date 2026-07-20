@@ -20,6 +20,7 @@ export type {
 export { sanitizeJobError } from "./errors";
 export { deterministicIdempotencyKey } from "./idempotency";
 export { deriveJobProgress } from "./progress";
+export { normalizeBackgroundJobSnapshot } from "./snapshot";
 export {
   BACKGROUND_JOB_RECENT_INDEX,
   BACKGROUND_JOB_STATUS_INDEX,

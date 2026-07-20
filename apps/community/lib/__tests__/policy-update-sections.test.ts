@@ -83,6 +83,23 @@ describe("policy update section helpers", () => {
     ).toBe(false);
   });
 
+  it("omits empty image fields so policy updates can be stored in durable jobs", () => {
+    const normalized = normalizePolicyUpdateSectionLayout([
+      {
+        heading: "Weekly Policy Update",
+        body: ["Community update."],
+      },
+      {
+        heading: "Policy development",
+        body: ["Policy body."],
+        images: [],
+      },
+    ]);
+
+    expect(normalized).toHaveLength(2);
+    expect(normalized.every((section) => !Object.hasOwn(section, "images"))).toBe(true);
+  });
+
   it("links main policy headings from matching section links", () => {
     const section = {
       heading: "Illinois Becomes First U.S. State to Levy Direct Privilege Tax on Cryptocurrency Transactions",

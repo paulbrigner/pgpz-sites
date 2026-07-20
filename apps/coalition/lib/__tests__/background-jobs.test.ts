@@ -304,6 +304,33 @@ describe("durable background-job safety", () => {
     expect(idempotencyPut.expires).toBe(jobPut.expires);
   });
 
+  it("removes nested undefined values at the durable snapshot boundary", async () => {
+    const staged = await prepareSingleRecipientBackgroundJob({
+      kind: "policy_update",
+      mode: "live",
+      idempotencyKey: "policy-update:undefined-snapshot-test",
+      payload: {
+        update: {
+          sections: [{ heading: "Action Item", images: undefined }],
+        },
+      },
+      recipients: [
+        {
+          ...recipient,
+          metadata: { optionalLabel: undefined },
+        },
+      ],
+    });
+    const [jobPut, taskPut] = staged.transactItems.map(
+      (entry) => entry.Put?.Item as Record<string, any>,
+    );
+
+    expect(jobPut.payload).toEqual({
+      update: { sections: [{ heading: "Action Item" }] },
+    });
+    expect(taskPut.recipient.metadata).toEqual({});
+  });
+
   it("repairs a partially materialized building job from its durable audience manifest", async () => {
     const secondRecipient = {
       recipientKey: "admin-2",

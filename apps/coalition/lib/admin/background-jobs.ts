@@ -10,6 +10,7 @@ import {
   deriveJobProgress,
   encodeBackgroundJobCursor,
   jobStatusIndexKeys,
+  normalizeBackgroundJobSnapshot,
   normalizeRecipients as normalizeBackgroundJobRecipients,
   normalizeBackgroundJobPageSize,
   recentJobIndexKeys,
@@ -740,13 +741,17 @@ async function dispatchTasks(jobId: string, tasks: BackgroundJobTaskRecord[]) {
 
 export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgroundJobInput) {
   const { tableName } = requireConfiguration();
-  const recipients = normalizeRecipients(input.recipients);
+  const normalizedInput = normalizeBackgroundJobSnapshot({
+    ...input,
+    recipients: normalizeRecipients(input.recipients),
+  });
+  const recipients = normalizedInput.recipients;
   if (recipients.length !== 1) throw new Error("Atomic background-job staging requires exactly one recipient.");
-  const mode = input.mode || "live";
+  const mode = normalizedInput.mode || "live";
   if (mode === "smoke") await assertSmokeRecipient(recipients[0]);
-  const stableIdempotencyKey = input.idempotencyKey.trim();
+  const stableIdempotencyKey = normalizedInput.idempotencyKey.trim();
   if (!stableIdempotencyKey || stableIdempotencyKey.length > 180) throw new Error("A valid idempotency key is required.");
-  const fingerprint = requestFingerprint(input, recipients);
+  const fingerprint = requestFingerprint(normalizedInput, recipients);
   const now = new Date().toISOString();
   const jobExpires = backgroundJobExpiration("job", now);
   const taskExpires = backgroundJobExpiration("task", now);
@@ -758,14 +763,14 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
     ...jobKey(jobId),
     type: "BACKGROUND_JOB",
     jobId,
-    kind: input.kind,
+    kind: normalizedInput.kind,
     mode,
     status: "building",
-    sourceId: input.sourceId || null,
+    sourceId: normalizedInput.sourceId || null,
     createdAt: now,
     updatedAt: now,
-    createdBy: input.createdBy || null,
-    payload: input.payload,
+    createdBy: normalizedInput.createdBy || null,
+    payload: normalizedInput.payload,
     idempotencyKey: stableIdempotencyKey,
     fingerprint,
     recipientCount: 1,
@@ -787,7 +792,7 @@ export async function prepareSingleRecipientBackgroundJob(input: EnqueueBackgrou
     type: "BACKGROUND_JOB_TASK",
     jobId,
     taskId,
-    kind: input.kind,
+    kind: normalizedInput.kind,
     mode,
     status: "pending",
     recipient,
@@ -881,19 +886,23 @@ export async function dispatchStagedBackgroundJob(jobId: string) {
 
 export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
   const { tableName } = requireConfiguration();
-  const recipients = normalizeRecipients(input.recipients);
+  const normalizedInput = normalizeBackgroundJobSnapshot({
+    ...input,
+    recipients: normalizeRecipients(input.recipients),
+  });
+  const recipients = normalizedInput.recipients;
   if (!recipients.length) throw new Error("Background job requires at least one recipient.");
-  const mode = input.mode || "live";
+  const mode = normalizedInput.mode || "live";
   if (mode === "smoke") {
     if (recipients.length !== 1) throw new Error("Smoke jobs must contain exactly one recipient.");
     await assertSmokeRecipient(recipients[0]);
   }
-  const stableIdempotencyKey = input.idempotencyKey.trim();
+  const stableIdempotencyKey = normalizedInput.idempotencyKey.trim();
   if (!stableIdempotencyKey || stableIdempotencyKey.length > 180) {
     throw new Error("A valid idempotency key is required.");
   }
-  const fingerprint = requestFingerprint(input, recipients);
-  if (Buffer.byteLength(JSON.stringify(input.payload), "utf8") > 300_000) {
+  const fingerprint = requestFingerprint(normalizedInput, recipients);
+  if (Buffer.byteLength(JSON.stringify(normalizedInput.payload), "utf8") > 300_000) {
     throw new Error("Background-job content snapshot exceeds the safe DynamoDB item-size budget.");
   }
   if (recipients.some((recipient) => Buffer.byteLength(JSON.stringify(recipient), "utf8") > 50_000)) {
@@ -918,14 +927,14 @@ export async function enqueueBackgroundJob(input: EnqueueBackgroundJobInput) {
     ...jobKey(jobId),
     type: "BACKGROUND_JOB",
     jobId,
-    kind: input.kind,
+    kind: normalizedInput.kind,
     mode,
     status: "building",
-    sourceId: input.sourceId || null,
+    sourceId: normalizedInput.sourceId || null,
     createdAt: now,
     updatedAt: now,
-    createdBy: input.createdBy || null,
-    payload: input.payload,
+    createdBy: normalizedInput.createdBy || null,
+    payload: normalizedInput.payload,
     idempotencyKey: stableIdempotencyKey,
     fingerprint,
     audienceManifestPageCount: audienceManifestPages.length,
