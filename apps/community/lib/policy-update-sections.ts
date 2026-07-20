@@ -125,11 +125,13 @@ export function normalizePolicyUpdateSectionLayout(sections: PolicyUpdateSection
         return false;
       });
 
-      return {
+      const normalizedSection: PolicyUpdateSection = {
         ...section,
         heading: retainedImages.length ? section.heading : withoutSocialPrefix(section.heading),
-        ...(retainedImages.length ? { images: retainedImages } : { images: undefined }),
       };
+      if (retainedImages.length) normalizedSection.images = retainedImages;
+      else delete normalizedSection.images;
+      return normalizedSection;
     })
     .filter(
       (section) =>

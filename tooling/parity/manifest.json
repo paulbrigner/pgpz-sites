@@ -235,7 +235,7 @@
       },
       {
         "path": "lib/__tests__/background-jobs.test.ts",
-        "sha256": "b41dce387c510f8f3dd7ee03b95930975a6541ef9e1a41e8b1e060398c893f78"
+        "sha256": "5f27d45dfea4959ec329e1e3ea2f1fe8f581d8a4ee17bf4a08817c3fa5a1cc4a"
       },
       {
         "path": "lib/__tests__/email-background-job-processor.test.ts",
@@ -299,7 +299,7 @@
       },
       {
         "path": "lib/admin/background-jobs.ts",
-        "sha256": "471ec4825d14b22faa3b726609a9a8b567de7f9314c59c4e53460057cdb6eff3"
+        "sha256": "1afd4aa446d7df43de5891478d62fa50b7848b81de7ab9030a2baefcec40f3c7"
       },
       {
         "path": "lib/admin/email-log.ts",
