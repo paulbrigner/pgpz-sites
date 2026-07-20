@@ -146,6 +146,37 @@ test("requires strong distinct Community autoverify rotation keys", () => {
   );
 });
 
+test("requires a complete server-only X Monitor client when Community enables the feature", () => {
+  const environment = {
+    ...validEnvironment(),
+    SOCIAL_PROOF_AUTOVERIFY_SECRET: "a".repeat(64),
+    NEXT_PUBLIC_XMONITOR_ENABLED: "true",
+    XMONITOR_READ_API_BASE_URL: "https://monitor.example/v1",
+    XMONITOR_READ_CLIENT_ID: "pgpz-community",
+    XMONITOR_READ_CLIENT_SECRET: "x".repeat(43),
+    XMONITOR_READ_TIMEOUT_MS: "10000",
+  };
+  assert.doesNotThrow(() =>
+    validateBrandedProductionEnvironment(environment, {
+      applicationName: "community",
+    }),
+  );
+  assert.throws(
+    () =>
+      validateBrandedProductionEnvironment(
+        {
+          ...environment,
+          XMONITOR_READ_API_BASE_URL: "http://monitor.example/v1",
+          XMONITOR_READ_CLIENT_ID: "INVALID CLIENT",
+          XMONITOR_READ_CLIENT_SECRET: "weak",
+          XMONITOR_READ_TIMEOUT_MS: "99999",
+        },
+        { applicationName: "community" },
+      ),
+    /credential-free HTTPS URL[\s\S]*XMONITOR_READ_CLIENT_ID is invalid[\s\S]*XMONITOR_READ_CLIENT_SECRET must contain at least 32 bytes[\s\S]*XMONITOR_READ_TIMEOUT_MS must be an integer/,
+  );
+});
+
 test("keeps long-lived AWS, SMTP, and NextAuth credentials out of production serialization", () => {
   const productionSerializers = [
     "tooling/write-amplify-env.mjs",

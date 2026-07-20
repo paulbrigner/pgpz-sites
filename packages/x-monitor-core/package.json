@@ -1,0 +1,21 @@
+{
+  "name": "@pgpz/x-monitor-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts.ts",
+    "./read-client": "./src/read-client.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "3.2.7"
+  }
+}

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ExternalLink, FileText, Mail, MessageCircle } from "lucide-react";
+import { Activity, ExternalLink, FileText, Mail, MessageCircle } from "lucide-react";
 import { ReferralInviteCard } from "@/components/referrals/ReferralInviteCard";
 import { Button } from "@/components/ui/button";
 
@@ -121,10 +121,42 @@ export function CommunityHero({
   );
 }
 
-export function CommunityMemberResources({ resources }: { resources: CommunityMemberResource[] }) {
+export function CommunityMemberResources({
+  resources,
+  xMonitorEnabled = false,
+}: {
+  resources: CommunityMemberResource[];
+  xMonitorEnabled?: boolean;
+}) {
   return (
     <>
       <ReferralInviteCard />
+
+      {xMonitorEnabled ? (
+        <section className="glass-surface flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
+              <Activity className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="section-eyebrow text-[var(--brand-denim)]">Community intelligence</p>
+              <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">
+                Follow focused Zcash conversation on X
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                X Monitor brings captured posts, generated summaries, and activity trends into a
+                read-only member view with no direct access to the monitoring backend.
+              </p>
+            </div>
+          </div>
+          <Button className="shrink-0" asChild>
+            <Link href="/x-monitor">
+              Open X Monitor
+              <Activity className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </Button>
+        </section>
+      ) : null}
 
       <section className="glass-surface grid gap-6 p-6 lg:grid-cols-[1fr_220px] lg:items-center">
         <div className="flex items-start gap-4">
