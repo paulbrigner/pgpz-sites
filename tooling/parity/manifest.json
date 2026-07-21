@@ -167,7 +167,7 @@
       },
       {
         "path": "components/admin/AccessLogPanel.tsx",
-        "sha256": "2e2209e8f7ea59c6f829d333a5977ff268a8bd12cb170254d12ad40ffcf2375a"
+        "sha256": "71a71b365c6afc2a51fb3810d1035807aaaaa21183e7c00af99db7c343ebd35e"
       },
       {
         "path": "components/admin/AdminSkeleton.tsx",

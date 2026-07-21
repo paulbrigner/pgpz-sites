@@ -58,7 +58,7 @@ export const COMMUNITY_ZEC_SHELF_CLIENT_CONFIG = {
   apiBasePath: "/api/zec-shelf",
   title: "ZEC Shelf",
   heroEyebrow: "Member resource library",
-  description: "A curated home for useful Zcash websites, tools, research, and references—organized for easy return visits.",
+  description: "A curated home for useful Zcash websites, tools, research, and references.",
   collectionEyebrow: "The collection",
   collectionTitle: "Resource library",
   curatedForLabel: "Curated for PGPZ Community members",

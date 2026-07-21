@@ -46,7 +46,7 @@ type ReferralCreditRecord = {
 };
 
 export type ReferralMemberCreditPreview = {
-  displayLabel: "New member";
+  displayLabel: string;
   membershipStatus: "active" | "none";
   creditedAt: string;
 };
@@ -501,13 +501,16 @@ export async function getReferralSummaryForUser(userId: string): Promise<Referra
     }),
   );
 
-  const recentCredits = credits.slice(0, 5).map((credit) => ({
-    displayLabel: "New member" as const,
-    membershipStatus: referredUsers.get(credit.referredUserId)?.membershipStatus === "active"
-      ? "active" as const
-      : "none" as const,
-    creditedAt: credit.creditedAt,
-  }));
+  const recentCredits = credits.slice(0, 5).map((credit) => {
+    const referredUser = referredUsers.get(credit.referredUserId);
+    return {
+      displayLabel: getUserDisplayName(referredUser || { name: credit.referredName }) || "New member",
+      membershipStatus: referredUser?.membershipStatus === "active"
+        ? "active" as const
+        : "none" as const,
+      creditedAt: credit.creditedAt,
+    };
+  });
   const activeRecruitCount = credits.filter((credit) =>
     referredUsers.get(credit.referredUserId)?.membershipStatus === "active"
   ).length;
