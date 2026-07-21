@@ -81,6 +81,34 @@ describe("member resource submissions route", () => {
     expect(mocks.listApprovedResourceSubmissions).not.toHaveBeenCalled();
   });
 
+  it("rejects unauthenticated and inactive POST submissions", async () => {
+    mocks.resolveAppSession.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      user: { id: "account-1" },
+      capabilities: { member: false },
+    });
+
+    const unauthenticated = await postResource({
+      title: "A resource",
+      url: "https://example.test/resource",
+      details: "Useful notes",
+    });
+    const inactive = await postResource({
+      title: "A resource",
+      url: "https://example.test/resource",
+      details: "Useful notes",
+    });
+
+    expect(unauthenticated.status).toBe(401);
+    await expect(unauthenticated.json()).resolves.toEqual({
+      error: "Sign in before sharing a resource.",
+    });
+    expect(inactive.status).toBe(403);
+    await expect(inactive.json()).resolves.toEqual({
+      error: "Active coalition membership is required.",
+    });
+    expect(mocks.createResourceSubmission).not.toHaveBeenCalled();
+  });
+
   it("lists approved resources only for active members", async () => {
     mocks.resolveAppSession.mockResolvedValue(memberSession);
     mocks.listApprovedResourceSubmissions.mockResolvedValue([{
