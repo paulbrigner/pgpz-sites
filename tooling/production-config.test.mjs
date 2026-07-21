@@ -177,6 +177,47 @@ test("requires a complete server-only X Monitor client when Community enables th
   );
 });
 
+test("requires a distinct server-only manage client when Community enables Topic Briefings", () => {
+  const environment = {
+    ...validEnvironment(),
+    SOCIAL_PROOF_AUTOVERIFY_SECRET: "a".repeat(64),
+    NEXT_PUBLIC_XMONITOR_ENABLED: "true",
+    NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED: "true",
+    XMONITOR_READ_API_BASE_URL: "https://monitor.example/v1",
+    XMONITOR_READ_CLIENT_ID: "pgpz-community",
+    XMONITOR_READ_CLIENT_SECRET: "x".repeat(43),
+    XMONITOR_READ_TIMEOUT_MS: "10000",
+    XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID: "pgpz-community-briefings-admin",
+    XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET: "y".repeat(43),
+    XMONITOR_BRIEFINGS_ADMIN_TIMEOUT_MS: "15000",
+  };
+  assert.doesNotThrow(() =>
+    validateBrandedProductionEnvironment(environment, { applicationName: "community" }),
+  );
+  assert.throws(
+    () => validateBrandedProductionEnvironment(
+      {
+        ...environment,
+        XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID: environment.XMONITOR_READ_CLIENT_ID,
+        XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET: environment.XMONITOR_READ_CLIENT_SECRET,
+        XMONITOR_BRIEFINGS_ADMIN_TIMEOUT_MS: "60000",
+      },
+      { applicationName: "community" },
+    ),
+    /CLIENT_ID must differ[\s\S]*CLIENT_SECRET must differ[\s\S]*ADMIN_TIMEOUT_MS must be an integer/,
+  );
+  assert.throws(
+    () => validateBrandedProductionEnvironment(
+      {
+        ...environment,
+        NEXT_PUBLIC_XMONITOR_ENABLED: "false",
+      },
+      { applicationName: "community" },
+    ),
+    /requires NEXT_PUBLIC_XMONITOR_ENABLED/,
+  );
+});
+
 test("keeps long-lived AWS, SMTP, and NextAuth credentials out of production serialization", () => {
   const productionSerializers = [
     "tooling/write-amplify-env.mjs",

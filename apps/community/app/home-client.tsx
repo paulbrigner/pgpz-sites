@@ -16,7 +16,10 @@ import {
 } from "@/components/home/CommunityHomeSections";
 import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 import { useAppSession } from "@/lib/use-app-session";
-import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
+import {
+  isCommunityXMonitorBriefingsEnabled,
+  isCommunityXMonitorEnabled,
+} from "@/lib/x-monitor-public";
 
 type ProofStatus = {
   membershipStatus: "active" | "none";
@@ -154,6 +157,7 @@ export default function HomeClient({
   const activeFromStatus = proofStatus?.membershipStatus === "active";
   const isMember = activeFromSession || activeFromStatus;
   const xMonitorEnabled = isCommunityXMonitorEnabled();
+  const xMonitorBriefingsEnabled = isCommunityXMonitorBriefingsEnabled();
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
@@ -602,6 +606,7 @@ export default function HomeClient({
             <CommunityMemberResources
               resources={memberResources}
               xMonitorEnabled={xMonitorEnabled}
+              xMonitorBriefingsEnabled={xMonitorBriefingsEnabled}
             />
           ) : null}
 

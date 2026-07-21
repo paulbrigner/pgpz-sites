@@ -8,6 +8,7 @@ import { XMonitorActivity } from "./XMonitorActivity";
 import { XMonitorFeed } from "./XMonitorFeed";
 import { XMonitorFilters } from "./XMonitorFilters";
 import { XMonitorSummaries } from "./XMonitorSummaries";
+import { XMonitorSectionNav } from "./XMonitorSectionNav";
 
 const FEED_ITEM: FeedItem = {
   status_id: "1234567890123456789",
@@ -51,6 +52,16 @@ const EMPTY_TRENDS: ActivityTrendsResponse = {
 afterEach(() => cleanup());
 
 describe("Community X Monitor presentation", () => {
+  it("links the local Live Monitor and Topic Briefings sections without a new global destination", () => {
+    render(<XMonitorSectionNav active="monitor" />);
+    expect(screen.getByRole("link", { name: /Live Monitor/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /Live Monitor/i })).toHaveAttribute("href", "/x-monitor");
+    expect(screen.getByRole("link", { name: /Topic Briefings/i })).toHaveAttribute(
+      "href",
+      "/x-monitor/briefings",
+    );
+  });
+
   it("shows the adjusted watch-list and theme filter surface", () => {
     render(<XMonitorFilters query={parseCommunityXMonitorQuery({
       tier: "ecosystem",

@@ -6,7 +6,7 @@ injected HTTP client. It does not own authentication, authorization, React UI,
 PostgreSQL, AWS, collectors, Answer Mode, email, or scheduled jobs.
 
 The source snapshot was vendored from
-`paulbrigner/zodldashboard@9061f599c2be49890bad389ff42040a6e8dfe25f`.
+`paulbrigner/zodldashboard@c4c70db7e25f5fd01e9736ffa5fcbac9effe18f9`.
 `vendor-manifest.json` records the source paths and hashes. Run
 `npm run xmonitor:verify-vendor` from the monorepo root after any change.
 

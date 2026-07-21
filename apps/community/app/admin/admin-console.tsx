@@ -1,24 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, BellRing, Gift, Mail, Newspaper, Users } from "lucide-react";
+import { Activity, BellRing, BookOpenText, Gift, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
 import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
 import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
 import { ReferralProgramPanel } from "@/components/admin/ReferralProgramPanel";
 import { SignupNotificationsPanel } from "@/components/admin/SignupNotificationsPanel";
+import { BriefingsAdminPanel } from "@/components/admin/BriefingsAdminPanel";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
+import { isCommunityXMonitorBriefingsEnabled } from "@/lib/x-monitor-public";
 
-type AdminTab = "users" | "notifications" | "referrals" | "updates" | "newsletters" | "access";
+type AdminTab = "users" | "notifications" | "referrals" | "updates" | "newsletters" | "briefings" | "access";
 
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
   currentAdminId?: string | null;
 };
 
-const tabs: Array<{
+const baseTabs: Array<{
   id: AdminTab;
   label: string;
   description: string;
@@ -55,6 +57,12 @@ const tabs: Array<{
     icon: Newspaper,
   },
   {
+    id: "briefings",
+    label: "Topic Briefings",
+    description: "Curate, refresh, review, and publish monitored answers",
+    icon: BookOpenText,
+  },
+  {
     id: "access",
     label: "Access log",
     description: "Recent member logins and page views",
@@ -64,11 +72,14 @@ const tabs: Array<{
 
 export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
+  const tabs = isCommunityXMonitorBriefingsEnabled()
+    ? baseTabs
+    : baseTabs.filter((tab) => tab.id !== "briefings");
 
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -108,6 +119,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       {activeTab === "referrals" ? <ReferralProgramPanel /> : null}
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
+      {activeTab === "briefings" ? <BriefingsAdminPanel /> : null}
       {activeTab === "access" ? <AccessLogPanel /> : null}
     </div>
   );

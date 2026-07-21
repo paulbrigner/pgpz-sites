@@ -11,6 +11,7 @@ import { XMonitorActivity } from "@/components/x-monitor/XMonitorActivity";
 import { XMonitorFeed } from "@/components/x-monitor/XMonitorFeed";
 import { XMonitorFilters } from "@/components/x-monitor/XMonitorFilters";
 import { XMonitorSummaries } from "@/components/x-monitor/XMonitorSummaries";
+import { XMonitorSectionNav } from "@/components/x-monitor/XMonitorSectionNav";
 import { getMemberAccess } from "@/lib/member-access";
 import { canAccessCommunityXMonitor } from "@/lib/x-monitor-access";
 import {
@@ -19,7 +20,10 @@ import {
   parseCommunityXMonitorQuery,
   type CommunityXMonitorSearchParams,
 } from "@/lib/x-monitor-query";
-import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
+import {
+  isCommunityXMonitorBriefingsEnabled,
+  isCommunityXMonitorEnabled,
+} from "@/lib/x-monitor-public";
 import {
   createCommunityXMonitorClient,
 } from "@/lib/x-monitor-server";
@@ -176,6 +180,8 @@ export default async function XMonitorPage({
           </div>
         </div>
       </section>
+
+      {isCommunityXMonitorBriefingsEnabled() ? <XMonitorSectionNav active="monitor" /> : null}
 
       <XMonitorFilters key={buildCommunityXMonitorHref(query)} query={query} />
 
