@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   BookOpenText,
   CalendarClock,
-  CheckCircle2,
   ExternalLink,
   Link2,
   MessageSquareText,
@@ -64,11 +63,38 @@ const safeMarkdownHref = (href: string | undefined) => {
 const linkedCitationMarker = /^(?:\[#([0-9]+)\]|#([0-9]+))$/;
 const inlineCitationMarker = /\[#([0-9]{1,32})\]/g;
 
-const buildCitationReferences = (citations: BriefingCitation[]) => {
+const proseMarkdownForLegacyCitationScan = (answerText: string) => {
+  let activeFence: { character: string; length: number } | null = null;
+  const withoutFencedCode = answerText.split("\n").map((line) => {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (activeFence) {
+      if (
+        fenceMatch
+        && fenceMatch[1][0] === activeFence.character
+        && fenceMatch[1].length >= activeFence.length
+      ) {
+        activeFence = null;
+      }
+      return "";
+    }
+    if (fenceMatch) {
+      activeFence = { character: fenceMatch[1][0], length: fenceMatch[1].length };
+      return "";
+    }
+    return line;
+  }).join("\n");
+
+  return withoutFencedCode
+    .replace(/(`+)[\s\S]*?\1/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style|pre|code)\b[\s\S]*?<\/\1>/gi, "");
+};
+
+const buildCitationReferences = (citations: BriefingCitation[], answerText = "") => {
   const seenStatusIds = new Set<string>();
   const references: CitationReference[] = [];
 
-  citations.forEach((citation) => {
+  const appendCitation = (citation: BriefingCitation) => {
     const normalizedStatusId = String(citation.status_id || "").trim();
     if (normalizedStatusId && seenStatusIds.has(normalizedStatusId)) return;
     if (normalizedStatusId) seenStatusIds.add(normalizedStatusId);
@@ -77,7 +103,24 @@ const buildCitationReferences = (citations: BriefingCitation[]) => {
       href: xPostHref(normalizedStatusId),
       number: references.length + 1,
     });
-  });
+  };
+
+  citations.forEach(appendCitation);
+
+  const legacyMarkerPattern = /\[#([0-9]{15,32})\]/g;
+  let legacyMarker: RegExpExecArray | null;
+  const proseMarkdown = proseMarkdownForLegacyCitationScan(answerText);
+  while ((legacyMarker = legacyMarkerPattern.exec(proseMarkdown)) !== null) {
+    const statusId = legacyMarker[1];
+    if (seenStatusIds.has(statusId)) continue;
+    appendCitation({
+      status_id: statusId,
+      author_handle: "",
+      url: `https://x.com/i/status/${statusId}`,
+      discovered_at: "",
+      excerpt: null,
+    });
+  }
 
   return references;
 };
@@ -92,9 +135,9 @@ const citationLinkNode = (reference: CitationReference): MarkdownNode => {
   };
 };
 
-const createCitationLinksPlugin = (citations: BriefingCitation[]) => {
+const createCitationLinksPlugin = (citations: BriefingCitation[], answerText: string) => {
   const referencesByStatusId = new Map<string, CitationReference>();
-  buildCitationReferences(citations).forEach((reference) => {
+  buildCitationReferences(citations, answerText).forEach((reference) => {
     if (reference.href) {
       referencesByStatusId.set(String(reference.citation.status_id).trim(), reference);
     }
@@ -173,7 +216,7 @@ function BriefingMarkdown({
 }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, createCitationLinksPlugin(citations)]}
+      remarkPlugins={[remarkGfm, createCitationLinksPlugin(citations, children)]}
       skipHtml
       components={{
         h1: ({ children: heading }) => <h3 className="mt-6 text-xl font-semibold text-[var(--brand-ink)]">{heading}</h3>,
@@ -333,8 +376,8 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
           Topic briefings are being prepared
         </h2>
         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-          PGPZ administrators are reviewing the first set of generated briefings. Published,
-          reviewed answers will appear here.
+          PGPZ administrators are reviewing the first set of generated briefings. Curated answers
+          will appear here after approval.
         </p>
       </section>
     );
@@ -343,21 +386,19 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
   return (
     <section aria-labelledby="topic-briefings-heading" className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="section-eyebrow text-[var(--brand-denim)]">Curated questions</p>
-          <h2 id="topic-briefings-heading" className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">
-            Published briefings
-          </h2>
-        </div>
+        <h2 id="topic-briefings-heading" className="section-eyebrow text-[var(--brand-denim)]">
+          Curated questions
+        </h2>
         <p className="text-xs leading-5 text-slate-500">
-          {briefings.length} reviewed {briefings.length === 1 ? "topic" : "topics"}
+          {briefings.length} {briefings.length === 1 ? "topic" : "topics"}
         </p>
       </div>
 
       <div className="space-y-4">
         {briefings.map((briefing) => {
           const isOpen = openSlugs.has(briefing.slug);
-          const citationReferences = buildCitationReferences(briefing.citations);
+          const citationReferences = buildCitationReferences(briefing.citations, briefing.answer_text);
+          const displayedSourceCount = Math.max(briefing.source_count, citationReferences.length);
           return (
             <details
               key={briefing.topic_id}
@@ -382,19 +423,14 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
                         Update under review
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.12em] text-emerald-800">
-                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        PGPZ reviewed
-                      </span>
-                    )}
+                    ) : null}
                   </span>
                   <span className="mt-3 block text-lg font-semibold leading-7 text-[var(--brand-ink)] sm:text-xl">
                     {briefing.question}
                   </span>
                   <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs leading-5 text-slate-500">
                     <span>Evidence through {formatDate(briefing.corpus_through)}</span>
-                    <span>{briefing.source_count} {briefing.source_count === 1 ? "source" : "sources"}</span>
+                    <span>{displayedSourceCount} {displayedSourceCount === 1 ? "source" : "sources"}</span>
                   </span>
                 </span>
                 <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-white text-[var(--brand-denim)]">
@@ -470,9 +506,11 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                           <>
                             <div className="flex items-center justify-between gap-3">
                               <span className="font-semibold text-[var(--brand-denim)]">
-                                Source {number} · @{citation.author_handle || "unknown"}
+                                Source {number} · {citation.author_handle ? `@${citation.author_handle}` : "X post"}
                               </span>
-                              <span className="text-xs text-slate-500">{formatDate(citation.discovered_at)}</span>
+                              {citation.discovered_at ? (
+                                <span className="text-xs text-slate-500">{formatDate(citation.discovered_at)}</span>
+                              ) : null}
                             </div>
                             {excerpt ? (
                               <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{excerpt}</p>

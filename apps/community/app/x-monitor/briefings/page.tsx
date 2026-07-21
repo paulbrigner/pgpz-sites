@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 
 export const metadata = {
   title: "Topic Briefings | X Monitor | PGPZ Community",
-  description: "PGPZ-curated, reviewed answers generated from monitored Zcash conversation on X.",
+  description: "PGPZ-curated answers generated from monitored Zcash conversation on X.",
   robots: { index: false, follow: false },
 };
 
@@ -84,11 +84,10 @@ export default async function XMonitorBriefingsPage() {
       <section className="community-hero">
         <div className="community-hero__frame">
           <div className="max-w-3xl space-y-5">
-            <p className="section-eyebrow text-white/70">X Monitor · PGPZ reviewed</p>
+            <p className="section-eyebrow text-white/70">X Monitor</p>
             <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">Zcash Topic Briefings</h1>
             <p className="max-w-2xl text-base leading-7 text-white/78">
-              Read PGPZ-curated answers generated from monitored Zcash conversation on X. Each
-              published briefing includes its evidence window, review date, and cited posts.
+              PGPZ-curated answers generated from monitored Zcash conversation on X.
             </p>
           </div>
         </div>

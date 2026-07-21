@@ -16,7 +16,7 @@ const sections = [
     id: "briefings" as const,
     href: "/x-monitor/briefings",
     label: "Topic Briefings",
-    description: "Curated, reviewed answers",
+    description: "Curated answers",
     icon: BookOpenText,
   },
 ];

@@ -199,18 +199,25 @@ function TopicFields({
           <option value="detailed">Detailed</option>
         </select>
       </label>
-      <label className="space-y-1" htmlFor={`${idPrefix}-order`}>
-        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Display order</span>
-        <input
-          id={`${idPrefix}-order`}
-          type="number"
-          min={-10000}
-          max={10000}
-          value={draft.order}
-          onChange={(event) => onChange({ ...draft, order: Number(event.target.value) })}
-          className={inputClass}
-        />
-      </label>
+      <div className="space-y-1">
+        <label className="space-y-1" htmlFor={`${idPrefix}-order`}>
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Display order</span>
+          <input
+            id={`${idPrefix}-order`}
+            type="number"
+            min={-10000}
+            max={10000}
+            value={draft.order}
+            onChange={(event) => onChange({ ...draft, order: Number(event.target.value) })}
+            className={inputClass}
+            aria-describedby={`${idPrefix}-order-help`}
+          />
+        </label>
+        <span id={`${idPrefix}-order-help`} className="block text-xs leading-5 text-slate-500">
+          Lower numbers appear first; ties are alphabetical. Saved changes appear on the member page
+          on its next load without regenerating or republishing a briefing.
+        </span>
+      </div>
       <label className="space-y-1 md:col-span-2" htmlFor={`${idPrefix}-context`}>
         <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Editorial guidance</span>
         <textarea
@@ -412,8 +419,9 @@ export function BriefingsAdminPanel() {
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Manage the fixed topic list, schedule evidence refreshes, and review generated drafts.
               Members see only versions an administrator publishes; there is no member answer prompt.
-              Topic edits apply to future drafts, while every version keeps the question and settings
-              used to generate it.
+              Saved display order changes appear on the member page on its next load without
+              regenerating or republishing. Other topic edits apply to future drafts, while every
+              version keeps the question and settings used to generate it.
             </p>
           </div>
           <Button type="button" onClick={() => setShowCreate((visible) => !visible)}>

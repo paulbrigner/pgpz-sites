@@ -87,6 +87,8 @@ describe("Topic Briefings admin panel", () => {
     expect(await screen.findByRole("heading", { name: topic.question })).toBeInTheDocument();
     expect(screen.getByLabelText("Refresh cadence")).toHaveValue("1440");
     expect(screen.getByLabelText("Display order")).toHaveValue(1);
+    expect(screen.getByText(/Lower numbers appear first; ties are alphabetical/i)).toBeInTheDocument();
+    expect(screen.getByText(/Saved display order changes appear on the member page on its next load/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh now" })).toBeInTheDocument();
     expect(screen.queryByText(/member answer prompt/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /ask/i })).not.toBeInTheDocument();
