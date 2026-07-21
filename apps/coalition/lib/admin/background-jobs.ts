@@ -25,6 +25,7 @@ import { normalizeEmail } from "@/lib/admin/email-transport";
 export type BackgroundJobKind =
   | "newsletter"
   | "policy_update"
+  | "admin_signup_notification"
   | "bulk_invitation"
   | "community_sync";
 export type BackgroundJobMode = "live" | "validate_only" | "smoke";

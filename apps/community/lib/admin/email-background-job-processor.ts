@@ -28,6 +28,11 @@ import {
   markNewsletterSent,
   updateNewsletterSendRunProgress,
 } from "@/lib/admin/newsletters";
+import {
+  buildAdminSignupNotificationEmail,
+  getCurrentEligibleAdminSignupNotificationRecipient,
+  type AdminSignupNotificationJobPayload,
+} from "@/lib/admin/signup-notifications";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { listUnsubscribeHeaders } from "@/lib/email-link-security";
 import { buildNewsletterEmail } from "@/lib/newsletter-email";
@@ -485,6 +490,115 @@ async function processPolicyUpdate(
   }
 }
 
+async function processAdminSignupNotification(
+  job: BackgroundJobRecord,
+  task: BackgroundJobTaskRecord,
+  leaseToken: string,
+): Promise<ProcessResult> {
+  const payload = job.payload as AdminSignupNotificationJobPayload;
+  let deliveryStarted = false;
+  let providerMessageId: string | null = null;
+  let providerAcceptedAt: string | null = null;
+  try {
+    const current = await getCurrentEligibleAdminSignupNotificationRecipient(
+      task.recipient,
+      payload.event,
+    );
+    if (!current) {
+      await finalize({
+        job,
+        task,
+        leaseToken,
+        status: "skipped",
+        result: { reason: "admin_notification_recipient_ineligible" },
+      });
+      return { outcome: "skipped", retry: false };
+    }
+    if (job.mode === "smoke") await assertSmokeRecipient(task.recipient);
+    const built = buildAdminSignupNotificationEmail(payload);
+    if (job.mode === "validate_only") {
+      if (!buildEmailServerConfig() || !EMAIL_FROM) throw new Error("Email provider not configured");
+      await finalize({ job, task, leaseToken, status: "validated", result: { subject: built.subject } });
+      return { outcome: "validated", retry: false };
+    }
+    const transportConfig = buildEmailServerConfig();
+    if (!transportConfig || !EMAIL_FROM) throw new Error("Email provider not configured");
+    const transporter = nodemailer.createTransport(transportConfig);
+    await markBackgroundJobDeliveryStarted(job.id, task.taskId, leaseToken);
+    deliveryStarted = true;
+    const sendResult = await transporter.sendMail({
+      to: task.recipient.email!,
+      from: EMAIL_FROM,
+      subject: built.subject,
+      text: built.text,
+      html: built.html,
+    });
+    providerMessageId = sendResult?.messageId ? String(sendResult.messageId) : null;
+    providerAcceptedAt = new Date().toISOString();
+    let projectionsCompleted = await finalize({
+      job,
+      task,
+      leaseToken,
+      status: "sent",
+      providerMessageId,
+      result: { subject: built.subject, providerAcceptedAt },
+    });
+    await recordEmailEvent({
+      eventId: `background:${job.id}:${task.taskId}:sent`,
+      occurredAt: providerAcceptedAt,
+      userId: null,
+      email: task.recipient.email,
+      type: `admin_signup_${payload.event.type}`,
+      subject: built.subject,
+      status: "sent",
+      providerMessageId,
+      metadata: {
+        adminUserId: task.recipient.userId,
+        memberUserId: payload.event.memberUserId,
+        eventOccurredAt: payload.event.occurredAt,
+        backgroundJobId: job.id,
+      },
+    }).catch((projectionError) => {
+      projectionsCompleted = false;
+      console.error("Admin signup notification was sent but email-log projection failed", {
+        jobId: job.id,
+        taskId: task.taskId,
+        error: errorMessage(projectionError, "Email-log projection failed"),
+      });
+    });
+    if (projectionsCompleted) {
+      await markBackgroundJobTaskProjectionCompleted(job.id, task.taskId).catch(
+        () => undefined,
+      );
+    }
+    return { outcome: "sent", retry: false };
+  } catch (error) {
+    await recordEmailEvent({
+      userId: null,
+      email: task.recipient.email,
+      type: `admin_signup_${payload.event?.type || "unknown"}`,
+      subject: null,
+      status: "failed",
+      error: errorMessage(error, "Failed to send admin signup notification"),
+      metadata: {
+        adminUserId: task.recipient.userId,
+        memberUserId: payload.event?.memberUserId || null,
+        backgroundJobId: job.id,
+        attempt: task.attemptCount,
+      },
+    }).catch(() => undefined);
+    return retryOrFinishFailure({
+      job,
+      task,
+      leaseToken,
+      error,
+      deliveryStarted,
+      providerMessageId,
+      providerAcceptedAt,
+    });
+  }
+}
+
 export async function processEmailBackgroundJobTask({
   job,
   task,
@@ -496,6 +610,9 @@ export async function processEmailBackgroundJobTask({
 }) {
   if (job.kind === "newsletter") return processNewsletter(job, task, leaseToken);
   if (job.kind === "policy_update") return processPolicyUpdate(job, task, leaseToken);
+  if (job.kind === "admin_signup_notification") {
+    return processAdminSignupNotification(job, task, leaseToken);
+  }
   throw new Error(`Unsupported email background job kind: ${job.kind}`);
 }
 
@@ -503,7 +620,9 @@ export async function reconcileEmailBackgroundJobProjections(limit = 100) {
   const jobs = (await listBackgroundJobs(limit)).filter(
     (job) =>
       TERMINAL_JOB_STATUSES.has(job.status) &&
-      (job.kind === "newsletter" || job.kind === "policy_update"),
+      (job.kind === "newsletter" ||
+        job.kind === "policy_update" ||
+        job.kind === "admin_signup_notification"),
   );
   let repairedTasks = 0;
   let failedRepairs = 0;
@@ -512,7 +631,7 @@ export async function reconcileEmailBackgroundJobProjections(limit = 100) {
     try {
       if (job.kind === "newsletter") {
         await syncNewsletterProgress(job, job.payload as NewsletterJobPayload);
-      } else {
+      } else if (job.kind === "policy_update") {
         await syncPolicyUpdateProgress(job);
       }
     } catch {
@@ -525,6 +644,33 @@ export async function reconcileEmailBackgroundJobProjections(limit = 100) {
         candidate.status === "sent" && !candidate.projectionCompletedAt,
     )) {
       try {
+        if (job.kind === "admin_signup_notification") {
+          const payload = job.payload as AdminSignupNotificationJobPayload;
+          const built = buildAdminSignupNotificationEmail(payload);
+          const providerAcceptedAt =
+            typeof task.result?.providerAcceptedAt === "string"
+              ? task.result.providerAcceptedAt
+              : task.deliveryStartedAt;
+          await recordEmailEvent({
+            eventId: `background:${job.id}:${task.taskId}:sent`,
+            occurredAt: providerAcceptedAt,
+            userId: null,
+            email: task.recipient.email,
+            type: `admin_signup_${payload.event.type}`,
+            subject: built.subject,
+            status: "sent",
+            providerMessageId: task.providerMessageId,
+            metadata: {
+              adminUserId: task.recipient.userId,
+              memberUserId: payload.event.memberUserId,
+              eventOccurredAt: payload.event.occurredAt,
+              backgroundJobId: job.id,
+            },
+          });
+          await markBackgroundJobTaskProjectionCompleted(job.id, task.taskId);
+          repairedTasks += 1;
+          continue;
+        }
         const trackingId =
           typeof task.result?.trackingId === "string"
             ? task.result.trackingId

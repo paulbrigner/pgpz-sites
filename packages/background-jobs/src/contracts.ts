@@ -1,6 +1,7 @@
 export const BACKGROUND_JOB_KINDS = [
   "newsletter",
   "policy_update",
+  "admin_signup_notification",
   "bulk_invitation",
   "community_sync",
 ] as const;

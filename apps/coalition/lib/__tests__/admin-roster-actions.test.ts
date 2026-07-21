@@ -451,9 +451,13 @@ describe("admin roster account actions", () => {
     );
     expect(request.TransactItems[1].Update).toEqual(
       expect.objectContaining({
+        UpdateExpression: expect.stringMatching(
+          /adminSignupApprovalRequestedEmailOptIn.*adminSignupSuccessfulJoinEmailOptIn/,
+        ),
         ExpressionAttributeValues: expect.objectContaining({
           ":isAdmin": false,
           ":currentIsAdmin": true,
+          ":notificationsOff": false,
         }),
       }),
     );

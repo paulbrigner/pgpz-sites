@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isAccountActive } from "@pgpz/core";
+import { queueAdminSignupNotification } from "@/lib/admin/signup-notifications";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
 export type ManualApprovalStatus = "none" | "pending" | "approved";
@@ -56,10 +57,11 @@ export async function requestManualApproval(userId: string) {
       UpdateExpression:
         "SET manualApprovalStatus = :pending, manualApprovalRequestedAt = if_not_exists(manualApprovalRequestedAt, :now), manualApprovalUpdatedAt = :now",
       ConditionExpression:
-        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus = :none) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+        "attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus = :none) AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :pending) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
       ExpressionAttributeNames: {
         "#pk": "pk",
         "#membershipStatus": "membershipStatus",
+        "#manualApprovalStatus": "manualApprovalStatus",
         "#accountStatus": "accountStatus",
         "#deactivatedAt": "deactivatedAt",
       },
@@ -72,9 +74,44 @@ export async function requestManualApproval(userId: string) {
     });
   } catch (err: any) {
     if (err?.name === "ConditionalCheckFailedException") {
+      const latest = await documentClient.get({
+        TableName: TABLE_NAME,
+        Key: userKey(userId),
+        ProjectionExpression:
+          "membershipStatus, manualApprovalStatus, manualApprovalRequestedAt, accountStatus, deactivatedAt",
+        ConsistentRead: true,
+      });
+
+      if (
+        latest.Item &&
+        isAccountActive(latest.Item) &&
+        latest.Item.membershipStatus !== "active" &&
+        latest.Item.manualApprovalStatus === "pending"
+      ) {
+        return {
+          status: "pending" as const,
+          manualApprovalStatus: "pending" as const,
+          manualApprovalRequestedAt:
+            (latest.Item.manualApprovalRequestedAt as string | undefined) || null,
+        };
+      }
+
       throw new ManualApprovalError("This account is no longer eligible for manual approval.", 409);
     }
     throw err;
+  }
+
+  try {
+    await queueAdminSignupNotification({
+      type: "approval_requested",
+      memberUserId: userId,
+      occurredAt: now,
+    });
+  } catch (error) {
+    console.error("Failed to dispatch admin approval-request notification", {
+      memberUserId: userId,
+      error,
+    });
   }
 
   return {

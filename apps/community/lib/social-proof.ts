@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { isAccountActive } from "@pgpz/core";
+import { queueAdminSignupNotification } from "@/lib/admin/signup-notifications";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   MEMBERSHIP_PROOF_RETENTION_POLICY,
@@ -668,6 +669,23 @@ async function verifyXProofCandidate({
       throw new SocialProofError("That X post, X account, or member record has already been used for membership.", 409);
     }
     throw err;
+  }
+
+  try {
+    await queueAdminSignupNotification({
+      type: "successful_join",
+      memberUserId: userId,
+      occurredAt: verifiedAt,
+      method: "x_self_verification",
+      xHandle: handle,
+      proofPostUrl: canonicalPostUrl,
+    });
+  } catch (error) {
+    console.error("Failed to dispatch admin self-verification notification", {
+      memberUserId: userId,
+      proofPostId: postId,
+      error,
+    });
   }
 
   return {

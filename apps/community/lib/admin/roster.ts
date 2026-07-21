@@ -495,7 +495,10 @@ export async function updateAdminMemberAdminAccess({
     TableName: TABLE_NAME,
     Key: userKey(user.id!),
     UpdateExpression:
-      "SET isAdmin = :isAdmin, adminAccessUpdatedAt = :now, adminAccessUpdatedBy = :adminUserId, updatedAt = :now",
+      "SET isAdmin = :isAdmin, adminAccessUpdatedAt = :now, adminAccessUpdatedBy = :adminUserId, updatedAt = :now" +
+      (isAdmin
+        ? ""
+        : ", adminSignupApprovalRequestedEmailOptIn = :notificationsOff, adminSignupSuccessfulJoinEmailOptIn = :notificationsOff"),
     ConditionExpression:
       `attribute_exists(#pk) AND (attribute_not_exists(isAdmin) OR isAdmin = :currentIsAdmin)${isAdmin ? " AND (attribute_not_exists(#accountStatus) OR #accountStatus = :activeAccount) AND attribute_not_exists(#deactivatedAt)" : ""}`,
     ExpressionAttributeNames: {
@@ -507,6 +510,7 @@ export async function updateAdminMemberAdminAccess({
       ":currentIsAdmin": currentIsAdmin,
       ":now": now,
       ":adminUserId": adminUserId,
+      ...(!isAdmin ? { ":notificationsOff": false } : {}),
       ...(isAdmin ? { ":activeAccount": "active" } : {}),
     },
   };
