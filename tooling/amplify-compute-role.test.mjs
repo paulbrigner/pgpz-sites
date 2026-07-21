@@ -36,6 +36,11 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
     JSON.stringify(plan.permissionPolicy),
     /table\/PGPZCoalitionNextAuth/,
   );
+  const applicationTable = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ApplicationTable",
+  );
+  assert.ok(applicationTable);
+  assert.ok(applicationTable.Action.includes("dynamodb:ConditionCheckItem"));
   assert.deepEqual(plan.permissionPolicy.Statement.at(-1).Action, [
     "ses:SendEmail",
     "ses:SendRawEmail",
