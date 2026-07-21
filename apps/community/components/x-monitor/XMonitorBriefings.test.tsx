@@ -65,8 +65,10 @@ describe("X Monitor curated briefing presentation", () => {
     expect(summary).not.toBeNull();
     await user.click(summary!);
 
-    expect(screen.getByRole("heading", { name: "Published briefings" })).toBeInTheDocument();
-    expect(screen.getAllByText("PGPZ reviewed")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Curated questions" })).toBeInTheDocument();
+    expect(screen.queryByText("Published briefings")).not.toBeInTheDocument();
+    expect(within(summary!).queryByText("PGPZ reviewed")).not.toBeInTheDocument();
+    expect(screen.getByText("1 topic")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Current view" })).toBeInTheDocument();
     expect(screen.getByText("three layers").tagName).toBe("STRONG");
     expect(screen.getByRole("link", { name: "Official context" })).toHaveAttribute(
@@ -121,7 +123,11 @@ describe("X Monitor curated briefing presentation", () => {
             "",
             "First claim [#1234567890123456789]. Repeated [#1234567890123456789] and second [#2345678901234567890].",
             "",
-            "Unknown [#999] and inline code `[#1234567890123456789]` remain literal.",
+            "Legacy source [#3456789012345678901], malformed [#999], and inline code `[#1234567890123456789]`.",
+            "Uncited code `[#4567890123456789012]` must not create a source.",
+            "```text",
+            "[#4567890123456789012]",
+            "```",
             "",
             "[#1234567890123456789](https://malicious.example/hijack)",
           ].join("\n"),
@@ -145,13 +151,20 @@ describe("X Monitor curated briefing presentation", () => {
     expect(screen.getByRole("link", {
       name: /Source 2: open @electriccoinco post on X in a new tab/i,
     })).toHaveAttribute("href", "https://x.com/i/status/2345678901234567890");
+    expect(screen.getByRole("link", {
+      name: /Source 3: open the cited post on X in a new tab/i,
+    })).toHaveAttribute("href", "https://x.com/i/status/3456789012345678901");
     expect(screen.getByText((_, element) => (
-      element?.tagName === "P" && element.textContent?.includes("Unknown [#999]") === true
+      element?.tagName === "P" && element.textContent?.includes("malformed [#999]") === true
     ))).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /999/ })).not.toBeInTheDocument();
     expect(screen.getByText("[#1234567890123456789]", { selector: "code" })).toBeInTheDocument();
     expect(screen.getByText(/Source 1 · @zcash/)).toBeInTheDocument();
     expect(screen.getByText(/Source 2 · @electriccoinco/)).toBeInTheDocument();
+    expect(screen.getByText(/Source 3 · X post/)).toBeInTheDocument();
+    expect(screen.queryByText(/Source 4 ·/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Source 4:/i })).not.toBeInTheDocument();
+    expect(screen.getByText("3 sources")).toBeInTheDocument();
     expect(screen.getByText(/Numbered markers in the answer link directly/i)).toBeInTheDocument();
   });
 
