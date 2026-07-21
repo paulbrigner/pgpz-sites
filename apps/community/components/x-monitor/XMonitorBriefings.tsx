@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,8 +12,26 @@ import {
   ExternalLink,
   Link2,
   MessageSquareText,
+  Minus,
+  Plus,
 } from "lucide-react";
 import type { CuratedBriefing } from "@pgpz/x-monitor-core/contracts";
+
+type BriefingCitation = CuratedBriefing["citations"][number];
+
+type MarkdownNode = {
+  type?: string;
+  value?: string;
+  url?: string;
+  title?: string | null;
+  children?: MarkdownNode[];
+};
+
+type CitationReference = {
+  citation: BriefingCitation;
+  href: string | null;
+  number: number;
+};
 
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "Not available";
@@ -43,10 +61,119 @@ const safeMarkdownHref = (href: string | undefined) => {
   }
 };
 
-function BriefingMarkdown({ children }: { children: string }) {
+const linkedCitationMarker = /^(?:\[#([0-9]+)\]|#([0-9]+))$/;
+const inlineCitationMarker = /\[#([0-9]{1,32})\]/g;
+
+const buildCitationReferences = (citations: BriefingCitation[]) => {
+  const seenStatusIds = new Set<string>();
+  const references: CitationReference[] = [];
+
+  citations.forEach((citation) => {
+    const normalizedStatusId = String(citation.status_id || "").trim();
+    if (normalizedStatusId && seenStatusIds.has(normalizedStatusId)) return;
+    if (normalizedStatusId) seenStatusIds.add(normalizedStatusId);
+    references.push({
+      citation,
+      href: xPostHref(normalizedStatusId),
+      number: references.length + 1,
+    });
+  });
+
+  return references;
+};
+
+const citationLinkNode = (reference: CitationReference): MarkdownNode => {
+  const handle = String(reference.citation.author_handle || "").replace(/^@/, "").trim();
+  return {
+    type: "link",
+    url: reference.href || undefined,
+    title: `Source ${reference.number}: open ${handle ? `@${handle}` : "the cited"} post on X in a new tab`,
+    children: [{ type: "text", value: `[${reference.number}]` }],
+  };
+};
+
+const createCitationLinksPlugin = (citations: BriefingCitation[]) => {
+  const referencesByStatusId = new Map<string, CitationReference>();
+  buildCitationReferences(citations).forEach((reference) => {
+    if (reference.href) {
+      referencesByStatusId.set(String(reference.citation.status_id).trim(), reference);
+    }
+  });
+
+  return function citationLinksPlugin() {
+    return (tree: MarkdownNode) => {
+      const rewriteChildren = (parent: MarkdownNode) => {
+        if (!parent.children) return;
+
+        parent.children = parent.children.flatMap((node) => {
+          if (node.type === "link" || node.type === "linkReference") {
+            const exactLabel = node.children?.length === 1 && node.children[0]?.type === "text"
+              ? node.children[0].value || ""
+              : "";
+            const markerMatch = linkedCitationMarker.exec(exactLabel);
+            if (markerMatch) {
+              const reference = referencesByStatusId.get(markerMatch[1] || markerMatch[2]);
+              return reference ? [citationLinkNode(reference)] : [{ type: "text", value: exactLabel }];
+            }
+            return [node];
+          }
+
+          if (
+            node.type === "code"
+            || node.type === "inlineCode"
+            || node.type === "html"
+            || node.type === "image"
+            || node.type === "imageReference"
+          ) {
+            return [node];
+          }
+
+          if (node.type === "text" && node.value) {
+            const replacements: MarkdownNode[] = [];
+            let cursor = 0;
+            let match: RegExpExecArray | null;
+            inlineCitationMarker.lastIndex = 0;
+
+            while ((match = inlineCitationMarker.exec(node.value)) !== null) {
+              if (match.index > cursor) {
+                replacements.push({ type: "text", value: node.value.slice(cursor, match.index) });
+              }
+              const reference = referencesByStatusId.get(match[1]);
+              replacements.push(
+                reference
+                  ? citationLinkNode(reference)
+                  : { type: "text", value: match[0] },
+              );
+              cursor = match.index + match[0].length;
+            }
+
+            if (replacements.length === 0) return [node];
+            if (cursor < node.value.length) {
+              replacements.push({ type: "text", value: node.value.slice(cursor) });
+            }
+            return replacements;
+          }
+
+          rewriteChildren(node);
+          return [node];
+        });
+      };
+
+      rewriteChildren(tree);
+    };
+  };
+};
+
+function BriefingMarkdown({
+  children,
+  citations,
+}: {
+  children: string;
+  citations: BriefingCitation[];
+}) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, createCitationLinksPlugin(citations)]}
       skipHtml
       components={{
         h1: ({ children: heading }) => <h3 className="mt-6 text-xl font-semibold text-[var(--brand-ink)]">{heading}</h3>,
@@ -61,14 +188,21 @@ function BriefingMarkdown({ children }: { children: string }) {
         blockquote: ({ children: quote }) => (
           <blockquote className="border-l-4 border-[var(--zcash-gold)] pl-4 text-slate-600">{quote}</blockquote>
         ),
-        a: ({ href, children: label }) => {
+        a: ({ href, title, children: label }) => {
           const safeHref = safeMarkdownHref(href);
+          const isCitation = Boolean(
+            safeHref && /^https:\/\/x\.com\/i\/status\/[0-9]{1,32}\/?$/.test(safeHref),
+          );
           return safeHref ? (
             <Link
               href={safeHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-[var(--brand-denim)] underline"
+              title={title || undefined}
+              aria-label={isCitation ? title || undefined : undefined}
+              className={isCitation
+                ? "mx-0.5 inline-flex rounded bg-[var(--brand-ice)] px-1.5 py-0.5 text-xs font-semibold text-[var(--brand-denim)] no-underline"
+                : "font-medium text-[var(--brand-denim)] underline"}
             >
               {label}
             </Link>
@@ -88,20 +222,108 @@ function BriefingMarkdown({ children }: { children: string }) {
 }
 
 export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] }) {
+  const [openSlugs, setOpenSlugs] = useState<Set<string>>(() => new Set());
+  const pendingToggleRef = useRef<{
+    slug: string;
+    summary: HTMLElement;
+    top: number;
+  } | null>(null);
+  const toggleFrameRef = useRef<number | null>(null);
+  const deepLinkFrameRef = useRef<number | null>(null);
+
   useEffect(() => {
-    let slug = "";
-    try {
-      slug = decodeURIComponent(window.location.hash.replace(/^#/, ""));
-    } catch {
-      return;
-    }
-    if (!slug) return;
-    const target = document.getElementById(slug);
-    if (target instanceof HTMLDetailsElement) {
-      target.open = true;
-      target.scrollIntoView?.({ block: "start" });
-    }
+    const openBriefingFromHash = () => {
+      let slug = "";
+      try {
+        slug = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+      } catch {
+        return;
+      }
+      if (!slug) return;
+
+      const target = document.getElementById(slug);
+      if (!(target instanceof HTMLDetailsElement)) return;
+
+      document
+        .querySelectorAll<HTMLDetailsElement>('details[name="x-monitor-topic-briefing"]')
+        .forEach((details) => {
+          details.open = details === target;
+        });
+      setOpenSlugs(new Set([slug]));
+
+      if (deepLinkFrameRef.current !== null) {
+        window.cancelAnimationFrame(deepLinkFrameRef.current);
+      }
+      deepLinkFrameRef.current = window.requestAnimationFrame(() => {
+        target.scrollIntoView?.({ block: "start", behavior: "instant" });
+        deepLinkFrameRef.current = null;
+      });
+    };
+
+    openBriefingFromHash();
+    window.addEventListener("hashchange", openBriefingFromHash);
+    return () => {
+      window.removeEventListener("hashchange", openBriefingFromHash);
+      if (deepLinkFrameRef.current !== null) {
+        window.cancelAnimationFrame(deepLinkFrameRef.current);
+      }
+      if (toggleFrameRef.current !== null) {
+        window.cancelAnimationFrame(toggleFrameRef.current);
+      }
+    };
   }, []);
+
+  const handleSummaryClick = (slug: string, summary: HTMLElement) => {
+    pendingToggleRef.current = {
+      slug,
+      summary,
+      top: summary.getBoundingClientRect().top,
+    };
+  };
+
+  const handleToggle = (slug: string, details: HTMLDetailsElement) => {
+    const isOpen = details.open;
+    setOpenSlugs((current) => {
+      const currentlyOpen = current.has(slug);
+      if (currentlyOpen === isOpen) return current;
+      const next = new Set(current);
+      if (isOpen) next.add(slug);
+      else next.delete(slug);
+      return next;
+    });
+
+    const pendingToggle = pendingToggleRef.current;
+    if (!pendingToggle || pendingToggle.slug !== slug) return;
+    pendingToggleRef.current = null;
+
+    let currentHash = "";
+    try {
+      currentHash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    } catch {
+      currentHash = "";
+    }
+    if (isOpen || currentHash === slug) {
+      const hash = isOpen ? `#${encodeURIComponent(slug)}` : "";
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${window.location.search}${hash}`,
+      );
+    }
+
+    if (toggleFrameRef.current !== null) {
+      window.cancelAnimationFrame(toggleFrameRef.current);
+    }
+    toggleFrameRef.current = window.requestAnimationFrame(() => {
+      if (pendingToggle.summary.isConnected) {
+        const delta = pendingToggle.summary.getBoundingClientRect().top - pendingToggle.top;
+        if (Math.abs(delta) > 1) {
+          window.scrollBy({ top: delta, left: 0, behavior: "instant" });
+        }
+      }
+      toggleFrameRef.current = null;
+    });
+  };
 
   if (briefings.length === 0) {
     return (
@@ -133,16 +355,21 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
       </div>
 
       <div className="space-y-4">
-        {briefings.map((briefing, index) => {
+        {briefings.map((briefing) => {
+          const isOpen = openSlugs.has(briefing.slug);
+          const citationReferences = buildCitationReferences(briefing.citations);
           return (
             <details
               key={briefing.topic_id}
               id={briefing.slug}
               name="x-monitor-topic-briefing"
-              open={index === 0 ? true : undefined}
               className="glass-surface scroll-mt-28 overflow-hidden [&_summary::-webkit-details-marker]:hidden"
+              onToggle={(event) => handleToggle(briefing.slug, event.currentTarget)}
             >
-              <summary className="group flex cursor-pointer list-none items-start justify-between gap-4 p-5 sm:p-6">
+              <summary
+                className="flex cursor-pointer list-none items-start justify-between gap-4 p-5 sm:p-6"
+                onClick={(event) => handleSummaryClick(briefing.slug, event.currentTarget)}
+              >
                 <span className="min-w-0">
                   <span className="flex flex-wrap items-center gap-2">
                     {briefing.category ? (
@@ -170,9 +397,13 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                     <span>{briefing.source_count} {briefing.source_count === 1 ? "source" : "sources"}</span>
                   </span>
                 </span>
-                <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-white text-[var(--brand-denim)] transition group-open:rotate-45">
-                  <span className="text-xl leading-none" aria-hidden="true">+</span>
-                  <span className="sr-only">Toggle answer</span>
+                <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border bg-white text-[var(--brand-denim)]">
+                  {isOpen ? (
+                    <Minus className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <Plus className="h-5 w-5" aria-hidden="true" />
+                  )}
+                  <span className="sr-only">{isOpen ? "Collapse answer" : "Expand answer"}</span>
                 </span>
               </summary>
 
@@ -187,12 +418,8 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                   </div>
                 ) : null}
 
-                <div className="space-y-4 text-sm leading-7 text-slate-700 sm:text-base [&_ol>li]:list-decimal">
-                  <BriefingMarkdown>{briefing.answer_text}</BriefingMarkdown>
-                </div>
-
                 {briefing.key_points.length > 0 ? (
-                  <div className="mt-6 rounded-2xl border border-[rgba(245,168,0,0.26)] bg-[var(--brand-ice)] p-5">
+                  <div className="mb-6 rounded-2xl border border-[rgba(245,168,0,0.26)] bg-[var(--brand-ice)] p-5">
                     <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--brand-ink)]">
                       <MessageSquareText className="h-4 w-4 text-[var(--brand-denim)]" aria-hidden="true" />
                       Key points
@@ -206,6 +433,10 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                     </ul>
                   </div>
                 ) : null}
+
+                <div className="space-y-4 text-sm leading-7 text-slate-700 sm:text-base [&_ol>li]:list-decimal">
+                  <BriefingMarkdown citations={briefing.citations}>{briefing.answer_text}</BriefingMarkdown>
+                </div>
 
                 <div className="mt-6 grid gap-3 rounded-2xl border bg-white p-4 text-xs leading-5 text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
@@ -229,15 +460,17 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                 {briefing.citations.length > 0 ? (
                   <div className="mt-6">
                     <h3 className="text-sm font-semibold text-[var(--brand-ink)]">Sources from monitored X conversation</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Numbered markers in the answer link directly to the matching monitored X posts.
+                    </p>
                     <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {briefing.citations.map((citation, citationIndex) => {
-                        const href = xPostHref(citation.status_id);
+                      {citationReferences.map(({ citation, href, number }, citationIndex) => {
                         const excerpt = citation.excerpt || citation.body_text;
                         const card = (
                           <>
                             <div className="flex items-center justify-between gap-3">
                               <span className="font-semibold text-[var(--brand-denim)]">
-                                @{citation.author_handle || "unknown"}
+                                Source {number} · @{citation.author_handle || "unknown"}
                               </span>
                               <span className="text-xs text-slate-500">{formatDate(citation.discovered_at)}</span>
                             </div>

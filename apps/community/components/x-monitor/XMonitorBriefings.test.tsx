@@ -1,6 +1,7 @@
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CuratedBriefing } from "@pgpz/x-monitor-core/contracts";
 import { XMonitorBriefings } from "./XMonitorBriefings";
 
@@ -33,11 +34,36 @@ const briefing = (overrides: Partial<CuratedBriefing> = {}): CuratedBriefing => 
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, "", "/");
+  vi.restoreAllMocks();
 });
 
 describe("X Monitor curated briefing presentation", () => {
-  it("renders reviewed published snapshots without a free-form answer control", () => {
+  it("renders every briefing collapsed by default without a free-form answer control", () => {
+    const second = briefing({
+      topic_id: "33333333-3333-4333-8333-333333333333",
+      version_id: "44444444-4444-4444-8444-444444444444",
+      slug: "tachyon-status",
+      question: "What is Tachyon and its current status?",
+      order: 2,
+    });
+    const { container } = render(<XMonitorBriefings briefings={[briefing(), second]} />);
+
+    expect([...container.querySelectorAll<HTMLDetailsElement>("details")]
+      .every((details) => details.open === false)).toBe(true);
+    expect(screen.getAllByText("Expand answer")).toHaveLength(2);
+    expect(screen.queryByText("Collapse answer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ask X Monitor/i)).not.toBeInTheDocument();
+  });
+
+  it("renders reviewed Markdown safely after expanding a briefing", async () => {
+    const user = userEvent.setup();
     render(<XMonitorBriefings briefings={[briefing()]} />);
+    const summary = screen.getByText("What is the 3Z architecture and its current status?")
+      .closest("summary");
+    expect(summary).not.toBeNull();
+    await user.click(summary!);
 
     expect(screen.getByRole("heading", { name: "Published briefings" })).toBeInTheDocument();
     expect(screen.getAllByText("PGPZ reviewed")).toHaveLength(2);
@@ -49,9 +75,6 @@ describe("X Monitor curated briefing presentation", () => {
     );
     expect(screen.getByText("Unsafe").closest("a")).toBeNull();
     expect(screen.queryByText(/not rendered/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Ask X Monitor/i)).not.toBeInTheDocument();
 
     const source = screen.getByRole("link", { name: /@zcash/i });
     expect(source).toHaveAttribute("href", "https://x.com/i/status/1234567890123456789");
@@ -59,8 +82,85 @@ describe("X Monitor curated briefing presentation", () => {
     expect(screen.getByText(/AI-generated from monitored public X posts/)).toBeInTheDocument();
   });
 
-  it("labels stale content while preserving the last reviewed answer", () => {
+  it("uses distinct expand and collapse controls and puts key points first", async () => {
+    const user = userEvent.setup();
+    render(<XMonitorBriefings briefings={[briefing()]} />);
+
+    const summary = screen.getByText("What is the 3Z architecture and its current status?")
+      .closest("summary");
+    expect(summary).not.toBeNull();
+    expect(summary!.querySelector(".lucide-plus")).toBeInTheDocument();
+    expect(summary!.querySelector(".lucide-minus")).not.toBeInTheDocument();
+
+    await user.click(summary!);
+    await waitFor(() => expect(within(summary!).getByText("Collapse answer")).toBeInTheDocument());
+    expect(summary!.querySelector(".lucide-minus")).toBeInTheDocument();
+    expect(summary!.querySelector(".lucide-plus")).not.toBeInTheDocument();
+
+    const keyPoints = screen.getByRole("heading", { name: "Key points" });
+    const answerHeading = screen.getByRole("heading", { name: "Current view" });
+    expect(
+      keyPoints.compareDocumentPosition(answerHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("links published inline citation markers to numbered X sources", async () => {
+    const user = userEvent.setup();
+    const secondCitation = {
+      status_id: "2345678901234567890",
+      author_handle: "electriccoinco",
+      url: "javascript:alert('not-used')",
+      discovered_at: "2026-07-20T12:30:00.000Z",
+      excerpt: "A second cited source excerpt.",
+    };
+    render(
+      <XMonitorBriefings
+        briefings={[briefing({
+          answer_text: [
+            "## Current view",
+            "",
+            "First claim [#1234567890123456789]. Repeated [#1234567890123456789] and second [#2345678901234567890].",
+            "",
+            "Unknown [#999] and inline code `[#1234567890123456789]` remain literal.",
+            "",
+            "[#1234567890123456789](https://malicious.example/hijack)",
+          ].join("\n"),
+          citations: [...briefing().citations, secondCitation],
+          source_count: 2,
+        })]}
+      />,
+    );
+    const summary = screen.getByText("What is the 3Z architecture and its current status?")
+      .closest("summary");
+    await user.click(summary!);
+
+    const sourceOneLinks = screen.getAllByRole("link", {
+      name: /Source 1: open @zcash post on X in a new tab/i,
+    });
+    expect(sourceOneLinks).toHaveLength(3);
+    sourceOneLinks.forEach((link) => {
+      expect(link).toHaveAttribute("href", "https://x.com/i/status/1234567890123456789");
+      expect(link).not.toHaveAttribute("href", "https://malicious.example/hijack");
+    });
+    expect(screen.getByRole("link", {
+      name: /Source 2: open @electriccoinco post on X in a new tab/i,
+    })).toHaveAttribute("href", "https://x.com/i/status/2345678901234567890");
+    expect(screen.getByText((_, element) => (
+      element?.tagName === "P" && element.textContent?.includes("Unknown [#999]") === true
+    ))).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /999/ })).not.toBeInTheDocument();
+    expect(screen.getByText("[#1234567890123456789]", { selector: "code" })).toBeInTheDocument();
+    expect(screen.getByText(/Source 1 · @zcash/)).toBeInTheDocument();
+    expect(screen.getByText(/Source 2 · @electriccoinco/)).toBeInTheDocument();
+    expect(screen.getByText(/Numbered markers in the answer link directly/i)).toBeInTheDocument();
+  });
+
+  it("labels stale content while preserving the last reviewed answer", async () => {
+    const user = userEvent.setup();
     render(<XMonitorBriefings briefings={[briefing({ stale: true })]} />);
+    const summary = screen.getByText("What is the 3Z architecture and its current status?")
+      .closest("summary");
+    await user.click(summary!);
 
     expect(screen.getByText("Update under review")).toBeInTheDocument();
     expect(screen.getByText(/remains the last PGPZ-approved answer/i)).toBeInTheDocument();
@@ -81,8 +181,47 @@ describe("X Monitor curated briefing presentation", () => {
     const { container } = render(<XMonitorBriefings briefings={[briefing(), second]} />);
 
     expect(container.querySelector<HTMLDetailsElement>("#tachyon-status")?.open).toBe(true);
+    expect(container.querySelector<HTMLDetailsElement>("#three-z-architecture")?.open).toBe(false);
     expect(screen.getByRole("link", { name: "Link to What is Tachyon and its current status?" }))
       .toHaveAttribute("href", "#tachyon-status");
+  });
+
+  it("retains the clicked header position and hash across disclosure changes", async () => {
+    const user = userEvent.setup();
+    let scheduledFrame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      scheduledFrame = callback;
+      return 17;
+    });
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    render(<XMonitorBriefings briefings={[briefing()]} />);
+
+    const summary = screen.getByText("What is the 3Z architecture and its current status?")
+      .closest("summary")!;
+    const details = summary.closest("details")!;
+    let summaryTop = 320;
+    vi.spyOn(summary, "getBoundingClientRect").mockImplementation(() => ({
+      x: 0,
+      y: summaryTop,
+      top: summaryTop,
+      right: 0,
+      bottom: summaryTop,
+      left: 0,
+      width: 0,
+      height: 0,
+      toJSON: () => ({}),
+    }));
+
+    await user.click(summary);
+    expect(details.open).toBe(true);
+    expect(window.location.hash).toBe("#three-z-architecture");
+    summaryTop = 120;
+    act(() => scheduledFrame?.(0));
+    expect(scrollBy).toHaveBeenCalledWith({ top: -200, left: 0, behavior: "instant" });
+
+    await user.click(summary);
+    expect(details.open).toBe(false);
+    expect(window.location.hash).toBe("");
   });
 
   it("ignores malformed URL fragments without breaking the briefing page", () => {
