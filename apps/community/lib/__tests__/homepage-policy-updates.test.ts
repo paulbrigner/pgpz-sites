@@ -19,9 +19,10 @@ vi.mock("@/lib/policy-updates", () => ({
   getPolicyUpdate: mocks.getPolicyUpdate,
 }));
 
-const update = (slug: string, title: string) => ({
+const update = (slug: string, title: string, category: "weekly" | "special" = "special") => ({
   slug,
-  categoryLabel: "Policy update",
+  category,
+  categoryLabel: category === "weekly" ? "Weekly Policy Memo" : "Special Update",
   title,
   shortTitle: title,
   summary: `${title} summary`,
@@ -30,23 +31,29 @@ const update = (slug: string, title: string) => ({
   portalPath: `/updates/${slug}`,
 });
 
+const featuredUpdate = (slug: string, title: string, category: "weekly" | "special") => {
+  const { category: _category, ...featured } = update(slug, title, category);
+  return featured;
+};
+
 describe("Community homepage policy-update loading", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getPolicyUpdate.mockImplementation((slug: string) => update(slug, `Fallback ${slug}`));
   });
 
-  it("uses the newest published records", async () => {
+  it("uses the newest published record from each category", async () => {
     mocks.getPublishedPolicyUpdates.mockResolvedValue([
-      update("published-1", "Published one"),
-      update("published-2", "Published two"),
-      update("published-3", "Published three"),
+      update("weekly-new", "Newest weekly", "weekly"),
+      update("special-new", "Newest special", "special"),
+      update("weekly-old", "Older weekly", "weekly"),
+      update("special-old", "Older special", "special"),
     ]);
     const { loadFeaturedPolicyUpdates } = await import("../homepage-policy-updates");
 
     await expect(loadFeaturedPolicyUpdates()).resolves.toEqual([
-      update("published-1", "Published one"),
-      update("published-2", "Published two"),
+      featuredUpdate("special-new", "Newest special", "special"),
+      featuredUpdate("weekly-new", "Newest weekly", "weekly"),
     ]);
   });
 

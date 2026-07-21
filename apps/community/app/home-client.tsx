@@ -8,7 +8,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
 import {
-  CommunityClosingCards,
   CommunityHero,
   CommunityMemberResources,
   CommunityPillars,
@@ -61,6 +60,17 @@ const formatDate = (value: string | null | undefined) => {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  });
+};
+
+const formatMemberSince = (value: string | null | undefined) => {
+  if (!value) return "date unavailable";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "date unavailable";
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   });
 };
 
@@ -147,19 +157,11 @@ export default function HomeClient({
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
-  const membershipProvider =
-    proofStatus?.membershipProvider || sessionUser?.membershipProvider || null;
-  const proofUrl =
-    proofStatus?.membershipProofPostUrl || sessionUser?.membershipProofPostUrl || null;
-  const verifiedXHandle =
-    proofStatus?.membershipProofHandle || sessionUser?.membershipProofHandle || null;
   const manualApprovalStatus =
     proofStatus?.manualApprovalStatus || sessionUser?.manualApprovalStatus || "none";
   const manualApprovalRequestedAt =
     proofStatus?.manualApprovalRequestedAt || sessionUser?.manualApprovalRequestedAt || null;
   const manualApprovalPending = manualApprovalStatus === "pending" && !isMember;
-  const manuallyApproved =
-    isMember && (membershipProvider === "manual" || manualApprovalStatus === "approved");
   const onboardingTitle = manualApprovalPending
     ? "Manual approval requested"
     : isSocialProofOnboarding
@@ -434,7 +436,7 @@ export default function HomeClient({
         </section>
       ) : (
         <>
-          <section className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+          <section className={isMember ? "" : "grid gap-5 lg:grid-cols-[1fr_0.8fr]"}>
             <div className="glass-surface p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
@@ -444,7 +446,7 @@ export default function HomeClient({
                   </h2>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
-                      ? "Your free PGPZ community membership is active. Thanks for helping build a credible, constructive policy home for Zcash."
+                      ? `Member since ${formatMemberSince(verifiedAt)}.`
                       : "Complete member verification with X or request manual approval if you prefer not to link an X account."}
                   </p>
                 </div>
@@ -456,34 +458,7 @@ export default function HomeClient({
                 </div>
               </div>
 
-              {isMember ? (
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border bg-white/75 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">VERIFIED ACCOUNT</div>
-                    <div className="mt-2 text-lg font-semibold text-[var(--brand-ink)]">
-                      {manuallyApproved ? "Manual approval" : verifiedXHandle || "X account"}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border bg-white/75 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">VERIFIED AT</div>
-                    <div className="mt-2 text-sm font-medium text-[var(--brand-ink)]">{formatDate(verifiedAt)}</div>
-                  </div>
-                  <div className="rounded-lg border bg-white/75 p-4 sm:col-span-2">
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">PROOF RECORD</div>
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                      {proofUrl ? (
-                        <Link className="font-medium text-[var(--brand-denim)] underline" href={proofUrl} target="_blank" rel="noopener noreferrer">
-                          View verified X post
-                        </Link>
-                      ) : manuallyApproved ? (
-                        <span className="text-slate-600">Manual approval by PGPZ admin</span>
-                      ) : (
-                        <span className="text-slate-600">Proof URL unavailable</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
+              {!isMember ? (
                 <div className="mt-6 space-y-5">
                   <div className="rounded-lg border border-[rgba(245,168,0,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -599,10 +574,10 @@ export default function HomeClient({
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
-            <aside className="muted-card p-6">
+            {!isMember ? <aside className="muted-card p-6">
               <p className="section-eyebrow text-[var(--brand-denim)]">COMMUNITY</p>
               <h2 className="mt-2 text-xl font-semibold text-[var(--brand-ink)]">What this space is for</h2>
               <div className="mt-4 space-y-4 text-sm leading-6 text-slate-600">
@@ -620,7 +595,7 @@ export default function HomeClient({
                   We are starting small and building in public. Expect this space to grow as PGPZ programming, resources, and member tools come online.
                 </p>
               </div>
-            </aside>
+            </aside> : null}
           </section>
 
           {isMember ? (
@@ -632,7 +607,6 @@ export default function HomeClient({
 
           <CommunityPillars resources={memberResources} />
 
-          <CommunityClosingCards />
         </>
       )}
     </div>

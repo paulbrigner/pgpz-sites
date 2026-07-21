@@ -13,7 +13,7 @@ type ReferralSummary = {
   creditedSignupCount: number;
   activeRecruitCount: number;
   recentCredits: Array<{
-    displayLabel: "New member";
+    displayLabel: string;
     membershipStatus: "active" | "none";
     creditedAt: string;
   }>;
@@ -60,6 +60,22 @@ export default function ProfileSettingsPage() {
   const sessionUser = session?.user as any | undefined;
   const isMember = session?.capabilities.member === true;
   const currentEmail = typeof sessionUser?.email === "string" ? sessionUser.email : "";
+  const membershipVerifiedAt = typeof sessionUser?.membershipVerifiedAt === "string"
+    ? sessionUser.membershipVerifiedAt
+    : null;
+  const membershipProvider = typeof sessionUser?.membershipProvider === "string"
+    ? sessionUser.membershipProvider
+    : null;
+  const membershipProofPostUrl = typeof sessionUser?.membershipProofPostUrl === "string"
+    ? sessionUser.membershipProofPostUrl
+    : null;
+  const memberSince = membershipVerifiedAt && Number.isFinite(Date.parse(membershipVerifiedAt))
+    ? new Date(membershipVerifiedAt).toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })
+    : "Date unavailable";
 
   useEffect(() => {
     if (!authenticated || !sessionUser) return;
@@ -299,6 +315,44 @@ export default function ProfileSettingsPage() {
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {isMember ? (
+        <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">Membership record</h2>
+            <p className="text-sm text-muted-foreground">Member since {memberSince}</p>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border bg-white px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Verification</div>
+              <div className="mt-2 text-sm font-medium text-[var(--brand-ink)]">
+                {membershipProvider === "manual"
+                  ? "Manual approval"
+                  : sessionUser?.membershipProofHandle || "Verified member"}
+              </div>
+            </div>
+            <div className="rounded-md border bg-white px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Proof record</div>
+              <div className="mt-2 text-sm">
+                {membershipProofPostUrl ? (
+                  <a
+                    className="font-medium text-[var(--brand-denim)] underline"
+                    href={membershipProofPostUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View verified X post
+                  </a>
+                ) : membershipProvider === "manual" ? (
+                  <span className="text-slate-600">Manual approval by PGPZ admin</span>
+                ) : (
+                  <span className="text-slate-600">Proof URL unavailable</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       <section className="rounded-lg border bg-white/80 p-6 shadow-sm">

@@ -30,7 +30,16 @@ const staticFeaturedPolicyUpdates = () =>
 export async function loadFeaturedPolicyUpdates() {
   try {
     const publishedUpdates = await cachedPublishedPolicyUpdates();
-    const featured = publishedUpdates.slice(0, 2).map(featuredPolicyUpdate);
+    const newestByCategory = new Map<"special" | "weekly", (typeof publishedUpdates)[number]>();
+    for (const update of publishedUpdates) {
+      if ((update.category === "special" || update.category === "weekly") && !newestByCategory.has(update.category)) {
+        newestByCategory.set(update.category, update);
+      }
+    }
+    const featured = (["special", "weekly"] as const)
+      .map((category) => newestByCategory.get(category))
+      .filter((update): update is (typeof publishedUpdates)[number] => Boolean(update))
+      .map(featuredPolicyUpdate);
     if (featured.length) return featured;
   } catch (error) {
     console.error("Unable to load published policy updates for the Community homepage", error);

@@ -300,38 +300,3 @@ export function CommunityPillars({ resources }: { resources: CommunityMemberReso
     </section>
   );
 }
-
-export function CommunityClosingCards() {
-  return (
-    <section className="grid gap-5 lg:grid-cols-2">
-      <article className="glass-item p-6">
-        <p className="section-eyebrow text-[var(--brand-denim)]">COMING NEXT</p>
-        <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">Building the next version</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          Future versions of the PGPZ Community will add richer member profiles, additional sign-up and verification options beyond X, resource libraries, event pages, and more ways for members to participate in Zcash policy work.
-        </p>
-      </article>
-
-      <article className="glass-item p-6">
-        <p className="section-eyebrow text-[var(--brand-denim)]">GET INVOLVED</p>
-        <h2 className="mt-3 text-xl font-semibold text-[var(--brand-ink)]">Help shape the policy community</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          Have a policy resource, event idea, research question, or introduction that could help policymakers better understand Zcash? Share it with the PGPZ team as we build the next version of the community site.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Button asChild>
-            <Link href="mailto:admin@pgpz.org?subject=PGPZ%20Community%20Feedback">
-              Share feedback
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-              Visit PGPZ.org
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </article>
-    </section>
-  );
-}

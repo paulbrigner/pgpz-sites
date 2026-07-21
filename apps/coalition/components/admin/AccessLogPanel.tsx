@@ -118,15 +118,12 @@ export function AccessLogPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["30-day events", meta?.totalCount ?? events.length],
           ["Logins", meta?.loginCount ?? 0],
           ["Page views", meta?.pageViewCount ?? 0],
           ["Members", meta?.uniqueMemberCount ?? 0],
-          ["Better Auth", meta?.betterAuthCount ?? 0],
-          ["NextAuth", meta?.nextAuthCount ?? 0],
-          ["Unattributed", meta?.unknownAuthProviderCount ?? 0],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border bg-white/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</div>
@@ -137,7 +134,7 @@ export function AccessLogPanel() {
 
       {meta && !meta.complete ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Provider totals are incomplete because the 30-day query exceeded the safety page limit.
+          Totals are incomplete because the 30-day query exceeded the safety page limit.
         </div>
       ) : null}
 

@@ -410,7 +410,7 @@ describe("referral member summaries", () => {
     expect(summary.activeRecruitCount).toBe(15);
     expect(summary.recentCredits).toHaveLength(5);
     expect(summary.recentCredits[0]).toMatchObject({
-      displayLabel: "New member",
+      displayLabel: "Recruit 30",
       membershipStatus: "active",
     });
     expect(summary.recentCredits[0]).not.toHaveProperty("referredUserId");
