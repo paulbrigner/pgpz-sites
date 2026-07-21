@@ -347,7 +347,7 @@
       },
       {
         "path": "lib/admin/signup-notifications.ts",
-        "sha256": "eb2ca04b2c9645f5d59a3deef84aa615790fb03b911887211d7bf8910f7f0af8"
+        "sha256": "fb0206e7aef53991342bc6bda51e3cbc9a131262c17748752084d7cd45bdb17e"
       },
       {
         "path": "lib/app-session.ts",

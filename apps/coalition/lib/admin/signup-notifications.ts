@@ -22,11 +22,6 @@ import {
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { getUserDisplayName } from "@/lib/user-display-name";
 
-const APPROVAL_REQUESTED_FIELD = "adminSignupApprovalRequestedEmailOptIn";
-const SUCCESSFUL_JOIN_FIELD = "adminSignupSuccessfulJoinEmailOptIn";
-const PREFERENCES_UPDATED_AT_FIELD = "adminSignupNotificationsUpdatedAt";
-const PREFERENCES_UPDATED_BY_FIELD = "adminSignupNotificationsUpdatedBy";
-
 export type AdminSignupNotificationPreferences = {
   approvalRequested: boolean;
   successfulJoin: boolean;
@@ -182,8 +177,7 @@ export async function updateAdminSignupNotificationPreferences({
       TableName: TABLE_NAME,
       Key: userKey(userId),
       UpdateExpression:
-        `SET ${APPROVAL_REQUESTED_FIELD} = :approvalRequested, ${SUCCESSFUL_JOIN_FIELD} = :successfulJoin, ` +
-        `${PREFERENCES_UPDATED_AT_FIELD} = :now, ${PREFERENCES_UPDATED_BY_FIELD} = :adminUserId`,
+        "SET adminSignupApprovalRequestedEmailOptIn = :approvalRequested, adminSignupSuccessfulJoinEmailOptIn = :successfulJoin, adminSignupNotificationsUpdatedAt = :now, adminSignupNotificationsUpdatedBy = :adminUserId",
       ConditionExpression:
         "attribute_exists(#pk) AND isAdmin = :true AND (attribute_not_exists(#accountStatus) OR attribute_type(#accountStatus, :nullType) OR #accountStatus = :emptyString OR #accountStatus = :activeAccount) AND (attribute_not_exists(#deactivatedAt) OR attribute_type(#deactivatedAt, :nullType) OR #deactivatedAt = :emptyString)",
       ExpressionAttributeNames: {

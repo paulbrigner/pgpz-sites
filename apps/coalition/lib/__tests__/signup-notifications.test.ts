@@ -113,6 +113,8 @@ describe("Coalition admin signup notifications", () => {
     });
     expect(dynamoMocks.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        UpdateExpression:
+          "SET adminSignupApprovalRequestedEmailOptIn = :approvalRequested, adminSignupSuccessfulJoinEmailOptIn = :successfulJoin, adminSignupNotificationsUpdatedAt = :now, adminSignupNotificationsUpdatedBy = :adminUserId",
         ExpressionAttributeValues: expect.objectContaining({
           ":approvalRequested": true,
           ":successfulJoin": false,
