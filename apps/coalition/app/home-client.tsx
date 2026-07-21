@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -12,7 +12,6 @@ import {
   Loader2,
   MessageCircle,
   Newspaper,
-  Send,
   ShieldCheck,
   UserCheck,
   UsersRound,
@@ -25,6 +24,7 @@ import {
   CoalitionPolicyPriorities,
   CoalitionWorkstreams,
 } from "@/components/home/CoalitionHomeSections";
+import ResourceSubmissionForm from "@/components/resources/ResourceSubmissionForm";
 import {
   policyInterestGroupLabel,
   policyInterestGroupOptions,
@@ -88,12 +88,6 @@ export default function HomeClient() {
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resourceTitle, setResourceTitle] = useState("");
-  const [resourceUrl, setResourceUrl] = useState("");
-  const [resourceDetails, setResourceDetails] = useState("");
-  const [resourceSubmitting, setResourceSubmitting] = useState(false);
-  const [resourceMessage, setResourceMessage] = useState<string | null>(null);
-  const [resourceError, setResourceError] = useState<string | null>(null);
   const pendingProfileApplied = useRef(false);
 
   const displayName = useMemo(() => {
@@ -314,34 +308,6 @@ export default function HomeClient() {
       setError(err?.message || "Unable to accept coalition invitation");
     } finally {
       setInvitationAccepting(false);
-    }
-  };
-
-  const submitResource = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setResourceSubmitting(true);
-    setResourceMessage(null);
-    setResourceError(null);
-    try {
-      const res = await fetch("/api/resources/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: resourceTitle,
-          url: resourceUrl,
-          details: resourceDetails,
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || "Unable to submit resource for review");
-      setResourceTitle("");
-      setResourceUrl("");
-      setResourceDetails("");
-      setResourceMessage("Resource added to the PGPZ moderation queue.");
-    } catch (err: any) {
-      setResourceError(err?.message || "Unable to submit resource for review");
-    } finally {
-      setResourceSubmitting(false);
     }
   };
 
@@ -747,72 +713,7 @@ export default function HomeClient() {
                 Have a resource, Hill meeting insight, partner update, or campaign idea that could help advance Zcash policy? Share it with the PGPZ team from this workspace.
               </p>
               {isMember ? (
-                <form className="mt-5 space-y-4" onSubmit={submitResource}>
-                  {resourceMessage ? (
-                    <Alert className="bg-emerald-50 text-[var(--brand-teal)]">
-                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                      <AlertTitle>Submitted</AlertTitle>
-                      <AlertDescription>{resourceMessage}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                  {resourceError ? (
-                    <Alert variant="destructive">
-                      <AlertTitle>Submission issue</AlertTitle>
-                      <AlertDescription>{resourceError}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="space-y-1.5 text-sm font-medium text-[var(--brand-ink)]">
-                      Resource title
-                      <input
-                        required
-                        maxLength={140}
-                        value={resourceTitle}
-                        onChange={(event) => setResourceTitle(event.target.value)}
-                        className="h-10 w-full rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
-                        placeholder="Policy explainer, meeting note, campaign idea"
-                      />
-                    </label>
-                    <label className="space-y-1.5 text-sm font-medium text-[var(--brand-ink)]">
-                      Link
-                      <input
-                        type="url"
-                        maxLength={300}
-                        value={resourceUrl}
-                        onChange={(event) => setResourceUrl(event.target.value)}
-                        className="h-10 w-full rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
-                        placeholder="https://"
-                      />
-                    </label>
-                  </div>
-                  <label className="space-y-1.5 text-sm font-medium text-[var(--brand-ink)]">
-                    Notes for the PGPZ team
-                    <textarea
-                      required
-                      maxLength={4000}
-                      rows={5}
-                      value={resourceDetails}
-                      onChange={(event) => setResourceDetails(event.target.value)}
-                      className="w-full resize-y rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 py-2 text-sm leading-6 text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
-                      placeholder="Share context, urgency, suggested use, or who should follow up."
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    <Button type="submit" isLoading={resourceSubmitting} disabled={resourceSubmitting}>
-                      <Send className="h-4 w-4" aria-hidden="true" />
-                      Submit for review
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href="/resources">Browse approved resources</Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                        Visit PGPZ.org
-                        <ExternalLink className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                </form>
+                <ResourceSubmissionForm showSupportingLinks />
               ) : (
                 <div className="mt-5 rounded-lg border border-[rgba(245,168,0,0.3)] bg-white/80 p-4 text-sm leading-6 text-slate-600">
                   Resource submissions are available after coalition access is approved.
