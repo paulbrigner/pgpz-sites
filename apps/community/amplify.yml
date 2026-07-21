@@ -35,6 +35,9 @@ frontend:
         - env | grep -e REGION_AWS >> .env.production
         - 'test -z "${NEXT_PUBLIC_XMONITOR_ENABLED:-}" || test "${NEXT_PUBLIC_XMONITOR_ENABLED}" = "true" || test "${NEXT_PUBLIC_XMONITOR_ENABLED}" = "false"'
         - env | grep -e '^NEXT_PUBLIC_XMONITOR_ENABLED=' >> .env.production || true
+        - 'test -z "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-}" || test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED}" = "true" || test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED}" = "false"'
+        - 'test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-false}" != "true" || test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" = "true"'
+        - env | grep -e '^NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED=' >> .env.production || true
         - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || test -n "${XMONITOR_READ_API_BASE_URL:-}"'
         - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || case "${XMONITOR_READ_API_BASE_URL}" in https://*) true ;; *) false ;; esac'
         - 'test "${NEXT_PUBLIC_XMONITOR_ENABLED:-false}" != "true" || test -n "${XMONITOR_READ_CLIENT_ID:-}"'
@@ -43,6 +46,13 @@ frontend:
         - env | grep -e '^XMONITOR_READ_CLIENT_ID=' >> .env.production || true
         - env | grep -e '^XMONITOR_READ_CLIENT_SECRET=' >> .env.production || true
         - env | grep -e '^XMONITOR_READ_TIMEOUT_MS=' >> .env.production || true
+        - 'test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-false}" != "true" || test -n "${XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID:-}"'
+        - 'test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-false}" != "true" || test "${XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID}" != "${XMONITOR_READ_CLIENT_ID}"'
+        - 'test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-false}" != "true" || test "${#XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET}" -ge 32'
+        - 'test "${NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED:-false}" != "true" || test "${XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET}" != "${XMONITOR_READ_CLIENT_SECRET}"'
+        - env | grep -e '^XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID=' >> .env.production || true
+        - env | grep -e '^XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET=' >> .env.production || true
+        - env | grep -e '^XMONITOR_BRIEFINGS_ADMIN_TIMEOUT_MS=' >> .env.production || true
         - env | grep -e X_BEARER_TOKEN >> .env.production
         - env | grep -e XMON_X_API_BEARER_TOKEN >> .env.production || true
         - env | grep -e X_API_BASE_URL >> .env.production || true

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "sourceRepository": "paulbrigner/zodldashboard",
-  "sourceCommit": "9061f599c2be49890bad389ff42040a6e8dfe25f",
+  "sourceCommit": "c4c70db7e25f5fd01e9736ffa5fcbac9effe18f9",
   "files": [
     {
       "source": "packages/x-monitor-core/src/index.ts",
@@ -11,12 +11,12 @@
     {
       "source": "packages/x-monitor-core/src/contracts.ts",
       "destination": "packages/x-monitor-core/src/contracts.ts",
-      "sha256": "f15344fb119dccd5809c3c8af19c80a12439d8d5376dce754bc96b60013933be"
+      "sha256": "cc16311be58d4ddf7784d07c48afa90b825ac3ae02c44a01aec934ef18791e07"
     },
     {
       "source": "packages/x-monitor-core/src/read-client.ts",
       "destination": "packages/x-monitor-core/src/read-client.ts",
-      "sha256": "a15f5bc0db901393058ba715f0afa9acc33b57fee9093499ab984fbf87723671"
+      "sha256": "6929b19a6274e90e053f456dca7453ec0fe622c55f32706e1ca37c813c6b79cb"
     }
   ]
 }

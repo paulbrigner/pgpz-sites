@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildActivityTrendsApiUrl,
+  buildCuratedBriefingApiUrl,
+  buildCuratedBriefingsApiUrl,
   buildFeedApiUrl,
   buildPostDetailApiUrl,
   createXMonitorReadClient,
@@ -86,5 +88,60 @@ describe("X Monitor read client", () => {
     });
 
     await expect(client.postDetail("missing")).resolves.toBeNull();
+  });
+
+  it("reads only published curated briefing snapshots from stable URLs", async () => {
+    const fetchMock = vi.fn<XMonitorFetch>(async (input) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith("/curated-briefings/three-z")) {
+        return Response.json({ slug: "three-z", answer_text: "Reviewed answer" });
+      }
+      return Response.json({ items: [], generated_at: "2026-07-21T12:00:00.000Z" });
+    });
+    const client = createXMonitorReadClient({
+      baseUrl: "https://monitor.example/v1",
+      fetch: fetchMock,
+    });
+
+    await expect(client.curatedBriefings()).resolves.toEqual({
+      items: [],
+      generated_at: "2026-07-21T12:00:00.000Z",
+    });
+    await expect(client.curatedBriefing("three-z")).resolves.toMatchObject({
+      slug: "three-z",
+      answer_text: "Reviewed answer",
+    });
+    expect(buildCuratedBriefingsApiUrl("https://monitor.example/v1/"))
+      .toBe("https://monitor.example/v1/curated-briefings");
+    expect(buildCuratedBriefingApiUrl("https://monitor.example/v1", "three-z"))
+      .toBe("https://monitor.example/v1/curated-briefings/three-z");
+    expect(buildCuratedBriefingApiUrl("https://monitor.example/v1", " Three-Z "))
+      .toBe("https://monitor.example/v1/curated-briefings/three-z");
+    expect(() => buildCuratedBriefingApiUrl("https://monitor.example/v1", "../compose"))
+      .toThrow("valid slug");
+
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.method).toBeUndefined();
+      expect(init?.cache).toBe("no-store");
+      expect(init?.redirect).toBe("manual");
+    }
+  });
+
+  it("validates curated briefing list and detail response shapes", async () => {
+    const malformedList = createXMonitorReadClient({
+      baseUrl: "https://monitor.example/v1",
+      fetch: async () => Response.json({ items: null, generated_at: null }),
+    });
+    await expect(malformedList.curatedBriefings()).rejects.toThrow(
+      "Invalid curated briefings response payload",
+    );
+
+    const malformedDetail = createXMonitorReadClient({
+      baseUrl: "https://monitor.example/v1",
+      fetch: async () => Response.json({ slug: "three-z" }),
+    });
+    await expect(malformedDetail.curatedBriefing("three-z")).rejects.toThrow(
+      "Invalid curated briefing response payload",
+    );
   });
 });

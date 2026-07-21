@@ -107,6 +107,37 @@ export function validateBrandedProductionEnvironment(
         }
       }
     }
+    const briefingsFlag = environment.NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED?.trim().toLowerCase();
+    if (briefingsFlag && !new Set(["true", "false"]).has(briefingsFlag)) {
+      issues.push("NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED must be true or false");
+    }
+    if (briefingsFlag === "true") {
+      if (xMonitorFlag !== "true") {
+        issues.push("NEXT_PUBLIC_XMONITOR_BRIEFINGS_ENABLED requires NEXT_PUBLIC_XMONITOR_ENABLED");
+      }
+      const adminClientId = environment.XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID?.trim() || "";
+      if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(adminClientId)) {
+        issues.push("XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID is invalid");
+      }
+      if (adminClientId && adminClientId === environment.XMONITOR_READ_CLIENT_ID?.trim()) {
+        issues.push("XMONITOR_BRIEFINGS_ADMIN_CLIENT_ID must differ from XMONITOR_READ_CLIENT_ID");
+      }
+      const adminSecret = validateSigningSecret(
+        environment,
+        "XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET",
+        issues,
+      );
+      if (adminSecret && adminSecret === environment.XMONITOR_READ_CLIENT_SECRET?.trim()) {
+        issues.push("XMONITOR_BRIEFINGS_ADMIN_CLIENT_SECRET must differ from XMONITOR_READ_CLIENT_SECRET");
+      }
+      const configuredAdminTimeout = environment.XMONITOR_BRIEFINGS_ADMIN_TIMEOUT_MS?.trim();
+      if (configuredAdminTimeout) {
+        const timeout = Number(configuredAdminTimeout);
+        if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 30_000) {
+          issues.push("XMONITOR_BRIEFINGS_ADMIN_TIMEOUT_MS must be an integer from 1000 to 30000");
+        }
+      }
+    }
   }
 
   if (trackingSecret && previousTrackingSecret === trackingSecret) {

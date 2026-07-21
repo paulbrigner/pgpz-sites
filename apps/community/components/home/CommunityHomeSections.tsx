@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Activity, ExternalLink, FileText, Mail, MessageCircle } from "lucide-react";
+import { Activity, BookOpenText, ExternalLink, FileText, Mail, MessageCircle } from "lucide-react";
 import { ReferralInviteCard } from "@/components/referrals/ReferralInviteCard";
 import { Button } from "@/components/ui/button";
 
@@ -124,9 +124,11 @@ export function CommunityHero({
 export function CommunityMemberResources({
   resources,
   xMonitorEnabled = false,
+  xMonitorBriefingsEnabled = false,
 }: {
   resources: CommunityMemberResource[];
   xMonitorEnabled?: boolean;
+  xMonitorBriefingsEnabled?: boolean;
 }) {
   return (
     <>
@@ -149,12 +151,22 @@ export function CommunityMemberResources({
               </p>
             </div>
           </div>
-          <Button className="shrink-0" asChild>
-            <Link href="/x-monitor">
-              Open X Monitor
-              <Activity className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </Button>
+          <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+            <Button asChild>
+              <Link href="/x-monitor">
+                Open X Monitor
+                <Activity className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+            {xMonitorBriefingsEnabled ? (
+              <Button variant="outline" asChild>
+                <Link href="/x-monitor/briefings">
+                  Topic briefings
+                  <BookOpenText className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
