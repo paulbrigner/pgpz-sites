@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/copy-pdf-worker.mjs",
+    "build": "next build && node ../../tooling/verify-signup-notification-bundle.mjs . && node scripts/copy-pdf-worker.mjs",
     "start": "next start",
     "lint": "next lint",
     "forum:update": "NODE_OPTIONS=--conditions=react-server tsx scripts/export-policy-update-forum-markdown.ts",

@@ -120,6 +120,8 @@ describe("admin signup notifications", () => {
       expect.objectContaining({
         Key: { pk: "USER#admin-1", sk: "USER#admin-1" },
         ConditionExpression: expect.stringContaining("isAdmin = :true"),
+        UpdateExpression:
+          "SET adminSignupApprovalRequestedEmailOptIn = :approvalRequested, adminSignupSuccessfulJoinEmailOptIn = :successfulJoin, adminSignupNotificationsUpdatedAt = :now, adminSignupNotificationsUpdatedBy = :adminUserId",
         ExpressionAttributeValues: expect.objectContaining({
           ":approvalRequested": true,
           ":successfulJoin": true,
