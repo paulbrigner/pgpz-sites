@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Inbox, Mail, Newspaper, Users } from "lucide-react";
+import { Activity, BellRing, Inbox, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
 import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
 import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
 import { ResourceModerationPanel } from "@/components/admin/ResourceModerationPanel";
+import { SignupNotificationsPanel } from "@/components/admin/SignupNotificationsPanel";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 
-type AdminTab = "users" | "resources" | "updates" | "newsletters" | "access";
+type AdminTab = "users" | "notifications" | "resources" | "updates" | "newsletters" | "access";
 
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
@@ -34,6 +35,12 @@ const tabs: Array<{
     label: "User management",
     description: "Membership, verification, welcome emails, and notes",
     icon: Users,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    description: "Approval-request email alerts",
+    icon: BellRing,
   },
   {
     id: "updates",
@@ -61,7 +68,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -97,6 +104,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       </div>
 
       {activeTab === "users" ? <AdminClient initialRoster={null} currentAdminId={currentAdminId} /> : null}
+      {activeTab === "notifications" ? <SignupNotificationsPanel /> : null}
       {activeTab === "resources" ? <ResourceModerationPanel /> : null}
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}

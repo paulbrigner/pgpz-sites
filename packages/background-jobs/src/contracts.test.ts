@@ -18,6 +18,7 @@ describe("background-job contracts", () => {
     expect(BACKGROUND_JOB_KINDS).toEqual([
       "newsletter",
       "policy_update",
+      "admin_signup_notification",
       "bulk_invitation",
       "community_sync",
     ]);

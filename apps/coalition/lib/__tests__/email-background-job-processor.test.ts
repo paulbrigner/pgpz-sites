@@ -33,6 +33,11 @@ const newsletterMocks = vi.hoisted(() => ({
   updateProgress: vi.fn(),
 }));
 
+const signupNotificationMocks = vi.hoisted(() => ({
+  buildEmail: vi.fn(),
+  eligibleRecipient: vi.fn(),
+}));
+
 const transportMocks = vi.hoisted(() => ({
   buildConfig: vi.fn(),
 }));
@@ -67,6 +72,11 @@ vi.mock("@/lib/admin/newsletters", () => ({
   claimNewsletterBackgroundDelivery: newsletterMocks.claimDelivery,
   markNewsletterSent: newsletterMocks.markSent,
   updateNewsletterSendRunProgress: newsletterMocks.updateProgress,
+}));
+vi.mock("@/lib/admin/signup-notifications", () => ({
+  buildAdminSignupNotificationEmail: signupNotificationMocks.buildEmail,
+  getCurrentEligibleAdminSignupNotificationRecipient:
+    signupNotificationMocks.eligibleRecipient,
 }));
 vi.mock("@/lib/config", () => ({
   EMAIL_FROM: "no-reply@example.test",
@@ -161,6 +171,43 @@ const task = {
   expires: 2_000_000_000,
 };
 
+const signupPayload = {
+  event: {
+    type: "approval_requested" as const,
+    memberUserId: "member-1",
+    occurredAt: "2026-07-19T00:00:00.000Z",
+  },
+  member: {
+    id: "member-1",
+    email: "new-member@example.test",
+    name: "New Member",
+    firstName: "New",
+    lastName: "Member",
+  },
+};
+
+const signupRecipient = {
+  recipientKey: "admin-1",
+  userId: "admin-1",
+  email: "admin@example.test",
+  name: "Example Admin",
+};
+
+function signupJob(overrides: Record<string, unknown> = {}) {
+  return job({
+    kind: "admin_signup_notification",
+    sourceId: "member-1:approval_requested",
+    payload: signupPayload,
+    ...overrides,
+  });
+}
+
+const signupTask = {
+  ...task,
+  kind: "admin_signup_notification",
+  recipient: signupRecipient,
+};
+
 describe("email background-job delivery boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -180,6 +227,16 @@ describe("email background-job delivery boundary", () => {
     newsletterMocks.claimDelivery.mockResolvedValue(true);
     newsletterMocks.markSent.mockResolvedValue(true);
     newsletterMocks.updateProgress.mockResolvedValue(undefined);
+    signupNotificationMocks.buildEmail.mockReturnValue({
+      subject: "New member is waiting for approval",
+      text: "A new member is waiting for approval.",
+      html: "<p>A new member is waiting for approval.</p>",
+    });
+    signupNotificationMocks.eligibleRecipient.mockResolvedValue({
+      id: "admin-1",
+      email: "admin@example.test",
+      isAdmin: true,
+    });
     transportMocks.buildConfig.mockReturnValue({ transport: "test" });
   });
 
@@ -260,5 +317,132 @@ describe("email background-job delivery boundary", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it("revalidates and sends an eligible admin signup notification", async () => {
+    const liveJob = signupJob();
+    backgroundJobMocks.complete.mockResolvedValue(
+      signupJob({ status: "completed", processingCount: 0, sentCount: 1 }),
+    );
+
+    await expect(
+      processEmailBackgroundJobTask({
+        job: liveJob as never,
+        task: signupTask as never,
+        leaseToken: "lease-1",
+      }),
+    ).resolves.toEqual({ outcome: "sent", retry: false });
+
+    expect(signupNotificationMocks.eligibleRecipient).toHaveBeenCalledWith(
+      signupRecipient,
+      signupPayload.event,
+    );
+    expect(signupNotificationMocks.buildEmail).toHaveBeenCalledWith(signupPayload);
+    expect(backgroundJobMocks.deliveryStarted).toHaveBeenCalledWith(
+      "job-1",
+      "task-1",
+      "lease-1",
+    );
+    expect(mailMocks.sendMail).toHaveBeenCalledWith({
+      to: "admin@example.test",
+      from: "no-reply@example.test",
+      subject: "New member is waiting for approval",
+      text: "A new member is waiting for approval.",
+      html: "<p>A new member is waiting for approval.</p>",
+    });
+    expect(backgroundJobMocks.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "sent",
+        providerMessageId: "ses-message-1",
+        result: expect.objectContaining({
+          subject: "New member is waiting for approval",
+          providerAcceptedAt: expect.any(String),
+        }),
+      }),
+    );
+    expect(emailLogMocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: "background:job-1:task-1:sent",
+        userId: null,
+        email: "admin@example.test",
+        type: "admin_signup_approval_requested",
+        status: "sent",
+        providerMessageId: "ses-message-1",
+        metadata: expect.objectContaining({
+          adminUserId: "admin-1",
+          memberUserId: "member-1",
+          backgroundJobId: "job-1",
+        }),
+      }),
+    );
+    expect(backgroundJobMocks.projectionCompleted).toHaveBeenCalledWith(
+      "job-1",
+      "task-1",
+    );
+    expect(trackingMocks.create).not.toHaveBeenCalled();
+    expect(newsletterMocks.claimDelivery).not.toHaveBeenCalled();
+  });
+
+  it("skips an admin signup notification when the recipient is no longer eligible", async () => {
+    signupNotificationMocks.eligibleRecipient.mockResolvedValueOnce(null);
+    backgroundJobMocks.complete.mockResolvedValue(
+      signupJob({ status: "completed", processingCount: 0, skippedCount: 1 }),
+    );
+
+    await expect(
+      processEmailBackgroundJobTask({
+        job: signupJob() as never,
+        task: signupTask as never,
+        leaseToken: "lease-1",
+      }),
+    ).resolves.toEqual({ outcome: "skipped", retry: false });
+
+    expect(backgroundJobMocks.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "skipped",
+        result: { reason: "admin_notification_recipient_ineligible" },
+      }),
+    );
+    expect(signupNotificationMocks.buildEmail).not.toHaveBeenCalled();
+    expect(backgroundJobMocks.deliveryStarted).not.toHaveBeenCalled();
+    expect(mailMocks.createTransport).not.toHaveBeenCalled();
+    expect(mailMocks.sendMail).not.toHaveBeenCalled();
+    expect(emailLogMocks.record).not.toHaveBeenCalled();
+  });
+
+  it("releases an admin signup notification for retry when it fails before delivery starts", async () => {
+    const error = new Error("email rendering failed");
+    signupNotificationMocks.buildEmail.mockImplementationOnce(() => {
+      throw error;
+    });
+
+    await expect(
+      processEmailBackgroundJobTask({
+        job: signupJob() as never,
+        task: signupTask as never,
+        leaseToken: "lease-1",
+      }),
+    ).resolves.toEqual({ outcome: "retry_scheduled", retry: true });
+
+    expect(backgroundJobMocks.deliveryStarted).not.toHaveBeenCalled();
+    expect(mailMocks.createTransport).not.toHaveBeenCalled();
+    expect(mailMocks.sendMail).not.toHaveBeenCalled();
+    expect(backgroundJobMocks.complete).not.toHaveBeenCalled();
+    expect(backgroundJobMocks.releaseForRetry).toHaveBeenCalledWith({
+      jobId: "job-1",
+      taskId: "task-1",
+      leaseToken: "lease-1",
+      error,
+    });
+    expect(emailLogMocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        email: "admin@example.test",
+        type: "admin_signup_approval_requested",
+        status: "failed",
+        error: "email rendering failed",
+        metadata: expect.objectContaining({ attempt: 1 }),
+      }),
+    );
   });
 });

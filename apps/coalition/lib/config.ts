@@ -28,6 +28,9 @@ export const EMAIL_SERVER_USER = process.env.EMAIL_SERVER_USER as string | undef
 export const EMAIL_SERVER_PASSWORD = process.env.EMAIL_SERVER_PASSWORD as string | undefined;
 export const EMAIL_SERVER_SECURE = process.env.EMAIL_SERVER_SECURE as string | undefined;
 
+export const SITE_NAME = "PGPZ Coalition";
+export const SIGNUP_NOTIFICATION_SUCCESSFUL_JOIN_OPTION = null;
+
 export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;
 export const KEY_PAIR_ID = process.env.KEY_PAIR_ID as string;
 export const PRIVATE_KEY_SECRET = (process.env.PRIVATE_KEY_SECRET || "").replace(/\\n/g, "\n") as string;

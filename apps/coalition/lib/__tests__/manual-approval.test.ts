@@ -11,6 +11,10 @@ const jobMocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
 }));
 
+const notificationMocks = vi.hoisted(() => ({
+  queue: vi.fn(),
+}));
+
 vi.mock("@/lib/dynamodb", () => ({
   documentClient: dynamoMocks,
   TABLE_NAME: "TestTable",
@@ -19,6 +23,10 @@ vi.mock("@/lib/dynamodb", () => ({
 vi.mock("@/lib/admin/background-jobs", () => ({
   prepareSingleRecipientBackgroundJob: jobMocks.prepare,
   dispatchStagedBackgroundJob: jobMocks.dispatch,
+}));
+
+vi.mock("@/lib/admin/signup-notifications", () => ({
+  queueAdminSignupNotification: notificationMocks.queue,
 }));
 
 import {
@@ -61,6 +69,8 @@ describe("manual approval admin flow", () => {
     });
     jobMocks.dispatch.mockReset();
     jobMocks.dispatch.mockResolvedValue({ dispatched: 1 });
+    notificationMocks.queue.mockReset();
+    notificationMocks.queue.mockResolvedValue({ queued: true, recipientCount: 0 });
   });
 
   it.each([
@@ -88,6 +98,80 @@ describe("manual approval admin flow", () => {
       }),
     );
     expectActiveAccountCondition(dynamoMocks.update.mock.calls[0][0]);
+    expect(notificationMocks.queue).toHaveBeenCalledWith({
+      type: "approval_requested",
+      memberUserId: "user-1",
+      occurredAt: expect.any(String),
+    });
+  });
+
+  it("does not send a duplicate notification for an already-pending request", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        membershipStatus: "none",
+        manualApprovalStatus: "pending",
+        manualApprovalRequestedAt: "2026-07-21T12:00:00.000Z",
+        accountStatus: "active",
+      },
+    });
+
+    await expect(requestManualApproval("user-1")).resolves.toMatchObject({ status: "pending" });
+    expect(dynamoMocks.update).not.toHaveBeenCalled();
+    expect(notificationMocks.queue).not.toHaveBeenCalled();
+  });
+
+  it("returns the winning pending request without queuing twice after a concurrent first request", async () => {
+    dynamoMocks.get
+      .mockResolvedValueOnce({
+        Item: {
+          membershipStatus: "none",
+          manualApprovalStatus: "none",
+          accountStatus: "active",
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          membershipStatus: "none",
+          manualApprovalStatus: "pending",
+          manualApprovalRequestedAt: "2026-07-21T12:00:00.000Z",
+          accountStatus: "active",
+        },
+      });
+    dynamoMocks.update.mockRejectedValueOnce(
+      Object.assign(new Error("request race"), { name: "ConditionalCheckFailedException" }),
+    );
+
+    await expect(requestManualApproval("user-1")).resolves.toEqual({
+      status: "pending",
+      manualApprovalStatus: "pending",
+      manualApprovalRequestedAt: "2026-07-21T12:00:00.000Z",
+      applicationStatus: "requested",
+    });
+    expect(dynamoMocks.get).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        Key: { pk: "USER#user-1", sk: "USER#user-1" },
+        ConsistentRead: true,
+      }),
+    );
+    expect(notificationMocks.queue).not.toHaveBeenCalled();
+  });
+
+  it("keeps a successful request successful when notification delivery fails", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        membershipStatus: "none",
+        manualApprovalStatus: "none",
+        accountStatus: "active",
+      },
+    });
+    notificationMocks.queue.mockRejectedValueOnce(new Error("queue unavailable"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(requestManualApproval("user-1")).resolves.toMatchObject({ status: "requested" });
+    expect(dynamoMocks.update).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.queue).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
   });
 
   it.each([

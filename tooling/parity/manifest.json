@@ -70,6 +70,14 @@
         "sha256": "e0bb36e3e47d4f029019527299c71bafa14c932d15b1551b7b6157cc4bb978cf"
       },
       {
+        "path": "app/api/admin/signup-notification-preferences/route.test.ts",
+        "sha256": "c6199c8e5b288e07844a247768416283ee790a7f1f12a1462cf9eb5dddd8f4df"
+      },
+      {
+        "path": "app/api/admin/signup-notification-preferences/route.ts",
+        "sha256": "d07f95b8e2017f00910cdf3a06522a85e49969046ec98abfe55af7d696d0e051"
+      },
+      {
         "path": "app/api/admin/users/adminize/route.ts",
         "sha256": "72f81b2871cb4ababb6e063e648e063a4ef150d18f40faa95cecca7c6b74e349"
       },
@@ -182,6 +190,10 @@
         "sha256": "e866111428a85e90882831b743fb5e675563b4937ac57d3a009dab8eaea23faa"
       },
       {
+        "path": "components/admin/SignupNotificationsPanel.tsx",
+        "sha256": "a6a9869141259556910ab5963a9bbcb773dadef088d97ca9c2a830d37eb40d18"
+      },
+      {
         "path": "components/admin/sensitive-data.tsx",
         "sha256": "37b52c06b792f3f410981a85ddeb0b80d62d4cce856cebf5e5d9cca0a66bf135"
       },
@@ -239,7 +251,7 @@
       },
       {
         "path": "lib/__tests__/email-background-job-processor.test.ts",
-        "sha256": "7e98db56f1491220e6b52b651392924410c6f0e5dc81df6ac621a61354d42d9a"
+        "sha256": "f863267551390fd34815dda3c74c5ad7e80f397a27fefc53476146d9595213d2"
       },
       {
         "path": "lib/__tests__/better-auth-client-ip.test.ts",
@@ -299,7 +311,7 @@
       },
       {
         "path": "lib/admin/background-jobs.ts",
-        "sha256": "08acd6be2d052ebcae3266b84b8830e8bc4044529359b55cca38f61c1d69c4bf"
+        "sha256": "f037760b980e56231b91e1c914caab52335586e1aa9221cc980620a1bd085aa9"
       },
       {
         "path": "lib/admin/email-log.ts",
@@ -307,7 +319,7 @@
       },
       {
         "path": "lib/admin/email-background-job-processor.ts",
-        "sha256": "b37fd9a31caa6d53ba18b1d2903617cd0a0736166546608233df8bac641f9a42"
+        "sha256": "7e9851f103990fd818e204f0832fad33204076728b5e862205b5eb61d1a4e886"
       },
       {
         "path": "lib/admin/email-tracking.ts",
@@ -332,6 +344,10 @@
       {
         "path": "lib/admin/policy-update-email-assets.ts",
         "sha256": "2a936e3062ad69d42acf21fef6554f05ff05d08d5a5e200e62a8f3d4dd10bf0e"
+      },
+      {
+        "path": "lib/admin/signup-notifications.ts",
+        "sha256": "eb2ca04b2c9645f5d59a3deef84aa615790fb03b911887211d7bf8910f7f0af8"
       },
       {
         "path": "lib/app-session.ts",
@@ -630,6 +646,10 @@
       "lib/__tests__/account-signin-eligibility.test.ts",
       "lib/__tests__/admin-roster-actions.test.ts",
       "lib/__tests__/manual-approval.test.ts",
+      {
+        "path": "lib/__tests__/signup-notifications.test.ts",
+        "reason": "Community supports successful X self-verification alerts; Coalition exposes approval-request alerts only."
+      },
       "lib/__tests__/system-email.test.ts",
       "lib/account-signin-eligibility.ts",
       "lib/admin/roster.ts",

@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, outcome: claim.outcome });
   }
   try {
-    const result = claim.job.kind === "newsletter" || claim.job.kind === "policy_update"
+    const result = claim.job.kind === "newsletter" ||
+      claim.job.kind === "policy_update" ||
+      claim.job.kind === "admin_signup_notification"
       ? await processEmailBackgroundJobTask(claim)
       : await processCoalitionBackgroundJobTask(claim);
     return NextResponse.json(
