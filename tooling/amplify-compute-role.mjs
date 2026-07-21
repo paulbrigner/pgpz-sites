@@ -20,6 +20,7 @@ export const AMPLIFY_COMPUTE_APPLICATIONS = Object.freeze({
 
 const primaryDynamoActions = [
   "dynamodb:BatchWriteItem",
+  "dynamodb:ConditionCheckItem",
   "dynamodb:DeleteItem",
   "dynamodb:GetItem",
   "dynamodb:PutItem",
