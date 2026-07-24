@@ -100,6 +100,18 @@ test("skips published uploads with no valid local assets", () => {
   );
 });
 
+test("accepts the DOCX source object layout", () => {
+  assert.equal(
+    planUpload(
+      upload({
+        sourceFormat: "docx",
+        s3Key: "policy-updates/uploads/public-update/source.docx",
+      }),
+    ).status,
+    "ready",
+  );
+});
+
 test("rejects records whose primary key does not match their upload slug", () => {
   assert.equal(planUpload(upload({ pk: "POLICY_UPDATE_UPLOAD#another-update" })).status, "skip-invalid-record");
 });

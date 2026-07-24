@@ -51,6 +51,42 @@ const update: PolicyUpdate = {
 };
 
 describe("buildPolicyUpdateForumMarkdown", () => {
+  it("preserves DOCX run emphasis and hyperlinks", () => {
+    const markdown = buildPolicyUpdateForumMarkdown(
+      {
+        ...update,
+        sections: [
+          {
+            heading: "Policy development",
+            body: ["Read the primary source for details."],
+            bodyRuns: [
+              [
+                { text: "Read the " },
+                {
+                  text: "primary source",
+                  bold: true,
+                  href: "https://example.org/source",
+                },
+                { text: " for details." },
+              ],
+            ],
+            links: [
+              {
+                text: "primary source",
+                href: "https://example.org/source",
+              },
+            ],
+          },
+        ],
+      },
+      { siteUrl: "https://coalition.pgpz.org" },
+    );
+
+    expect(markdown).toContain(
+      "Read the [**primary source**](https://example.org/source) for details.",
+    );
+  });
+
   it("exports clean forum markdown with public email asset images", () => {
     const markdown = buildPolicyUpdateForumMarkdown(update, {
       siteUrl: "https://coalition.pgpz.org",

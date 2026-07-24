@@ -2,12 +2,24 @@ export type PolicyUpdateCategory = "weekly" | "special";
 export type PolicyUpdateVisibilityStatus = "draft" | "published" | "unpublished";
 export type PolicyUpdateGenerationStatus = "not_started" | "generated" | "failed";
 
+export type PolicyUpdateTextRun = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  href?: string;
+};
+
 export type PolicyUpdateSection = {
   heading: string;
+  headingRuns?: PolicyUpdateTextRun[];
   body: string[];
+  bodyRuns?: PolicyUpdateTextRun[][];
   table?: PolicyUpdateTable;
   bullets?: string[];
+  bulletRuns?: PolicyUpdateTextRun[][];
   bodyAfterBullets?: string[];
+  bodyAfterBulletsRuns?: PolicyUpdateTextRun[][];
   links?: PolicyUpdateLink[];
   images?: PolicyUpdateImage[];
 };

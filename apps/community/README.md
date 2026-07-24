@@ -98,7 +98,16 @@ not produce an `out/` directory; use `npm run start:community` after building.
 
 ## Forum Markdown Export
 
-After an update has been uploaded and generated in the admin interface, use **Admin → Update distribution → Markdown** to copy and download a clean Markdown version for forum posting. The export uses direct links and public email-asset image URLs, with no tracking links, open pixel, unsubscribe link, or inline attachments.
+New policy updates use Word (`.docx`) as the canonical source. In **Admin → Update distribution**:
+
+1. Upload the DOCX source.
+2. Generate the structured portal content and downloadable PDF.
+3. Review the portal, PDF, and Markdown outputs.
+4. Publish and send through the existing workflow.
+
+New PDF uploads are not supported. Existing pre-DOCX records remain readable and downloadable.
+
+After an update has been uploaded and generated, use **Admin → Update distribution → Markdown** to copy and download a clean Markdown version for forum posting. The export uses direct links and public email-asset image URLs, with no tracking links, open pixel, unsubscribe link, or inline attachments.
 
 The command-line exporter is available as a fallback:
 
@@ -115,7 +124,7 @@ If the local AWS SSO session is expired, refresh it first:
 aws sso login --profile pgpcommunity
 ```
 
-Before the generated record is available, the exporter can use the source PDF as a fallback while still pointing social images at the expected public email-asset URLs for that slug:
+For a pre-DOCX legacy record only, the exporter can still use its source PDF as a compatibility fallback:
 
 ```bash
 npm run forum:update --workspace=apps/community -- \

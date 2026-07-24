@@ -1,5 +1,6 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { NextRequest, NextResponse } from "next/server";
+import { policyUpdateAssetObjectKey } from "@pgpz/core/server";
 import { getUploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
 import { hasPolicyUpdateResourceAccess } from "@/lib/policy-update-access";
 import { s3Client } from "@/lib/s3";
@@ -15,10 +16,6 @@ function contentTypeForAsset(asset: string) {
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".svg")) return "image/svg+xml";
   return "image/png";
-}
-
-function assetObjectKey(pdfObjectKey: string, asset: string) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/assets/${asset}`);
 }
 
 export async function GET(
@@ -47,7 +44,7 @@ export async function GET(
     const s3Object = await s3Client.send(
       new GetObjectCommand({
         Bucket: upload.s3Bucket,
-        Key: assetObjectKey(upload.s3Key, asset),
+        Key: policyUpdateAssetObjectKey(upload.s3Key, asset),
       }),
     );
 

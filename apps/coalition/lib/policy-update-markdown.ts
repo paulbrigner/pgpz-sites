@@ -4,6 +4,7 @@ import type {
   PolicyUpdateLink,
   PolicyUpdateSection,
   PolicyUpdateTable,
+  PolicyUpdateTextRun,
 } from "@/lib/policy-updates";
 import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
 import {
@@ -45,6 +46,14 @@ function markdownTextSegment(value: string) {
   return value.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
 }
 
+function escapeMarkdownRunText(value: string) {
+  return markdownTextSegment(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/([*_`])/g, "\\$1");
+}
+
 function linkedTextParts(text: string, links: PolicyUpdateLink[] = []) {
   const matches = links
     .map((link) => ({ link, index: text.indexOf(link.text) }))
@@ -67,7 +76,28 @@ function linkedTextParts(text: string, links: PolicyUpdateLink[] = []) {
   return parts;
 }
 
-function linkifyText(text: string, links: PolicyUpdateLink[] = []) {
+function linkifyText(
+  text: string,
+  links: PolicyUpdateLink[] = [],
+  runs: PolicyUpdateTextRun[] = [],
+) {
+  if (
+    runs.length &&
+    runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim() === text.replace(/\s+/g, " ").trim()
+  ) {
+    return runs
+      .map((run) => {
+        let content = escapeMarkdownRunText(run.text);
+        if (run.underline) content = `<u>${content}</u>`;
+        if (run.italic) content = `*${content}*`;
+        if (run.bold) content = `**${content}**`;
+        return run.href ? `[${content}](${run.href})` : content;
+      })
+      .join("")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+  }
+
   return linkedTextParts(text, links)
     .map((part) => {
       if (!part.link) return markdownTextSegment(part.text);
@@ -128,11 +158,15 @@ function isRelevantPostsMarker(text: string) {
 }
 
 function sectionHasRelevantPostsMarker(section: PolicyUpdateSection) {
-  return [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+  return [section.heading, ...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
 }
 
-function renderParagraph(paragraph: string, links: PolicyUpdateLink[]) {
-  return isRelevantPostsMarker(paragraph) ? "## Relevant Posts" : linkifyText(paragraph, links);
+function renderParagraph(
+  paragraph: string,
+  links: PolicyUpdateLink[],
+  runs: PolicyUpdateTextRun[] = [],
+) {
+  return isRelevantPostsMarker(paragraph) ? "## Relevant Posts" : linkifyText(paragraph, links, runs);
 }
 
 function policyUpdateMarkdownIntro(update: Pick<PolicyUpdate, "category" | "summary">) {
@@ -201,8 +235,8 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
     }
   }
 
-  for (const paragraph of section.body) {
-    lines.push("", renderParagraph(paragraph, section.links || []));
+  for (const [index, paragraph] of section.body.entries()) {
+    lines.push("", renderParagraph(paragraph, section.links || [], section.bodyRuns?.[index]));
   }
 
   if (!isSocial) {
@@ -222,11 +256,19 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   if (section.table) lines.push("", renderTable(section.table));
 
   if (section.bullets?.length) {
-    lines.push("", ...section.bullets.map((item) => `- ${linkifyText(item, section.links)}`));
+    lines.push(
+      "",
+      ...section.bullets.map(
+        (item, index) => `- ${linkifyText(item, section.links, section.bulletRuns?.[index])}`,
+      ),
+    );
   }
 
-  for (const paragraph of section.bodyAfterBullets || []) {
-    lines.push("", renderParagraph(paragraph, section.links || []));
+  for (const [index, paragraph] of (section.bodyAfterBullets || []).entries()) {
+    lines.push(
+      "",
+      renderParagraph(paragraph, section.links || [], section.bodyAfterBulletsRuns?.[index]),
+    );
   }
 
   return lines

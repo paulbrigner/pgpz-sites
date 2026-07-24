@@ -43,7 +43,7 @@ function usage() {
 Generated-record export, recommended after admin page generation:
   npm run forum:update -- --slug 2026-06-15-weekly-policy-memo --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
 
-PDF fallback, useful before a generated record exists:
+Legacy PDF fallback, retained only for pre-DOCX records:
   npm run forum:update -- --source pdf --pdf "/path/to/memo.pdf" --slug 2026-06-15-weekly-policy-memo --title "Weekly Policy Memo: June 15, 2026" --published-at 2026-06-15 --summary "FinCEN AML rulemaking..."`;
 }
 

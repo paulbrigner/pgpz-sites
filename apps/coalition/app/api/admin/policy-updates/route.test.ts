@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listPolicyUpdateRecipients: vi.fn(),
   markNewsletterTrackingSent: vi.fn(),
   materializePolicyUpdateEmailAssets: vi.fn(),
+  publishUploadedPolicyUpdate: vi.fn(),
   recordEmailEvent: vi.fn(),
   recordPolicyUpdateSendRun: vi.fn(),
   requireAdminSession: vi.fn(),
@@ -21,6 +22,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+
+vi.mock("@pgpz/core/server", () => ({
+  parsePolicyUpdateDocx: vi.fn(),
+  policyUpdateArtifactPrefix: vi.fn(),
+  policyUpdateAssetObjectKey: vi.fn(),
+  policyUpdatePdfObjectKey: vi.fn(),
+  renderPolicyUpdatePdf: vi.fn(),
+  validatePolicyUpdateDocx: vi.fn(),
+}));
 
 vi.mock("nodemailer", () => ({
   default: { createTransport: mocks.createTransport },
@@ -88,7 +98,7 @@ vi.mock("@/lib/admin/policy-update-uploads", () => ({
   normalizePolicyUpdateCategory: vi.fn(),
   policyUpdateToSummary: vi.fn(),
   policyUpdateUploadObjectKey: vi.fn(),
-  publishUploadedPolicyUpdate: vi.fn(),
+  publishUploadedPolicyUpdate: mocks.publishUploadedPolicyUpdate,
   saveGeneratedPolicyUpdateContent: vi.fn(),
   savePolicyUpdateGenerationFailure: vi.fn(),
   saveUploadedPolicyUpdate: vi.fn(),
@@ -245,5 +255,27 @@ describe("admin policy update sends", () => {
     expect(mocks.enqueueBackgroundJob).not.toHaveBeenCalled();
     expect(mocks.recordPolicyUpdateSendRun).not.toHaveBeenCalled();
     expect(mocks.createNewsletterTrackingRecord).not.toHaveBeenCalled();
+  });
+
+  it("blocks publishing until generated portal content and a PDF artifact exist", async () => {
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue({
+      ...update,
+      sourceFormat: "docx",
+      visibilityStatus: "draft",
+      generationStatus: "not_started",
+      pdfS3Key: null,
+    });
+
+    const response = await postPolicyUpdate({
+      action: "publishUpdate",
+      slug: update.slug,
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/Generate and review/),
+    });
+    expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
+    expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
   });
 });

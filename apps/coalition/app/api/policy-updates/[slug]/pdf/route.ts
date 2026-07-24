@@ -28,11 +28,15 @@ export async function GET(
   if (upload.visibilityStatus !== "published" && !access.isAdmin) {
     return NextResponse.json({ error: "Unknown policy update PDF" }, { status: 404 });
   }
+  // Keep the last successful artifact available when a later regeneration fails.
+  if (!upload.pdfS3Key) {
+    return NextResponse.json({ error: "Policy update PDF has not been generated" }, { status: 404 });
+  }
 
   const s3Object = await s3Client.send(
     new GetObjectCommand({
       Bucket: upload.s3Bucket,
-      Key: upload.s3Key,
+      Key: upload.pdfS3Key,
     }),
   );
 
@@ -48,7 +52,7 @@ export async function GET(
   return new Response(body, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${contentDispositionFileName(upload.fileName)}"`,
+      "Content-Disposition": `inline; filename="${contentDispositionFileName(upload.pdfFileName || `${upload.slug}.pdf`)}"`,
       "Cache-Control": "private, no-store",
     },
   });

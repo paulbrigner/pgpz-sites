@@ -23,6 +23,7 @@ import {
   type PolicyUpdateImage,
   type PolicyUpdateLink,
   type PolicyUpdateSection,
+  type PolicyUpdateTextRun,
 } from "@/lib/policy-updates";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +75,36 @@ function MembershipRequired() {
   );
 }
 
-function renderLinkedText(text: string, links: PolicyUpdateLink[] = []) {
+function renderLinkedText(
+  text: string,
+  links: PolicyUpdateLink[] = [],
+  runs: PolicyUpdateTextRun[] = [],
+) {
+  if (
+    runs.length &&
+    runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim() === text.replace(/\s+/g, " ").trim()
+  ) {
+    return runs.map((run, index) => {
+      let content: ReactNode = run.text;
+      if (run.bold) content = <strong>{content}</strong>;
+      if (run.italic) content = <em>{content}</em>;
+      if (run.underline && !run.href) content = <span className="underline underline-offset-2">{content}</span>;
+      return run.href ? (
+        <a
+          key={`${run.href}-${index}`}
+          href={run.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(245,168,0,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
+        >
+          {content}
+        </a>
+      ) : (
+        <Fragment key={`${run.text}-${index}`}>{content}</Fragment>
+      );
+    });
+  }
+
   const matches = links
     .map((link) => ({ link, index: text.indexOf(link.text) }))
     .filter((match) => match.index >= 0)
@@ -117,19 +147,21 @@ function isRelevantPostsMarker(text: string) {
 function PolicyUpdateParagraph({
   paragraph,
   links,
+  runs,
 }: {
   paragraph: string;
   links?: PolicyUpdateLink[];
+  runs?: PolicyUpdateTextRun[];
 }) {
   if (isRelevantPostsMarker(paragraph)) {
     return <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">Relevant Posts</h2>;
   }
 
-  return <p>{renderLinkedText(paragraph, links)}</p>;
+  return <p>{renderLinkedText(paragraph, links, runs)}</p>;
 }
 
 function hasRelevantPostsMarker(section: PolicyUpdateSection) {
-  return [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+  return [section.heading, ...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
 }
 
 function hasRelevantPostImages(section: PolicyUpdateSection) {
@@ -263,8 +295,8 @@ function PolicyUpdateSectionBlock({
               </PolicyUpdateSectionHeading>
             ) : null}
             <div className="space-y-4 text-sm leading-7 text-slate-700">
-              {section.body.map((paragraph) => (
-                <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
+              {section.body.map((paragraph, index) => (
+                <PolicyUpdateParagraph key={`${paragraph}-${index}`} paragraph={paragraph} links={section.links} runs={section.bodyRuns?.[index]} />
               ))}
             </div>
           </div>
@@ -274,15 +306,15 @@ function PolicyUpdateSectionBlock({
         ) : null}
         {section.bullets?.length ? (
           <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
-            {section.bullets.map((item) => (
-              <li key={item}>{item}</li>
+            {section.bullets.map((item, index) => (
+              <li key={`${item}-${index}`}>{renderLinkedText(item, section.links, section.bulletRuns?.[index])}</li>
             ))}
           </ul>
         ) : null}
         {section.bodyAfterBullets?.length ? (
           <div className="space-y-4 text-sm leading-7 text-slate-700">
-            {section.bodyAfterBullets.map((paragraph) => (
-              <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
+            {section.bodyAfterBullets.map((paragraph, index) => (
+              <PolicyUpdateParagraph key={`${paragraph}-${index}`} paragraph={paragraph} links={section.links} runs={section.bodyAfterBulletsRuns?.[index]} />
             ))}
           </div>
         ) : null}
@@ -296,8 +328,8 @@ function PolicyUpdateSectionBlock({
         {section.heading}
       </PolicyUpdateSectionHeading>
       <div className="space-y-4 text-sm leading-7 text-slate-700">
-        {section.body.map((paragraph) => (
-          <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
+        {section.body.map((paragraph, index) => (
+          <PolicyUpdateParagraph key={`${paragraph}-${index}`} paragraph={paragraph} links={section.links} runs={section.bodyRuns?.[index]} />
         ))}
       </div>
       {renderRelevantPostsImageLabel ? (
@@ -309,15 +341,15 @@ function PolicyUpdateSectionBlock({
       {section.table ? <PolicyUpdateTable table={section.table} /> : null}
       {section.bullets?.length ? (
         <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
-          {section.bullets.map((item) => (
-            <li key={item}>{item}</li>
+          {section.bullets.map((item, index) => (
+            <li key={`${item}-${index}`}>{renderLinkedText(item, section.links, section.bulletRuns?.[index])}</li>
           ))}
         </ul>
       ) : null}
       {section.bodyAfterBullets?.length ? (
         <div className="space-y-4 text-sm leading-7 text-slate-700">
-          {section.bodyAfterBullets.map((paragraph) => (
-            <PolicyUpdateParagraph key={paragraph} paragraph={paragraph} links={section.links} />
+          {section.bodyAfterBullets.map((paragraph, index) => (
+            <PolicyUpdateParagraph key={`${paragraph}-${index}`} paragraph={paragraph} links={section.links} runs={section.bodyAfterBulletsRuns?.[index]} />
           ))}
         </div>
       ) : null}

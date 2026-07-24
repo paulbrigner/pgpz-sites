@@ -6,6 +6,67 @@ const weeklyUpdate = getLatestPolicyUpdate("weekly");
 const specialUpdate = getLatestPolicyUpdate("special");
 
 describe("buildPolicyUpdateEmail", () => {
+  it("preserves DOCX run emphasis and hyperlinks in portal-derived email content", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        sections: [
+          {
+            heading: "Policy development",
+            body: ["Read the primary source for details."],
+            bodyRuns: [
+              [
+                { text: "Read the " },
+                {
+                  text: "primary source",
+                  bold: true,
+                  href: "https://example.org/source",
+                },
+                { text: " for details." },
+              ],
+            ],
+            bullets: ["Review the committee draft today."],
+            bulletRuns: [
+              [
+                { text: "Review the " },
+                {
+                  text: "committee draft",
+                  href: "https://example.org/draft",
+                },
+                { text: " today." },
+              ],
+            ],
+            links: [
+              {
+                text: "primary source",
+                href: "https://example.org/source",
+              },
+              {
+                text: "committee draft",
+                href: "https://example.org/draft",
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://community.pgpz.org",
+    );
+
+    expect(built.html).toContain(
+      '<a href="https://example.org/source" style="color:',
+    );
+    expect(built.html).toContain("<strong>primary source</strong></a>");
+    expect(built.text).toContain(
+      "primary source (https://example.org/source)",
+    );
+    expect(built.text).toContain(
+      "committee draft (https://example.org/draft)",
+    );
+  });
+
   it("greets recipients by first name", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 

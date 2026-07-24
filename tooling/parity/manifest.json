@@ -63,11 +63,11 @@
       },
       {
         "path": "app/api/admin/policy-updates/route.test.ts",
-        "sha256": "7985f8800fa11b4737de425a7a3cb33526ef03f1f27cc58688195669189a91ef"
+        "sha256": "92d2d0ef2a3bd11d2a8a5abcce75f854822d826c1596dea803d8f7c7948a6fab"
       },
       {
         "path": "app/api/admin/policy-updates/route.ts",
-        "sha256": "e0bb36e3e47d4f029019527299c71bafa14c932d15b1551b7b6157cc4bb978cf"
+        "sha256": "c51d979e998f10655b8d69ffb85aa06ad70ad9fd63bf8ed9d6494ece07aaed7c"
       },
       {
         "path": "app/api/admin/signup-notification-preferences/route.test.ts",
@@ -115,7 +115,7 @@
       },
       {
         "path": "app/api/policy-updates/[slug]/assets/[asset]/route.ts",
-        "sha256": "861f4be662633dfbfde7507f1875918da21bdf6a98fc2d124d5a7c66d4def483"
+        "sha256": "2b80f0cacdf7048e0f2669964a1bef1845f4d75a972bb3a8729b4122b5862a4b"
       },
       {
         "path": "app/api/policy-updates/[slug]/email-assets/[asset]/route.ts",
@@ -127,7 +127,7 @@
       },
       {
         "path": "app/api/policy-updates/[slug]/pdf/route.ts",
-        "sha256": "41ca7e60931defc0c108469aa6686dd35b989f02a1075e0843923acfde65b6f6"
+        "sha256": "563ac3bd1b14a52fff8ed4330a66fc952c3c34fb97b72b9242ec623e1e34a715"
       },
       {
         "path": "app/api/profile/confirm-email-change/route.ts",
@@ -343,7 +343,7 @@
       },
       {
         "path": "lib/admin/policy-update-email-assets.ts",
-        "sha256": "2a936e3062ad69d42acf21fef6554f05ff05d08d5a5e200e62a8f3d4dd10bf0e"
+        "sha256": "615236c1b1c880d33ba2f71016c3db4dd80c2199117de4f9097e1ba8616b94b1"
       },
       {
         "path": "lib/admin/signup-notifications.ts",

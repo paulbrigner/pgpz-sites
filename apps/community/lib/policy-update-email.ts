@@ -4,6 +4,7 @@ import type {
   PolicyUpdateLink,
   PolicyUpdateSection,
   PolicyUpdateTable,
+  PolicyUpdateTextRun,
 } from "@/lib/policy-updates";
 import {
   buildPolicyUpdateEmailAssetPath,
@@ -82,7 +83,23 @@ const emailImageSrc = (src: string, materializationId?: string | null) => {
   return buildPolicyUpdateEmailAssetPath(match[1], match[2], materializationId);
 };
 
-const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
+type LinkedTextPart = PolicyUpdateTextRun & { link?: PolicyUpdateLink };
+
+const linkedTextParts = (
+  text: string,
+  links: PolicyUpdateLink[] = [],
+  runs: PolicyUpdateTextRun[] = [],
+): LinkedTextPart[] => {
+  if (
+    runs.length &&
+    runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim() === text.replace(/\s+/g, " ").trim()
+  ) {
+    return runs.map((run) => ({
+      ...run,
+      ...(run.href ? { link: { text: run.text, href: run.href } } : {}),
+    }));
+  }
+
   const matches = links
     .map((link) => ({ link, index: text.indexOf(link.text) }))
     .filter((match) => match.index >= 0)
@@ -90,7 +107,7 @@ const linkedTextParts = (text: string, links: PolicyUpdateLink[] = []) => {
 
   if (!matches.length) return [{ text }];
 
-  const parts: Array<{ text: string; link?: PolicyUpdateLink }> = [];
+  const parts: LinkedTextPart[] = [];
   let cursor = 0;
 
   matches.forEach(({ link, index }) => {
@@ -112,24 +129,32 @@ const renderLinkedHtml = (
   links: PolicyUpdateLink[] = [],
   baseUrl: string,
   tracking?: PolicyUpdateEmailTracking,
+  runs: PolicyUpdateTextRun[] = [],
 ) =>
-  linkedTextParts(text, links)
+  linkedTextParts(text, links, runs)
     .map((part) => {
-      if (!part.link) return escapeHtml(part.text);
+      let content = escapeHtml(part.text);
+      if (part.bold) content = `<strong>${content}</strong>`;
+      if (part.italic) content = `<em>${content}</em>`;
+      if (part.underline && !part.link) content = `<u>${content}</u>`;
+      if (!part.link) return content;
 
-      return `<a href="${escapeHtml(trackedHref(baseUrl, part.link.href, tracking))}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${escapeHtml(part.text)}</a>`;
+      return `<a href="${escapeHtml(trackedHref(baseUrl, part.link.href, tracking))}" style="color:${colors.goldDeep};font-weight:700;text-decoration:underline;text-decoration-color:${colors.gold};text-underline-offset:3px;">${content}</a>`;
     })
     .join("");
 
-const renderLinkedText = (text: string, links: PolicyUpdateLink[] = []) =>
-  linkedTextParts(text, links)
+const renderLinkedText = (text: string, links: PolicyUpdateLink[] = [], runs: PolicyUpdateTextRun[] = []) =>
+  linkedTextParts(text, links, runs)
     .map((part) => (part.link ? `${part.text} (${part.link.href})` : part.text))
     .join("");
 
 const isRelevantPostsMarker = (text: string) => /^Relevant Posts?:$/i.test(text.trim());
 
-const renderParagraphText = (text: string, links: PolicyUpdateLink[] = []) =>
-  isRelevantPostsMarker(text) ? "Relevant Posts:" : renderLinkedText(text, links);
+const renderParagraphText = (
+  text: string,
+  links: PolicyUpdateLink[] = [],
+  runs: PolicyUpdateTextRun[] = [],
+) => isRelevantPostsMarker(text) ? "Relevant Posts:" : renderLinkedText(text, links, runs);
 
 const renderRelevantPostsLabel = () =>
   `<h2 style="margin:0 0 10px;color:${colors.ink};font-size:20px;line-height:1.28;">Relevant Posts</h2>`;
@@ -139,17 +164,28 @@ const renderParagraphs = (
   links: PolicyUpdateLink[] = [],
   baseUrl: string,
   tracking?: PolicyUpdateEmailTracking,
+  runGroups: PolicyUpdateTextRun[][] = [],
 ) =>
   paragraphs
-    .map((paragraph) => {
+    .map((paragraph, index) => {
       if (isRelevantPostsMarker(paragraph)) return renderRelevantPostsLabel();
-      return `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links, baseUrl, tracking)}</p>`;
+      return `<p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">${renderLinkedHtml(paragraph, links, baseUrl, tracking, runGroups[index])}</p>`;
     })
     .join("");
 
-const renderBullets = (items: string[]) =>
+const renderBullets = (
+  items: string[],
+  runGroups: PolicyUpdateTextRun[][] = [],
+  links: PolicyUpdateLink[] = [],
+  baseUrl = "",
+  tracking?: PolicyUpdateEmailTracking,
+) =>
   `<ul style="margin:0;padding-left:20px;color:${colors.slate};font-size:15px;line-height:1.64;">${items
-    .map((item) => `<li style="margin:0 0 9px;">${escapeHtml(item)}</li>`)
+    .map((item, index) => `<li style="margin:0 0 9px;">${
+      baseUrl
+        ? renderLinkedHtml(item, links, baseUrl, tracking, runGroups[index])
+        : escapeHtml(item)
+    }</li>`)
     .join("")}</ul>`;
 
 const renderProgressSummary = (
@@ -344,7 +380,7 @@ const renderSectionHtml = (
     imageHrefFallback,
     isSocial,
   });
-  const hasRelevantPostsMarker = [...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
+  const hasRelevantPostsMarker = [section.heading, ...section.body, ...(section.bodyAfterBullets || [])].some(isRelevantPostsMarker);
   const relevantPostsImageLabel =
     !isSocial && !hasRelevantPostsMarker && (section.images || []).some(isPolicyUpdateRelevantPostImage)
       ? renderRelevantPostsLabel()
@@ -358,12 +394,12 @@ const renderSectionHtml = (
                   ${
                     isProgressSummary
                       ? renderProgressSummary(section, baseUrl, tracking)
-                      : renderParagraphs(section.body, section.links, baseUrl, tracking)
+                      : renderParagraphs(section.body, section.links, baseUrl, tracking, section.bodyRuns)
                   }
                   ${!isSocial ? `${relevantPostsImageLabel}${imagesHtml}` : ""}
                   ${section.table ? renderTable(section.table) : ""}
-                  ${!isProgressSummary && section.bullets?.length ? renderBullets(section.bullets) : ""}
-                  ${!isProgressSummary && section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking) : ""}
+                  ${!isProgressSummary && section.bullets?.length ? renderBullets(section.bullets, section.bulletRuns, section.links, baseUrl, tracking) : ""}
+                  ${!isProgressSummary && section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking, section.bodyAfterBulletsRuns) : ""}
                 </div>
               </td>
             </tr>`;
@@ -371,7 +407,9 @@ const renderSectionHtml = (
 
 const renderProgressSummaryText = (section: PolicyUpdateSection) =>
   [
-    ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
+    ...section.body.map((paragraph, index) =>
+      renderParagraphText(paragraph, section.links, section.bodyRuns?.[index]),
+    ),
     ...progressSummaryItems(section).flatMap((item) => [
       `- ${item.label}`,
       ...(item.details || []).flatMap((detail) => [
@@ -394,10 +432,16 @@ const renderSectionTextLines = (section: PolicyUpdateSection) => {
   return [
     section.heading,
     ...renderSectionImageText(section),
-    ...section.body.map((paragraph) => renderParagraphText(paragraph, section.links)),
+    ...section.body.map((paragraph, index) =>
+      renderParagraphText(paragraph, section.links, section.bodyRuns?.[index]),
+    ),
     ...(section.table ? renderTableText(section.table) : []),
-    ...(section.bullets || []).map((item) => `- ${item}`),
-    ...(section.bodyAfterBullets || []).map((paragraph) => renderParagraphText(paragraph, section.links)),
+    ...(section.bullets || []).map(
+      (item, index) => `- ${renderLinkedText(item, section.links, section.bulletRuns?.[index])}`,
+    ),
+    ...(section.bodyAfterBullets || []).map((paragraph, index) =>
+      renderParagraphText(paragraph, section.links, section.bodyAfterBulletsRuns?.[index]),
+    ),
     "",
   ];
 };

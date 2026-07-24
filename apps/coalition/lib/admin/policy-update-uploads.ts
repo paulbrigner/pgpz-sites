@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
+import { policyUpdateSourceObjectKey } from "@pgpz/core/server";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import {
   policyUpdateCategoryLabels,
@@ -40,6 +41,12 @@ export type UploadedPolicyUpdateRecord = {
   contentType: string;
   s3Bucket: string;
   s3Key: string;
+  sourceFormat: "docx" | "legacy_pdf";
+  pdfS3Key: string | null;
+  pdfFileName: string | null;
+  pdfFileSize: number | null;
+  pdfSha256: string | null;
+  pdfGeneratedAt: string | null;
   visibilityStatus: PolicyUpdateVisibilityStatus;
   publishedOn: string | null;
   publishedBy: string | null;
@@ -118,6 +125,10 @@ export type SaveGeneratedPolicyUpdateContentInput = {
   generatedModel: string;
   sourceTextLength: number;
   sourceTextSha256: string;
+  pdfS3Key: string;
+  pdfFileName: string;
+  pdfFileSize: number;
+  pdfSha256: string;
 };
 
 const textOrEmpty = (value: unknown) => (typeof value === "string" ? value : "");
@@ -139,6 +150,45 @@ const textArrayOrFallback = (value: unknown, fallback: string[]) => {
   return items.length ? items : fallback;
 };
 
+const safeRunHref = (value: unknown) => {
+  if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) return undefined;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const textRunsOrFallback = (value: unknown, fallback: string) => {
+  if (!Array.isArray(value)) return [];
+  const runs = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const text = textOrEmpty(record.text);
+      if (!text) return null;
+      const href = safeRunHref(record.href);
+      return {
+        text,
+        ...(record.bold === true ? { bold: true } : {}),
+        ...(record.italic === true ? { italic: true } : {}),
+        ...(record.underline === true ? { underline: true } : {}),
+        ...(href ? { href } : {}),
+      };
+    })
+    .filter((run): run is NonNullable<typeof run> => !!run);
+  return runs.length && runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim() === fallback.replace(/\s+/g, " ").trim()
+    ? runs
+    : [];
+};
+
+const textRunGroupsOrFallback = (value: unknown, fallback: string[]) => {
+  if (!Array.isArray(value)) return [];
+  const groups = fallback.map((text, index) => textRunsOrFallback(value[index], text));
+  return groups.some((group) => group.length) ? groups : [];
+};
+
 const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[]) => {
   if (!Array.isArray(value)) return fallback;
   const sections = value
@@ -150,10 +200,21 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
       if (!heading) return null;
 
       const section: PolicyUpdateSection = { heading, body };
+      const headingRuns = textRunsOrFallback(record.headingRuns, heading);
+      const bodyRuns = textRunGroupsOrFallback(record.bodyRuns, body);
       const bullets = textArrayOrFallback(record.bullets, []);
+      const bulletRuns = textRunGroupsOrFallback(record.bulletRuns, bullets);
       const bodyAfterBullets = textArrayOrFallback(record.bodyAfterBullets, []);
+      const bodyAfterBulletsRuns = textRunGroupsOrFallback(
+        record.bodyAfterBulletsRuns,
+        bodyAfterBullets,
+      );
+      if (headingRuns.length) section.headingRuns = headingRuns;
+      if (bodyRuns.length) section.bodyRuns = bodyRuns;
       if (bullets.length) section.bullets = bullets;
+      if (bulletRuns.length) section.bulletRuns = bulletRuns;
       if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
+      if (bodyAfterBulletsRuns.length) section.bodyAfterBulletsRuns = bodyAfterBulletsRuns;
       if (Array.isArray(record.images)) {
         const images = record.images
           .map((image) => {
@@ -234,27 +295,27 @@ function defaultUploadedPolicyUpdateContent({
     category === "special"
       ? [
           "A new featured policy resource has been uploaded for PGPZ Coalition review.",
-          "Open the PDF resource to review the full analysis, citations, and formatting.",
+          "Generate the portal content and PDF from the uploaded Word document, then review the full analysis, citations, and formatting.",
           "This draft page can be published once the admin review is complete.",
         ]
       : [
           "A new weekly policy memo has been uploaded for PGPZ Coalition review.",
-          "Open the PDF resource to review the full weekly update through the Zcash policy lens.",
+          "Generate the portal content and PDF from the uploaded Word document, then review the full weekly update through the Zcash policy lens.",
           "This draft page can be published once the admin review is complete.",
         ];
 
   return {
     keyTakeaways,
     actionItems: [
-      "Review the PDF resource and confirm the page metadata before publishing.",
+      "Review the generated portal page and PDF before publishing.",
       "Share follow-up questions or feedback with PGPZ.",
     ],
     sections: [
       {
-        heading: "PDF Resource",
+        heading: "Source Document",
         body: [
           fallbackSummary,
-          "This page is generated from the uploaded PDF metadata. The full resource is available through the PDF link above.",
+          "This draft is waiting for structured portal content and a downloadable PDF to be generated from the uploaded Word document.",
         ],
       },
     ] satisfies PolicyUpdateSection[],
@@ -266,10 +327,7 @@ export function getPolicyUpdateUploadBucket() {
 }
 
 export function policyUpdateUploadObjectKey(slug: string) {
-  const cleanSlug = slug.trim().replace(/^\/+|\/+$/g, "");
-  return POLICY_UPDATE_UPLOAD_PREFIX
-    ? `${POLICY_UPDATE_UPLOAD_PREFIX}/${cleanSlug}.pdf`
-    : `${cleanSlug}.pdf`;
+  return policyUpdateSourceObjectKey(POLICY_UPDATE_UPLOAD_PREFIX || "", slug);
 }
 
 export function createPolicyUpdateUploadSlug({
@@ -349,6 +407,21 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
     contentType: textOrEmpty(item.contentType) || "application/pdf",
     s3Bucket: textOrEmpty(item.s3Bucket),
     s3Key: textOrEmpty(item.s3Key),
+    sourceFormat: item.sourceFormat === "docx" ? "docx" : "legacy_pdf",
+    pdfS3Key:
+      textOrNull(item.pdfS3Key) ||
+      (item.sourceFormat === "docx" ? null : textOrEmpty(item.s3Key) || null),
+    pdfFileName:
+      textOrNull(item.pdfFileName) ||
+      (item.sourceFormat === "docx" ? null : textOrEmpty(item.fileName) || `${slug}.pdf`),
+    pdfFileSize:
+      typeof item.pdfFileSize === "number" && Number.isFinite(item.pdfFileSize)
+        ? item.pdfFileSize
+        : item.sourceFormat === "docx"
+          ? null
+          : Number(item.fileSize || 0),
+    pdfSha256: textOrNull(item.pdfSha256),
+    pdfGeneratedAt: textOrNull(item.pdfGeneratedAt),
     visibilityStatus: normalizeVisibilityStatus(item.visibilityStatus),
     publishedOn: textOrNull(item.publishedOn),
     publishedBy: textOrNull(item.publishedBy),
@@ -544,6 +617,11 @@ export async function saveGeneratedPolicyUpdateContent(
       "#generationError = :generationError",
       "#generationSourceTextLength = :generationSourceTextLength",
       "#generationSourceTextSha256 = :generationSourceTextSha256",
+      "#pdfS3Key = :pdfS3Key",
+      "#pdfFileName = :pdfFileName",
+      "#pdfFileSize = :pdfFileSize",
+      "#pdfSha256 = :pdfSha256",
+      "#pdfGeneratedAt = :pdfGeneratedAt",
     ].join(", "),
     ExpressionAttributeNames: {
       "#title": "title",
@@ -562,6 +640,11 @@ export async function saveGeneratedPolicyUpdateContent(
       "#generationError": "generationError",
       "#generationSourceTextLength": "generationSourceTextLength",
       "#generationSourceTextSha256": "generationSourceTextSha256",
+      "#pdfS3Key": "pdfS3Key",
+      "#pdfFileName": "pdfFileName",
+      "#pdfFileSize": "pdfFileSize",
+      "#pdfSha256": "pdfSha256",
+      "#pdfGeneratedAt": "pdfGeneratedAt",
     },
     ExpressionAttributeValues: {
       ":title": title,
@@ -580,6 +663,11 @@ export async function saveGeneratedPolicyUpdateContent(
       ":generationError": null,
       ":generationSourceTextLength": input.sourceTextLength,
       ":generationSourceTextSha256": input.sourceTextSha256,
+      ":pdfS3Key": input.pdfS3Key,
+      ":pdfFileName": input.pdfFileName,
+      ":pdfFileSize": input.pdfFileSize,
+      ":pdfSha256": input.pdfSha256,
+      ":pdfGeneratedAt": now,
     },
   });
 

@@ -1,6 +1,10 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
+import {
+  policyUpdateAssetObjectKey,
+  policyUpdateEmailAssetObjectPrefix,
+} from "@pgpz/core/server";
 import { CopyObjectCommand } from "@aws-sdk/client-s3";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import type { UploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
@@ -51,11 +55,11 @@ export function policyUpdateEmailAssetNames(
 }
 
 function mutableAssetObjectKey(pdfObjectKey: string, asset: string) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/assets/${asset}`);
+  return policyUpdateAssetObjectKey(pdfObjectKey, asset);
 }
 
 function immutableObjectPrefix(pdfObjectKey: string, materializationId: string) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/email-assets/${materializationId}`);
+  return policyUpdateEmailAssetObjectPrefix(pdfObjectKey, materializationId);
 }
 
 function encodedCopySource(bucket: string, key: string) {

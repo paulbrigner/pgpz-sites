@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
   transpilePackages: ["@pgpz/core", "@pgpz/x-monitor-core", "@pgpz/zec-shelf"],
+  serverExternalPackages: ["pdfkit"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.microlink.io" },

@@ -79,7 +79,14 @@ export function policyUpdateSectionHeadingLink(section: PolicyUpdateSection) {
   if (isPolicyUpdateSocialPostSection(section)) return null;
 
   const heading = normalizedLinkText(withoutSocialPrefix(section.heading));
-  if (!heading || /^why this matters/.test(heading) || /^action items?/.test(heading)) return null;
+  if (
+    !heading ||
+    /^why this matters/.test(heading) ||
+    /^action items?/.test(heading) ||
+    /^relevant posts?/.test(heading)
+  ) {
+    return null;
+  }
 
   const headingMatch = links.find((link) => {
     const linkText = normalizedLinkText(link.text);

@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
+import {
+  parsePolicyUpdateDocx,
+  policyUpdateArtifactPrefix,
+  policyUpdateAssetObjectKey,
+  policyUpdatePdfObjectKey,
+  renderPolicyUpdatePdf,
+  validatePolicyUpdateDocx,
+} from "@pgpz/core/server";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -56,6 +64,7 @@ import {
   buildPolicyUpdateForumMarkdown,
   policyUpdateMarkdownFileName,
 } from "@/lib/policy-update-markdown";
+import { policyUpdateEmailSubjectForTitle } from "@/lib/policy-update-subject";
 import { s3Client } from "@/lib/s3";
 import {
   backgroundJobIdForIdempotencyKey,
@@ -66,6 +75,8 @@ import {
 export const dynamic = "force-dynamic";
 
 const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
+const DOCX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 async function requireAdminOrForbidden() {
   try {
@@ -128,7 +139,7 @@ const isUploadFile = (value: FormDataEntryValue | null): value is File =>
   typeof (value as File).name === "string";
 
 const titleFromFileName = (fileName: string) =>
-  fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  fileName.replace(/\.docx$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
 const isPublishedDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
@@ -263,17 +274,14 @@ async function preparePolicyUpdateUpload(body: any) {
     );
   }
 
-  const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
-  const contentType = textFromBody(body, "contentType") || "application/pdf";
+  const fileName = textFromBody(body, "fileName") || "policy-update.docx";
   const fileSize = numberFromBody(body, "fileSize");
-  const fileLooksLikePdf =
-    fileName.toLowerCase().endsWith(".pdf") || contentType === "application/pdf";
-  if (!fileLooksLikePdf) {
-    return NextResponse.json({ error: "Only PDF uploads are allowed" }, { status: 400 });
+  if (!fileName.toLowerCase().endsWith(".docx")) {
+    return NextResponse.json({ error: "Only DOCX uploads are allowed" }, { status: 400 });
   }
   if (!fileSize || fileSize > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: "PDF upload must be 25 MB or smaller" },
+      { error: "DOCX upload must be 25 MB or smaller" },
       { status: 400 },
     );
   }
@@ -304,7 +312,7 @@ async function preparePolicyUpdateUpload(body: any) {
   }
   const s3Key = policyUpdateUploadObjectKey(slug);
   const uploadHeaders = {
-    "Content-Type": "application/pdf",
+    "Content-Type": DOCX_CONTENT_TYPE,
     "x-amz-server-side-encryption": "AES256",
   };
   const uploadUrl = await getSignedUrl(
@@ -312,7 +320,7 @@ async function preparePolicyUpdateUpload(body: any) {
     new PutObjectCommand({
       Bucket: bucket,
       Key: s3Key,
-      ContentType: "application/pdf",
+      ContentType: DOCX_CONTENT_TYPE,
       ServerSideEncryption: "AES256",
     }),
     { expiresIn: 600 },
@@ -330,7 +338,7 @@ async function preparePolicyUpdateUpload(body: any) {
       ...metadata,
       fileName,
       fileSize,
-      contentType: "application/pdf",
+      contentType: DOCX_CONTENT_TYPE,
     },
   });
 }
@@ -346,7 +354,7 @@ async function completePolicyUpdateUpload(body: any, adminUserId: string | null)
 
   const slug = textFromBody(body, "slug");
   const s3Key = textFromBody(body, "s3Key");
-  const fileName = textFromBody(body, "fileName") || "policy-update.pdf";
+  const fileName = textFromBody(body, "fileName") || "policy-update.docx";
   if (!slug || !s3Key || s3Key !== policyUpdateUploadObjectKey(slug)) {
     return NextResponse.json({ error: "Invalid upload completion request" }, { status: 400 });
   }
@@ -361,27 +369,31 @@ async function completePolicyUpdateUpload(body: any, adminUserId: string | null)
   try {
     head = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
   } catch {
-    return NextResponse.json({ error: "Uploaded PDF was not found in storage" }, { status: 400 });
+    return NextResponse.json({ error: "Uploaded DOCX was not found in storage" }, { status: 400 });
   }
 
   const fileSize = Number(head.ContentLength || 0);
   if (!fileSize || fileSize > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: "PDF upload must be 25 MB or smaller" },
+      { error: "DOCX upload must be 25 MB or smaller" },
       { status: 400 },
     );
   }
 
-  const objectStart = await s3Client.send(
+  const object = await s3Client.send(
     new GetObjectCommand({
       Bucket: bucket,
       Key: s3Key,
-      Range: "bytes=0-4",
     }),
   );
-  const signature = await streamToBuffer(objectStart.Body);
-  if (signature.toString("ascii") !== "%PDF-") {
-    return NextResponse.json({ error: "Uploaded file is not a valid PDF" }, { status: 400 });
+  const bytes = await streamToBuffer(object.Body);
+  try {
+    await validatePolicyUpdateDocx(bytes);
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Uploaded file is not a valid DOCX document" },
+      { status: 400 },
+    );
   }
 
   const metadata = uploadMetadataFromValues({
@@ -401,9 +413,15 @@ async function completePolicyUpdateUpload(body: any, adminUserId: string | null)
     ...metadata,
     fileName,
     fileSize,
-    contentType: "application/pdf",
+    contentType: DOCX_CONTENT_TYPE,
     s3Bucket: bucket,
     s3Key,
+    sourceFormat: "docx",
+    pdfS3Key: null,
+    pdfFileName: null,
+    pdfFileSize: null,
+    pdfSha256: null,
+    pdfGeneratedAt: null,
     uploadedAt,
     uploadedBy: adminUserId,
   });
@@ -427,25 +445,28 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
   const form = await request.formData();
   const file = form.get("file");
   if (!isUploadFile(file)) {
-    return NextResponse.json({ error: "Choose a PDF file to upload" }, { status: 400 });
+    return NextResponse.json({ error: "Choose a DOCX file to upload" }, { status: 400 });
   }
 
-  const fileName = file.name || "policy-update.pdf";
-  const fileLooksLikePdf =
-    fileName.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
-  if (!fileLooksLikePdf) {
-    return NextResponse.json({ error: "Only PDF uploads are allowed" }, { status: 400 });
+  const fileName = file.name || "policy-update.docx";
+  if (!fileName.toLowerCase().endsWith(".docx")) {
+    return NextResponse.json({ error: "Only DOCX uploads are allowed" }, { status: 400 });
   }
   if (file.size > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: "PDF upload must be 25 MB or smaller" },
+      { error: "DOCX upload must be 25 MB or smaller" },
       { status: 400 },
     );
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
-    return NextResponse.json({ error: "Uploaded file is not a valid PDF" }, { status: 400 });
+  try {
+    await validatePolicyUpdateDocx(bytes);
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "Uploaded file is not a valid DOCX document" },
+      { status: 400 },
+    );
   }
 
   const category = normalizePolicyUpdateCategory(formText(form, "category"));
@@ -481,7 +502,7 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
       Bucket: bucket,
       Key: s3Key,
       Body: bytes,
-      ContentType: "application/pdf",
+      ContentType: DOCX_CONTENT_TYPE,
       ServerSideEncryption: "AES256",
     }),
   );
@@ -491,9 +512,15 @@ async function handlePolicyUpdateUpload(request: NextRequest) {
     ...metadata,
     fileName,
     fileSize: bytes.length,
-    contentType: "application/pdf",
+    contentType: DOCX_CONTENT_TYPE,
     s3Bucket: bucket,
     s3Key,
+    sourceFormat: "docx",
+    pdfS3Key: null,
+    pdfFileName: null,
+    pdfFileSize: null,
+    pdfSha256: null,
+    pdfGeneratedAt: null,
     uploadedAt,
     uploadedBy: null,
   });
@@ -524,26 +551,66 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       }),
     );
     const bytes = await streamToBuffer(object.Body);
-    if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
-      throw new Error("Stored upload is not a valid PDF.");
+    const isDocx = record.sourceFormat === "docx";
+    const generated: any = isDocx
+      ? await parsePolicyUpdateDocx(bytes, {
+          assetBasePath: `/api/policy-updates/${encodeURIComponent(record.slug)}/assets`,
+        })
+      : await generatePolicyUpdatePageContent(record, bytes);
+    const pdfS3Key = isDocx ? policyUpdatePdfObjectKey(record.s3Key) : record.s3Key;
+    let pdfBytes = bytes;
+    if (isDocx) {
+      for (const asset of generated.assets) {
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: record.s3Bucket,
+            Key: policyUpdateAssetObjectKey(record.s3Key, asset.fileName),
+            Body: asset.bytes,
+            ContentType: asset.contentType,
+            ServerSideEncryption: "AES256",
+          }),
+        );
+      }
+      const brandName = /coalition\./i.test(SITE_URL) ? "PGPZ Coalition" : "PGPZ Community";
+      pdfBytes = await renderPolicyUpdatePdf(generated, {
+        brandName,
+        categoryLabel: record.category === "special" ? "Special Update" : "Weekly Policy Memo",
+        portalUrl: `${SITE_URL.replace(/\/+$/, "")}/updates/${record.slug}`,
+        publishedAt: record.displayDate,
+      });
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: record.s3Bucket,
+          Key: pdfS3Key,
+          Body: pdfBytes,
+          ContentType: "application/pdf",
+          ServerSideEncryption: "AES256",
+        }),
+      );
     }
-
-    const generated = await generatePolicyUpdatePageContent(record, bytes);
+    const pdfFileName = `${record.slug}.pdf`;
+    const pdfSha256 = createHash("sha256").update(pdfBytes).digest("hex");
     const updated = await saveGeneratedPolicyUpdateContent({
       slug: record.slug,
       title: generated.title,
       shortTitle: generated.shortTitle,
       coverImage: generated.coverImage,
       summary: generated.summary,
-      emailSubject: generated.emailSubject,
+      emailSubject: isDocx
+        ? policyUpdateEmailSubjectForTitle(record.category, generated.title)
+        : generated.emailSubject,
       emailPreheader: generated.emailPreheader,
       keyTakeaways: generated.keyTakeaways,
       actionItems: generated.actionItems,
       sections: generated.sections,
       generatedBy: adminUserId,
-      generatedModel: generated.generatedModel,
-      sourceTextLength: generated.sourceTextLength,
+      generatedModel: isDocx ? "docx-structured-v1" : generated.generatedModel,
+      sourceTextLength: isDocx ? generated.sourceText.length : generated.sourceTextLength,
       sourceTextSha256: generated.sourceTextSha256,
+      pdfS3Key,
+      pdfFileName: isDocx ? pdfFileName : record.pdfFileName || record.fileName,
+      pdfFileSize: pdfBytes.length,
+      pdfSha256,
     });
     if (!updated) {
       return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
@@ -559,7 +626,7 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       slug: record.slug,
       error: message,
       generatedBy: adminUserId,
-      generatedModel: "pdf-source-exact",
+      generatedModel: record.sourceFormat === "docx" ? "docx-structured-v1" : "pdf-source-exact",
     }).catch(() => null);
 
     return NextResponse.json(
@@ -575,11 +642,13 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
 }
 
 function policyUpdateAssetPrefix(s3Key: string) {
-  return s3Key.replace(/\.pdf$/i, "/assets/");
+  return `${policyUpdateArtifactPrefix(s3Key)}/assets/`;
 }
 
 async function deletePolicyUpdateUploadObjects(record: NonNullable<Awaited<ReturnType<typeof getUploadedPolicyUpdateRecord>>>) {
   const keys = new Set<string>([record.s3Key]);
+  if (record.pdfS3Key) keys.add(record.pdfS3Key);
+  // Immutable email snapshots remain so previously sent draft messages keep rendering.
   const prefix = policyUpdateAssetPrefix(record.s3Key);
   let ContinuationToken: string | undefined;
 
@@ -767,6 +836,12 @@ export async function POST(request: NextRequest) {
       if (!draft) {
         return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
       }
+      if (draft.generationStatus !== "generated" || !draft.pdfS3Key) {
+        return NextResponse.json(
+          { error: "Generate and review the portal content and PDF before publishing." },
+          { status: 400 },
+        );
+      }
       try {
         const materialization = await materializePolicyUpdateEmailAssets({
           upload: draft,
@@ -819,6 +894,12 @@ export async function POST(request: NextRequest) {
 
   const draftMode = !!draftRecipientEmail;
   const uploadedRecord = await getUploadedPolicyUpdateRecord(slug);
+  if (uploadedRecord && (uploadedRecord.generationStatus !== "generated" || !uploadedRecord.pdfS3Key)) {
+    return NextResponse.json(
+      { error: "Generate and review the portal content and PDF before sending." },
+      { status: 400 },
+    );
+  }
   if (!draftMode && uploadedRecord && uploadedRecord.visibilityStatus !== "published") {
     return NextResponse.json(
       { error: "Publish this update before sending it to subscribers." },

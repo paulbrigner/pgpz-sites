@@ -121,6 +121,8 @@ type LoadStateOptions = {
 };
 
 const MAX_POLICY_UPDATE_UPLOAD_BYTES = 25 * 1024 * 1024;
+const DOCX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const emptyStats: PolicyUpdateEmailStats = {
   sent: 0,
@@ -145,7 +147,7 @@ const formatDateTime = (value: string | null) => {
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 const titleFromFileName = (fileName: string) =>
-  fileName.replace(/\.pdf$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  fileName.replace(/\.docx$/i, "").replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
 const previewSlugFromInput = (value: string) => {
   let input = value.trim();
@@ -170,9 +172,9 @@ const previewSlugFromInput = (value: string) => {
     .slice(0, 96);
 };
 
-const fileHasPdfSignature = async (file: File) => {
-  const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-  return String.fromCharCode(...bytes) === "%PDF-";
+const fileHasDocxSignature = async (file: File) => {
+  const bytes = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return bytes[0] === 0x50 && bytes[1] === 0x4b;
 };
 
 const visibilityLabel = (update: PolicyUpdateSummary) => {
@@ -381,8 +383,11 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
   );
   const selectedVisibilityStatus =
     selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
-  const selectedCanSendMembers = selectedVisibilityStatus === "published";
   const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
+  const selectedCanPublish =
+    selectedUpdate?.source !== "uploaded" || selectedHasGeneratedContent;
+  const selectedCanSendMembers =
+    selectedVisibilityStatus === "published" && selectedCanPublish;
   const selectedIsGenerating = Boolean(
     selectedUpdate && generatingContentSlug === selectedUpdate.slug,
   );
@@ -478,17 +483,15 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
   const uploadPolicyUpdate = async () => {
     if (!uploadFile) {
-      setUploadError("Choose a PDF file to upload.");
+      setUploadError("Choose a DOCX file to upload.");
       return;
     }
-    const looksLikePdf =
-      uploadFile.type === "application/pdf" || uploadFile.name.toLowerCase().endsWith(".pdf");
-    if (!looksLikePdf) {
-      setUploadError("Only PDF uploads are allowed.");
+    if (!uploadFile.name.toLowerCase().endsWith(".docx")) {
+      setUploadError("Only DOCX uploads are allowed.");
       return;
     }
     if (uploadFile.size > MAX_POLICY_UPDATE_UPLOAD_BYTES) {
-      setUploadError("PDF upload must be 25 MB or smaller.");
+      setUploadError("DOCX upload must be 25 MB or smaller.");
       return;
     }
 
@@ -498,8 +501,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     setUploadNotice(null);
     setUploadError(null);
     try {
-      if (!(await fileHasPdfSignature(uploadFile))) {
-        throw new Error("Uploaded file is not a valid PDF.");
+      if (!(await fileHasDocxSignature(uploadFile))) {
+        throw new Error("Uploaded file is not a valid DOCX document.");
       }
 
       const metadata = {
@@ -510,7 +513,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         summary: uploadSummary.trim(),
         fileName: uploadFile.name,
         fileSize: uploadFile.size,
-        contentType: uploadFile.type || "application/pdf",
+        contentType: DOCX_CONTENT_TYPE,
       };
 
       const prepareRes = await fetch("/api/admin/policy-updates", {
@@ -528,7 +531,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
       const uploadRes = await fetch(prepared.upload.uploadUrl, {
         method: "PUT",
-        headers: prepared.upload.headers || { "Content-Type": "application/pdf" },
+        headers: prepared.upload.headers || { "Content-Type": DOCX_CONTENT_TYPE },
         body: uploadFile,
       });
       if (!uploadRes.ok) {
@@ -557,7 +560,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setUploadInputKey((current) => current + 1);
       await loadState({ selectedSlugOverride: uploadedSlug });
     } catch (err: any) {
-      setUploadError(err?.message || "Failed to upload policy update PDF");
+      setUploadError(err?.message || "Failed to upload policy update DOCX");
     } finally {
       setUploading(false);
     }
@@ -918,13 +921,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
           <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--brand-denim)]">
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
-              Upload update PDF
+              Upload update DOCX
             </div>
             <div className="mt-3 space-y-3">
               <input
                 key={uploadInputKey}
                 type="file"
-                accept="application/pdf,.pdf"
+                accept={`${DOCX_CONTENT_TYPE},.docx`}
                 onChange={(event) => handleUploadFileChange(event.target.files?.[0] || null)}
                 className="w-full rounded-md border bg-white px-3 py-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-[var(--brand-ink)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--zcash-gold)]"
               />
@@ -980,7 +983,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 onClick={uploadPolicyUpdate}
               >
                 <UploadCloud className={cn("h-4 w-4", uploading && "animate-pulse")} />
-                {uploading ? "Uploading..." : "Upload PDF"}
+                {uploading ? "Uploading..." : "Upload DOCX"}
               </Button>
               {uploadNotice ? <p className="text-xs leading-5 text-emerald-700">{uploadNotice}</p> : null}
               {uploadError ? <p className="text-xs leading-5 text-rose-700">{uploadError}</p> : null}
@@ -1134,8 +1137,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                       type="button"
                       size="sm"
                       onClick={() => changeSelectedVisibility("publishUpdate")}
-                      disabled={visibilityUpdatingSlug === selectedUpdate.slug || deletingDraftSlug === selectedUpdate.slug}
+                      disabled={
+                        !selectedCanPublish ||
+                        visibilityUpdatingSlug === selectedUpdate.slug ||
+                        deletingDraftSlug === selectedUpdate.slug
+                      }
                       className="w-full justify-center px-3"
+                      title={selectedCanPublish ? "Publish this update" : "Generate content and PDF before publishing"}
                     >
                       <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Publish
@@ -1191,8 +1199,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 {selectedIsConfirmingDelete ? (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-900">
                     <span className="font-semibold">Confirm permanent draft deletion.</span>{" "}
-                    This removes the uploaded draft from the admin list and attempts to clean up its PDF and generated
-                    assets.
+                    This removes the uploaded draft from the admin list and attempts to clean up its DOCX source,
+                    generated PDF, and assets.
                   </div>
                 ) : null}
                 {uploadNotice ? (
@@ -1209,7 +1217,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
 
               {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (
                 <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
-                  <span className="font-semibold">Generating page content.</span>{" "}
+                  <span className="font-semibold">Generating portal content and PDF.</span>{" "}
                   The previous status will refresh when this run finishes.
                 </div>
               ) : selectedUpdate.source === "uploaded" && !selectedHasGeneratedContent ? (
@@ -1229,7 +1237,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   ) : (
                     <>
                       <span className="font-semibold">Generate page content before publishing.</span>{" "}
-                      Until then, the draft preview uses the basic upload metadata and fallback page copy.
+                      Until then, the draft preview uses the basic upload metadata and fallback page copy, and the
+                      update cannot be published.
                     </>
                   )}
                 </div>

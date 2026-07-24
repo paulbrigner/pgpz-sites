@@ -147,7 +147,10 @@ export function planUpload(upload) {
     typeof upload.s3Bucket !== "string" ||
     !upload.s3Bucket.trim() ||
     typeof upload.s3Key !== "string" ||
-    !upload.s3Key.toLowerCase().endsWith(".pdf")
+    !(
+      upload.s3Key.toLowerCase().endsWith(".pdf") ||
+      upload.s3Key.toLowerCase().endsWith("/source.docx")
+    )
   ) {
     return { status: "skip-invalid-record", assetNames: [] };
   }
@@ -161,12 +164,18 @@ export function planUpload(upload) {
   return { status: "ready", assetNames };
 }
 
-function mutableAssetObjectKey(pdfObjectKey, asset) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/assets/${asset}`);
+function policyUpdateArtifactPrefix(sourceObjectKey) {
+  const clean = sourceObjectKey.trim().replace(/\/+$/, "");
+  if (/\/source\.docx$/i.test(clean)) return clean.replace(/\/source\.docx$/i, "");
+  return clean.replace(/\.(?:docx|pdf)$/i, "");
 }
 
-function immutableObjectPrefix(pdfObjectKey, materializationId) {
-  return pdfObjectKey.replace(/\.pdf$/i, `/email-assets/${materializationId}`);
+function mutableAssetObjectKey(sourceObjectKey, asset) {
+  return `${policyUpdateArtifactPrefix(sourceObjectKey)}/assets/${asset}`;
+}
+
+function immutableObjectPrefix(sourceObjectKey, materializationId) {
+  return `${policyUpdateArtifactPrefix(sourceObjectKey)}/email-assets/${materializationId}`;
 }
 
 function encodedCopySource(bucket, key) {
