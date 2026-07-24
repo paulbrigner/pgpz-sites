@@ -17,9 +17,26 @@ type ExtractedPolicyUpdatePdf = {
     text: string;
     href: string;
   }>;
+  layoutLines?: ExtractedPolicyUpdateTextLine[];
   images: ExtractedPolicyUpdateImage[];
   sourceTextLength: number;
   sourceTextSha256: string;
+};
+
+type ExtractedPolicyUpdateTextLine = {
+  page: number;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  bold: boolean;
+  italic: boolean;
+  links: Array<{
+    text: string;
+    href: string;
+  }>;
 };
 
 type ExtractedPolicyUpdateTable = {
@@ -57,6 +74,7 @@ type PositionedTextItem = {
   y: number;
   width: number;
   height: number;
+  fontName: string;
 };
 
 type PositionedTextLine = {
@@ -73,7 +91,7 @@ const MONTH_NAME_PATTERN =
 const ARTICLE_BODY_START_PATTERN = `On\\s+${MONTH_NAME_PATTERN}\\s+\\d{1,2}(?:,\\s+\\d{4})?\\b`;
 const PGPZ_RESOURCE_CHROME_PATTERN = /PGPZ\s+(?:Community|Coalition)\s+Member Policy Resource/gi;
 const PGPZ_UPDATE_URL_PATTERN =
-  /https:\/\/(?:community|coalition)\.pgpz\.org\/updates\/[a-z0-9]+(?:\s*-\s*[a-z0-9]+)*/gi;
+  /https:\/\/(?:community|coalition)\.pgpz\.org\/updates\/[a-z0-9_-]+(?:\s*-\s*[a-z0-9_-]+)*/gi;
 const WEEKLY_MEMO_TITLE_PATTERN = new RegExp(
   `\\bWeekly\\s+Policy\\s+Memo\\s*[:|•-]\\s*((?:Week\\s+of\\s+)?${MONTH_NAME_PATTERN}\\s+\\d{1,2})\\s*,\\s*(\\d{4})\\b`,
   "i",
@@ -321,9 +339,65 @@ function isCategoryDateLine(line: string) {
   return /^Special Update\s*\|/i.test(line) || /^Weekly Policy Memo\s*(?:[|:•-])/i.test(line);
 }
 
-function meaningfulTitleFromLines(lines: string[], record: UploadedPolicyUpdateRecord) {
+function titleFromLayoutLines(layoutLines: ExtractedPolicyUpdateTextLine[] | undefined) {
+  const candidates = (layoutLines || [])
+    .filter((line) => line.page === 1)
+    .map((line) => ({
+      ...line,
+      text: stripPdfChrome(line.text)
+        .replace(PGPZ_UPDATE_URL_PATTERN, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    }))
+    .filter((line) => line.text)
+    .filter((line) => !isCategoryDateLine(line.text))
+    .filter((line) => !/^https?:\/\//i.test(line.text))
+    .filter((line) => !/^(?:Key Takeaways|Action Items?)$/i.test(line.text))
+    .filter((line) => !/^(?:Not a PGPZ member|Sign up here)/i.test(line.text));
+
+  const largestFontSize = Math.max(0, ...candidates.map((line) => line.fontSize));
+  if (largestFontSize < 13) return null;
+
+  const orderedCandidates = candidates.sort((a, b) => b.y - a.y || a.x - b.x);
+  const firstTitleLineIndex = orderedCandidates.findIndex(
+    (line) => line.fontSize >= largestFontSize - 0.75,
+  );
+  if (firstTitleLineIndex < 0) return null;
+
+  const titleLines = [orderedCandidates[firstTitleLineIndex]];
+  for (const line of orderedCandidates.slice(firstTitleLineIndex + 1)) {
+    const previous = titleLines[titleLines.length - 1];
+    const verticalGap = previous.y - line.y;
+    if (
+      line.fontSize < largestFontSize - 0.75 ||
+      verticalGap <= 0 ||
+      verticalGap > Math.max(32, largestFontSize * 2)
+    ) {
+      break;
+    }
+    titleLines.push(line);
+  }
+
+  const title = titleLines
+    .map((line) => line.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (title.length < 12 || title.length > 240) return null;
+  return title;
+}
+
+function meaningfulTitleFromLines(
+  lines: string[],
+  record: UploadedPolicyUpdateRecord,
+  layoutLines?: ExtractedPolicyUpdateTextLine[],
+) {
   const weeklyTitle = weeklyMemoTitleFromText(lines.slice(0, 10).join(" "));
   if (weeklyTitle) return weeklyTitle;
+
+  const layoutTitle = titleFromLayoutLines(layoutLines);
+  if (layoutTitle) return layoutTitle;
 
   const introIndex = lines.findIndex(isArticleBodyStart);
   const titleLines = lines
@@ -355,6 +429,158 @@ function openingSummaryFromLines(lines: string[], fallback: string) {
   const endIndex = endCandidates.length ? Math.min(...endCandidates) : lines.length;
   const summary = exactParagraphsFromLines(lines.slice(introIndex, endIndex))[0] || "";
   return summary || fallback;
+}
+
+function cleanedLayoutLineText(value: string) {
+  return stripPdfChrome(value)
+    .replace(PGPZ_UPDATE_URL_PATTERN, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLayoutSectionHeadingLine(line: ExtractedPolicyUpdateTextLine) {
+  const text = cleanedLayoutLineText(line.text);
+  if (!text || !line.bold || line.x > 110 || line.fontSize < 9.5) return false;
+  if (
+    /^(?:Key Takeaways|Action Items?|Not a PGPZ member|Sign up here|Special Update\b|Weekly Policy Memo\b)/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  return text.length <= 180;
+}
+
+function layoutSectionHeadingBlocks(layoutLines: ExtractedPolicyUpdateTextLine[]) {
+  const blocks: Array<{
+    heading: string;
+    startIndex: number;
+    endIndex: number;
+  }> = [];
+
+  for (let index = 0; index < layoutLines.length; index += 1) {
+    const line = layoutLines[index];
+    if (!isLayoutSectionHeadingLine(line)) continue;
+
+    const headingLines = [cleanedLayoutLineText(line.text)];
+    let endIndex = index;
+    for (let nextIndex = index + 1; nextIndex < layoutLines.length; nextIndex += 1) {
+      const next = layoutLines[nextIndex];
+      const previous = layoutLines[nextIndex - 1];
+      const verticalGap = previous.y - next.y;
+      if (
+        next.page !== line.page ||
+        !isLayoutSectionHeadingLine(next) ||
+        verticalGap <= 0 ||
+        verticalGap > Math.max(20, line.fontSize * 1.85)
+      ) {
+        break;
+      }
+      headingLines.push(cleanedLayoutLineText(next.text));
+      endIndex = nextIndex;
+    }
+
+    blocks.push({
+      heading: headingLines.join(" ").replace(/\s+/g, " ").trim(),
+      startIndex: index,
+      endIndex,
+    });
+    index = endIndex;
+  }
+
+  return blocks;
+}
+
+function layoutSectionBody(lines: ExtractedPolicyUpdateTextLine[]) {
+  const body: string[] = [];
+  const links: Array<{ text: string; href: string }> = [];
+  const seenLinks = new Set<string>();
+  let paragraph = "";
+  let previous: ExtractedPolicyUpdateTextLine | null = null;
+
+  const flush = () => {
+    const clean = paragraph.replace(/\s+/g, " ").trim();
+    if (clean) body.push(clean);
+    paragraph = "";
+  };
+
+  for (const line of lines) {
+    const text = cleanedLayoutLineText(line.text);
+    if (!text) continue;
+    if (
+      /^(?:Not a PGPZ member|Sign up here|community\.pgpz\.org\s*\|)/i.test(text) ||
+      /^\d+$/.test(text)
+    ) {
+      continue;
+    }
+
+    const verticalGap =
+      previous && previous.page === line.page ? previous.y - line.y : Number.POSITIVE_INFINITY;
+    if (
+      previous &&
+      (previous.page !== line.page ||
+        verticalGap > Math.max(18, Math.max(previous.height, line.height) * 1.65))
+    ) {
+      flush();
+    }
+
+    paragraph = appendWrappedLine(paragraph, text);
+    for (const link of line.links) {
+      const key = `${link.text}\n${link.href}`;
+      if (!seenLinks.has(key)) {
+        seenLinks.add(key);
+        links.push(link);
+      }
+    }
+    previous = line;
+  }
+
+  flush();
+  return { body, links };
+}
+
+function buildLayoutAwareSectionsFromSource(extracted: ExtractedPolicyUpdatePdf) {
+  const orderedLines = [...(extracted.layoutLines || [])].sort(
+    (a, b) => a.page - b.page || b.y - a.y || a.x - b.x,
+  );
+  const executiveSummaryIndex = orderedLines.findIndex(
+    (line) =>
+      /^Executive Summary$/i.test(cleanedLayoutLineText(line.text)) &&
+      isLayoutSectionHeadingLine(line),
+  );
+  if (executiveSummaryIndex < 0) return [];
+
+  const contentLines = orderedLines.slice(executiveSummaryIndex);
+  const headingBlocks = layoutSectionHeadingBlocks(contentLines);
+  if (headingBlocks.length < 2 || !/^Executive Summary$/i.test(headingBlocks[0].heading)) {
+    return [];
+  }
+  if (
+    !headingBlocks
+      .slice(1)
+      .every((block) => /\bHearing(?:—|-)/i.test(block.heading))
+  ) {
+    return [];
+  }
+
+  return headingBlocks
+    .map((block, index) => {
+      const nextBlock = headingBlocks[index + 1];
+      const { body, links } = layoutSectionBody(
+        contentLines.slice(block.endIndex + 1, nextBlock?.startIndex ?? contentLines.length),
+      );
+      if (!body.length && !links.length) return null;
+      return {
+        heading: block.heading,
+        body,
+        ...(links.length ? { links } : {}),
+      } satisfies GeneratedPolicyUpdateContent["sections"][number];
+    })
+    .filter(
+      (
+        section,
+      ): section is GeneratedPolicyUpdateContent["sections"][number] => !!section,
+    );
 }
 
 function buildStructuredSectionsFromSource(
@@ -994,7 +1220,7 @@ export function sourcePolicyUpdateContent(
 ): GeneratedPolicyUpdateContent {
   const lines = splitSourceLines(extracted.text);
   const linesWithBlanks = splitSourceLines(extracted.text, { keepBlank: true });
-  const title = meaningfulTitleFromLines(lines, record);
+  const title = meaningfulTitleFromLines(lines, record, extracted.layoutLines);
   const recordSummary = isBoilerplateGeneratedSummary(record.summary) ? "" : record.summary.trim();
   const sourceIntroSummary = openingSummaryFromLines(linesWithBlanks, "");
   const keyTakeawayLines = linesBetweenHeadings(lines, /^Key Takeaways$/i, [
@@ -1022,8 +1248,13 @@ export function sourcePolicyUpdateContent(
   ]);
   const keyTakeaways = exactItemsFromLines(keyTakeawayLines);
   const actionItems = exactItemsFromLines(actionItemLines);
+  const layoutSections = buildLayoutAwareSectionsFromSource(extracted);
   const structuredSections = buildStructuredSectionsFromSource(extracted, linesWithBlanks);
-  const sections = structuredSections.length ? structuredSections : fallbackSectionsFromText(record, extracted);
+  const sections = layoutSections.length
+    ? layoutSections
+    : structuredSections.length
+      ? structuredSections
+      : fallbackSectionsFromText(record, extracted);
   const sectionSummary = summaryFromSections(sections);
   const summary =
     sourceIntroSummary ||
@@ -1192,6 +1423,7 @@ function positionedLinesFromTextContent(content: any) {
         y: typeof transform[5] === "number" ? transform[5] : 0,
         width: typeof item.width === "number" ? item.width : 0,
         height: typeof item.height === "number" ? item.height : 0,
+        fontName: typeof item.fontName === "string" ? item.fontName : "",
       };
     })
     .filter((item: PositionedTextItem | null): item is PositionedTextItem => !!item)
@@ -1209,6 +1441,142 @@ function positionedLinesFromTextContent(content: any) {
   }
 
   return lines;
+}
+
+type PdfFontTraits = {
+  bold: boolean;
+  italic: boolean;
+};
+
+function fontTraitsFromName(value: string): PdfFontTraits {
+  const normalized = value.replace(/^[A-Z]{6}\+/, "");
+  return {
+    bold: /(?:bold|semibold|demibold|demi|heavy|black)/i.test(
+      normalized.replace(/[-_,]+/g, " "),
+    ),
+    italic: /(?:italic|oblique)/i.test(normalized.replace(/[-_,]+/g, " ")),
+  };
+}
+
+function pdfFontTraits(page: any, content: any) {
+  const traits = new Map<string, PdfFontTraits>();
+  const fontNames = new Set<string>(
+    (Array.isArray(content?.items) ? content.items : [])
+      .map((item: any) => (typeof item?.fontName === "string" ? item.fontName : ""))
+      .filter(Boolean),
+  );
+
+  for (const fontName of fontNames) {
+    let resolvedName = fontName;
+    try {
+      const font = page.commonObjs.get(fontName);
+      if (typeof font?.name === "string" && font.name.trim()) resolvedName = font.name.trim();
+    } catch {
+      // Fall back to the PDF.js font identifier when the embedded font is unavailable.
+    }
+    traits.set(fontName, fontTraitsFromName(resolvedName));
+  }
+
+  return traits;
+}
+
+function positionedLineText(line: PositionedTextLine) {
+  let output = "";
+  let previousRight: number | null = null;
+
+  for (const item of line.items) {
+    const value = item.str.replace(/\u0000/g, "");
+    if (!value) continue;
+    const gap = previousRight === null ? 0 : item.x - previousRight;
+    if (
+      output &&
+      gap > Math.max(1.5, item.height * 0.12) &&
+      !/\s$/.test(output) &&
+      !/^\s/.test(value)
+    ) {
+      output += " ";
+    }
+    output += value;
+    previousRight = item.x + item.width;
+  }
+
+  return output.replace(/\s+/g, " ").trim();
+}
+
+function annotationOverlapsTextLine(annotation: LinkAnnotation, line: PositionedTextLine) {
+  if (annotation.rect.length < 4 || !line.items.length) return false;
+  const [rawLeft, rawBottom, rawRight, rawTop] = annotation.rect;
+  const annotationLeft = Math.min(rawLeft, rawRight);
+  const annotationRight = Math.max(rawLeft, rawRight);
+  const annotationBottom = Math.min(rawBottom, rawTop);
+  const annotationTop = Math.max(rawBottom, rawTop);
+  const lineLeft = Math.min(...line.items.map((item) => item.x));
+  const lineRight = Math.max(...line.items.map((item) => item.x + item.width));
+  const lineHeight = Math.max(...line.items.map((item) => item.height), 1);
+  const baselineTolerance = lineHeight * 0.2;
+
+  return (
+    annotationRight >= lineLeft &&
+    annotationLeft <= lineRight &&
+    line.y >= annotationBottom - baselineTolerance &&
+    line.y <= annotationTop + baselineTolerance
+  );
+}
+
+function layoutLinesFromTextContent({
+  content,
+  page,
+  pageNumber,
+  annotations,
+}: {
+  content: any;
+  page: any;
+  pageNumber: number;
+  annotations: LinkAnnotation[];
+}): ExtractedPolicyUpdateTextLine[] {
+  const traits = pdfFontTraits(page, content);
+
+  return positionedLinesFromTextContent(content)
+    .map((line) => {
+      const text = positionedLineText(line);
+      if (!text) return null;
+
+      const characterCount = line.items.reduce(
+        (total, item) => total + item.str.replace(/\s+/g, "").length,
+        0,
+      );
+      const boldCharacterCount = line.items.reduce(
+        (total, item) =>
+          total +
+          (traits.get(item.fontName)?.bold ? item.str.replace(/\s+/g, "").length : 0),
+        0,
+      );
+      const italicCharacterCount = line.items.reduce(
+        (total, item) =>
+          total +
+          (traits.get(item.fontName)?.italic ? item.str.replace(/\s+/g, "").length : 0),
+        0,
+      );
+      const left = Math.min(...line.items.map((item) => item.x));
+      const right = Math.max(...line.items.map((item) => item.x + item.width));
+      const height = Math.max(...line.items.map((item) => item.height), 0);
+
+      return {
+        page: pageNumber,
+        text,
+        x: left,
+        y: line.y,
+        width: Math.max(0, right - left),
+        height,
+        fontSize: height,
+        bold: characterCount > 0 && boldCharacterCount / characterCount >= 0.75,
+        italic: characterCount > 0 && italicCharacterCount / characterCount >= 0.75,
+        links: annotations
+          .filter((annotation) => annotationOverlapsTextLine(annotation, line))
+          .map((annotation) => ({ text: annotation.text, href: annotation.href })),
+      } satisfies ExtractedPolicyUpdateTextLine;
+    })
+    .filter((line): line is ExtractedPolicyUpdateTextLine => !!line);
 }
 
 function appendTableCellLine(current: string, line: string) {
@@ -1903,6 +2271,7 @@ async function extractPageImageAssets({
   pageText,
   pdfjs,
   socialImageCounter,
+  operatorList,
 }: {
   record: UploadedPolicyUpdateRecord;
   page: any;
@@ -1911,16 +2280,17 @@ async function extractPageImageAssets({
   pageText: string;
   pdfjs: any;
   socialImageCounter: { count: number };
+  operatorList?: any;
 }) {
-  const operatorList = await page.getOperatorList();
+  const pageOperatorList = operatorList || (await page.getOperatorList());
   const extracted: ExtractedPolicyUpdateImage[] = [];
   let imageIndex = 0;
   let currentMatrix: PdfMatrix = [...IDENTITY_MATRIX];
   const matrixStack: PdfMatrix[] = [];
 
-  for (let opIndex = 0; opIndex < operatorList.fnArray.length; opIndex += 1) {
-    const fn = operatorList.fnArray[opIndex];
-    const args = operatorList.argsArray[opIndex] || [];
+  for (let opIndex = 0; opIndex < pageOperatorList.fnArray.length; opIndex += 1) {
+    const fn = pageOperatorList.fnArray[opIndex];
+    const args = pageOperatorList.argsArray[opIndex] || [];
 
     if (fn === pdfjs.OPS.save) {
       matrixStack.push([...currentMatrix]);
@@ -2123,6 +2493,7 @@ export async function extractPolicyUpdatePdfContent(
   try {
     const pageTexts: string[] = [];
     const detectedLinks: ExtractedPolicyUpdatePdf["links"] = [];
+    const layoutLines: ExtractedPolicyUpdateTextLine[] = [];
     const extractedImages: ExtractedPolicyUpdateImage[] = [];
     const socialImageCounter = { count: 0 };
     const summaryCommentsTable: ExtractedPolicyUpdateTable = {
@@ -2145,7 +2516,16 @@ export async function extractPolicyUpdatePdfContent(
           page.getAnnotations({ intent: "display" }).catch(() => []),
         ]);
         const pageLinks = linksFromAnnotations(pageNumber, annotations);
+        const operatorList = await page.getOperatorList();
         const pageText = textContentToPageText(content);
+        layoutLines.push(
+          ...layoutLinesFromTextContent({
+            content,
+            page,
+            pageNumber,
+            annotations: pageLinks,
+          }),
+        );
         if (pageText) {
           pageTexts.push(`${pageText}\n\n--- Page ${pageNumber} of ${document.numPages} ---`);
         }
@@ -2165,6 +2545,7 @@ export async function extractPolicyUpdatePdfContent(
             pageText,
             pdfjs,
             socialImageCounter,
+            operatorList,
           });
           extractedImages.push(...images);
         }
@@ -2183,6 +2564,7 @@ export async function extractPolicyUpdatePdfContent(
       text,
       tables: summaryCommentsTable.rows.length ? [normalizeSummaryCommentsTableRows(summaryCommentsTable)] : [],
       links,
+      layoutLines,
       images: extractedImages.slice(0, MAX_EXTRACTED_IMAGES),
       sourceTextLength: text.length,
       sourceTextSha256: createHash("sha256").update(text).digest("hex"),

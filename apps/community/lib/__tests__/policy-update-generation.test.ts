@@ -220,4 +220,137 @@ describe("sourcePolicyUpdateContent", () => {
       "Relevant Posts:",
     ]);
   });
+
+  it("uses PDF layout to preserve a special update title, bold subheads, and repeated link labels", () => {
+    const clarityHref =
+      "https://community.pgpz.org/resources/statements-for-the-record/2026-07-17-hfsc-clarity-act-statement-for-the-record.pdf";
+    const fincenHref =
+      "https://community.pgpz.org/resources/statements-for-the-record/2026-07-21-hfsc-fincen-oversight-statement-for-the-record.pdf";
+    const layoutLine = (
+      overrides: Partial<{
+        page: number;
+        text: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        fontSize: number;
+        bold: boolean;
+        italic: boolean;
+        links: Array<{ text: string; href: string }>;
+      }>,
+    ) => ({
+      page: 2,
+      text: "",
+      x: 72,
+      y: 0,
+      width: 460,
+      height: 11,
+      fontSize: 11,
+      bold: false,
+      italic: false,
+      links: [] as Array<{ text: string; href: string }>,
+      ...overrides,
+    });
+    const specialRecord = {
+      ...record,
+      category: "special",
+      emailSubject: "PGPZ Special Update: Uploaded title",
+    } as any;
+    const content = sourcePolicyUpdateContent(specialRecord, {
+      text: `
+        PGPZ Community Member Policy Resource
+        Statements for the Record—July 17 CLARITY Act and
+        July 21 FinCEN Oversight Hearings
+        Special Update | July Statements for the Record| July 24, 2026
+        https://community.pgpz.org/updates/July_Statements_for_the_Record
+        This week, PGPZ submitted two Statements for the Record.
+        --- Page 1 of 2 ---
+        Executive Summary
+        The two Statements reinforce a consistent PGPZ message.
+        July 17 Hearing—Building the Future of Finance: How the CLARITY Act Unlocks
+        Innovation
+        The CLARITY statement protects non-custodial software developers.
+        Read the Statement for the Record here.
+        July 21 Hearing—Oversight of the Financial Crimes Enforcement Network
+        The FinCEN statement supports financial privacy.
+        Read the Statement for the Record here.
+        --- Page 2 of 2 ---
+      `,
+      tables: [],
+      links: [
+        { page: 2, text: "here.", href: clarityHref },
+        { page: 2, text: "here.", href: fincenHref },
+      ],
+      layoutLines: [
+        layoutLine({
+          page: 1,
+          text: "Statements for the Record—July 17 CLARITY Act and",
+          y: 700,
+          height: 16,
+          fontSize: 16,
+        }),
+        layoutLine({
+          page: 1,
+          text: "July 21 FinCEN Oversight Hearings",
+          y: 681,
+          height: 16,
+          fontSize: 16,
+        }),
+        layoutLine({ text: "Executive Summary", y: 700, height: 13, fontSize: 13, bold: true }),
+        layoutLine({
+          text: "The two Statements reinforce a consistent PGPZ message.",
+          y: 680,
+        }),
+        layoutLine({
+          text: "July 17 Hearing—Building the Future of Finance: How the CLARITY Act Unlocks",
+          y: 640,
+          bold: true,
+        }),
+        layoutLine({ text: "Innovation", y: 625, width: 60, bold: true }),
+        layoutLine({
+          text: "The CLARITY statement protects non-custodial software developers.",
+          y: 600,
+        }),
+        layoutLine({
+          text: "Read the Statement for the Record here.",
+          y: 560,
+          links: [{ text: "here.", href: clarityHref }],
+        }),
+        layoutLine({
+          text: "July 21 Hearing—Oversight of the Financial Crimes Enforcement Network",
+          y: 530,
+          bold: true,
+        }),
+        layoutLine({
+          text: "The FinCEN statement supports financial privacy.",
+          y: 500,
+        }),
+        layoutLine({
+          text: "Read the Statement for the Record here.",
+          y: 460,
+          links: [{ text: "here.", href: fincenHref }],
+        }),
+        layoutLine({ text: "2", x: 300, y: 38, width: 6 }),
+      ],
+      images: [],
+      sourceTextLength: 0,
+      sourceTextSha256: "",
+    });
+
+    expect(content.title).toBe(
+      "Statements for the Record—July 17 CLARITY Act and July 21 FinCEN Oversight Hearings",
+    );
+    expect(content.emailSubject).toBe(
+      "PGPZ Special Update: Statements for the Record—July 17 CLARITY Act and July 21 FinCEN Oversight Hearings",
+    );
+    expect(content.sections.map((section) => section.heading)).toEqual([
+      "Executive Summary",
+      "July 17 Hearing—Building the Future of Finance: How the CLARITY Act Unlocks Innovation",
+      "July 21 Hearing—Oversight of the Financial Crimes Enforcement Network",
+    ]);
+    expect(content.sections[1].links).toEqual([{ text: "here.", href: clarityHref }]);
+    expect(content.sections[2].links).toEqual([{ text: "here.", href: fincenHref }]);
+    expect(content.sections[2].body).not.toContain("2");
+  });
 });
