@@ -167,6 +167,31 @@ describe("buildPolicyUpdateForumMarkdown", () => {
     );
   });
 
+  it("does not duplicate a colonless relevant post section heading", () => {
+    const markdown = buildPolicyUpdateForumMarkdown(
+      {
+        ...update,
+        sections: [
+          {
+            heading: "Relevant Post",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/relevant-post.png",
+                alt: "Relevant post screenshot",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        siteUrl: "https://community.pgpz.org",
+      },
+    );
+
+    expect(markdown.match(/^## Relevant Posts?$/gm)).toHaveLength(1);
+  });
+
   it("links known June 22 relevant post screenshots in markdown exports", () => {
     const markdown = buildPolicyUpdateForumMarkdown(
       {

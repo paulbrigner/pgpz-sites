@@ -154,7 +154,7 @@ function renderImage({
 }
 
 function isRelevantPostsMarker(text: string) {
-  return /^Relevant Posts?:$/i.test(text.trim());
+  return /^Relevant Posts?:?$/i.test(text.trim());
 }
 
 function sectionHasRelevantPostsMarker(section: PolicyUpdateSection) {

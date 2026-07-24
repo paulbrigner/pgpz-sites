@@ -147,7 +147,7 @@ const renderLinkedText = (text: string, links: PolicyUpdateLink[] = [], runs: Po
     .map((part) => (part.link ? `${part.text} (${part.link.href})` : part.text))
     .join("");
 
-const isRelevantPostsMarker = (text: string) => /^Relevant Posts?:$/i.test(text.trim());
+const isRelevantPostsMarker = (text: string) => /^Relevant Posts?:?$/i.test(text.trim());
 
 const renderParagraphText = (
   text: string,

@@ -282,6 +282,34 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.text).not.toContain("[Image: Relevant post screenshot from page 3] https://example.com/article");
   });
 
+  it("does not duplicate a colonless relevant post section heading", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        slug: "test-upload",
+        sections: [
+          {
+            heading: "Relevant Post",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/test-upload/assets/relevant-post.png",
+                alt: "Relevant post screenshot",
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
+    );
+
+    expect(built.html.match(/>Relevant Posts?<\/h2>/g)).toHaveLength(1);
+  });
+
   it("links known June 22 relevant post screenshots to their source X posts", () => {
     if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
 

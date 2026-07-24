@@ -142,7 +142,7 @@ function renderLinkedText(
 }
 
 function isRelevantPostsMarker(text: string) {
-  return /^Relevant Posts?:$/i.test(text.trim());
+  return /^Relevant Posts?:?$/i.test(text.trim());
 }
 
 function PolicyUpdateParagraph({
