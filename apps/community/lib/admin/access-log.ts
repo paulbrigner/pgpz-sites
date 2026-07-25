@@ -88,26 +88,25 @@ async function hydrateAdminStatus(
     ),
   ];
 
-  for (let index = 0; index < userIds.length; index += 100) {
-    let keys = userIds.slice(index, index + 100).map((userId) => ({
-      pk: `USER#${userId}`,
-      sk: `USER#${userId}`,
-    }));
-
-    for (let attempt = 0; keys.length && attempt < 3; attempt += 1) {
-      const result = await documentClient.batchGet({
-        RequestItems: {
-          [TABLE_NAME]: {
-            Keys: keys,
-            ProjectionExpression: "id, isAdmin",
+  for (let index = 0; index < userIds.length; index += 25) {
+    const users = await Promise.all(
+      userIds.slice(index, index + 25).map(async (userId) => {
+        const result = await documentClient.get({
+          TableName: TABLE_NAME,
+          Key: {
+            pk: `USER#${userId}`,
+            sk: `USER#${userId}`,
           },
-        },
-      });
+          ProjectionExpression: "id, isAdmin",
+        });
+        return result.Item;
+      }),
+    );
 
-      for (const user of result.Responses?.[TABLE_NAME] || []) {
-        if (user?.id) isAdminByUserId.set(String(user.id), user.isAdmin === true);
+    for (const user of users) {
+      if (user?.id) {
+        isAdminByUserId.set(String(user.id), user.isAdmin === true);
       }
-      keys = (result.UnprocessedKeys?.[TABLE_NAME]?.Keys || []) as typeof keys;
     }
   }
 

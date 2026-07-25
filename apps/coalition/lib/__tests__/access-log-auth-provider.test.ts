@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  batchGet: vi.fn(),
+  get: vi.fn(),
   put: vi.fn(),
   query: vi.fn(),
   update: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/dynamodb", () => ({
   TABLE_NAME: "TestTable",
   documentClient: {
-    batchGet: mocks.batchGet,
+    get: mocks.get,
     put: mocks.put,
     query: mocks.query,
     update: mocks.update,
@@ -48,11 +48,7 @@ const event = ({
 describe("access-log auth provider telemetry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.batchGet.mockResolvedValue({
-      Responses: {
-        TestTable: [{ id: "user-1", isAdmin: false }],
-      },
-    });
+    mocks.get.mockResolvedValue({ Item: { id: "user-1", isAdmin: false } });
     mocks.put.mockResolvedValue({});
     mocks.update.mockResolvedValue({});
   });
@@ -119,13 +115,11 @@ describe("access-log auth provider telemetry", () => {
         event({ id: "member-event", userId: "member-1", eventType: "login" }),
       ],
     });
-    mocks.batchGet.mockResolvedValue({
-      Responses: {
-        TestTable: [
-          { id: "admin-1", isAdmin: true },
-          { id: "member-1", isAdmin: false },
-        ],
-      },
+    mocks.get.mockImplementation(({ Key }: { Key: { pk: string } }) => {
+      const id = Key.pk.replace(/^USER#/, "");
+      return Promise.resolve({
+        Item: { id, isAdmin: id === "admin-1" },
+      });
     });
     const { listAccessLog } = await import("@/lib/admin/access-log");
 
@@ -139,16 +133,15 @@ describe("access-log auth provider telemetry", () => {
       pageViewCount: 0,
       uniqueMemberCount: 1,
     });
-    expect(mocks.batchGet).toHaveBeenCalledWith({
-      RequestItems: {
-        TestTable: {
-          Keys: [
-            { pk: "USER#admin-1", sk: "USER#admin-1" },
-            { pk: "USER#member-1", sk: "USER#member-1" },
-          ],
-          ProjectionExpression: "id, isAdmin",
-        },
-      },
+    expect(mocks.get).toHaveBeenCalledWith({
+      TableName: "TestTable",
+      Key: { pk: "USER#admin-1", sk: "USER#admin-1" },
+      ProjectionExpression: "id, isAdmin",
+    });
+    expect(mocks.get).toHaveBeenCalledWith({
+      TableName: "TestTable",
+      Key: { pk: "USER#member-1", sk: "USER#member-1" },
+      ProjectionExpression: "id, isAdmin",
     });
   });
 });
