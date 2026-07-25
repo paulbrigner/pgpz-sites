@@ -202,7 +202,11 @@ function renderProgressSummaryMarkdown(section: PolicyUpdateSection) {
   ]);
 }
 
-function renderSection(section: PolicyUpdateSection, siteUrl: string) {
+function renderSection(
+  section: PolicyUpdateSection,
+  siteUrl: string,
+  useSourceDividers: boolean,
+) {
   const lines: string[] = [];
   const socialHeading = splitPolicyUpdateSocialPostHeading(section.heading);
   const isSocial = isPolicyUpdateSocialPostSection(section);
@@ -211,6 +215,8 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
   const renderRelevantPostsImageLabel =
     !isSocial && !sectionHasRelevantPostsMarker(section) && (section.images || []).some(isPolicyUpdateRelevantPostImage);
+
+  if (useSourceDividers && section.dividerBefore) lines.push("---", "");
 
   if (socialHeading) {
     lines.push(`## ${escapeMarkdownText(socialHeading.label)}`);
@@ -288,6 +294,8 @@ function renderSection(section: PolicyUpdateSection, siteUrl: string) {
     );
   }
 
+  if (useSourceDividers && section.dividerAfter) lines.push("", "---");
+
   return lines
     .filter((line, index, all) => !(line === "" && all[index - 1] === ""))
     .join("\n")
@@ -300,8 +308,9 @@ export function buildPolicyUpdateForumMarkdown(
 ) {
   const siteUrl = normalizeBaseUrl(options.siteUrl);
   const greeting = options.greeting?.trim() || "Hi everyone,";
+  const useSourceDividers = update.sourceFormat === "docx";
   const sections = normalizePolicyUpdateSectionLayout(update.sections)
-    .map((section) => renderSection(section, siteUrl))
+    .map((section) => renderSection(section, siteUrl, useSourceDividers))
     .filter(Boolean);
 
   const markdown = [
@@ -310,7 +319,7 @@ export function buildPolicyUpdateForumMarkdown(
     renderList("Key Takeaways", update.keyTakeaways),
     renderList("Action Items", update.actionItems),
     "---",
-    sections.join("\n\n---\n\n"),
+    sections.join(useSourceDividers ? "\n\n" : "\n\n---\n\n"),
   ]
     .filter((part) => part.trim())
     .join("\n\n")

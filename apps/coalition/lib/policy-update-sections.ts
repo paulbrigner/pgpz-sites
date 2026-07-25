@@ -1,6 +1,15 @@
 import type { PolicyUpdateSection } from "@/lib/policy-updates";
 
 type PolicyUpdateSectionImage = NonNullable<PolicyUpdateSection["images"]>[number];
+type SocialImagePlacement =
+  | "x-post-of-the-week"
+  | "fincen-followup"
+  | "illinois-followup";
+type SocialImageGroup = {
+  images: NonNullable<PolicyUpdateSection["images"]>;
+  dividerBefore?: boolean;
+  dividerAfter?: boolean;
+};
 
 export type PolicyUpdateSocialPostHeading = {
   label: string;
@@ -47,7 +56,9 @@ export function isPolicyUpdateSocialPostSection(
   );
 }
 
-function socialPostImagePlacement(image: PolicyUpdateSectionImage) {
+function socialPostImagePlacement(
+  image: PolicyUpdateSectionImage,
+): SocialImagePlacement | null {
   const text = `${image.src} ${image.alt || ""} ${image.caption || ""}`.toLowerCase();
   if (!/(?:^|[/-])x[-_]|x post|twitter|@/i.test(text)) return null;
 
@@ -110,26 +121,51 @@ function isPortalIntroSection(section: PolicyUpdateSection) {
 
 function socialImageSection(
   heading: "X Post of the Week" | "Notable Post" | "Notable Posts",
-  images: NonNullable<PolicyUpdateSection["images"]>,
+  group: SocialImageGroup,
 ): PolicyUpdateSection | null {
-  return images.length ? { heading, body: [], images } : null;
+  return group.images.length
+    ? {
+        heading,
+        body: [],
+        images: group.images,
+        ...(group.dividerBefore ? { dividerBefore: true } : {}),
+        ...(group.dividerAfter ? { dividerAfter: true } : {}),
+      }
+    : null;
 }
 
 export function normalizePolicyUpdateSectionLayout(sections: PolicyUpdateSection[]) {
-  const imageGroups: Record<string, NonNullable<PolicyUpdateSection["images"]>> = {
-    "x-post-of-the-week": [],
-    "fincen-followup": [],
-    "illinois-followup": [],
+  const imageGroups: Record<SocialImagePlacement, SocialImageGroup> = {
+    "x-post-of-the-week": { images: [] },
+    "fincen-followup": { images: [] },
+    "illinois-followup": { images: [] },
   };
 
   const stripped = sections
     .map((section) => {
+      const movedPlacements = new Set<SocialImagePlacement>();
       const retainedImages = (section.images || []).filter((image) => {
         const placement = socialPostImagePlacement(image);
         if (!placement) return true;
-        imageGroups[placement].push(image);
+        imageGroups[placement].images.push(image);
+        movedPlacements.add(placement);
         return false;
       });
+      const hasNonImageContent =
+        section.body.length ||
+        section.bullets?.length ||
+        section.bodyAfterBullets?.length ||
+        section.table;
+      if (
+        section.images?.length &&
+        !retainedImages.length &&
+        !hasNonImageContent &&
+        movedPlacements.size === 1
+      ) {
+        const placement = [...movedPlacements][0];
+        if (section.dividerBefore) imageGroups[placement].dividerBefore = true;
+        if (section.dividerAfter) imageGroups[placement].dividerAfter = true;
+      }
 
       const normalizedSection: PolicyUpdateSection = {
         ...section,

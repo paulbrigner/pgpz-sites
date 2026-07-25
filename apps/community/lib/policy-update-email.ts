@@ -367,9 +367,12 @@ const renderSectionHtml = (
   section: PolicyUpdateSection,
   baseUrl: string,
   tracking: PolicyUpdateEmailTracking | undefined,
+  useSourceDividers: boolean,
 ) => {
   const isSocial = isPolicyUpdateSocialPostSection(section);
-  const showTopBorder = !isPolicyUpdateActionItemSection(section);
+  const showTopBorder = useSourceDividers
+    ? section.dividerBefore === true
+    : !isPolicyUpdateActionItemSection(section);
   const isProgressSummary = isPgpzProgressSummarySection(section);
   const headingLink = policyUpdateSectionHeadingLink(section);
   const imageHrefFallback = headingLink?.href || section.links?.[0]?.href || null;
@@ -388,7 +391,7 @@ const renderSectionHtml = (
 
   return `<tr>
               <td style="padding:0 30px 22px;">
-                <div style="${showTopBorder ? "border-top:1px solid rgba(245,168,0,0.34);" : ""}padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
+                <div style="${showTopBorder ? (useSourceDividers ? "border-top:1.5pt solid #F79646;" : "border-top:1px solid rgba(245,168,0,0.34);") : ""}padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
                   ${renderSectionHeading(section, baseUrl, tracking)}
                   ${isSocial ? imagesHtml : ""}
                   ${
@@ -401,6 +404,7 @@ const renderSectionHtml = (
                   ${!isProgressSummary && section.bullets?.length ? renderBullets(section.bullets, section.bulletRuns, section.links, baseUrl, tracking) : ""}
                   ${!isProgressSummary && section.bodyAfterBullets?.length ? renderParagraphs(section.bodyAfterBullets, section.links, baseUrl, tracking, section.bodyAfterBulletsRuns) : ""}
                 </div>
+                ${useSourceDividers && section.dividerAfter ? '<div style="border-top:1.5pt solid #F79646;margin-top:22px;"></div>' : ""}
               </td>
             </tr>`;
 };
@@ -526,7 +530,7 @@ export function buildPolicyUpdateEmail(
                 </table>
               </td>
             </tr>
-            ${sections.map((section) => renderSectionHtml(section, base, emailTracking)).join("")}
+            ${sections.map((section) => renderSectionHtml(section, base, emailTracking, update.sourceFormat === "docx")).join("")}
             <tr>
               <td style="padding:0 30px 26px;">
                 ${renderForwardedEmailCommunityCta({ portalUrl: base, href: communityLinkHref })}

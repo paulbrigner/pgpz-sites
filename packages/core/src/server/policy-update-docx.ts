@@ -11,6 +11,7 @@ const MAX_DOCX_EXPANDED_BYTES = 120 * 1024 * 1024;
 const SAFE_URL_PATTERN = /^https?:\/\//i;
 const ASSET_SCHEME = "pgpz-docx-asset:";
 const PAGE_BREAK_TOKEN = "[[PGPZ_PAGE_BREAK]]";
+const DIVIDER_TOKEN = "[[PGPZ_DIVIDER]]";
 const EMUS_PER_POINT = 12_700;
 
 export type PolicyUpdateTextRun = {
@@ -42,6 +43,8 @@ export type PolicyUpdateDocumentImage = {
 export type PolicyUpdateDocumentSection = {
   heading: string;
   headingRuns?: PolicyUpdateTextRun[];
+  dividerBefore?: boolean;
+  dividerAfter?: boolean;
   body: string[];
   bodyRuns?: PolicyUpdateTextRun[][];
   bullets?: string[];
@@ -295,9 +298,23 @@ function sourcePageCountFromAppXml(xml: string) {
   return Number.isInteger(value) && value > 0 && value <= 10_000 ? value : undefined;
 }
 
-function docxWithPageBreakTokens(zip: JSZip, documentXml: string) {
+function isSourceDividerParagraph(paragraphXml: string) {
+  if (!/<w:pBdr\b/i.test(paragraphXml)) return false;
+  if (/<w:(?:t|drawing|pict|object)\b/i.test(paragraphXml)) return false;
+  return /<w:(?:top|bottom)\b[^>]*\bw:val="(?!nil\b|none\b)[^"]+"/i.test(
+    paragraphXml,
+  );
+}
+
+function docxWithLayoutTokens(zip: JSZip, documentXml: string) {
   const tokenRun = `<w:t>${PAGE_BREAK_TOKEN}</w:t>`;
+  const dividerRun = `<w:r><w:t>${DIVIDER_TOKEN}</w:t></w:r>`;
   const markedDocumentXml = documentXml
+    .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) =>
+      isSourceDividerParagraph(paragraph)
+        ? paragraph.replace(/<\/w:p>$/, `${dividerRun}</w:p>`)
+        : paragraph,
+    )
     .replace(/<w:lastRenderedPageBreak\s*\/>/g, tokenRun)
     .replace(/<w:br\b[^>]*\bw:type="page"[^>]*\/>/g, tokenRun);
   zip.file("word/document.xml", markedDocumentXml);
@@ -525,7 +542,7 @@ export async function parsePolicyUpdateDocx(
     relationshipsXml,
   );
   const displaySizeOccurrenceBySha256 = new Map<string, number>();
-  const mammothBytes = await docxWithPageBreakTokens(zip, documentXml);
+  const mammothBytes = await docxWithLayoutTokens(zip, documentXml);
   const assets: PolicyUpdateDocxAsset[] = [];
   const conversion = await mammoth.convertToHtml(
     { buffer: mammothBytes },
@@ -577,6 +594,7 @@ export async function parsePolicyUpdateDocx(
   let coverCta: PolicyUpdateDocumentImage | undefined;
   let pendingCoverCtaCaption = "";
   let pendingPageBreak = false;
+  let pendingDivider = false;
   const sections: PolicyUpdateDocumentSection[] = [];
   const keyTakeaways: string[] = [];
   const actionItems: string[] = [];
@@ -586,6 +604,21 @@ export async function parsePolicyUpdateDocx(
     const finalized = finalizeSection(currentSection);
     if (finalized) sections.push(finalized);
     currentSection = null;
+  };
+
+  const beginSection = (
+    heading: string,
+    body: string[] = [],
+    headingRuns?: PolicyUpdateTextRun[],
+  ): PolicyUpdateDocumentSection => {
+    const section: PolicyUpdateDocumentSection = {
+      heading,
+      ...(headingRuns?.length ? { headingRuns } : {}),
+      ...(pendingDivider ? { dividerBefore: true } : {}),
+      body,
+    };
+    pendingDivider = false;
+    return section;
   };
 
   const prepareRuns = (rawRuns: PolicyUpdateTextRun[]) => {
@@ -631,7 +664,7 @@ export async function parsePolicyUpdateDocx(
     }
 
     if (tag === "ul" || tag === "ol") {
-      if (!currentSection) currentSection = { heading: "Overview", body: [] };
+      if (!currentSection) currentSection = beginSection("Overview");
       const items = directElements(element, "li").map((item) =>
         prepareRuns(extractRuns(item)),
       );
@@ -642,7 +675,20 @@ export async function parsePolicyUpdateDocx(
     const imageNodes = sourceImageNodes(element);
     if (!/^h[1-6]$/.test(tag) && tag !== "p" && !imageNodes.length) continue;
 
-    const runs = prepareRuns(extractRuns(element));
+    const rawRuns = extractRuns(element);
+    if (runsText(rawRuns) === DIVIDER_TOKEN) {
+      pushCurrentSection();
+      if (sections.length) {
+        sections[sections.length - 1] = {
+          ...sections[sections.length - 1],
+          dividerAfter: true,
+        };
+      } else {
+        pendingDivider = true;
+      }
+      continue;
+    }
+    const runs = prepareRuns(rawRuns);
     const text = runsText(runs);
 
     if (!title && text && (/^h1$/.test(tag) || /(?:weekly policy memo|special update)/i.test(text))) {
@@ -684,20 +730,20 @@ export async function parsePolicyUpdateDocx(
     if (headingLike || boldPrefix) {
       pushCurrentSection();
       const headingRuns = boldPrefix?.headingRuns || runs;
-      currentSection = {
-        heading: (boldPrefix?.heading || text).replace(/:\s*$/, ""),
+      currentSection = beginSection(
+        (boldPrefix?.heading || text).replace(/:\s*$/, ""),
+        [],
         headingRuns,
-        body: [],
-      };
+      );
       mergeSectionLinks(currentSection, headingRuns);
       if (boldPrefix?.remainderRuns.length) appendParagraph(currentSection, boldPrefix.remainderRuns);
     } else if (text) {
-      if (!currentSection) currentSection = { heading: "Overview", body: [] };
+      if (!currentSection) currentSection = beginSection("Overview");
       appendParagraph(currentSection, runs);
     }
 
     if (imageNodes.length) {
-      if (!currentSection) currentSection = { heading: "Overview", body: [] };
+      if (!currentSection) currentSection = beginSection("Overview");
       const headingLabel = currentSection.heading || title || "policy update";
       const imageBreak = pendingPageBreak;
       pendingPageBreak = false;
@@ -1071,7 +1117,7 @@ export async function renderPolicyUpdatePdf(
     const isArticleHeading = !/^(?:overview|why this matters(?: for zcash)?|action items?|relevant posts?|x post of the week)$/i.test(
       section.heading,
     );
-    if (isArticleHeading) {
+    if (section.dividerBefore) {
       doc
         .moveTo(contentLeft, doc.y)
         .lineTo(contentLeft + contentWidth, doc.y)
@@ -1158,6 +1204,16 @@ export async function renderPolicyUpdatePdf(
         ...(image.href ? { link: image.href } : {}),
       });
       doc.y += height + 10;
+    }
+    if (section.dividerAfter) {
+      ensurePdfSpace(doc, 8);
+      doc
+        .moveTo(contentLeft, doc.y)
+        .lineTo(contentLeft + contentWidth, doc.y)
+        .lineWidth(1.5)
+        .strokeColor("#f79646")
+        .stroke();
+      doc.moveDown(0.8);
     }
     doc.moveDown(0.25);
   }

@@ -237,6 +237,8 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
       if (!heading) return null;
 
       const section: PolicyUpdateSection = { heading, body };
+      if (record.dividerBefore === true) section.dividerBefore = true;
+      if (record.dividerAfter === true) section.dividerAfter = true;
       const headingRuns = textRunsOrFallback(record.headingRuns, heading);
       const bodyRuns = textRunGroupsOrFallback(record.bodyRuns, body);
       const bullets = textArrayOrFallback(record.bullets, []);
@@ -488,6 +490,7 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
 export function uploadedPolicyUpdateToPolicyUpdate(record: UploadedPolicyUpdateRecord): PolicyUpdate {
   const categoryLabel = policyUpdateCategoryLabels[record.category];
   return {
+    sourceFormat: record.sourceFormat,
     slug: record.slug,
     category: record.category,
     categoryLabel,

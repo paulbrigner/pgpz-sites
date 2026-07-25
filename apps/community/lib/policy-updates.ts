@@ -13,6 +13,8 @@ export type PolicyUpdateTextRun = {
 export type PolicyUpdateSection = {
   heading: string;
   headingRuns?: PolicyUpdateTextRun[];
+  dividerBefore?: boolean;
+  dividerAfter?: boolean;
   body: string[];
   bodyRuns?: PolicyUpdateTextRun[][];
   table?: PolicyUpdateTable;
@@ -55,6 +57,7 @@ export type PolicyUpdateImage = {
 };
 
 export type PolicyUpdate = {
+  sourceFormat?: "docx" | "legacy_pdf";
   slug: string;
   category: PolicyUpdateCategory;
   categoryLabel: string;

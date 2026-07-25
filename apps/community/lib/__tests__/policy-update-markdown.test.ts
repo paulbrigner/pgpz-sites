@@ -112,6 +112,25 @@ describe("buildPolicyUpdateForumMarkdown", () => {
     expect(markdown).not.toContain("/assets/x-josh-swihart.png");
   });
 
+  it("uses only explicit source dividers for DOCX markdown", () => {
+    const markdown = buildPolicyUpdateForumMarkdown({
+      ...update,
+      sourceFormat: "docx",
+      sections: [
+        {
+          heading: "X Post of the Week",
+          body: ["Source post."],
+          dividerAfter: true,
+        },
+        { heading: "Why this matters for Zcash", body: ["Analysis."] },
+        { heading: "Action Item", body: ["Take action."] },
+      ],
+    });
+
+    expect(markdown).toContain("Source post.\n\n---\n\n## Why this matters for Zcash");
+    expect(markdown).toContain("Analysis.\n\n## Action Item");
+  });
+
   it("preserves table cell line breaks as markdown-safe breaks", () => {
     const markdown = buildPolicyUpdateForumMarkdown(
       {

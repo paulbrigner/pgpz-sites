@@ -100,6 +100,29 @@ describe("policy update section helpers", () => {
     expect(normalized.every((section) => !Object.hasOwn(section, "images"))).toBe(true);
   });
 
+  it("keeps source divider boundaries when a standalone social image is relocated", () => {
+    const normalized = normalizePolicyUpdateSectionLayout([
+      {
+        heading: "Relevant Post",
+        body: [],
+        dividerAfter: true,
+        images: [
+          {
+            src: "/assets/x-justin-slaughter.png",
+            alt: "Embedded X post screenshot from Justin Slaughter",
+          },
+        ],
+      },
+    ]);
+
+    expect(normalized).toEqual([
+      expect.objectContaining({
+        heading: "Notable Posts",
+        dividerAfter: true,
+      }),
+    ]);
+  });
+
   it("links main policy headings from matching section links", () => {
     const section = {
       heading: "Illinois Becomes First U.S. State to Levy Direct Privilege Tax on Cryptocurrency Transactions",

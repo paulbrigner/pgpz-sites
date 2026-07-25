@@ -186,6 +186,30 @@ async function exampleDocxWithPageBreakMarkers() {
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
+async function exampleDocxWithDividers() {
+  const zip = await JSZip.loadAsync(await exampleDocx());
+  const documentXml = await zip.file("word/document.xml")!.async("string");
+  const divider =
+    '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="1" w:color="F79646"/></w:pBdr></w:pPr></w:p>';
+  zip.file(
+    "word/document.xml",
+    documentXml
+      .replace(
+        /(<w:p><w:r><w:rPr><w:b\/><\/w:rPr><w:t>Policy Development Heading<\/w:t><\/w:r><\/w:p>)/,
+        `${divider}$1`,
+      )
+      .replace(
+        "<w:sectPr/>",
+        `${divider}
+          <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Second Policy Heading</w:t></w:r></w:p>
+          <w:p><w:r><w:t>Second policy body.</w:t></w:r></w:p>
+          ${divider}
+          <w:sectPr/>`,
+      ),
+  );
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
 const pdfPageCount = (pdf: Buffer) =>
   pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)?.length || 0;
 
@@ -275,6 +299,24 @@ describe("policy update DOCX pipeline", () => {
       text: "Read the ",
       pageBreakBefore: true,
     });
+  });
+
+  it("preserves only the horizontal dividers explicitly present in the DOCX", async () => {
+    const parsed = await parsePolicyUpdateDocx(await exampleDocxWithDividers(), {
+      assetBasePath: "/api/policy-updates/example/assets",
+    });
+
+    expect(parsed.sections).toHaveLength(2);
+    expect(parsed.sections[0]).toMatchObject({
+      heading: "Policy Development Heading",
+      dividerBefore: true,
+      dividerAfter: true,
+    });
+    expect(parsed.sections[1]).toMatchObject({
+      heading: "Second Policy Heading",
+      dividerAfter: true,
+    });
+    expect(parsed.sections[1]).not.toHaveProperty("dividerBefore");
   });
 
   it("rejects non-DOCX and macro-enabled packages", async () => {

@@ -168,6 +168,31 @@ describe("buildPolicyUpdateEmail", () => {
     expect(containerStyleBefore("Second policy development")).toContain("border-top");
   });
 
+  it("uses only explicit source dividers for DOCX policy updates", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        sourceFormat: "docx",
+        sections: [
+          {
+            heading: "X Post of the Week",
+            body: ["Source post."],
+            dividerAfter: true,
+          },
+          { heading: "Why this matters for Zcash", body: ["Analysis."] },
+          { heading: "Action Item", body: ["Take action."] },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+    );
+
+    expect(built.html.match(/border-top:1\.5pt solid #F79646/g)).toHaveLength(1);
+    expect(built.html).not.toContain("border-top:1px solid rgba(245,168,0,0.34)");
+  });
+
   it("renders policy update tables in HTML and text email bodies", () => {
     if (!specialUpdate) throw new Error("Missing special update fixture");
 
