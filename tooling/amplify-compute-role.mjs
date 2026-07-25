@@ -70,6 +70,7 @@ export function buildAmplifyComputePermissionPolicy({
   additionalTableNames = [],
   bucket,
   prefix,
+  publicFilesPrefix,
   sesIdentityArn,
   fromAddress,
   backgroundJobsTableName,
@@ -77,6 +78,10 @@ export function buildAmplifyComputePermissionPolicy({
 }) {
   const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, "");
   if (!normalizedPrefix) throw new Error("prefix is required");
+  const normalizedPublicFilesPrefix =
+    typeof publicFilesPrefix === "string"
+      ? publicFilesPrefix.replace(/^\/+|\/+$/g, "")
+      : "";
   return {
     Version: "2012-10-17",
     Statement: [
@@ -139,6 +144,36 @@ export function buildAmplifyComputePermissionPolicy({
         ],
         Resource: [`arn:aws:s3:::${bucket}/${normalizedPrefix}/*`],
       },
+      ...(normalizedPublicFilesPrefix
+        ? [
+            {
+              Sid: "ListPublicFileObjects",
+              Effect: "Allow",
+              Action: ["s3:ListBucket"],
+              Resource: [`arn:aws:s3:::${bucket}`],
+              Condition: {
+                StringLike: {
+                  "s3:prefix": [
+                    normalizedPublicFilesPrefix,
+                    `${normalizedPublicFilesPrefix}/*`,
+                  ],
+                },
+              },
+            },
+            {
+              Sid: "ManagePublicFileObjects",
+              Effect: "Allow",
+              Action: [
+                "s3:DeleteObject",
+                "s3:GetObject",
+                "s3:PutObject",
+              ],
+              Resource: [
+                `arn:aws:s3:::${bucket}/${normalizedPublicFilesPrefix}/*`,
+              ],
+            },
+          ]
+        : []),
       {
         Sid: "SendApplicationEmail",
         Effect: "Allow",
@@ -163,6 +198,7 @@ export function buildAmplifyComputeRolePlan({
   additionalTableNames,
   bucket,
   prefix = "policy-updates/uploads",
+  publicFilesPrefix,
   sesIdentityArn,
   fromAddress,
 }) {
@@ -200,6 +236,7 @@ export function buildAmplifyComputeRolePlan({
       additionalTableNames: resolvedAdditionalTableNames,
       bucket,
       prefix,
+      publicFilesPrefix,
       sesIdentityArn,
       fromAddress,
       backgroundJobsTableName: application.backgroundJobsTableName,

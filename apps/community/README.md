@@ -12,6 +12,7 @@ Membership is activated through automated X social proof. The previous NFT, Unlo
 - Denormalized active membership state on the user record.
 - Social proof audit records in the same DynamoDB table.
 - Admin roster for active/unverified members and welcome emails.
+- Admin-managed resource files with stable public or members-only URLs.
 - Zcash-inspired visual system using `#F5A800` as the primary gold.
 
 ## Membership Flow
@@ -137,6 +138,25 @@ npm run forum:update --workspace=apps/community -- \
   --summary "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements" \
   --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
 ```
+
+## Resource File Library
+
+Administrators can upload and maintain downloadable files in **Admin → Public
+files**. Each record has a stable `/resources/...` URL and can be set to either:
+
+- **Public** — available without authentication.
+- **Members only** — available to active Community members and administrators.
+
+Objects remain in the private `pgpz-community-content` bucket under the
+`public-files/` prefix. The application route checks DynamoDB metadata and
+streams the selected immutable S3 version; the bucket itself is never made
+public. Replacing a file preserves its URL and prior version, while Archive
+removes route access without deleting its stored history.
+
+Do not add managed resources under `apps/community/public/resources`; an exact
+static file there would bypass the managed route. The two initial statements
+are retained only as checksum-pinned migration fixtures under
+`tooling/fixtures/initial-community-public-files`.
 
 ## Deployment
 

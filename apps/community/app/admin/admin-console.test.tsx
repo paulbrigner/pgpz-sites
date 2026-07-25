@@ -14,6 +14,7 @@ vi.mock("@/components/admin/PolicyUpdateMailer", () => ({ PolicyUpdateMailer: ()
 vi.mock("@/components/admin/ReferralProgramPanel", () => ({ ReferralProgramPanel: () => <div>Referral panel</div> }));
 vi.mock("@/components/admin/SignupNotificationsPanel", () => ({ SignupNotificationsPanel: () => <div>Notification panel</div> }));
 vi.mock("@/components/admin/BriefingsAdminPanel", () => ({ BriefingsAdminPanel: () => <div>Briefings editorial panel</div> }));
+vi.mock("@/components/admin/PublicFileLibraryPanel", () => ({ PublicFileLibraryPanel: () => <div>Public file library panel</div> }));
 
 import { AdminConsole } from "./admin-console";
 
@@ -38,5 +39,13 @@ describe("admin console Topic Briefings integration", () => {
 
     expect(screen.queryByRole("button", { name: /Topic Briefings/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Briefings editorial panel")).not.toBeInTheDocument();
+  });
+
+  it("opens the public file library", async () => {
+    const user = userEvent.setup();
+    render(<AdminConsole initialUpdates={[]} currentAdminId="admin-1" />);
+
+    await user.click(screen.getByRole("button", { name: /Public files/i }));
+    expect(screen.getByText("Public file library panel")).toBeInTheDocument();
   });
 });

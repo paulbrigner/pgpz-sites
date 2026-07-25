@@ -78,6 +78,8 @@ frontend:
         - env | grep -e PRIVATE_KEY_SECRET >> .env.production || true
         - env | grep -e POLICY_UPDATE_UPLOAD_BUCKET >> .env.production || true
         - env | grep -e POLICY_UPDATE_UPLOAD_PREFIX >> .env.production || true
+        - env | grep -e PUBLIC_FILES_BUCKET >> .env.production || true
+        - env | grep -e PUBLIC_FILES_PREFIX >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next

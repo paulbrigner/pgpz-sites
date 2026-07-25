@@ -50,6 +50,10 @@ export const POLICY_UPDATE_UPLOAD_BUCKET =
     process.env.PGPZ_CONTENT_BUCKET) as string | undefined;
 export const POLICY_UPDATE_UPLOAD_PREFIX =
   (process.env.POLICY_UPDATE_UPLOAD_PREFIX || "policy-updates/uploads").replace(/^\/+|\/+$/g, "");
+export const PUBLIC_FILES_BUCKET =
+  (process.env.PUBLIC_FILES_BUCKET || POLICY_UPDATE_UPLOAD_BUCKET) as string | undefined;
+export const PUBLIC_FILES_PREFIX =
+  (process.env.PUBLIC_FILES_PREFIX || "public-files").replace(/^\/+|\/+$/g, "");
 
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||

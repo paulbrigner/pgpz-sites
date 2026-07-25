@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, BellRing, BookOpenText, Gift, Mail, Newspaper, Users } from "lucide-react";
+import { Activity, BellRing, BookOpenText, Files, Gift, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
 import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
@@ -9,11 +9,20 @@ import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
 import { ReferralProgramPanel } from "@/components/admin/ReferralProgramPanel";
 import { SignupNotificationsPanel } from "@/components/admin/SignupNotificationsPanel";
 import { BriefingsAdminPanel } from "@/components/admin/BriefingsAdminPanel";
+import { PublicFileLibraryPanel } from "@/components/admin/PublicFileLibraryPanel";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 import { isCommunityXMonitorBriefingsEnabled } from "@/lib/x-monitor-public";
 
-type AdminTab = "users" | "notifications" | "referrals" | "updates" | "newsletters" | "briefings" | "access";
+type AdminTab =
+  | "users"
+  | "notifications"
+  | "referrals"
+  | "updates"
+  | "newsletters"
+  | "briefings"
+  | "public-files"
+  | "access";
 
 type Props = {
   initialUpdates: PolicyUpdateSummary[];
@@ -63,6 +72,12 @@ const baseTabs: Array<{
     icon: BookOpenText,
   },
   {
+    id: "public-files",
+    label: "Public files",
+    description: "Manage public or members-only resource URLs",
+    icon: Files,
+  },
+  {
     id: "access",
     label: "Access log",
     description: "Recent member logins and page views",
@@ -79,7 +94,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -120,6 +135,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
       {activeTab === "briefings" ? <BriefingsAdminPanel /> : null}
+      {activeTab === "public-files" ? <PublicFileLibraryPanel /> : null}
       {activeTab === "access" ? <AccessLogPanel /> : null}
     </div>
   );

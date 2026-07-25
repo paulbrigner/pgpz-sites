@@ -24,10 +24,11 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
     applicationName: "community",
     ...common,
     fromAddress: "no-reply@community.pgpz.org",
+    publicFilesPrefix: "public-files",
   });
   assert.equal(plan.appId, "d2xb9ethk5a24j");
   assert.equal(plan.branchName, "main");
-  assert.equal(plan.permissionPolicy.Statement.length, 6);
+  assert.equal(plan.permissionPolicy.Statement.length, 8);
   assert.match(
     JSON.stringify(plan.permissionPolicy),
     /table\/PGPZCommunityNextAuth/,
@@ -71,6 +72,24 @@ test("scopes Community permissions to its table, content prefix, and sender", ()
     ],
   });
   assert.doesNotMatch(JSON.stringify(enqueue), /ReceiveMessage|DeleteMessage/);
+  const listPublicFiles = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ListPublicFileObjects",
+  );
+  assert.deepEqual(listPublicFiles.Condition.StringLike["s3:prefix"], [
+    "public-files",
+    "public-files/*",
+  ]);
+  const managePublicFiles = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ManagePublicFileObjects",
+  );
+  assert.deepEqual(managePublicFiles.Action, [
+    "s3:DeleteObject",
+    "s3:GetObject",
+    "s3:PutObject",
+  ]);
+  assert.deepEqual(managePublicFiles.Resource, [
+    "arn:aws:s3:::pgpz-content/public-files/*",
+  ]);
 });
 
 test("grants Coalition only the actions used by one-way Community sync", () => {
@@ -97,6 +116,12 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
   assert.equal(
     plan.backgroundJobsQueueArn,
     "arn:aws:sqs:us-east-1:123456789012:pgpz-coalition-background-jobs",
+  );
+  assert.equal(
+    plan.permissionPolicy.Statement.some(
+      (statement) => statement.Sid === "ManagePublicFileObjects",
+    ),
+    false,
   );
 });
 
