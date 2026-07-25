@@ -67,6 +67,7 @@ export function AccessLogPanel() {
   const [events, setEvents] = useState<AccessLogEvent[]>([]);
   const [meta, setMeta] = useState<AccessLogResponse["meta"] | null>(null);
   const [eventType, setEventType] = useState<"all" | AccessEventType>("all");
+  const [omitAdminUsers, setOmitAdminUsers] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function AccessLogPanel() {
     try {
       const params = new URLSearchParams({ limit: "200", days: "30" });
       if (eventType !== "all") params.set("eventType", eventType);
+      if (omitAdminUsers) params.set("omitAdmins", "true");
       const res = await fetch(`/api/admin/access-log?${params.toString()}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to load access log");
@@ -92,7 +94,7 @@ export function AccessLogPanel() {
   useEffect(() => {
     void loadAccessLog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventType]);
+  }, [eventType, omitAdminUsers]);
 
   const filteredEvents = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -169,6 +171,15 @@ export function AccessLogPanel() {
                 {label}
               </button>
             ))}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 hover:border-slate-400">
+              <input
+                type="checkbox"
+                checked={omitAdminUsers}
+                onChange={(event) => setOmitAdminUsers(event.target.checked)}
+                className="h-4 w-4 accent-[var(--zcash-gold)]"
+              />
+              Omit admin users
+            </label>
             <Button type="button" variant="outline" onClick={loadAccessLog} disabled={loading}>
               <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
               Refresh

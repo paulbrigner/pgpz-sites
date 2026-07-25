@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  batchGet: vi.fn(),
   put: vi.fn(),
   query: vi.fn(),
   update: vi.fn(),
@@ -11,6 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/dynamodb", () => ({
   TABLE_NAME: "TestTable",
   documentClient: {
+    batchGet: mocks.batchGet,
     put: mocks.put,
     query: mocks.query,
     update: mocks.update,
@@ -21,12 +23,16 @@ const event = ({
   id,
   eventType = "page_view",
   authProvider,
+  userId = "user-1",
+  isAdmin,
 }: {
   id: string;
   eventType?: "login" | "page_view";
   authProvider?: string;
+  userId?: string;
+  isAdmin?: boolean;
 }) => ({
-  pk: "ACCESS_LOG#USER#user-1",
+  pk: `ACCESS_LOG#USER#${userId}`,
   sk: `ACCESS_LOG#2026-07-16T12:00:00.000Z#${id}`,
   GSI1PK: "ACCESS_LOG",
   GSI1SK: `2026-07-16T12:00:00.000Z#${id}`,
@@ -34,13 +40,19 @@ const event = ({
   logId: id,
   createdAt: "2026-07-16T12:00:00.000Z",
   eventType,
-  userId: "user-1",
+  userId,
+  ...(typeof isAdmin === "boolean" ? { isAdmin } : {}),
   authProvider,
 });
 
 describe("access-log auth provider telemetry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.batchGet.mockResolvedValue({
+      Responses: {
+        TestTable: [{ id: "user-1", isAdmin: false }],
+      },
+    });
     mocks.put.mockResolvedValue({});
     mocks.update.mockResolvedValue({});
   });
@@ -53,12 +65,14 @@ describe("access-log auth provider telemetry", () => {
       userId: "user-1",
       path: "/members",
       authProvider: "better-auth",
+      isAdmin: true,
     });
 
     expect(mocks.put).toHaveBeenCalledWith({
       TableName: "TestTable",
       Item: expect.objectContaining({
         authProvider: "better-auth",
+        isAdmin: true,
       }),
     });
   });
@@ -96,5 +110,45 @@ describe("access-log auth provider telemetry", () => {
         }),
       }),
     );
+  });
+
+  it("omits admin users before computing events and totals", async () => {
+    mocks.query.mockResolvedValue({
+      Items: [
+        event({ id: "admin-event", userId: "admin-1" }),
+        event({ id: "member-event", userId: "member-1", eventType: "login" }),
+      ],
+    });
+    mocks.batchGet.mockResolvedValue({
+      Responses: {
+        TestTable: [
+          { id: "admin-1", isAdmin: true },
+          { id: "member-1", isAdmin: false },
+        ],
+      },
+    });
+    const { listAccessLog } = await import("@/lib/admin/access-log");
+
+    const result = await listAccessLog({ limit: 10, omitAdmins: true });
+
+    expect(result.events.map((entry) => entry.id)).toEqual(["member-event"]);
+    expect(result.meta).toMatchObject({
+      returned: 1,
+      totalCount: 1,
+      loginCount: 1,
+      pageViewCount: 0,
+      uniqueMemberCount: 1,
+    });
+    expect(mocks.batchGet).toHaveBeenCalledWith({
+      RequestItems: {
+        TestTable: {
+          Keys: [
+            { pk: "USER#admin-1", sk: "USER#admin-1" },
+            { pk: "USER#member-1", sk: "USER#member-1" },
+          ],
+          ProjectionExpression: "id, isAdmin",
+        },
+      },
+    });
   });
 });

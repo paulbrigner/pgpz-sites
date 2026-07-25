@@ -43,11 +43,11 @@
       },
       {
         "path": "app/api/access-log/page-view/route.ts",
-        "sha256": "f409a93da72388a7bb0a88906aa0f0ed0c6438c045fcc21ebada538dcbdbcab7"
+        "sha256": "aebb7af971a02758ae8b1411150eb806787c6ebace8558a5b58fe98c2f0ffe83"
       },
       {
         "path": "app/api/admin/access-log/route.ts",
-        "sha256": "be480fb795179c5e3594f548258f28b2f9d0298ca54157ee6b1640b08b5176a1"
+        "sha256": "332a4ffe39b94baaf5076f5bede57f06bead628693106cd0a13f4e02db9cfc40"
       },
       {
         "path": "app/api/admin/jobs/route.ts",
@@ -175,7 +175,7 @@
       },
       {
         "path": "components/admin/AccessLogPanel.tsx",
-        "sha256": "71a71b365c6afc2a51fb3810d1035807aaaaa21183e7c00af99db7c343ebd35e"
+        "sha256": "85e66c1ff7d92d4db7720ed09d5d91ccfbefed0bb9b31a0739fc52ebcccb6790"
       },
       {
         "path": "components/admin/AdminSkeleton.tsx",
@@ -303,7 +303,7 @@
       },
       {
         "path": "lib/admin/access-log.ts",
-        "sha256": "0b67131b8b0c7bfc1dc88b41cb12895d3cc41468e7803246e91d30619f4cea4d"
+        "sha256": "cae8be564fb063cd2e3bff5731acacedbbf59cc17e5fdbc400f995c9ebf43c72"
       },
       {
         "path": "lib/admin/auth.ts",

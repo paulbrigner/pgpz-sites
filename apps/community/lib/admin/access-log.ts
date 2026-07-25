@@ -11,6 +11,7 @@ export type AccessLogEvent = {
   eventType: AccessEventType;
   createdAt: string;
   userId: string | null;
+  isAdmin: boolean | null;
   email: string | null;
   name: string | null;
   membershipStatus: string | null;
@@ -25,6 +26,7 @@ export type AccessLogEvent = {
 export type RecordAccessEventParams = {
   eventType: AccessEventType;
   userId?: string | null;
+  isAdmin?: boolean | null;
   email?: string | null;
   name?: string | null;
   membershipStatus?: string | null;
@@ -39,6 +41,7 @@ export type RecordAccessEventParams = {
 export type ListAccessLogOptions = {
   eventType?: AccessEventType | "all";
   userId?: string | null;
+  omitAdmins?: boolean;
   limit?: number;
   since?: string | null;
 };
@@ -72,6 +75,49 @@ const normalizeSince = (value: unknown) => {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 };
 
+async function hydrateAdminStatus(
+  events: AccessLogEvent[],
+  isAdminByUserId: Map<string, boolean>,
+) {
+  const userIds = [
+    ...new Set(
+      events
+        .filter((event) => event.isAdmin === null)
+        .map((event) => event.userId)
+        .filter((userId): userId is string => !!userId && !isAdminByUserId.has(userId)),
+    ),
+  ];
+
+  for (let index = 0; index < userIds.length; index += 100) {
+    let keys = userIds.slice(index, index + 100).map((userId) => ({
+      pk: `USER#${userId}`,
+      sk: `USER#${userId}`,
+    }));
+
+    for (let attempt = 0; keys.length && attempt < 3; attempt += 1) {
+      const result = await documentClient.batchGet({
+        RequestItems: {
+          [TABLE_NAME]: {
+            Keys: keys,
+            ProjectionExpression: "id, isAdmin",
+          },
+        },
+      });
+
+      for (const user of result.Responses?.[TABLE_NAME] || []) {
+        if (user?.id) isAdminByUserId.set(String(user.id), user.isAdmin === true);
+      }
+      keys = (result.UnprocessedKeys?.[TABLE_NAME]?.Keys || []) as typeof keys;
+    }
+  }
+
+  for (const event of events) {
+    if (event.isAdmin === null && event.userId && isAdminByUserId.has(event.userId)) {
+      event.isAdmin = isAdminByUserId.get(event.userId) ?? null;
+    }
+  }
+}
+
 export function getAccessLogRequestMetadata(headers: Headers) {
   const forwardedFor = headers.get("x-forwarded-for") || "";
   const ipAddress =
@@ -95,6 +141,7 @@ function toAccessLogEvent(item: Record<string, any> | undefined | null): AccessL
     eventType,
     createdAt: String(item.createdAt),
     userId: nullableString(item.userId, 180),
+    isAdmin: typeof item.isAdmin === "boolean" ? item.isAdmin : null,
     email: nullableString(item.email, 320),
     name: nullableString(item.name, 240),
     membershipStatus: nullableString(item.membershipStatus, 80),
@@ -128,6 +175,7 @@ export async function recordAccessEvent(params: RecordAccessEventParams) {
     createdAt: now,
     eventType,
     userId,
+    isAdmin: typeof params.isAdmin === "boolean" ? params.isAdmin : null,
     email: nullableString(params.email, 320),
     name: nullableString(params.name, 240),
     membershipStatus: nullableString(params.membershipStatus, 80),
@@ -183,6 +231,7 @@ export async function listAccessLog(options: ListAccessLogOptions = {}) {
   const limit = Math.min(Math.max(Number(options.limit) || 100, 1), 500);
   const eventType = options.eventType === "login" || options.eventType === "page_view" ? options.eventType : null;
   const userId = nullableString(options.userId, 180);
+  const omitAdmins = options.omitAdmins === true;
   const since = normalizeSince(options.since);
   const events: AccessLogEvent[] = [];
   const uniqueMembers = new Set<string>();
@@ -192,6 +241,7 @@ export async function listAccessLog(options: ListAccessLogOptions = {}) {
   let betterAuthCount = 0;
   let nextAuthCount = 0;
   let unknownAuthProviderCount = 0;
+  const isAdminByUserId = new Map<string, boolean>();
   let ExclusiveStartKey: Record<string, any> | undefined;
   let pageCount = 0;
 
@@ -235,9 +285,13 @@ export async function listAccessLog(options: ListAccessLogOptions = {}) {
           Limit: Math.min(200, Math.max(limit * 2, 50)),
         });
 
-    for (const item of res.Items || []) {
-      const event = toAccessLogEvent(item as Record<string, any>);
-      if (!event) continue;
+    const pageEvents = (res.Items || [])
+      .map((item) => toAccessLogEvent(item as Record<string, any>))
+      .filter((event): event is AccessLogEvent => !!event);
+    if (omitAdmins) await hydrateAdminStatus(pageEvents, isAdminByUserId);
+
+    for (const event of pageEvents) {
+      if (omitAdmins && event.isAdmin === true) continue;
       totalCount += 1;
       if (event.eventType === "login") loginCount += 1;
       if (event.eventType === "page_view") pageViewCount += 1;

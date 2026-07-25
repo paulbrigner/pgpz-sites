@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       eventType: "page_view",
       authProvider: session?.authProvider || null,
       userId,
+      isAdmin: user?.isAdmin === true,
       email: typeof user?.email === "string" ? user.email : null,
       name: user ? getUserDisplayName(user) : null,
       membershipStatus: typeof user?.membershipStatus === "string" ? user.membershipStatus : null,

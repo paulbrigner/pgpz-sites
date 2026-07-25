@@ -11,10 +11,11 @@ export async function GET(request: NextRequest) {
     const eventType: AccessEventType | "all" =
       eventTypeParam === "login" || eventTypeParam === "page_view" ? eventTypeParam : "all";
     const userId = request.nextUrl.searchParams.get("userId") || null;
+    const omitAdmins = request.nextUrl.searchParams.get("omitAdmins") === "true";
     const limit = Number(request.nextUrl.searchParams.get("limit") || 200);
     const days = Math.min(Math.max(Number(request.nextUrl.searchParams.get("days") || 30), 1), 90);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const accessLog = await listAccessLog({ eventType, userId, limit, since });
+    const accessLog = await listAccessLog({ eventType, userId, omitAdmins, limit, since });
     return NextResponse.json(accessLog);
   } catch (err) {
     if (err instanceof AdminAccessError) {

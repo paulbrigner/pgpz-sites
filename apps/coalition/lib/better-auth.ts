@@ -185,6 +185,7 @@ async function recordBetterAuthLogin(email: string, betterAuthUserId: string) {
     eventType: "login",
     authProvider: "better-auth",
     userId: user.id ? String(user.id) : betterAuthUserId,
+    isAdmin: sessionUser.isAdmin === true,
     email: normalizedEmail,
     name: sessionUser.name,
     membershipStatus: sessionUser.membershipStatus,
