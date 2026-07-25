@@ -53,6 +53,8 @@ export type PolicyUpdateImage = {
   caption?: string;
   width?: number;
   height?: number;
+  displayWidthPt?: number;
+  displayHeightPt?: number;
   href?: string;
 };
 

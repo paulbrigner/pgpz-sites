@@ -118,6 +118,8 @@ function normalizeImages(value: unknown) {
       const href = normalizeUrl(cleanText(record.href, 700));
       const width = Number(record.width);
       const height = Number(record.height);
+      const displayWidthPt = Number(record.displayWidthPt);
+      const displayHeightPt = Number(record.displayHeightPt);
       if (!src || !alt || seen.has(src)) return null;
       seen.add(src);
       const image = {
@@ -127,6 +129,12 @@ function normalizeImages(value: unknown) {
         ...(href ? { href } : {}),
         ...(Number.isFinite(width) && width > 0 ? { width } : {}),
         ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+        ...(Number.isFinite(displayWidthPt) && displayWidthPt > 0
+          ? { displayWidthPt }
+          : {}),
+        ...(Number.isFinite(displayHeightPt) && displayHeightPt > 0
+          ? { displayHeightPt }
+          : {}),
       };
       return isPolicyUpdateDisplayImageAllowed(image) ? image : null;
     })
@@ -137,6 +145,8 @@ function normalizeImages(value: unknown) {
       href?: string;
       width?: number;
       height?: number;
+      displayWidthPt?: number;
+      displayHeightPt?: number;
     } => !!image)
     .slice(0, MAX_IMAGES_PER_SECTION);
 }

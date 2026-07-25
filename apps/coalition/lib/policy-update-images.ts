@@ -3,7 +3,52 @@ type PolicyUpdateImageLike = {
   alt?: string;
   caption?: string;
   href?: string;
+  width?: number;
+  height?: number;
+  displayWidthPt?: number;
+  displayHeightPt?: number;
 };
+
+const CSS_PIXELS_PER_POINT = 96 / 72;
+const MAX_SOURCE_DISPLAY_POINTS = 1_440;
+const MAX_SOURCE_DISPLAY_PIXELS = MAX_SOURCE_DISPLAY_POINTS * CSS_PIXELS_PER_POINT;
+
+function sourceDisplayPixels(value: unknown) {
+  const points = Number(value);
+  if (!Number.isFinite(points) || points <= 0 || points > MAX_SOURCE_DISPLAY_POINTS) {
+    return undefined;
+  }
+  return Math.round(points * CSS_PIXELS_PER_POINT);
+}
+
+export function policyUpdateImageDisplaySizePx(image: PolicyUpdateImageLike) {
+  let width = sourceDisplayPixels(image.displayWidthPt);
+  let height = sourceDisplayPixels(image.displayHeightPt);
+  const intrinsicWidth = Number(image.width);
+  const intrinsicHeight = Number(image.height);
+  const hasIntrinsicAspectRatio =
+    Number.isFinite(intrinsicWidth) &&
+    intrinsicWidth > 0 &&
+    Number.isFinite(intrinsicHeight) &&
+    intrinsicHeight > 0;
+
+  if (width && !height && hasIntrinsicAspectRatio) {
+    const derivedHeight = Math.round((width * intrinsicHeight) / intrinsicWidth);
+    if (derivedHeight > 0 && derivedHeight <= MAX_SOURCE_DISPLAY_PIXELS) {
+      height = derivedHeight;
+    }
+  } else if (height && !width && hasIntrinsicAspectRatio) {
+    const derivedWidth = Math.round((height * intrinsicWidth) / intrinsicHeight);
+    if (derivedWidth > 0 && derivedWidth <= MAX_SOURCE_DISPLAY_PIXELS) {
+      width = derivedWidth;
+    }
+  }
+
+  return {
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+  };
+}
 
 export function isPolicyUpdateDisplayImageAllowed(image: PolicyUpdateImageLike) {
   const src = image.src || "";

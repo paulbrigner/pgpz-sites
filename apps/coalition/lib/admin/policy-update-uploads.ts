@@ -226,6 +226,8 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
             const href = textOrEmpty(imageRecord.href).trim();
             const width = Number(imageRecord.width);
             const height = Number(imageRecord.height);
+            const displayWidthPt = Number(imageRecord.displayWidthPt);
+            const displayHeightPt = Number(imageRecord.displayHeightPt);
             if (!src || !alt) return null;
             const displayImage = {
               src,
@@ -234,6 +236,12 @@ const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[])
               ...(href ? { href } : {}),
               ...(Number.isFinite(width) && width > 0 ? { width } : {}),
               ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+              ...(Number.isFinite(displayWidthPt) && displayWidthPt > 0
+                ? { displayWidthPt }
+                : {}),
+              ...(Number.isFinite(displayHeightPt) && displayHeightPt > 0
+                ? { displayHeightPt }
+                : {}),
             };
             return isPolicyUpdateDisplayImageAllowed(displayImage) ? displayImage : null;
           })

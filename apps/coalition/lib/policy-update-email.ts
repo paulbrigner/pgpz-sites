@@ -10,7 +10,11 @@ import {
   buildPolicyUpdateEmailAssetPath,
   buildTrackedClickUrl,
 } from "@/lib/email-link-security";
-import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
+import {
+  isPolicyUpdateRelevantPostImage,
+  policyUpdateImageDisplaySizePx,
+  policyUpdateImageHref,
+} from "@/lib/policy-update-images";
 import {
   isPolicyUpdateActionItemSection,
   isPolicyUpdateSocialPostSection,
@@ -259,9 +263,22 @@ const renderImageHtml = ({
     baseUrl,
     emailImageSrc(image.src, tracking?.emailAssetMaterializationId),
   );
-  const width = Number.isFinite(Number(image.width)) && Number(image.width) > 0 ? Number(image.width) : 640;
-  const height = Number.isFinite(Number(image.height)) && Number(image.height) > 0 ? Number(image.height) : undefined;
-  const maxWidth = isSocial ? 640 : width <= 500 && height && height <= 500 ? 240 : 640;
+  const sourceDisplaySize = policyUpdateImageDisplaySizePx(image);
+  const width =
+    sourceDisplaySize.width ||
+    (Number.isFinite(Number(image.width)) && Number(image.width) > 0 ? Number(image.width) : 640);
+  const height =
+    sourceDisplaySize.height ||
+    (Number.isFinite(Number(image.height)) && Number(image.height) > 0
+      ? Number(image.height)
+      : undefined);
+  const maxWidth = sourceDisplaySize.width
+    ? Math.min(sourceDisplaySize.width, 640)
+    : isSocial
+      ? 640
+      : width <= 500 && height && height <= 500
+        ? 240
+        : 640;
   const img = `<img src="${escapeHtml(imageSrc)}" width="${Math.min(width, maxWidth)}"${height ? ` height="${height}"` : ""} alt="${escapeHtml(image.alt)}" style="display:block;width:100%;max-width:${maxWidth}px;height:auto;border:1px solid ${colors.line};border-radius:12px;background:#ffffff;" />`;
 
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:14px 0 18px;border:1px solid rgba(245,168,0,0.28);border-radius:16px;background:${isSocial ? "#ffffff" : "#FFFDF5"};">

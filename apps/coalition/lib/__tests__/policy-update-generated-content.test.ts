@@ -77,6 +77,8 @@ describe("normalizeGeneratedPolicyUpdateContent", () => {
                 caption: "Scan to join the PGPZ Community Signal chat.",
                 width: 230,
                 height: 230,
+                displayWidthPt: 172.5,
+                displayHeightPt: 172.5,
               },
             ],
           },
@@ -92,6 +94,8 @@ describe("normalizeGeneratedPolicyUpdateContent", () => {
         caption: "Scan to join the PGPZ Community Signal chat.",
         width: 230,
         height: 230,
+        displayWidthPt: 172.5,
+        displayHeightPt: 172.5,
       },
     ]);
   });

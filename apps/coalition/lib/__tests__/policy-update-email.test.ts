@@ -193,6 +193,40 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.html).not.toContain("border-top:1px solid rgba(245,168,0,0.34)");
   });
 
+  it("uses authored Word dimensions for DOCX images instead of the compact pixel heuristic", () => {
+    if (!weeklyUpdate) throw new Error("Missing weekly update fixture");
+
+    const built = buildPolicyUpdateEmail(
+      {
+        ...weeklyUpdate,
+        sourceFormat: "docx",
+        sections: [
+          {
+            heading: "Policy development",
+            body: [],
+            images: [
+              {
+                src: "/api/policy-updates/example/assets/docx-image-04.png",
+                alt: "Word-sized policy screenshot",
+                width: 470,
+                height: 499,
+                displayWidthPt: 300.5581102362205,
+                displayHeightPt: 319.11818897637795,
+              },
+            ],
+          },
+        ],
+      },
+      { email: "paul@example.com", firstName: "Paul" },
+      "https://coalition.pgpz.org",
+      { emailAssetMaterializationId: "materialization-1" },
+    );
+
+    expect(built.html).toContain('width="401" height="425"');
+    expect(built.html).toContain("max-width:401px");
+    expect(built.html).not.toContain("max-width:240px");
+  });
+
   it("renders policy update tables in HTML and text email bodies", () => {
     if (!specialUpdate) throw new Error("Missing special update fixture");
 

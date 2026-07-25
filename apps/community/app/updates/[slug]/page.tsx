@@ -10,7 +10,11 @@ import {
 import { getMemberAccess } from "@/lib/member-access";
 import { isEffectiveAdmin } from "@/lib/admin/member-preview";
 import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
-import { isPolicyUpdateRelevantPostImage, policyUpdateImageHref } from "@/lib/policy-update-images";
+import {
+  isPolicyUpdateRelevantPostImage,
+  policyUpdateImageDisplaySizePx,
+  policyUpdateImageHref,
+} from "@/lib/policy-update-images";
 import { isPgpzProgressSummarySection, progressSummaryItems } from "@/lib/policy-update-progress-summary";
 import {
   isPolicyUpdateActionItemSection,
@@ -232,27 +236,47 @@ function PolicyUpdateSectionImages({
     <div className={isSocial ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
       {images.map((image) => {
         const href = policyUpdateImageHref(image, imageHrefFallback);
+        const sourceDisplaySize = policyUpdateImageDisplaySizePx(image);
+        const usesSourceDisplayWidth = typeof sourceDisplaySize.width === "number";
         const isCompact =
+          !usesSourceDisplayWidth &&
           typeof image.width === "number" &&
           typeof image.height === "number" &&
           image.width <= 500 &&
           image.height <= 500;
+        const sourceFrameWidth = sourceDisplaySize.width
+          ? sourceDisplaySize.width + 26
+          : undefined;
+        const frameMaxWidth =
+          sourceFrameWidth && isSocial ? Math.min(sourceFrameWidth, 44 * 16) : sourceFrameWidth;
         return (
           <figure
             key={image.src}
             className={[
               "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] p-3",
               isSocial ? "mx-auto max-w-[44rem] bg-white" : "bg-[var(--brand-ice)]",
+              usesSourceDisplayWidth ? "w-full" : "",
               !isSocial && isCompact ? "max-w-xs" : "",
               !isSocial && !isCompact ? "sm:col-span-2" : "",
             ].join(" ")}
+            style={frameMaxWidth ? { maxWidth: `${frameMaxWidth}px` } : undefined}
           >
             {href ? (
               <a href={href} target="_blank" rel="noopener noreferrer" className="block">
-                <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+                <PolicyUpdateImageElement
+                  image={image}
+                  isCompact={isCompact}
+                  isSocial={isSocial}
+                  displayWidthPx={sourceDisplaySize.width}
+                />
               </a>
             ) : (
-              <PolicyUpdateImageElement image={image} isCompact={isCompact} isSocial={isSocial} />
+              <PolicyUpdateImageElement
+                image={image}
+                isCompact={isCompact}
+                isSocial={isSocial}
+                displayWidthPx={sourceDisplaySize.width}
+              />
             )}
           </figure>
         );
@@ -265,10 +289,12 @@ function PolicyUpdateImageElement({
   image,
   isCompact,
   isSocial,
+  displayWidthPx,
 }: {
   image: PolicyUpdateImage;
   isCompact: boolean;
   isSocial: boolean;
+  displayWidthPx?: number;
 }) {
   return (
     <img
@@ -280,6 +306,7 @@ function PolicyUpdateImageElement({
         "mx-auto h-auto w-full rounded-xl border border-slate-200 bg-white object-contain",
         isSocial ? "max-h-[38rem]" : isCompact ? "max-w-[15rem]" : "max-h-[34rem]",
       ].join(" ")}
+      style={displayWidthPx ? { maxWidth: `${displayWidthPx}px` } : undefined}
       loading="lazy"
     />
   );

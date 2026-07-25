@@ -668,6 +668,7 @@
       "lib/__tests__/policy-update-email.test.ts",
       "lib/__tests__/policy-update-generated-content.test.ts",
       "lib/__tests__/policy-update-generation.test.ts",
+      "lib/__tests__/policy-update-images.test.ts",
       "lib/__tests__/policy-update-markdown.test.ts",
       "lib/__tests__/policy-update-sections.test.ts",
       "lib/admin/policy-update-generation.ts",
