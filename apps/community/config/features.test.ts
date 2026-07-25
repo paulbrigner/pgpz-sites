@@ -1,0 +1,9 @@
+import { describe, expect, it } from "vitest";
+import { isFeatureEnabled, siteFeatures } from "./features";
+
+describe("Community feature registration", () => {
+  it("enables the managed public file library", () => {
+    expect(siteFeatures.publicFiles).toBe(true);
+    expect(isFeatureEnabled("publicFiles")).toBe(true);
+  });
+});

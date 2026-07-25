@@ -11,3 +11,8 @@ App-independent configuration and membership contracts for PGPZ sites.
 
 Applications own their branding, legal identity, environment mapping,
 infrastructure clients, membership behavior, and seed content.
+
+Branded applications that have not yet adopted a complete `SiteConfig` use
+`defineFeatureSwitches` for the same registered feature names. This keeps
+enablement explicit per site while allowing storage, metadata, authorization,
+and presentation adapters to remain application-owned.

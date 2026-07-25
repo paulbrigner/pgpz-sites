@@ -55,7 +55,13 @@ const siteForMode = (membershipMode: MembershipAdapter["mode"]) =>
     navigation: [],
     legal: { entityName: "Reference", termsUrl: "/terms", privacyUrl: "/privacy" },
     membershipMode,
-    features: { updates: false, newsletters: false, memberDirectory: false, zecShelf: false },
+    features: {
+      updates: false,
+      newsletters: false,
+      memberDirectory: false,
+      zecShelf: false,
+      publicFiles: false,
+    },
   });
 
 describe("ServerConfig", () => {

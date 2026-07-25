@@ -26,7 +26,8 @@ level rather than app level when preview branches exist.
   Amplify app default. Community and Coalition use distinct roles.
 - The role permits only the application's primary DynamoDB table and indexes,
   its isolated background-jobs table and indexes, send-only access to its
-  background-jobs SQS queue, the configured policy-update S3 prefix, and `ses:SendEmail` plus
+  background-jobs SQS queue, the configured policy-update and public-files S3
+  prefixes, and `ses:SendEmail` plus
   `ses:SendRawEmail` for the selected SES identity and exact From address.
   Nodemailer's SESv2 transport generates a MIME message and AWS authorizes that
   raw-content path with `ses:SendRawEmail`. Coalition additionally receives the smaller
@@ -51,6 +52,7 @@ node tooling/provision-amplify-compute-role.mjs \
   --application community \
   --account-id 860091316962 \
   --bucket COMMUNITY_BUCKET \
+  --public-files-prefix public-files \
   --ses-identity-arn arn:aws:ses:us-east-1:860091316962:identity/pgpz.org \
   --from-address admin@pgpz.org
 
@@ -58,6 +60,7 @@ node tooling/provision-amplify-compute-role.mjs \
   --application coalition \
   --account-id 860091316962 \
   --bucket COALITION_BUCKET \
+  --public-files-prefix public-files \
   --ses-identity-arn arn:aws:ses:us-east-1:860091316962:identity/pgpz.org \
   --from-address no-reply@coalition.pgpz.org
 ```

@@ -578,6 +578,46 @@
         "sha256": "b0bbfeb2c5e764e1c72687b2ed1ab97129e661d15646cead7854e5eff7cb5b27"
       },
       {
+        "path": "app/api/admin/public-files/route.test.ts",
+        "sha256": "bd3629775e71ff4ed7ea9f54e3327f89d18f33df6776dbe05ab68581336a1758"
+      },
+      {
+        "path": "app/api/admin/public-files/route.ts",
+        "sha256": "1968d0b89c1f89cc244705456d8f5d3289d3156a6ceb5f3b3afd43b403451b6d"
+      },
+      {
+        "path": "app/resources/[...path]/route.test.ts",
+        "sha256": "9a0a598537448c7e52f3caaf70e4f43442122ada0ed63af412e456c2ab8edd10"
+      },
+      {
+        "path": "app/resources/[...path]/route.ts",
+        "sha256": "6ae29832dd2185ce7be0f08aeb39796ce40ad7d7b2ab5166e24299c1bb83ce7e"
+      },
+      {
+        "path": "components/admin/PublicFileLibraryPanel.tsx",
+        "sha256": "447ed35d5753d1fa2964e945f99db6983ff92b8d3e267829703de2cd601add32"
+      },
+      {
+        "path": "lib/__tests__/admin-public-files.test.ts",
+        "sha256": "6ffa7e7e5593fa346c25122f058a346f3c1272c7d0ebc91b2e954bd716f81a64"
+      },
+      {
+        "path": "lib/__tests__/public-files.test.ts",
+        "sha256": "45ec61e80cbc6ba7aa33f81eda0f20b246358c0ca99e3f8ced8c7dc21501a10b"
+      },
+      {
+        "path": "lib/admin/public-files.ts",
+        "sha256": "a89bc50bea14953775f6956fe2257264717f0647b3066aa0efdc90e3b6ea8875"
+      },
+      {
+        "path": "lib/public-file-access.ts",
+        "sha256": "fc1eff1557623004ead458593e078fe1e5a146fa17d9d368de409041dce91ef7"
+      },
+      {
+        "path": "lib/public-files.ts",
+        "sha256": "cd8ab9994a89a57c3dffcbc50dc1cebe6ed64ec8229b52e76d1a5c09e0fe816a"
+      },
+      {
         "path": "vitest.setup.ts",
         "sha256": "d3491cbf9cd3907ea827b7bbe18189c7486e2e665208333bce843ecbb1fb706f"
       }
@@ -598,6 +638,8 @@
       "app/terms/page.tsx",
       "components/admin/AdminShell.tsx",
       "components/legal/LegalDocumentPage.tsx",
+      "config/features.test.ts",
+      "config/features.ts",
       "docs/BETTER_AUTH_PARALLEL_MIGRATION.md",
       "docs/ux-enhancement-process.md",
       "lib/__tests__/newsletter-email.test.ts",
@@ -617,6 +659,7 @@
       ".github/copilot-instructions.md",
       "app/(auth)/signin/page.tsx",
       "app/admin/admin-client.tsx",
+      "app/admin/admin-console.test.tsx",
       "app/admin/admin-console.tsx",
       "app/api/admin/email/send/route.ts",
       {

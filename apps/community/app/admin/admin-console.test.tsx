@@ -4,8 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const briefingsEnabled = vi.hoisted(() => vi.fn());
+const featureEnabled = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/x-monitor-public", () => ({
   isCommunityXMonitorBriefingsEnabled: briefingsEnabled,
+}));
+vi.mock("@/config/features", () => ({
+  isFeatureEnabled: featureEnabled,
 }));
 vi.mock("./admin-client", () => ({ default: () => <div>User panel</div> }));
 vi.mock("@/components/admin/AccessLogPanel", () => ({ AccessLogPanel: () => <div>Access panel</div> }));
@@ -19,7 +23,10 @@ vi.mock("@/components/admin/PublicFileLibraryPanel", () => ({ PublicFileLibraryP
 import { AdminConsole } from "./admin-console";
 
 describe("admin console Topic Briefings integration", () => {
-  beforeEach(() => briefingsEnabled.mockReturnValue(true));
+  beforeEach(() => {
+    briefingsEnabled.mockReturnValue(true);
+    featureEnabled.mockReturnValue(true);
+  });
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -47,5 +54,13 @@ describe("admin console Topic Briefings integration", () => {
 
     await user.click(screen.getByRole("button", { name: /Public files/i }));
     expect(screen.getByText("Public file library panel")).toBeInTheDocument();
+  });
+
+  it("hides the public file library when the registered feature is off", () => {
+    featureEnabled.mockImplementation((feature: string) => feature !== "publicFiles");
+    render(<AdminConsole initialUpdates={[]} currentAdminId="admin-1" />);
+
+    expect(screen.queryByRole("button", { name: /Public files/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Public file library panel")).not.toBeInTheDocument();
   });
 });

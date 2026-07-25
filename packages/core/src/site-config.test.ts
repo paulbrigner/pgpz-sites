@@ -3,6 +3,7 @@ import {
   ConfigValidationError,
   MEMBERSHIP_MODES,
   SITE_FEATURES,
+  defineFeatureSwitches,
   defineSiteConfig,
   isSiteFeatureEnabled,
   parseSiteConfig,
@@ -41,6 +42,7 @@ const validInput = () => ({
     newsletters: false,
     memberDirectory: false,
     zecShelf: true,
+    publicFiles: false,
   },
 });
 
@@ -63,6 +65,25 @@ describe("SiteConfig", () => {
     const config = defineSiteConfig(validInput() as SiteConfig);
     expectTypeOf(config).toMatchTypeOf<SiteConfig>();
     expect(config.name).toBe("Reference Site");
+  });
+
+  it("registers reusable per-application feature switches", () => {
+    const features = defineFeatureSwitches({
+      updates: true,
+      newsletters: true,
+      memberDirectory: true,
+      zecShelf: false,
+      publicFiles: true,
+    });
+
+    expect(features.publicFiles).toBe(true);
+    expectTypeOf(features.publicFiles).toEqualTypeOf<true>();
+    expect(() =>
+      defineFeatureSwitches({
+        ...features,
+        publicFiles: "yes",
+      } as never),
+    ).toThrow("site.features.publicFiles must be a boolean");
   });
 
   it("filters feature-gated navigation without changing the configured list", () => {

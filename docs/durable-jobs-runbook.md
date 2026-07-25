@@ -198,7 +198,10 @@ bucket, SES identity, and exact envelope sender inputs. Its deterministic
 policy now adds only that application's job table/indexes and
 `sqs:SendMessage`/`sqs:SendMessageBatch` on that application's queue. Review
 the dry run before the guarded role update, then confirm no receive/delete
-actions and no sibling background-job ARN are present.
+actions and no sibling background-job ARN are present. Include
+`--public-files-prefix public-files` for every Community or Coalition
+reprovision so the full-policy replacement preserves the enabled managed
+public-file library's isolated S3 access.
 
 ## Application environment and release order
 

@@ -29,6 +29,7 @@ describe("reference site configuration", () => {
       newsletters: false,
       memberDirectory: false,
       zecShelf: true,
+      publicFiles: false,
     });
   });
 });

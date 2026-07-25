@@ -10,6 +10,7 @@ import { ReferralProgramPanel } from "@/components/admin/ReferralProgramPanel";
 import { SignupNotificationsPanel } from "@/components/admin/SignupNotificationsPanel";
 import { BriefingsAdminPanel } from "@/components/admin/BriefingsAdminPanel";
 import { PublicFileLibraryPanel } from "@/components/admin/PublicFileLibraryPanel";
+import { isFeatureEnabled } from "@/config/features";
 import type { PolicyUpdateSummary } from "@/lib/policy-updates";
 import { cn } from "@/lib/utils";
 import { isCommunityXMonitorBriefingsEnabled } from "@/lib/x-monitor-public";
@@ -87,9 +88,11 @@ const baseTabs: Array<{
 
 export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
-  const tabs = isCommunityXMonitorBriefingsEnabled()
-    ? baseTabs
-    : baseTabs.filter((tab) => tab.id !== "briefings");
+  const tabs = baseTabs.filter(
+    (tab) =>
+      (tab.id !== "briefings" || isCommunityXMonitorBriefingsEnabled()) &&
+      (tab.id !== "public-files" || isFeatureEnabled("publicFiles")),
+  );
 
   return (
     <div className="space-y-5">
@@ -135,7 +138,9 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
       {activeTab === "briefings" ? <BriefingsAdminPanel /> : null}
-      {activeTab === "public-files" ? <PublicFileLibraryPanel /> : null}
+      {activeTab === "public-files" && isFeatureEnabled("publicFiles") ? (
+        <PublicFileLibraryPanel />
+      ) : null}
       {activeTab === "access" ? <AccessLogPanel /> : null}
     </div>
   );

@@ -37,6 +37,7 @@ export const siteConfig = defineSiteConfig({
     newsletters: false,
     memberDirectory: false,
     zecShelf: true,
+    publicFiles: false,
   },
 });
 

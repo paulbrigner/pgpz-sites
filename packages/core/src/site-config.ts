@@ -20,6 +20,7 @@ export const SITE_FEATURES = [
   "newsletters",
   "memberDirectory",
   "zecShelf",
+  "publicFiles",
 ] as const;
 
 export type SiteFeature = (typeof SITE_FEATURES)[number];
@@ -101,7 +102,13 @@ function parseColors(value: unknown, issues: string[]): SiteColorTokens {
 function parseFeatures(value: unknown, issues: string[]): FeatureSwitches {
   if (!isRecord(value)) {
     issues.push("site.features must be an object");
-    return { updates: false, newsletters: false, memberDirectory: false, zecShelf: false };
+    return {
+      updates: false,
+      newsletters: false,
+      memberDirectory: false,
+      zecShelf: false,
+      publicFiles: false,
+    };
   }
   rejectUnknownKeys(value, SITE_FEATURES, "site.features", issues);
   return Object.fromEntries(
@@ -112,6 +119,20 @@ function parseFeatures(value: unknown, issues: string[]): FeatureSwitches {
       return [feature, value[feature] === true];
     }),
   ) as FeatureSwitches;
+}
+
+export function parseFeatureSwitches(input: unknown): FeatureSwitches {
+  const issues: string[] = [];
+  const parsed = parseFeatures(input, issues);
+  if (issues.length) throw new ConfigValidationError("FeatureSwitches", issues);
+  return parsed;
+}
+
+export function defineFeatureSwitches<const T extends FeatureSwitches>(
+  features: T,
+): T {
+  parseFeatureSwitches(features);
+  return features;
 }
 
 function parseNavigation(value: unknown, issues: string[]): SiteNavigationItem[] {

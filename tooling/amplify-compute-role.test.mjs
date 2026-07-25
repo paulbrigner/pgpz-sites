@@ -97,6 +97,7 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
     applicationName: "coalition",
     ...common,
     fromAddress: "no-reply@coalition.pgpz.org",
+    publicFilesPrefix: "public-files",
   });
   const sync = plan.permissionPolicy.Statement.find(
     (statement) => statement.Sid === "CommunityEntitlementSynchronization",
@@ -117,12 +118,19 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
     plan.backgroundJobsQueueArn,
     "arn:aws:sqs:us-east-1:123456789012:pgpz-coalition-background-jobs",
   );
-  assert.equal(
-    plan.permissionPolicy.Statement.some(
-      (statement) => statement.Sid === "ManagePublicFileObjects",
-    ),
-    false,
+  const listPublicFiles = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ListPublicFileObjects",
   );
+  assert.deepEqual(listPublicFiles.Condition.StringLike["s3:prefix"], [
+    "public-files",
+    "public-files/*",
+  ]);
+  const managePublicFiles = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ManagePublicFileObjects",
+  );
+  assert.deepEqual(managePublicFiles.Resource, [
+    "arn:aws:s3:::pgpz-content/public-files/*",
+  ]);
 });
 
 test("rejects a display-name From value in the IAM condition", () => {

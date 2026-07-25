@@ -32,6 +32,7 @@ describe("disabled reference feature surface", () => {
     ["updates", "updates"],
     ["newsletters", "newsletters"],
     ["memberDirectory", "members"],
+    ["publicFiles", "resources"],
   ] as const)("does not create a route for disabled %s", (feature, route) => {
     expect(referenceSiteConfig.features[feature]).toBe(false);
     expect(existsSync(path.join(appRoot, route))).toBe(false);

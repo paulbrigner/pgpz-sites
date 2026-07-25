@@ -55,7 +55,7 @@ details in a module that can enter a client bundle.
 - A typed membership mode: `admin-approved`, `invitation-only`, or
   `externally-managed`.
 - Typed feature switches for updates, newsletters, member directory, ZEC Shelf,
-  and later feature packages.
+  the managed public-file library, and later feature packages.
 - Package-specific presentation configuration, such as ZEC Shelf labels and
   categories, without catalog seed records.
 

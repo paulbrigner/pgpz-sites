@@ -19,10 +19,12 @@ export {
   MEMBERSHIP_MODES,
   SITE_FEATURES,
   assertSiteConfig,
+  defineFeatureSwitches,
   defineSiteConfig,
   isMembershipMode,
   isSiteFeature,
   isSiteFeatureEnabled,
+  parseFeatureSwitches,
   parseSiteConfig,
   visibleSiteNavigation,
 } from "./site-config";
