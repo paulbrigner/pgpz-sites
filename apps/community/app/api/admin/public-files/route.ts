@@ -25,6 +25,7 @@ import {
   normalizePublicFileAccess,
   publicFileContentType,
   publicFileExtension,
+  publicFilePathIsReserved,
   publicFileTitleFromPath,
   PublicFileValidationError,
 } from "@/lib/public-files";
@@ -155,6 +156,12 @@ async function prepareUpload(body: any) {
   const normalized = safePublicPath(bodyText(body, "path"));
   if (normalized.path === null) return normalized.response;
   const path = normalized.path;
+  if (publicFilePathIsReserved(path)) {
+    return NextResponse.json(
+      { error: "That resource path is reserved by a legacy site file." },
+      { status: 409 },
+    );
+  }
   const originalFileName = safeOriginalFileName(
     bodyText(body, "fileName"),
     path.split("/").pop() || "download",
@@ -230,6 +237,12 @@ async function completeUpload(body: any, adminUserId: string | null) {
   const normalized = safePublicPath(bodyText(body, "path"));
   if (normalized.path === null) return normalized.response;
   const path = normalized.path;
+  if (publicFilePathIsReserved(path)) {
+    return NextResponse.json(
+      { error: "That resource path is reserved by a legacy site file." },
+      { status: 409 },
+    );
+  }
   const versionId = bodyText(body, "versionId");
   const s3Key = bodyText(body, "s3Key");
   const expectedKey = versionId ? publicFileObjectKey(path, versionId) : "";

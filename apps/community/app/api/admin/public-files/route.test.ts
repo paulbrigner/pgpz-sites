@@ -145,6 +145,22 @@ describe("public file admin API", () => {
     expect(mocks.getSignedUrl).not.toHaveBeenCalled();
   });
 
+  it("refuses paths that are still owned by legacy static resources", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(
+      jsonRequest("POST", {
+        action: "prepareUpload",
+        path: "2026-06-08-weekly-policy-memo.pdf",
+        fileName: "2026-06-08-weekly-policy-memo.pdf",
+        fileSize: 100,
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/reserved/i);
+    expect(mocks.getPublicFileRecord).not.toHaveBeenCalled();
+    expect(mocks.getSignedUrl).not.toHaveBeenCalled();
+  });
+
   it("completes a PDF upload only after storage and signature validation", async () => {
     mocks.getPublicFileRecord.mockResolvedValue(null);
     mocks.send

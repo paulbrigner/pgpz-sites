@@ -14,6 +14,13 @@ const PUBLIC_FILE_CONTENT_TYPES = {
   ".zip": "application/zip",
 } as const;
 
+const RESERVED_PUBLIC_FILE_PATHS = new Set([
+  "1h2026-us-digital-asset-policy-cover.png",
+  "1h2026-us-digital-asset-policy.pdf",
+  "2026-06-08-weekly-policy-memo-cover.png",
+  "2026-06-08-weekly-policy-memo.pdf",
+]);
+
 export type PublicFileStatus = "active" | "archived";
 export type PublicFileAccess = "public" | "members";
 
@@ -135,6 +142,10 @@ export function normalizePublicFilePath(rawValue: string) {
 
 export function publicFilePathForFileName(fileName: string) {
   return normalizePublicFilePath(fileName);
+}
+
+export function publicFilePathIsReserved(path: string) {
+  return RESERVED_PUBLIC_FILE_PATHS.has(normalizePublicFilePath(path));
 }
 
 export function publicFileTitleFromPath(path: string) {

@@ -4,6 +4,7 @@ import {
   normalizePublicFilePath,
   publicFileContentType,
   publicFileIsInline,
+  publicFilePathIsReserved,
   publicFileTitleFromPath,
   publicFileUrl,
 } from "@/lib/public-files";
@@ -52,5 +53,15 @@ describe("public file paths", () => {
     expect(normalizePublicFileAccess("public")).toBe("public");
     expect(normalizePublicFileAccess("members")).toBe("members");
     expect(normalizePublicFileAccess("unknown")).toBe("public");
+  });
+
+  it("reserves the remaining code-owned legacy resource paths", () => {
+    expect(
+      publicFilePathIsReserved("/resources/2026-06-08-weekly-policy-memo.pdf"),
+    ).toBe(true);
+    expect(publicFilePathIsReserved("1H2026-us-digital-asset-policy-cover.png")).toBe(
+      true,
+    );
+    expect(publicFilePathIsReserved("statements-for-the-record/new.pdf")).toBe(false);
   });
 });
