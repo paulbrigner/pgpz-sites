@@ -14,21 +14,30 @@ const mocks = vi.hoisted(() => ({
   listPolicyUpdateRecipients: vi.fn(),
   markNewsletterTrackingSent: vi.fn(),
   materializePolicyUpdateEmailAssets: vi.fn(),
+  parsePolicyUpdateDocx: vi.fn(),
+  policyUpdateAssetObjectKey: vi.fn(),
+  policyUpdatePdfObjectKey: vi.fn(),
+  policyUpdateToSummary: vi.fn(),
   publishUploadedPolicyUpdate: vi.fn(),
   recordEmailEvent: vi.fn(),
   recordPolicyUpdateSendRun: vi.fn(),
+  renderPolicyUpdatePdf: vi.fn(),
   requireAdminSession: vi.fn(),
+  s3Send: vi.fn(),
+  saveGeneratedPolicyUpdateContent: vi.fn(),
+  savePolicyUpdateGenerationFailure: vi.fn(),
   sendMail: vi.fn(),
+  uploadedPolicyUpdateToPolicyUpdate: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 
 vi.mock("@pgpz/core/server", () => ({
-  parsePolicyUpdateDocx: vi.fn(),
+  parsePolicyUpdateDocx: mocks.parsePolicyUpdateDocx,
   policyUpdateArtifactPrefix: vi.fn(),
-  policyUpdateAssetObjectKey: vi.fn(),
-  policyUpdatePdfObjectKey: vi.fn(),
-  renderPolicyUpdatePdf: vi.fn(),
+  policyUpdateAssetObjectKey: mocks.policyUpdateAssetObjectKey,
+  policyUpdatePdfObjectKey: mocks.policyUpdatePdfObjectKey,
+  renderPolicyUpdatePdf: mocks.renderPolicyUpdatePdf,
   validatePolicyUpdateDocx: vi.fn(),
 }));
 
@@ -96,14 +105,14 @@ vi.mock("@/lib/admin/policy-update-uploads", () => ({
   getPolicyUpdateUploadBucket: vi.fn(),
   getUploadedPolicyUpdateRecord: mocks.getUploadedPolicyUpdateRecord,
   normalizePolicyUpdateCategory: vi.fn(),
-  policyUpdateToSummary: vi.fn(),
+  policyUpdateToSummary: mocks.policyUpdateToSummary,
   policyUpdateUploadObjectKey: vi.fn(),
   publishUploadedPolicyUpdate: mocks.publishUploadedPolicyUpdate,
-  saveGeneratedPolicyUpdateContent: vi.fn(),
-  savePolicyUpdateGenerationFailure: vi.fn(),
+  saveGeneratedPolicyUpdateContent: mocks.saveGeneratedPolicyUpdateContent,
+  savePolicyUpdateGenerationFailure: mocks.savePolicyUpdateGenerationFailure,
   saveUploadedPolicyUpdate: vi.fn(),
   unpublishUploadedPolicyUpdate: vi.fn(),
-  uploadedPolicyUpdateToPolicyUpdate: vi.fn(),
+  uploadedPolicyUpdateToPolicyUpdate: mocks.uploadedPolicyUpdateToPolicyUpdate,
 }));
 
 vi.mock("@/lib/admin/policy-update-generation", () => ({
@@ -120,7 +129,7 @@ vi.mock("@/lib/policy-update-markdown", () => ({
 }));
 
 vi.mock("@/lib/s3", () => ({
-  s3Client: { send: vi.fn() },
+  s3Client: { send: mocks.s3Send },
 }));
 
 const update = {
@@ -185,6 +194,7 @@ describe("admin policy update sends", () => {
       duplicate: false,
       job: { id: "background-job-1", status: "queued" },
     });
+    mocks.s3Send.mockResolvedValue({});
   });
 
   it("queues member sends and does not construct the mail transport", async () => {
@@ -277,5 +287,72 @@ describe("admin policy update sends", () => {
     });
     expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
     expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
+  });
+
+  it("keeps upload summary metadata authoritative during DOCX generation", async () => {
+    const uploadRecord = {
+      ...update,
+      summary: "Editorial summary supplied during upload.",
+      emailPreheader: "Editorial preheader supplied during upload.",
+      sourceFormat: "docx",
+      s3Bucket: "policy-update-bucket",
+      s3Key: "policy-updates/uploads/policy-update-1/source.docx",
+      fileName: "policy-update.docx",
+      visibilityStatus: "draft",
+      generationStatus: "not_started",
+      pdfS3Key: null,
+    };
+    const generated = {
+      title: "Generated document title",
+      shortTitle: "Generated title",
+      summary: "Parser-derived summary that must not be displayed.",
+      emailPreheader: "Parser-derived preheader that must not be displayed.",
+      emailSubject: "Generated subject",
+      coverImage: "",
+      keyTakeaways: ["Takeaway"],
+      actionItems: ["Action"],
+      sections: [],
+      assets: [],
+      sourceText: "Document source text",
+      sourceTextSha256: "a".repeat(64),
+    };
+    const pdf = Buffer.from("%PDF-1.7 generated");
+
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue(uploadRecord);
+    mocks.s3Send
+      .mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: async () => Array.from(Buffer.from("DOCX source")),
+        },
+      })
+      .mockResolvedValueOnce({});
+    mocks.parsePolicyUpdateDocx.mockResolvedValue(generated);
+    mocks.policyUpdatePdfObjectKey.mockReturnValue(
+      "policy-updates/uploads/policy-update-1/resource.pdf",
+    );
+    mocks.renderPolicyUpdatePdf.mockResolvedValue(pdf);
+    mocks.saveGeneratedPolicyUpdateContent.mockResolvedValue({
+      ...uploadRecord,
+      generationStatus: "generated",
+    });
+    mocks.uploadedPolicyUpdateToPolicyUpdate.mockReturnValue(update);
+    mocks.policyUpdateToSummary.mockReturnValue(update);
+
+    const response = await postPolicyUpdate({
+      action: "generateContent",
+      slug: update.slug,
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.renderPolicyUpdatePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: uploadRecord.summary,
+        emailPreheader: uploadRecord.emailPreheader,
+      }),
+      expect.any(Object),
+    );
+    const saved = mocks.saveGeneratedPolicyUpdateContent.mock.calls[0]?.[0];
+    expect(saved).not.toHaveProperty("summary");
+    expect(saved).not.toHaveProperty("emailPreheader");
   });
 });

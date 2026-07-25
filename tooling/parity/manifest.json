@@ -63,11 +63,11 @@
       },
       {
         "path": "app/api/admin/policy-updates/route.test.ts",
-        "sha256": "92d2d0ef2a3bd11d2a8a5abcce75f854822d826c1596dea803d8f7c7948a6fab"
+        "sha256": "b83b6ab44be949282631871227848457c309b9c4d84d5b4186ea5870178b651d"
       },
       {
         "path": "app/api/admin/policy-updates/route.ts",
-        "sha256": "c51d979e998f10655b8d69ffb85aa06ad70ad9fd63bf8ed9d6494ece07aaed7c"
+        "sha256": "9c7b86b37911773a6c664cb4e13db17dfe793f8e27444b4fe6ca0d16c287913e"
       },
       {
         "path": "app/api/admin/signup-notification-preferences/route.test.ts",

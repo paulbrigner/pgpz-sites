@@ -557,6 +557,11 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
           assetBasePath: `/api/policy-updates/${encodeURIComponent(record.slug)}/assets`,
         })
       : await generatePolicyUpdatePageContent(record, bytes);
+    const presentationContent = {
+      ...generated,
+      summary: record.summary,
+      emailPreheader: record.emailPreheader,
+    };
     const pdfS3Key = isDocx ? policyUpdatePdfObjectKey(record.s3Key) : record.s3Key;
     let pdfBytes = bytes;
     if (isDocx) {
@@ -572,7 +577,7 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
         );
       }
       const brandName = /coalition\./i.test(SITE_URL) ? "PGPZ Coalition" : "PGPZ Community";
-      pdfBytes = await renderPolicyUpdatePdf(generated, {
+      pdfBytes = await renderPolicyUpdatePdf(presentationContent, {
         brandName,
         categoryLabel: record.category === "special" ? "Special Update" : "Weekly Policy Memo",
         portalUrl: `${SITE_URL.replace(/\/+$/, "")}/updates/${record.slug}`,
@@ -595,11 +600,9 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       title: generated.title,
       shortTitle: generated.shortTitle,
       coverImage: generated.coverImage,
-      summary: generated.summary,
       emailSubject: isDocx
         ? policyUpdateEmailSubjectForTitle(record.category, generated.title)
         : generated.emailSubject,
-      emailPreheader: generated.emailPreheader,
       keyTakeaways: generated.keyTakeaways,
       actionItems: generated.actionItems,
       sections: generated.sections,

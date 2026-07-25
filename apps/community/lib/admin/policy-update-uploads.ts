@@ -115,9 +115,7 @@ export type SaveGeneratedPolicyUpdateContentInput = {
   title?: string;
   shortTitle?: string;
   coverImage?: string;
-  summary: string;
   emailSubject?: string;
-  emailPreheader: string;
   keyTakeaways: string[];
   actionItems: string[];
   sections: PolicyUpdateSection[];
@@ -645,9 +643,7 @@ export async function saveGeneratedPolicyUpdateContent(
     UpdateExpression: [
       "SET #title = :title",
       "#shortTitle = :shortTitle",
-      "#summary = :summary",
       "#emailSubject = :emailSubject",
-      "#emailPreheader = :emailPreheader",
       "#coverImage = :coverImage",
       "#keyTakeaways = :keyTakeaways",
       "#actionItems = :actionItems",
@@ -668,9 +664,7 @@ export async function saveGeneratedPolicyUpdateContent(
     ExpressionAttributeNames: {
       "#title": "title",
       "#shortTitle": "shortTitle",
-      "#summary": "summary",
       "#emailSubject": "emailSubject",
-      "#emailPreheader": "emailPreheader",
       "#coverImage": "coverImage",
       "#keyTakeaways": "keyTakeaways",
       "#actionItems": "actionItems",
@@ -691,9 +685,7 @@ export async function saveGeneratedPolicyUpdateContent(
     ExpressionAttributeValues: {
       ":title": title,
       ":shortTitle": shortTitle,
-      ":summary": input.summary,
       ":emailSubject": emailSubject,
-      ":emailPreheader": input.emailPreheader,
       ":coverImage": coverImage,
       ":keyTakeaways": input.keyTakeaways,
       ":actionItems": input.actionItems,

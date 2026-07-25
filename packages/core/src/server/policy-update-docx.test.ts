@@ -14,6 +14,13 @@ import {
 async function exampleDocx() {
   const zip = new JSZip();
   zip.file(
+    "docProps/app.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+        <Pages>1</Pages>
+      </Properties>`,
+  );
+  zip.file(
     "[Content_Types].xml",
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -144,6 +151,44 @@ async function exampleDocxWithoutSummaryWithImage() {
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
+async function exampleDocxWithReusedImageSizes() {
+  const zip = await JSZip.loadAsync(await exampleDocxWithoutSummaryWithImage());
+  const documentXml = await zip.file("word/document.xml")!.async("string");
+  const imageParagraph = documentXml.match(
+    /<w:p><w:r><w:drawing>[\s\S]*?<\/w:drawing><\/w:r><\/w:p>/,
+  )?.[0];
+  if (!imageParagraph) throw new Error("Expected an image paragraph in the fixture.");
+  zip.file(
+    "word/document.xml",
+    documentXml.replace(
+      imageParagraph,
+      `${imageParagraph}${imageParagraph.replaceAll("9525", "19050")}`,
+    ),
+  );
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
+async function exampleDocxWithPageBreakMarkers() {
+  const zip = await JSZip.loadAsync(await exampleDocx());
+  const documentXml = await zip.file("word/document.xml")!.async("string");
+  zip.file(
+    "word/document.xml",
+    documentXml
+      .replace(
+        /(<w:p><w:r><w:rPr><w:b\/><\/w:rPr><w:t>Policy Development Heading<\/w:t><\/w:r><\/w:p>)/,
+        '<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:lastRenderedPageBreak/></w:r></w:p>$1',
+      )
+      .replace(
+        '<w:r><w:t xml:space="preserve">Read the </w:t></w:r>',
+        '<w:r><w:lastRenderedPageBreak/><w:t xml:space="preserve">Read the </w:t></w:r>',
+      ),
+  );
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
+const pdfPageCount = (pdf: Buffer) =>
+  pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)?.length || 0;
+
 describe("policy update DOCX pipeline", () => {
   it("validates and parses Word structure, direct bold headings, and hyperlinks", async () => {
     const bytes = await exampleDocx();
@@ -155,6 +200,8 @@ describe("policy update DOCX pipeline", () => {
     });
 
     expect(parsed.title).toBe("Weekly Policy Memo: Week of July 20, 2026");
+    expect(parsed.sourcePageCount).toBe(1);
+    expect(parsed.summary).toBe("A new PGPZ policy update is available.");
     expect(parsed.keyTakeaways).toEqual(["First takeaway."]);
     expect(parsed.actionItems).toEqual(["First action."]);
     expect(parsed.sections).toEqual([
@@ -181,6 +228,17 @@ describe("policy update DOCX pipeline", () => {
     ]);
   });
 
+  it("uses each Word display extent when the same image bytes are reused", async () => {
+    const parsed = await parsePolicyUpdateDocx(await exampleDocxWithReusedImageSizes(), {
+      assetBasePath: "/api/policy-updates/example/assets",
+    });
+
+    expect(parsed.sections[0].images).toEqual([
+      expect.objectContaining({ displayWidthPt: 0.75, displayHeightPt: 0.75 }),
+      expect.objectContaining({ displayWidthPt: 1.5, displayHeightPt: 1.5 }),
+    ]);
+  });
+
   it("retains section images when a DOCX does not include a summary table", async () => {
     const parsed = await parsePolicyUpdateDocx(
       await exampleDocxWithoutSummaryWithImage(),
@@ -197,8 +255,25 @@ describe("policy update DOCX pipeline", () => {
         {
           src: "/api/policy-updates/example/assets/docx-image-01.png",
           alt: "Source graphic",
+          displayWidthPt: 0.75,
+          displayHeightPt: 0.75,
         },
       ],
+    });
+  });
+
+  it("preserves and coalesces DOCX page-break markers on the next visible content", async () => {
+    const parsed = await parsePolicyUpdateDocx(await exampleDocxWithPageBreakMarkers(), {
+      assetBasePath: "/api/policy-updates/example/assets",
+    });
+
+    expect(parsed.sections[0].headingRuns?.[0]).toMatchObject({
+      text: "Policy Development Heading",
+      pageBreakBefore: true,
+    });
+    expect(parsed.sections[0].bodyRuns?.[0]?.[0]).toMatchObject({
+      text: "Read the ",
+      pageBreakBefore: true,
     });
   });
 
@@ -262,5 +337,8 @@ describe("policy update DOCX pipeline", () => {
 
     expect(pdf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
     expect(pdf.length).toBeGreaterThan(1_000);
+    // This compact fixture has no source page break. A footer overflow
+    // regression previously added an otherwise blank second page.
+    expect(pdfPageCount(pdf)).toBe(1);
   });
 });
