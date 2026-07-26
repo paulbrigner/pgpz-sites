@@ -72,6 +72,18 @@ export function PersonalHomeGrid({
   );
 }
 
+export function PersonalHomeColumn({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("grid content-start gap-5", className)}
+      {...props}
+    />
+  );
+}
+
 export function PersonalHomePanel({
   eyebrow,
   title,

@@ -8,6 +8,8 @@ import {
   NonProductionBanner,
   PersonalHome,
   PersonalHomeAction,
+  PersonalHomeColumn,
+  PersonalHomeGrid,
   PersonalHomeHeader,
   PersonalHomePanel,
   SectionHeading,
@@ -47,17 +49,22 @@ describe("shared UI primitives", () => {
           description="Your next useful actions."
           status={<span>Active member</span>}
         />
-        <PersonalHomePanel title="Start here">
-          <PersonalHomeAction
-            href="/updates/latest"
-            title="Read the latest update"
-            description="A current policy briefing."
-          />
-        </PersonalHomePanel>
+        <PersonalHomeGrid>
+          <PersonalHomeColumn aria-label="Policy column">
+            <PersonalHomePanel title="Start here">
+              <PersonalHomeAction
+                href="/updates/latest"
+                title="Read the latest update"
+                description="A current policy briefing."
+              />
+            </PersonalHomePanel>
+          </PersonalHomeColumn>
+        </PersonalHomeGrid>
       </PersonalHome>,
     );
 
     expect(screen.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
+    expect(screen.getByLabelText("Policy column")).toBeVisible();
     expect(screen.getByRole("heading", { level: 2, name: "Start here" })).toBeVisible();
     expect(screen.getByRole("link", { name: /Read the latest update/ })).toHaveAttribute(
       "href",
