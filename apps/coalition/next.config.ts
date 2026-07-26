@@ -4,7 +4,7 @@ import path from 'node:path';
 const nextConfig: NextConfig = {
   reactStrictMode: false,
   outputFileTracingRoot: path.join(process.cwd(), "../.."),
-  transpilePackages: ["@pgpz/core"],
+  transpilePackages: ["@pgpz/core", "@pgpz/ui"],
   serverExternalPackages: ["pdfkit"],
 };
 

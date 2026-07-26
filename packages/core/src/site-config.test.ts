@@ -38,6 +38,7 @@ const validInput = () => ({
   },
   membershipMode: "admin-approved",
   features: {
+    personalHome: false,
     updates: true,
     newsletters: false,
     memberDirectory: false,
@@ -69,6 +70,7 @@ describe("SiteConfig", () => {
 
   it("registers reusable per-application feature switches", () => {
     const features = defineFeatureSwitches({
+      personalHome: true,
       updates: true,
       newsletters: true,
       memberDirectory: true,
@@ -76,6 +78,7 @@ describe("SiteConfig", () => {
       publicFiles: true,
     });
 
+    expect(features.personalHome).toBe(true);
     expect(features.publicFiles).toBe(true);
     expectTypeOf(features.publicFiles).toEqualTypeOf<true>();
     expect(() =>

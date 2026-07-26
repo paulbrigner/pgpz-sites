@@ -4,6 +4,7 @@ import {
 } from "@pgpz/core";
 
 export const siteFeatures = defineFeatureSwitches({
+  personalHome: false,
   updates: true,
   newsletters: true,
   memberDirectory: true,

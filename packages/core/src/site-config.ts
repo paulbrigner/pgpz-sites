@@ -16,6 +16,7 @@ export const MEMBERSHIP_MODES = [
 export type MembershipMode = (typeof MEMBERSHIP_MODES)[number];
 
 export const SITE_FEATURES = [
+  "personalHome",
   "updates",
   "newsletters",
   "memberDirectory",
@@ -103,6 +104,7 @@ function parseFeatures(value: unknown, issues: string[]): FeatureSwitches {
   if (!isRecord(value)) {
     issues.push("site.features must be an object");
     return {
+      personalHome: false,
       updates: false,
       newsletters: false,
       memberDirectory: false,

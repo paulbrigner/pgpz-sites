@@ -15,6 +15,7 @@ const featuredPolicyUpdate = (update: NonNullable<ReturnType<typeof getPolicyUpd
   categoryLabel: update.categoryLabel,
   title: update.title,
   shortTitle: update.shortTitle,
+  publishedAt: update.publishedAt,
   summary: update.summary,
   emailPreheader: update.emailPreheader,
   coverImage: update.coverImage,

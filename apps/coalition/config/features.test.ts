@@ -7,6 +7,7 @@ import {
 describe("Coalition feature registration", () => {
   it("enables managed public files alongside Coalition's existing features", () => {
     expect(siteFeatures).toEqual({
+      personalHome: false,
       updates: true,
       newsletters: true,
       memberDirectory: true,

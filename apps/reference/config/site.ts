@@ -33,6 +33,7 @@ export const referenceSiteConfig = defineSiteConfig({
   },
   membershipMode: "externally-managed",
   features: {
+    personalHome: false,
     updates: false,
     newsletters: false,
     memberDirectory: false,
