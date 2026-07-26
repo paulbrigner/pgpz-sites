@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SecureLinkSubmitButton } from "@pgpz/ui";
 import { CheckCircle2, Gift, Mail } from "lucide-react";
 import {
   COMMUNITY_GUIDELINES_PATH,
@@ -393,10 +394,18 @@ function EmailSignIn({
               </>
             ) : null}
 
-            <Button className="w-full" type="submit" disabled={submitting || (isSignup && !legalAccepted)}>
-              <Mail className="h-4 w-4" />
-              {submitting ? "Sending..." : "Send secure link"}
-            </Button>
+            <div className="rounded-2xl border border-[rgba(245,168,0,0.3)] bg-[rgba(255,230,163,0.22)] p-3">
+              <SecureLinkSubmitButton
+                type="submit"
+                disabled={submitting || (isSignup && !legalAccepted)}
+              >
+                <Mail className="h-5 w-5" aria-hidden="true" />
+                {submitting ? "Sending..." : "Send secure link"}
+              </SecureLinkSubmitButton>
+              <p className="mt-2 text-center text-xs leading-5 text-slate-600">
+                We’ll email a one-time secure link. No password needed.
+              </p>
+            </div>
           </form>
         )}
 

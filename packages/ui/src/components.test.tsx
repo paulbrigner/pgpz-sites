@@ -12,6 +12,7 @@ import {
   PersonalHomeGrid,
   PersonalHomeHeader,
   PersonalHomePanel,
+  SecureLinkSubmitButton,
   SectionHeading,
 } from "./index";
 
@@ -27,6 +28,20 @@ describe("shared UI primitives", () => {
   it("preserves native button behavior", () => {
     render(<Button disabled>Unavailable</Button>);
     expect(screen.getByRole("button", { name: "Unavailable" })).toBeDisabled();
+  });
+
+  it("renders the secure-link completion action as a native submit button", () => {
+    render(
+      <SecureLinkSubmitButton type="submit" disabled>
+        Send secure link
+      </SecureLinkSubmitButton>,
+    );
+
+    expect(screen.getByRole("button", { name: "Send secure link" })).toHaveAttribute(
+      "type",
+      "submit",
+    );
+    expect(screen.getByRole("button", { name: "Send secure link" })).toBeDisabled();
   });
 
   it("composes labels and headings without prescribing app copy", () => {
