@@ -24,6 +24,14 @@ const sanitizeAuthCallback = (pathname: string | null, query: string | null) => 
   return query && query.length ? `${path}?${query}` : path;
 };
 
+const navHrefIsCurrent = (pathname: string | null, href: string) => {
+  if (!pathname || !href.startsWith("/")) return false;
+  const hrefPath = href.split(/[?#]/, 1)[0] || "/";
+  return hrefPath === "/"
+    ? pathname === "/"
+    : pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+};
+
 export function MainNav() {
   const { data: session, status, signOut } = useAppSession();
   const authenticated = status === "authenticated";
@@ -71,6 +79,8 @@ export function MainNav() {
     "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(245,168,0,0.34)] bg-[rgba(245,168,0,0.12)] text-white transition hover:border-[rgba(245,168,0,0.55)] hover:bg-[rgba(245,168,0,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)]";
   const mobileMenuItemClasses =
     "block w-full rounded-full border border-[rgba(245,168,0,0.28)] px-5 py-3 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-white/90 transition hover:border-[rgba(245,168,0,0.55)] hover:bg-[rgba(245,168,0,0.12)]";
+  const currentMenuItemClasses =
+    "border-[var(--zcash-gold)] bg-[var(--zcash-gold)] text-[var(--brand-ink)] shadow-[0_0_0_1px_rgba(255,255,255,0.16)] hover:border-[var(--zcash-gold-soft)] hover:bg-[var(--zcash-gold-soft)] hover:text-[var(--brand-ink)]";
 
   const mobileMenuItems = authenticated
     ? [
@@ -141,31 +151,31 @@ export function MainNav() {
         <NavigationMenu className="hidden items-center gap-2 lg:flex">
           <NavigationMenuList className="space-x-2">
             <NavigationMenuItem>
-              <NavigationMenuLink className={linkClasses} asChild>
-                <Link href="/">Home</Link>
+              <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/") && currentMenuItemClasses)} asChild>
+                <Link href="/" aria-current={navHrefIsCurrent(pathname, "/") ? "page" : undefined}>Home</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
 
             {authenticated ? (
               <NavigationMenuItem>
-                <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href="/updates">Updates</Link>
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/updates") && currentMenuItemClasses)} asChild>
+                  <Link href="/updates" aria-current={navHrefIsCurrent(pathname, "/updates") ? "page" : undefined}>Updates</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}
 
             {authenticated ? (
               <NavigationMenuItem>
-                <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href="/zec-shelf">ZEC Shelf</Link>
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/zec-shelf") && currentMenuItemClasses)} asChild>
+                  <Link href="/zec-shelf" aria-current={navHrefIsCurrent(pathname, "/zec-shelf") ? "page" : undefined}>ZEC Shelf</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}
 
             {authenticated && xMonitorEnabled && canAccessXMonitor ? (
               <NavigationMenuItem>
-                <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href="/x-monitor">
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/x-monitor") && currentMenuItemClasses)} asChild>
+                  <Link href="/x-monitor" aria-current={navHrefIsCurrent(pathname, "/x-monitor") ? "page" : undefined}>
                     <Activity className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                     X Monitor
                   </Link>
@@ -183,8 +193,8 @@ export function MainNav() {
 
             {authenticated ? (
               <NavigationMenuItem>
-                <NavigationMenuLink className={linkClasses} asChild>
-                  <Link href="/settings/profile">Profile</Link>
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/settings/profile") && currentMenuItemClasses)} asChild>
+                  <Link href="/settings/profile" aria-current={navHrefIsCurrent(pathname, "/settings/profile") ? "page" : undefined}>Profile</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}
@@ -193,7 +203,8 @@ export function MainNav() {
               <NavigationMenuItem>
                 <button
                   type="button"
-                  className={linkClasses}
+                  className={cn(linkClasses, navHrefIsCurrent(pathname, "/admin") && currentMenuItemClasses)}
+                  aria-current={navHrefIsCurrent(pathname, "/admin") ? "page" : undefined}
                   onClick={() => {
                     setNavLoading(true);
                     router.push("/admin");
@@ -279,9 +290,24 @@ export function MainNav() {
             >
               <div className="flex flex-col gap-2">
                 {mobileMenuItems.map((item) => {
+                  const current = "href" in item
+                    && typeof item.href === "string"
+                    && !("external" in item && item.external)
+                    && item.key !== "invite"
+                    && (item.key === "join"
+                      ? /^\/signin(?:\/|$)/.test(pathname || "") && searchParams?.get("reason") === "signup"
+                      : item.key === "signin"
+                        ? /^\/signin(?:\/|$)/.test(pathname || "") && searchParams?.get("reason") !== "signup"
+                        : navHrefIsCurrent(pathname, item.href));
                   if ("action" in item && item.action) {
                     return (
-                      <button key={item.key} type="button" className={mobileMenuItemClasses} onClick={item.action}>
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={cn(mobileMenuItemClasses, current && currentMenuItemClasses)}
+                        aria-current={current ? "page" : undefined}
+                        onClick={item.action}
+                      >
                         {item.label}
                       </button>
                     );
@@ -292,7 +318,8 @@ export function MainNav() {
                       href={item.href}
                       target={item.external ? "_blank" : undefined}
                       rel={item.external ? "noopener noreferrer" : undefined}
-                      className={mobileMenuItemClasses}
+                      className={cn(mobileMenuItemClasses, current && currentMenuItemClasses)}
+                      aria-current={current ? "page" : undefined}
                       onClick={closeMobileMenu}
                     >
                       {item.label}
