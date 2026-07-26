@@ -56,6 +56,7 @@ const siteForMode = (membershipMode: MembershipAdapter["mode"]) =>
     legal: { entityName: "Reference", termsUrl: "/terms", privacyUrl: "/privacy" },
     membershipMode,
     features: {
+      personalHome: false,
       updates: false,
       newsletters: false,
       memberDirectory: false,

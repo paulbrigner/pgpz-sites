@@ -25,6 +25,7 @@ describe("reference site configuration", () => {
 
   it("keeps every branded production feature off by default", () => {
     expect(referenceSiteConfig.features).toEqual({
+      personalHome: false,
       updates: false,
       newsletters: false,
       memberDirectory: false,

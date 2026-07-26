@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../../packages/ui/src";
 @source "../../../packages/zec-shelf/src";
 
 :root {
@@ -37,6 +38,27 @@
     color: #ffffff;
     box-shadow: 0 30px 60px -32px rgba(30, 30, 30, 0.58);
     border: 1px solid rgba(245, 168, 0, 0.26);
+  }
+
+  .community-personal-home__header {
+    position: relative;
+    overflow: hidden;
+    background: var(--hero-sheen);
+  }
+
+  .community-personal-home__header::after {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 82% 20%, rgba(245, 168, 0, 0.24), transparent 32%),
+      linear-gradient(140deg, rgba(255, 255, 255, 0.08), transparent 54%);
+    content: "";
+    pointer-events: none;
+  }
+
+  .community-personal-home__header > * {
+    position: relative;
+    z-index: 1;
   }
 
   .community-hero__frame {

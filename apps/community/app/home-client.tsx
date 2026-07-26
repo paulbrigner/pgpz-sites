@@ -11,9 +11,12 @@ import {
   CommunityHero,
   CommunityMemberResources,
   CommunityPillars,
+  type CommunityFeaturedPolicyUpdate,
   type CommunityHeroFeature,
   type CommunityMemberResource,
 } from "@/components/home/CommunityHomeSections";
+import { CommunityPersonalHome } from "@/components/home/CommunityPersonalHome";
+import { isFeatureEnabled } from "@/config/features";
 import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 import { useAppSession } from "@/lib/use-app-session";
 import {
@@ -40,17 +43,6 @@ type XChallenge = {
   challenge: string;
   expiresAt: string;
   suggestedPost: string;
-};
-
-type FeaturedPolicyUpdate = {
-  slug: string;
-  categoryLabel: string;
-  title: string;
-  shortTitle: string;
-  summary: string;
-  emailPreheader: string;
-  coverImage: string;
-  portalPath: string;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -83,7 +75,7 @@ const buildIntentUrl = (text: string) =>
 export default function HomeClient({
   featuredPolicyUpdates,
 }: {
-  featuredPolicyUpdates: FeaturedPolicyUpdate[];
+  featuredPolicyUpdates: CommunityFeaturedPolicyUpdate[];
 }) {
   const { data: session, status, update } = useAppSession();
   const searchParams = useSearchParams();
@@ -158,6 +150,7 @@ export default function HomeClient({
   const isMember = activeFromSession || activeFromStatus;
   const xMonitorEnabled = isCommunityXMonitorEnabled();
   const xMonitorBriefingsEnabled = isCommunityXMonitorBriefingsEnabled();
+  const personalHomeEnabled = isFeatureEnabled("personalHome");
   const showOnboardingFirst = authenticated && !isMember;
   const verifiedAt =
     proofStatus?.membershipVerifiedAt || sessionUser?.membershipVerifiedAt || null;
@@ -382,7 +375,7 @@ export default function HomeClient({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5">
-      {!showOnboardingFirst ? (
+      {!showOnboardingFirst && !(isMember && personalHomeEnabled) ? (
         <CommunityHero
           authenticated={authenticated}
           signupHref={signupHref}
@@ -440,6 +433,17 @@ export default function HomeClient({
         </section>
       ) : (
         <>
+          {isMember && personalHomeEnabled ? (
+            <CommunityPersonalHome
+              displayName={displayName}
+              memberSince={formatMemberSince(verifiedAt)}
+              updates={featuredPolicyUpdates}
+              xMonitorEnabled={xMonitorEnabled}
+              xMonitorBriefingsEnabled={xMonitorBriefingsEnabled}
+            />
+          ) : null}
+
+          {!isMember || !personalHomeEnabled ? (
           <section className={isMember ? "" : "grid gap-5 lg:grid-cols-[1fr_0.8fr]"}>
             <div className="glass-surface p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -601,8 +605,9 @@ export default function HomeClient({
               </div>
             </aside> : null}
           </section>
+          ) : null}
 
-          {isMember ? (
+          {isMember && !personalHomeEnabled ? (
             <CommunityMemberResources
               resources={memberResources}
               xMonitorEnabled={xMonitorEnabled}
@@ -610,7 +615,9 @@ export default function HomeClient({
             />
           ) : null}
 
-          <CommunityPillars resources={memberResources} />
+          {!isMember || !personalHomeEnabled ? (
+            <CommunityPillars resources={memberResources} />
+          ) : null}
 
         </>
       )}

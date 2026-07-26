@@ -25,6 +25,7 @@ const update = (slug: string, title: string, category: "weekly" | "special" = "s
   categoryLabel: category === "weekly" ? "Weekly Policy Memo" : "Special Update",
   title,
   shortTitle: title,
+  publishedAt: "2026-07-01",
   summary: `${title} summary`,
   emailPreheader: `${title} preheader`,
   coverImage: `/${slug}.png`,

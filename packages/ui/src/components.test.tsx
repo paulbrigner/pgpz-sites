@@ -6,6 +6,10 @@ import {
   Button,
   durableRequestIdempotency,
   NonProductionBanner,
+  PersonalHome,
+  PersonalHomeAction,
+  PersonalHomeHeader,
+  PersonalHomePanel,
   SectionHeading,
 } from "./index";
 
@@ -32,6 +36,33 @@ describe("shared UI primitives", () => {
     );
     expect(screen.getByText("Ready")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Neutral by design" })).toBeVisible();
+  });
+
+  it("composes a brand-neutral personal home with accessible landmarks and actions", () => {
+    render(
+      <PersonalHome>
+        <PersonalHomeHeader
+          eyebrow="Member home"
+          title="Welcome back"
+          description="Your next useful actions."
+          status={<span>Active member</span>}
+        />
+        <PersonalHomePanel title="Start here">
+          <PersonalHomeAction
+            href="/updates/latest"
+            title="Read the latest update"
+            description="A current policy briefing."
+          />
+        </PersonalHomePanel>
+      </PersonalHome>,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Welcome back" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 2, name: "Start here" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /Read the latest update/ })).toHaveAttribute(
+      "href",
+      "/updates/latest",
+    );
   });
 
   it("announces durable progress and makes delivery uncertainty explicit", () => {

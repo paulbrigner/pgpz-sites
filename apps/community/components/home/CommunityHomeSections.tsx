@@ -13,6 +13,18 @@ export type CommunityHeroFeature = {
   imageFit: string;
 };
 
+export type CommunityFeaturedPolicyUpdate = {
+  slug: string;
+  categoryLabel: string;
+  title: string;
+  shortTitle: string;
+  summary: string;
+  emailPreheader: string;
+  coverImage: string;
+  portalPath: string;
+  publishedAt: string;
+};
+
 export type CommunityMemberResource = {
   href: string;
   label: string;
