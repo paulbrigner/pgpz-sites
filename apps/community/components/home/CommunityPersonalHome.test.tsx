@@ -72,6 +72,17 @@ describe("CommunityPersonalHome", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Welcome back, Paul." })).toBeVisible();
     expect(screen.getByText("Active member")).toBeVisible();
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: "Start with the latest weekly policy memo",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "The newest weekly policy memo is your fastest route into the current policy conversation.",
+      ),
+    ).toBeVisible();
     expect(screen.getAllByRole("link", { name: /Read latest update/ })[0]).toHaveAttribute(
       "href",
       "/updates/new-weekly",

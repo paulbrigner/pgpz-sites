@@ -6,6 +6,7 @@ export { Container, SectionHeading, Surface } from "./Surface";
 export {
   PersonalHome,
   PersonalHomeAction,
+  PersonalHomeColumn,
   PersonalHomeGrid,
   PersonalHomeHeader,
   PersonalHomePanel,
