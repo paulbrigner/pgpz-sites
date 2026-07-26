@@ -172,7 +172,17 @@ export function normalizeCuratedBriefingTopicInput(
 
 export function normalizeCuratedBriefingDraftInput(value: unknown) {
   if (!plainObject(value)) throw new AdminXMonitorBriefingError("A draft payload is required");
-  const output: { answer_text?: string; key_points?: string[] } = {};
+  const output: { question?: string; answer_text?: string; key_points?: string[] } = {};
+  if (value.question !== undefined) {
+    if (typeof value.question !== "string") {
+      throw new AdminXMonitorBriefingError("Briefing title must be text");
+    }
+    const question = value.question.trim();
+    if (question.length < 10 || question.length > 1000) {
+      throw new AdminXMonitorBriefingError("Briefing title must be between 10 and 1,000 characters");
+    }
+    output.question = question;
+  }
   if (value.answer_text !== undefined) {
     if (typeof value.answer_text !== "string") {
       throw new AdminXMonitorBriefingError("Draft answer text must be text");
@@ -195,7 +205,7 @@ export function normalizeCuratedBriefingDraftInput(value: unknown) {
     });
   }
   if (Object.keys(output).length === 0) {
-    throw new AdminXMonitorBriefingError("Answer text or key points are required");
+    throw new AdminXMonitorBriefingError("Briefing title, answer text, or key points are required");
   }
   return output;
 }

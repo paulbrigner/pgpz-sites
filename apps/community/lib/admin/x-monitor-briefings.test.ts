@@ -96,12 +96,16 @@ describe("Community Topic Briefings admin boundary", () => {
       display_order: 8,
     }, { partial: true })).toThrow("At least one topic field");
     expect(normalizeCuratedBriefingDraftInput({
+      question: "What is the reviewed briefing title?",
       answer_text: "A reviewed answer.",
       key_points: ["One point"],
     })).toEqual({
+      question: "What is the reviewed briefing title?",
       answer_text: "A reviewed answer.",
       key_points: ["One point"],
     });
+    expect(() => normalizeCuratedBriefingDraftInput({ question: "Too short" }))
+      .toThrow("between 10 and 1,000");
     expect(() => normalizeCuratedBriefingDraftInput({ key_points: new Array(13).fill("point") }))
       .toThrow("at most 12");
   });

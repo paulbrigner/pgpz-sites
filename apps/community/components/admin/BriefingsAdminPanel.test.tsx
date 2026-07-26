@@ -95,6 +95,7 @@ describe("Topic Briefings admin panel", () => {
 
     await user.click(screen.getByRole("button", { name: /Review & history/i }));
     expect(await screen.findByRole("heading", { name: "Review version 1" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Briefing title")).toHaveValue(version.question);
     expect(screen.getByLabelText("Answer Markdown")).toHaveValue(version.answer_text);
     expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
@@ -133,6 +134,7 @@ describe("Topic Briefings admin panel", () => {
       source_version_id: publishedVersion.version_id,
       version_number: 2,
       review_status: "draft",
+      question: "How does the Zcash Ironwood upgrade work and when will it activate?",
       answer_text: "## Edited answer\n\nUpdated reviewed text.",
       reviewed_at: null,
       published_at: null,
@@ -160,9 +162,15 @@ describe("Topic Briefings admin panel", () => {
     await user.click(await screen.findByRole("button", { name: /Review & history/i }));
 
     expect(await screen.findByText(/currently published briefing/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Briefing title")).toHaveValue(publishedVersion.question);
     expect(screen.getByLabelText("Answer Markdown")).toHaveValue(publishedVersion.answer_text);
     expect(screen.getByLabelText(/Key points/i)).toHaveValue("One point");
 
+    await user.clear(screen.getByLabelText("Briefing title"));
+    await user.type(
+      screen.getByLabelText("Briefing title"),
+      revisedVersion.question,
+    );
     await user.clear(screen.getByLabelText("Answer Markdown"));
     await user.type(
       screen.getByLabelText("Answer Markdown"),
@@ -171,6 +179,7 @@ describe("Topic Briefings admin panel", () => {
     await user.click(screen.getByRole("button", { name: "Save changes as new draft" }));
 
     expect(await screen.findByRole("heading", { name: "Review version 2" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Briefing title")).toHaveValue(revisedVersion.question);
     expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
     expect(screen.getByText(/Nothing changes for members/i)).toBeInTheDocument();
 
@@ -179,6 +188,7 @@ describe("Topic Briefings admin panel", () => {
     );
     expect(patchCall).toBeDefined();
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      question: revisedVersion.question,
       answer_text: revisedVersion.answer_text,
       key_points: ["One point"],
     });
