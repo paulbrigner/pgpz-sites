@@ -685,6 +685,7 @@
       },
       "app/settings/profile/page.tsx",
       "components/home/Skeletons.tsx",
+      "components/site/main-nav.test.tsx",
       "components/site/main-nav.tsx",
       "lib/__tests__/account-signin-eligibility.test.ts",
       "lib/__tests__/admin-roster-actions.test.ts",

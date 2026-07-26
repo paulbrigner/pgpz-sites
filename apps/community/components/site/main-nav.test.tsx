@@ -1,0 +1,89 @@
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MainNav } from "./main-nav";
+
+const mocks = vi.hoisted(() => ({
+  pathname: "/",
+  push: vi.fn(),
+  signOut: vi.fn(),
+  setViewAsMember: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => mocks.pathname,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: mocks.push }),
+}));
+
+vi.mock("@/lib/use-app-session", () => ({
+  useAppSession: () => ({
+    data: {
+      capabilities: {
+        member: true,
+        protectedContent: true,
+      },
+    },
+    status: "authenticated",
+    signOut: mocks.signOut,
+  }),
+}));
+
+vi.mock("@/components/admin/AdminViewMode", () => ({
+  useAdminViewMode: () => ({
+    actualIsAdmin: false,
+    effectiveIsAdmin: false,
+    viewAsMember: false,
+    setViewAsMember: mocks.setViewAsMember,
+  }),
+}));
+
+vi.mock("@/lib/x-monitor-public", () => ({
+  isCommunityXMonitorEnabled: () => true,
+}));
+
+describe("community main navigation", () => {
+  beforeEach(() => {
+    mocks.pathname = "/";
+    vi.clearAllMocks();
+  });
+
+  afterEach(cleanup);
+
+  it("highlights a section in the mobile menu on its nested routes", async () => {
+    mocks.pathname = "/updates/weekly-policy-memo";
+    const user = userEvent.setup();
+
+    render(<MainNav />);
+    await user.click(screen.getByRole("button", { name: "Open navigation menu" }));
+
+    const mobileMenu = within(document.getElementById("main-nav-mobile-menu")!);
+    expect(mobileMenu.getByRole("link", { name: "Updates" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(mobileMenu.getByRole("link", { name: "Updates" })).toHaveClass(
+      "bg-[var(--zcash-gold)]",
+    );
+    expect(mobileMenu.getByRole("link", { name: "Home" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("marks Profile, not its Invite anchor, as the current mobile page", async () => {
+    mocks.pathname = "/settings/profile";
+    const user = userEvent.setup();
+
+    render(<MainNav />);
+    await user.click(screen.getByRole("button", { name: "Open navigation menu" }));
+
+    const mobileMenu = within(document.getElementById("main-nav-mobile-menu")!);
+    expect(mobileMenu.getByRole("link", { name: "Profile" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(mobileMenu.getByRole("link", { name: "Invite" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+});
