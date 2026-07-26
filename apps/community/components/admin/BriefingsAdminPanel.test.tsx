@@ -114,4 +114,74 @@ describe("Topic Briefings admin panel", () => {
       )).toBe(true);
     });
   });
+
+  it("creates an editable draft from the currently published briefing", async () => {
+    const user = userEvent.setup();
+    const publishedVersion: CuratedBriefingVersion = {
+      ...version,
+      review_status: "published",
+      reviewed_at: "2026-07-20T14:00:00.000Z",
+      published_at: "2026-07-20T14:00:00.000Z",
+    };
+    const publishedTopic: CuratedBriefingTopic = {
+      ...topic,
+      current_published_version_id: publishedVersion.version_id,
+    };
+    const revisedVersion: CuratedBriefingVersion = {
+      ...publishedVersion,
+      version_id: "44444444-4444-4444-8444-444444444444",
+      source_version_id: publishedVersion.version_id,
+      version_number: 2,
+      review_status: "draft",
+      answer_text: "## Edited answer\n\nUpdated reviewed text.",
+      reviewed_at: null,
+      published_at: null,
+    };
+    let revisionSaved = false;
+
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith(`/topics/${topic.topic_id}/versions`)) {
+        return Response.json({
+          items: revisionSaved ? [revisedVersion, publishedVersion] : [publishedVersion],
+        });
+      }
+      if (path.endsWith(`/versions/${publishedVersion.version_id}`) && init?.method === "PATCH") {
+        revisionSaved = true;
+        return Response.json(revisedVersion, { status: 201 });
+      }
+      if (path === "/api/admin/x-monitor/briefings" && (!init?.method || init.method === "GET")) {
+        return Response.json({ items: [publishedTopic] });
+      }
+      return Response.json({ error: "Unexpected test request" }, { status: 500 });
+    }));
+
+    render(<BriefingsAdminPanel />);
+    await user.click(await screen.findByRole("button", { name: /Review & history/i }));
+
+    expect(await screen.findByText(/currently published briefing/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Answer Markdown")).toHaveValue(publishedVersion.answer_text);
+    expect(screen.getByLabelText(/Key points/i)).toHaveValue("One point");
+
+    await user.clear(screen.getByLabelText("Answer Markdown"));
+    await user.type(
+      screen.getByLabelText("Answer Markdown"),
+      revisedVersion.answer_text,
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes as new draft" }));
+
+    expect(await screen.findByRole("heading", { name: "Review version 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing changes for members/i)).toBeInTheDocument();
+
+    const patchCall = vi.mocked(fetch).mock.calls.find(([path, init]) =>
+      String(path).endsWith(`/versions/${publishedVersion.version_id}`) && init?.method === "PATCH",
+    );
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      answer_text: revisedVersion.answer_text,
+      key_points: ["One point"],
+    });
+    expect(vi.mocked(fetch).mock.calls.some(([path]) => String(path).endsWith("/publish"))).toBe(false);
+  });
 });

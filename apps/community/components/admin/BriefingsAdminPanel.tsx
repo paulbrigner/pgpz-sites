@@ -370,7 +370,9 @@ export function BriefingsAdminPanel() {
         key_points: draft.keyPoints.split("\n").map((point) => point.trim()).filter(Boolean),
       }),
     });
-    setNotice("Editorial changes saved as a new draft version.");
+    setNotice(
+      "Editorial changes saved as a new draft version. Nothing changes for members until you publish it.",
+    );
     await loadVersions(topicId, revised.version_id);
   });
 
@@ -581,38 +583,40 @@ export function BriefingsAdminPanel() {
                                 </div>
                               </div>
 
-                              {selected.review_status === "draft" ? (
-                                <div className="mt-4 space-y-4">
-                                  <label className="block space-y-1" htmlFor={`answer-${selected.version_id}`}>
-                                    <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"><Pencil className="h-3.5 w-3.5" aria-hidden="true" />Answer Markdown</span>
-                                    <textarea
-                                      id={`answer-${selected.version_id}`}
-                                      value={versionDrafts[selected.version_id]?.answerText || ""}
-                                      onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { keyPoints: "" }), answerText: event.target.value } }))}
-                                      className={cn(inputClass, "min-h-72 font-mono text-xs leading-6")}
-                                    />
-                                  </label>
-                                  <label className="block space-y-1" htmlFor={`points-${selected.version_id}`}>
-                                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Key points · one per line</span>
-                                    <textarea
-                                      id={`points-${selected.version_id}`}
-                                      value={versionDrafts[selected.version_id]?.keyPoints || ""}
-                                      onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { answerText: "" }), keyPoints: event.target.value } }))}
-                                      className={cn(inputClass, "min-h-28")}
-                                    />
-                                  </label>
-                                  <div className="flex justify-end">
-                                    <Button type="button" variant="outline" onClick={() => void saveRevision(topic.topic_id, selected.version_id)} disabled={busy[`edit:${selected.version_id}`]}>
-                                      <Save className="h-4 w-4" aria-hidden="true" />Save as new draft
-                                    </Button>
-                                  </div>
+                              <div className="mt-4 space-y-4">
+                                {selected.review_status !== "draft" ? (
+                                  <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+                                    {selected.version_id === topic.current_published_version_id
+                                      ? "This is the currently published briefing. Saving editorial changes creates a new draft; members continue seeing this version until you publish the replacement."
+                                      : "This is a historical briefing version. Saving editorial changes creates a new draft and does not change the version members currently see."}
+                                  </p>
+                                ) : null}
+                                <label className="block space-y-1" htmlFor={`answer-${selected.version_id}`}>
+                                  <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"><Pencil className="h-3.5 w-3.5" aria-hidden="true" />Answer Markdown</span>
+                                  <textarea
+                                    id={`answer-${selected.version_id}`}
+                                    value={versionDrafts[selected.version_id]?.answerText || ""}
+                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { keyPoints: "" }), answerText: event.target.value } }))}
+                                    className={cn(inputClass, "min-h-72 font-mono text-xs leading-6")}
+                                  />
+                                </label>
+                                <label className="block space-y-1" htmlFor={`points-${selected.version_id}`}>
+                                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Key points · one per line</span>
+                                  <textarea
+                                    id={`points-${selected.version_id}`}
+                                    value={versionDrafts[selected.version_id]?.keyPoints || ""}
+                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { answerText: "" }), keyPoints: event.target.value } }))}
+                                    className={cn(inputClass, "min-h-28")}
+                                  />
+                                </label>
+                                {selected.rejection_reason ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Rejection reason: {selected.rejection_reason}</p> : null}
+                                <div className="flex justify-end">
+                                  <Button type="button" variant="outline" onClick={() => void saveRevision(topic.topic_id, selected.version_id)} disabled={busy[`edit:${selected.version_id}`]}>
+                                    <Save className="h-4 w-4" aria-hidden="true" />
+                                    {selected.review_status === "draft" ? "Save as new draft" : "Save changes as new draft"}
+                                  </Button>
                                 </div>
-                              ) : (
-                                <div className="mt-4 space-y-4">
-                                  <div className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{selected.answer_text}</div>
-                                  {selected.rejection_reason ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">Rejection reason: {selected.rejection_reason}</p> : null}
-                                </div>
-                              )}
+                              </div>
 
                               {selected.citations.length > 0 ? (
                                 <div className="mt-5 border-t pt-4">
