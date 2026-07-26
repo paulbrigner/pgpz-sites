@@ -288,7 +288,7 @@ export function CommunityPillars({ resources }: { resources: CommunityMemberReso
             body: "PGPZ will also include a smaller, action-oriented coalition of policy professionals and active advocates focused on policymaker education, advocacy strategy, and practical coordination around Zcash.",
           },
         ].map((pillar) => (
-          <article key={pillar.eyebrow} className="muted-card flex flex-col p-5">
+          <article key={pillar.eyebrow} className="muted-card flex min-w-0 flex-col p-5">
             <p className="section-eyebrow text-[var(--brand-denim)]">{pillar.eyebrow}</p>
             <h3 className="mt-3 text-lg font-semibold text-[var(--brand-ink)]">{pillar.title}</h3>
             <p className="mt-3 text-sm leading-6 text-slate-600">{pillar.body}</p>
