@@ -38,7 +38,7 @@ type TopicDraft = {
   enabled: boolean;
 };
 
-type VersionDraft = { answerText: string; keyPoints: string };
+type VersionDraft = { question: string; answerText: string; keyPoints: string };
 
 const inputClass =
   "w-full rounded-md border bg-white px-3 py-2 text-sm leading-5 text-slate-800 outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(31,76,111,0.18)]";
@@ -137,6 +137,9 @@ function TopicFields({
           maxLength={1000}
           required
         />
+        <span className="block text-xs leading-5 text-slate-500">
+          Used for future generated drafts. To change a particular version&apos;s title, open Review &amp; history and edit Briefing title.
+        </span>
       </label>
       <label className="space-y-1" htmlFor={`${idPrefix}-slug`}>
         <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">Stable slug</span>
@@ -338,6 +341,7 @@ export function BriefingsAdminPanel() {
       ...Object.fromEntries(items.map((version) => [
         version.version_id,
         current[version.version_id] || {
+          question: version.question,
           answerText: version.answer_text,
           keyPoints: version.key_points.join("\n"),
         },
@@ -366,6 +370,7 @@ export function BriefingsAdminPanel() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        question: draft.question,
         answer_text: draft.answerText,
         key_points: draft.keyPoints.split("\n").map((point) => point.trim()).filter(Boolean),
       }),
@@ -422,8 +427,9 @@ export function BriefingsAdminPanel() {
               Manage the fixed topic list, schedule evidence refreshes, and review generated drafts.
               Members see only versions an administrator publishes; there is no member answer prompt.
               Saved display order changes appear on the member page on its next load without
-              regenerating or republishing. Other topic edits apply to future drafts, while every
-              version keeps the question and settings used to generate it.
+              regenerating or republishing. Other topic edits apply to future generated drafts.
+              Editorial revisions may update a selected version&apos;s title, answer, and key points
+              while preserving its other historical settings.
             </p>
           </div>
           <Button type="button" onClick={() => setShowCreate((visible) => !visible)}>
@@ -561,7 +567,7 @@ export function BriefingsAdminPanel() {
                                   <p className="mt-1 text-xs text-slate-500">Evidence through {formatDate(selected.corpus_through)} · generated {formatDate(selected.generated_at)}</p>
                                   {selected.question !== topic.question ? (
                                     <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                                      This version answers the earlier snapshot: “{selected.question}”
+                                      This version uses a different title from the current topic: “{selected.question}”
                                     </p>
                                   ) : null}
                                 </div>
@@ -591,12 +597,23 @@ export function BriefingsAdminPanel() {
                                       : "This is a historical briefing version. Saving editorial changes creates a new draft and does not change the version members currently see."}
                                   </p>
                                 ) : null}
+                                <label className="block space-y-1" htmlFor={`question-${selected.version_id}`}>
+                                  <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"><Pencil className="h-3.5 w-3.5" aria-hidden="true" />Briefing title</span>
+                                  <textarea
+                                    id={`question-${selected.version_id}`}
+                                    value={versionDrafts[selected.version_id]?.question || ""}
+                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { question: "", answerText: "", keyPoints: "" }), question: event.target.value } }))}
+                                    className={cn(inputClass, "min-h-20")}
+                                    maxLength={1000}
+                                    required
+                                  />
+                                </label>
                                 <label className="block space-y-1" htmlFor={`answer-${selected.version_id}`}>
                                   <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600"><Pencil className="h-3.5 w-3.5" aria-hidden="true" />Answer Markdown</span>
                                   <textarea
                                     id={`answer-${selected.version_id}`}
                                     value={versionDrafts[selected.version_id]?.answerText || ""}
-                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { keyPoints: "" }), answerText: event.target.value } }))}
+                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { question: "", answerText: "", keyPoints: "" }), answerText: event.target.value } }))}
                                     className={cn(inputClass, "min-h-72 font-mono text-xs leading-6")}
                                   />
                                 </label>
@@ -605,7 +622,7 @@ export function BriefingsAdminPanel() {
                                   <textarea
                                     id={`points-${selected.version_id}`}
                                     value={versionDrafts[selected.version_id]?.keyPoints || ""}
-                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { answerText: "" }), keyPoints: event.target.value } }))}
+                                    onChange={(event) => setVersionDrafts((current) => ({ ...current, [selected.version_id]: { ...(current[selected.version_id] || { question: "", answerText: "", keyPoints: "" }), keyPoints: event.target.value } }))}
                                     className={cn(inputClass, "min-h-28")}
                                   />
                                 </label>
