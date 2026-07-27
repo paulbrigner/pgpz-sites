@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarClock, CheckCircle2, FileSignature } from "lucide-react";
 import { LetterSummaryMarkdown } from "@/components/letters/LetterSummaryMarkdown";
 import { isFeatureEnabled } from "@/config/features";
+import { formatLetterDate } from "@/lib/letter-date";
 import { getMemberAccess } from "@/lib/member-access";
 import {
   listLetterCampaigns,
@@ -16,13 +17,6 @@ export const metadata = {
   description:
     "Review PGPZ Coalition letters, formally sign on, and follow delivery status.",
 };
-
-const formatDeadline = (value: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZoneName: "short",
-  }).format(new Date(value));
 
 export default async function LettersPage() {
   if (!isFeatureEnabled("letterSignons")) redirect("/");
@@ -111,7 +105,7 @@ export default async function LettersPage() {
               ) : null}
               <p className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-slate-600">
                 <CalendarClock className="h-4 w-4" aria-hidden="true" />
-                Sign-on deadline: {formatDeadline(campaign.deadlineAt)}
+                Sign-on deadline: {formatLetterDate(campaign.deadlineAt)}
               </p>
             </Link>
           ))}

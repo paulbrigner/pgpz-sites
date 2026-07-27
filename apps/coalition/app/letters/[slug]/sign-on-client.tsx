@@ -19,6 +19,7 @@ import type {
   LetterCampaign,
   LetterSignOn,
 } from "@/lib/letter-signons";
+import { formatLetterDate } from "@/lib/letter-date";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LetterSummaryMarkdown } from "@/components/letters/LetterSummaryMarkdown";
@@ -44,13 +45,6 @@ type Props = {
   };
   adminPreview: boolean;
 };
-
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZoneName: "short",
-  }).format(new Date(value));
 
 export default function LetterSignOnClient({
   campaign,
@@ -243,7 +237,7 @@ export default function LetterSignOnClient({
               </span>
               <span className="inline-flex items-center gap-1.5 text-sm text-slate-600">
                 <CalendarClock className="h-4 w-4" aria-hidden="true" />
-                Deadline: {formatDate(campaign.deadlineAt)}
+                Deadline: {formatLetterDate(campaign.deadlineAt)}
               </span>
             </div>
             <h1 className="mt-5 text-3xl font-semibold tracking-tight text-[var(--brand-ink)] sm:text-4xl">
@@ -317,7 +311,7 @@ export default function LetterSignOnClient({
                       ? initialSignOn.organizationName
                       : initialSignOn.displayName}
                   </strong>{" "}
-                  on {formatDate(initialSignOn.acceptedAt)}.
+                  on {formatLetterDate(initialSignOn.acceptedAt)}.
                 </p>
                 {signOnOpen ? (
                   <Button
@@ -485,7 +479,7 @@ export default function LetterSignOnClient({
               </form>
             ) : (
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                The deadline was {formatDate(campaign.deadlineAt)}. The signer
+                The deadline was {formatLetterDate(campaign.deadlineAt)}. The signer
                 list remains available for review.
               </p>
             )}

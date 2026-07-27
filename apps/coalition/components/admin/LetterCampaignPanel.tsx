@@ -135,6 +135,58 @@ function CampaignCard({
     }
   }
 
+  async function publishCampaign() {
+    const deadline = new Date(deadlineAt);
+    if (!Number.isFinite(deadline.getTime()) || deadline.getTime() <= Date.now()) {
+      setMessage({
+        tone: "error",
+        text: "Set a future sign-on deadline before publishing.",
+      });
+      return;
+    }
+    if (
+      !window.confirm(
+        `Publish this letter and open sign-ons now? Members will be able to review PDF v${campaign.currentDocument.version} and sign until ${deadline.toLocaleString()}.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusy("publish");
+    setMessage(null);
+    try {
+      await responseJson(
+        await fetch("/api/admin/letter-campaigns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "update",
+            campaignId: campaign.id,
+            title,
+            summary,
+            recipient,
+            deadlineAt: deadline.toISOString(),
+            status: "open",
+          }),
+        }),
+      );
+      setStatus("open");
+      setMessage({
+        tone: "success",
+        text: "Campaign published. Members can now review the current PDF and sign on.",
+      });
+      await onChanged();
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error ? error.message : "Campaign publishing failed.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function uploadRevision(event: React.FormEvent) {
     event.preventDefault();
     if (!revisionFile) return;
@@ -253,20 +305,43 @@ function CampaignCard({
             ) : null}
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/letters/${campaign.slug}`} target="_blank">
-            <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
-            Member view
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <a
-            href={`/api/admin/letter-campaigns?campaignId=${encodeURIComponent(campaign.id)}&format=csv`}
-          >
-            <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-            Export signers
-          </a>
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {campaign.status === "draft" ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={publishCampaign}
+              disabled={busy !== null}
+            >
+              {busy === "publish" ? (
+                <Loader2
+                  className="mr-2 h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <CheckCircle2
+                  className="mr-2 h-4 w-4"
+                  aria-hidden="true"
+                />
+              )}
+              Publish and open sign-ons
+            </Button>
+          ) : null}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/letters/${campaign.slug}`} target="_blank">
+              <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
+              Member view
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href={`/api/admin/letter-campaigns?campaignId=${encodeURIComponent(campaign.id)}&format=csv`}
+            >
+              <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+              Export signers
+            </a>
+          </Button>
+        </div>
       </div>
 
       {message ? (
