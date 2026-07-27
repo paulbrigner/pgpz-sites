@@ -61,6 +61,7 @@ node tooling/provision-amplify-compute-role.mjs \
   --account-id 860091316962 \
   --bucket COALITION_BUCKET \
   --public-files-prefix public-files \
+  --letter-signons-prefix letter-signons \
   --ses-identity-arn arn:aws:ses:us-east-1:860091316962:identity/pgpz.org \
   --from-address no-reply@coalition.pgpz.org
 ```

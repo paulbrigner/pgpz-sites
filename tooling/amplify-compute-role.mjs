@@ -71,6 +71,7 @@ export function buildAmplifyComputePermissionPolicy({
   bucket,
   prefix,
   publicFilesPrefix,
+  letterSignonsPrefix,
   sesIdentityArn,
   fromAddress,
   backgroundJobsTableName,
@@ -81,6 +82,10 @@ export function buildAmplifyComputePermissionPolicy({
   const normalizedPublicFilesPrefix =
     typeof publicFilesPrefix === "string"
       ? publicFilesPrefix.replace(/^\/+|\/+$/g, "")
+      : "";
+  const normalizedLetterSignonsPrefix =
+    typeof letterSignonsPrefix === "string"
+      ? letterSignonsPrefix.replace(/^\/+|\/+$/g, "")
       : "";
   return {
     Version: "2012-10-17",
@@ -174,6 +179,36 @@ export function buildAmplifyComputePermissionPolicy({
             },
           ]
         : []),
+      ...(normalizedLetterSignonsPrefix
+        ? [
+            {
+              Sid: "ListLetterSignOnObjects",
+              Effect: "Allow",
+              Action: ["s3:ListBucket"],
+              Resource: [`arn:aws:s3:::${bucket}`],
+              Condition: {
+                StringLike: {
+                  "s3:prefix": [
+                    normalizedLetterSignonsPrefix,
+                    `${normalizedLetterSignonsPrefix}/*`,
+                  ],
+                },
+              },
+            },
+            {
+              Sid: "ManageLetterSignOnObjects",
+              Effect: "Allow",
+              Action: [
+                "s3:DeleteObject",
+                "s3:GetObject",
+                "s3:PutObject",
+              ],
+              Resource: [
+                `arn:aws:s3:::${bucket}/${normalizedLetterSignonsPrefix}/*`,
+              ],
+            },
+          ]
+        : []),
       {
         Sid: "SendApplicationEmail",
         Effect: "Allow",
@@ -199,6 +234,7 @@ export function buildAmplifyComputeRolePlan({
   bucket,
   prefix = "policy-updates/uploads",
   publicFilesPrefix,
+  letterSignonsPrefix,
   sesIdentityArn,
   fromAddress,
 }) {
@@ -237,6 +273,7 @@ export function buildAmplifyComputeRolePlan({
       bucket,
       prefix,
       publicFilesPrefix,
+      letterSignonsPrefix,
       sesIdentityArn,
       fromAddress,
       backgroundJobsTableName: application.backgroundJobsTableName,

@@ -10,6 +10,7 @@ export const siteFeatures = defineFeatureSwitches({
   memberDirectory: true,
   zecShelf: false,
   publicFiles: true,
+  letterSignons: true,
 });
 
 export function isFeatureEnabled(feature: SiteFeature) {

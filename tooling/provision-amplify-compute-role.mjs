@@ -27,7 +27,7 @@ function usage() {
     "  node tooling/provision-amplify-compute-role.mjs --application <community|coalition>",
     "    --account-id <12-digits> --bucket <name> --ses-identity-arn <arn>",
     "    --from-address <email> [--region us-east-1] [--prefix path]",
-    "    [--public-files-prefix path]",
+    "    [--public-files-prefix path] [--letter-signons-prefix path]",
     "    [--table name] [--profile profile] [--apply --confirm ATTACH-MAIN-COMPUTE-ROLE]",
     "",
     "Without --apply, the command prints the complete trust, permission, and branch-attachment plan.",
@@ -115,6 +115,7 @@ try {
     bucket: values.bucket,
     prefix: values.prefix || "policy-updates/uploads",
     publicFilesPrefix: values["public-files-prefix"],
+    letterSignonsPrefix: values["letter-signons-prefix"],
     sesIdentityArn: values["ses-identity-arn"],
     fromAddress: values["from-address"],
   });

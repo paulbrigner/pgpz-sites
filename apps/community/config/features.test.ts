@@ -7,5 +7,7 @@ describe("Community feature registration", () => {
     expect(isFeatureEnabled("personalHome")).toBe(true);
     expect(siteFeatures.publicFiles).toBe(true);
     expect(isFeatureEnabled("publicFiles")).toBe(true);
+    expect(siteFeatures.letterSignons).toBe(false);
+    expect(isFeatureEnabled("letterSignons")).toBe(false);
   });
 });

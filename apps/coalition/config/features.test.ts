@@ -13,7 +13,9 @@ describe("Coalition feature registration", () => {
       memberDirectory: true,
       zecShelf: false,
       publicFiles: true,
+      letterSignons: true,
     });
     expect(isFeatureEnabled("publicFiles")).toBe(true);
+    expect(isFeatureEnabled("letterSignons")).toBe(true);
   });
 });
