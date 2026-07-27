@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarClock, CheckCircle2, FileSignature } from "lucide-react";
+import { LetterSummaryMarkdown } from "@/components/letters/LetterSummaryMarkdown";
 import { isFeatureEnabled } from "@/config/features";
 import { getMemberAccess } from "@/lib/member-access";
 import {
@@ -100,9 +101,13 @@ export default async function LettersPage() {
                 {campaign.title}
               </h2>
               {campaign.summary ? (
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                <LetterSummaryMarkdown
+                  compact
+                  disableLinks
+                  className="mt-3 max-h-[4.5rem] overflow-hidden"
+                >
                   {campaign.summary}
-                </p>
+                </LetterSummaryMarkdown>
               ) : null}
               <p className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-slate-600">
                 <CalendarClock className="h-4 w-4" aria-hidden="true" />

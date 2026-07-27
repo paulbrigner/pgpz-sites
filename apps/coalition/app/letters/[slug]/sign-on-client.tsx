@@ -21,6 +21,7 @@ import type {
 } from "@/lib/letter-signons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LetterSummaryMarkdown } from "@/components/letters/LetterSummaryMarkdown";
 
 type PublicSigner = {
   userId: string;
@@ -249,9 +250,9 @@ export default function LetterSignOnClient({
               {campaign.title}
             </h1>
             {campaign.summary ? (
-              <p className="mt-4 text-base leading-7 text-slate-600">
+              <LetterSummaryMarkdown className="mt-4">
                 {campaign.summary}
-              </p>
+              </LetterSummaryMarkdown>
             ) : null}
             {campaign.recipient ? (
               <p className="mt-4 text-sm leading-6 text-slate-600">
