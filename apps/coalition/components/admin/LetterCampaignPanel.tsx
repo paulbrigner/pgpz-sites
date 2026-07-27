@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { LetterSummaryField } from "@/components/letters/LetterSummaryField";
 
 type CampaignSummary = {
   id: string;
@@ -300,14 +301,10 @@ function CampaignCard({
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-            Summary
-            <Textarea
-              className="mt-1.5 min-h-24"
-              value={summary}
-              onChange={(event) => setSummary(event.target.value)}
-            />
-          </label>
+          <LetterSummaryField
+            value={summary}
+            onChange={setSummary}
+          />
           <label className="text-sm font-medium text-slate-700 sm:col-span-2">
             Addressed to
             <Input
@@ -674,14 +671,10 @@ export function LetterCampaignPanel() {
               placeholder="clarity-act-zcash-letter"
             />
           </label>
-          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
-            Member-facing summary
-            <Textarea
-              className="mt-1.5 min-h-24"
-              value={summary}
-              onChange={(event) => setSummary(event.target.value)}
-            />
-          </label>
+          <LetterSummaryField
+            value={summary}
+            onChange={setSummary}
+          />
           <label className="text-sm font-medium text-slate-700 sm:col-span-2">
             Addressed to
             <Input
