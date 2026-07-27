@@ -31,7 +31,8 @@ level rather than app level when preview branches exist.
   `ses:SendRawEmail` for the selected SES identity and exact From address.
   Nodemailer's SESv2 transport generates a MIME message and AWS authorizes that
   raw-content path with `ses:SendRawEmail`. Coalition additionally receives the smaller
-  action set used by its one-way Community entitlement synchronization.
+  `Query`, `PutItem`, `TransactWriteItems`, and `UpdateItem` action set used by
+  its one-way Community entitlement synchronization.
   The role cannot receive from or delete messages in SQS and cannot access the
   sibling application's background-job resources. See
   `docs/durable-jobs-runbook.md` for the separately guarded infrastructure

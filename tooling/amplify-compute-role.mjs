@@ -31,6 +31,7 @@ const primaryDynamoActions = [
 ];
 
 const synchronizedDynamoActions = [
+  "dynamodb:PutItem",
   "dynamodb:Query",
   "dynamodb:TransactWriteItems",
   "dynamodb:UpdateItem",

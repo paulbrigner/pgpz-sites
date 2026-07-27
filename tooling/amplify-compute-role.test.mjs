@@ -106,6 +106,7 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
   assert.ok(sync);
   assert.match(JSON.stringify(sync.Resource), /table\/PGPZCommunityNextAuth/);
   assert.deepEqual(sync.Action, [
+    "dynamodb:PutItem",
     "dynamodb:Query",
     "dynamodb:TransactWriteItems",
     "dynamodb:UpdateItem",
