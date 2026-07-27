@@ -39,5 +39,6 @@ export const referenceSiteConfig = defineSiteConfig({
     memberDirectory: false,
     zecShelf: true,
     publicFiles: false,
+    letterSignons: false,
   },
 } satisfies SiteConfig);

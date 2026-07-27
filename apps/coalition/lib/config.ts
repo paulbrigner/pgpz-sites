@@ -44,6 +44,10 @@ export const PUBLIC_FILES_BUCKET =
   (process.env.PUBLIC_FILES_BUCKET || POLICY_UPDATE_UPLOAD_BUCKET) as string | undefined;
 export const PUBLIC_FILES_PREFIX =
   (process.env.PUBLIC_FILES_PREFIX || "public-files").replace(/^\/+|\/+$/g, "");
+export const LETTER_SIGNON_BUCKET =
+  (process.env.LETTER_SIGNON_BUCKET || PUBLIC_FILES_BUCKET) as string | undefined;
+export const LETTER_SIGNON_PREFIX =
+  (process.env.LETTER_SIGNON_PREFIX || "letter-signons").replace(/^\/+|\/+$/g, "");
 
 export const DEFAULT_SITE_URL = "https://coalition.pgpz.org";
 

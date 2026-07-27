@@ -202,6 +202,8 @@ actions and no sibling background-job ARN are present. Include
 `--public-files-prefix public-files` for every Community or Coalition
 reprovision so the full-policy replacement preserves the enabled managed
 public-file library's isolated S3 access.
+For Coalition, also include `--letter-signons-prefix letter-signons` so the
+same guarded full-policy replacement preserves versioned letter PDF access.
 
 ## Application environment and release order
 

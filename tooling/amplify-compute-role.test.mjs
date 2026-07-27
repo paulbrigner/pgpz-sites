@@ -98,6 +98,7 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
     ...common,
     fromAddress: "no-reply@coalition.pgpz.org",
     publicFilesPrefix: "public-files",
+    letterSignonsPrefix: "letter-signons",
   });
   const sync = plan.permissionPolicy.Statement.find(
     (statement) => statement.Sid === "CommunityEntitlementSynchronization",
@@ -130,6 +131,24 @@ test("grants Coalition only the actions used by one-way Community sync", () => {
   );
   assert.deepEqual(managePublicFiles.Resource, [
     "arn:aws:s3:::pgpz-content/public-files/*",
+  ]);
+  const listLetterSignons = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ListLetterSignOnObjects",
+  );
+  assert.deepEqual(listLetterSignons.Condition.StringLike["s3:prefix"], [
+    "letter-signons",
+    "letter-signons/*",
+  ]);
+  const manageLetterSignons = plan.permissionPolicy.Statement.find(
+    (statement) => statement.Sid === "ManageLetterSignOnObjects",
+  );
+  assert.deepEqual(manageLetterSignons.Action, [
+    "s3:DeleteObject",
+    "s3:GetObject",
+    "s3:PutObject",
+  ]);
+  assert.deepEqual(manageLetterSignons.Resource, [
+    "arn:aws:s3:::pgpz-content/letter-signons/*",
   ]);
 });
 

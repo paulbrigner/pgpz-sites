@@ -836,6 +836,49 @@
       ]
     },
     {
+      "name": "letter-signons",
+      "packagePath": "packages/letter-signons",
+      "contentOwnership": "The package owns provider-neutral letter campaign states, server-deadline logic, signer identity validation, immutable document acceptance, material-revision reconfirmation, and brand-injected receipt and update email rendering. Each app retains its own membership authorization, records, PDF storage, email transport, routes, and UI.",
+      "adoption": {
+        "community": "registered-disabled",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/contracts.ts",
+        "src/logic.ts",
+        "src/email.ts",
+        "src/logic.test.ts",
+        "src/email.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "config/features.ts"
+        ],
+        "coalition": [
+          "config/features.ts",
+          "lib/letter-signons.ts",
+          "lib/letter-signons-email.ts",
+          "app/letters/page.tsx",
+          "app/letters/[slug]/page.tsx",
+          "app/api/admin/letter-campaigns/route.ts",
+          "app/api/letters/[slug]/sign-on/route.ts",
+          "app/api/letters/[slug]/document/route.ts",
+          "components/admin/LetterCampaignPanel.tsx"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "coalition",
+          "path": "lib/letter-signons.ts",
+          "import": "@pgpz/letter-signons"
+        }
+      ]
+    },
+    {
       "name": "x-monitor-core",
       "packagePath": "packages/x-monitor-core",
       "contentOwnership": "The package owns the pinned provider-neutral read contracts and URL client extracted from zodldashboard. Community owns Better Auth authorization, the server-only credential adapter, explicit read-only BFF routes, and its native presentation. Privileged Answer, Compose, email, scheduling, capture, and operations behavior remains outside this package.",

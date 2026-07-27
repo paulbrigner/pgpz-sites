@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAppSession } from "@/lib/use-app-session";
 import { useAdminViewMode } from "@/components/admin/AdminViewMode";
+import { isFeatureEnabled } from "@/config/features";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
   const path = pathname || "/";
@@ -85,6 +86,9 @@ export function MainNav() {
         { key: "groups", label: "Policy Groups", href: "/groups" },
         ...(isMember ? [{ key: "members", label: "Members", href: "/members" }] : []),
         ...(isMember ? [{ key: "resources", label: "Resources", href: "/resources" }] : []),
+        ...(isMember && isFeatureEnabled("letterSignons")
+          ? [{ key: "letters", label: "Letters", href: "/letters" }]
+          : []),
         { key: "updates", label: "Updates", href: "/updates" },
         { key: "profile", label: "Profile", href: "/settings/profile" },
         ...(isAdmin
@@ -169,6 +173,14 @@ export function MainNav() {
               <NavigationMenuItem>
                 <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/resources") && currentMenuItemClasses)} asChild>
                   <Link href="/resources" aria-current={navHrefIsCurrent(pathname, "/resources") ? "page" : undefined}>Resources</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && isMember && isFeatureEnabled("letterSignons") ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/letters") && currentMenuItemClasses)} asChild>
+                  <Link href="/letters" aria-current={navHrefIsCurrent(pathname, "/letters") ? "page" : undefined}>Letters</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}

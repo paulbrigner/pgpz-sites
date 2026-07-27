@@ -31,6 +31,7 @@ describe("reference site configuration", () => {
       memberDirectory: false,
       zecShelf: true,
       publicFiles: false,
+      letterSignons: false,
     });
   });
 });

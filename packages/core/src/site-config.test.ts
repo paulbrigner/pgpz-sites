@@ -44,6 +44,7 @@ const validInput = () => ({
     memberDirectory: false,
     zecShelf: true,
     publicFiles: false,
+    letterSignons: false,
   },
 });
 
@@ -76,10 +77,12 @@ describe("SiteConfig", () => {
       memberDirectory: true,
       zecShelf: false,
       publicFiles: true,
+      letterSignons: true,
     });
 
     expect(features.personalHome).toBe(true);
     expect(features.publicFiles).toBe(true);
+    expect(features.letterSignons).toBe(true);
     expectTypeOf(features.publicFiles).toEqualTypeOf<true>();
     expect(() =>
       defineFeatureSwitches({

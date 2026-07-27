@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, BellRing, Files, Inbox, Mail, Newspaper, Users } from "lucide-react";
+import { Activity, BellRing, FileSignature, Files, Inbox, Mail, Newspaper, Users } from "lucide-react";
 import AdminClient from "./admin-client";
 import { AccessLogPanel } from "@/components/admin/AccessLogPanel";
 import { NewsletterMailer } from "@/components/admin/NewsletterMailer";
 import { PolicyUpdateMailer } from "@/components/admin/PolicyUpdateMailer";
 import { PublicFileLibraryPanel } from "@/components/admin/PublicFileLibraryPanel";
+import { LetterCampaignPanel } from "@/components/admin/LetterCampaignPanel";
 import { ResourceModerationPanel } from "@/components/admin/ResourceModerationPanel";
 import { SignupNotificationsPanel } from "@/components/admin/SignupNotificationsPanel";
 import { isFeatureEnabled } from "@/config/features";
@@ -19,6 +20,7 @@ type AdminTab =
   | "resources"
   | "updates"
   | "newsletters"
+  | "letters"
   | "public-files"
   | "access";
 
@@ -64,6 +66,12 @@ const baseTabs: Array<{
     icon: Newspaper,
   },
   {
+    id: "letters",
+    label: "Letter sign-ons",
+    description: "Draft review, signers, revisions, and delivery updates",
+    icon: FileSignature,
+  },
+  {
     id: "public-files",
     label: "Public files",
     description: "Manage public or members-only resource URLs",
@@ -86,7 +94,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -126,6 +134,9 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
       {activeTab === "resources" ? <ResourceModerationPanel /> : null}
       {activeTab === "updates" ? <PolicyUpdateMailer initialUpdates={initialUpdates} /> : null}
       {activeTab === "newsletters" ? <NewsletterMailer /> : null}
+      {activeTab === "letters" && isFeatureEnabled("letterSignons") ? (
+        <LetterCampaignPanel />
+      ) : null}
       {activeTab === "public-files" && isFeatureEnabled("publicFiles") ? (
         <PublicFileLibraryPanel />
       ) : null}

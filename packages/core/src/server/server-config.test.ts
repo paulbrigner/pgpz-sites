@@ -62,6 +62,7 @@ const siteForMode = (membershipMode: MembershipAdapter["mode"]) =>
       memberDirectory: false,
       zecShelf: false,
       publicFiles: false,
+      letterSignons: false,
     },
   });
 
