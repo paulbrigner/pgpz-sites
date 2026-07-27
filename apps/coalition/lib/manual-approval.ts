@@ -8,6 +8,7 @@ import {
   dispatchStagedBackgroundJob,
   prepareSingleRecipientBackgroundJob,
 } from "@/lib/admin/background-jobs";
+import { getAdminApprovalEligibility } from "@/lib/admin/approval-eligibility";
 
 export type ManualApprovalStatus = "none" | "pending" | "approved";
 export type AccessApplicationStatus = "none" | "requested" | "approved" | "declined" | "withdrawn";
@@ -175,9 +176,11 @@ export async function requestManualApproval(userId: string) {
 export async function approveManualApproval({
   userId,
   adminUserId,
+  allowUnsubmitted = false,
 }: {
   userId: string;
   adminUserId: string | null;
+  allowUnsubmitted?: boolean;
 }) {
   if (!userId) throw new ManualApprovalError("User ID is required.");
 
@@ -195,13 +198,21 @@ export async function approveManualApproval({
     throw new ManualApprovalError("This account is deactivated.", 409);
   }
 
-  const membershipStatus = user.Item.membershipStatus === "invited" ? "invited" : "none";
+  const membershipStatus = user.Item.membershipStatus;
   const manualApprovalStatus = normalizeManualApprovalStatus(user.Item.manualApprovalStatus);
   const applicationStatus = normalizeAccessApplicationStatus(
     user.Item.applicationStatus,
     user.Item.manualApprovalStatus,
   );
-  const approvalEligible = applicationStatus === "requested" && manualApprovalStatus !== "approved";
+  const approvalEligibility = getAdminApprovalEligibility({
+    ...user.Item,
+    membershipStatus,
+    manualApprovalStatus,
+    applicationStatus,
+  });
+  const approvalEligible =
+    approvalEligibility === "requested" ||
+    (allowUnsubmitted && approvalEligibility === "unsubmitted_override");
 
   if (!approvalEligible) {
     throw new ManualApprovalError(
@@ -213,6 +224,15 @@ export async function approveManualApproval({
   }
 
   const now = new Date().toISOString();
+  const approvalSource =
+    approvalEligibility === "unsubmitted_override"
+      ? "admin_override"
+      : "member_request";
+  const approvalCondition = allowUnsubmitted
+    ? "(applicationStatus = :requested OR #manualApprovalStatus = :pending OR ((attribute_not_exists(applicationStatus) OR attribute_type(applicationStatus, :nullType) OR applicationStatus = :emptyString OR applicationStatus = :none) AND (attribute_not_exists(#manualApprovalStatus) OR attribute_type(#manualApprovalStatus, :nullType) OR #manualApprovalStatus = :emptyString OR #manualApprovalStatus = :none)))"
+    : "(applicationStatus = :requested OR #manualApprovalStatus = :pending)";
+  const unapprovedMembershipCondition =
+    "(attribute_not_exists(#membershipStatus) OR attribute_type(#membershipStatus, :nullType) OR #membershipStatus = :emptyString OR #membershipStatus = :none)";
   const communitySyncJob = await prepareSingleRecipientBackgroundJob({
     kind: "community_sync",
     mode: "live",
@@ -234,9 +254,9 @@ export async function approveManualApproval({
             TableName: TABLE_NAME,
             Key: userKey(userId),
             UpdateExpression:
-              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now, applicationStatus = :approved, applicationApprovedAt = :now, applicationApprovedBy = :adminUserId, applicationUpdatedAt = :now, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationStatus, invitationTokenCreatedAt, invitationTokenCreatedBy, applicationDeclinedAt, applicationDeclinedBy, applicationDeclineReason, applicationWithdrawnAt, communitySyncError",
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, manualApprovalStatus = :approved, manualApprovalApprovedAt = :now, manualApprovalApprovedBy = :adminUserId, manualApprovalUpdatedAt = :now, applicationStatus = :approved, applicationApprovedAt = :now, applicationApprovedBy = :adminUserId, applicationUpdatedAt = :now, applicationApprovalSource = :approvalSource, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationStatus, invitationTokenCreatedAt, invitationTokenCreatedBy, applicationDeclinedAt, applicationDeclinedBy, applicationDeclineReason, applicationWithdrawnAt, communitySyncError",
             ConditionExpression:
-              `attribute_exists(#pk) AND (attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND ${ACTIVE_ACCOUNT_CONDITION} AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND (applicationStatus = :requested OR #manualApprovalStatus = :pending)`,
+              `attribute_exists(#pk) AND ${unapprovedMembershipCondition} AND ${ACTIVE_ACCOUNT_CONDITION} AND (attribute_not_exists(#manualApprovalStatus) OR #manualApprovalStatus <> :approved) AND ${approvalCondition}`,
             ExpressionAttributeNames: {
               "#pk": "pk",
               "#membershipStatus": "membershipStatus",
@@ -252,8 +272,10 @@ export async function approveManualApproval({
               ":now": now,
               ":approved": "approved",
               ":adminUserId": adminUserId,
+              ":approvalSource": approvalSource,
               ":queued": "queued",
               ":syncMessage": "Community synchronization is queued.",
+              ":none": "none",
               ...activeAccountConditionValues(),
             },
           },
@@ -297,7 +319,16 @@ export async function approveManualApproval({
         latestUser.applicationStatus,
         latestUser.manualApprovalStatus,
       );
-      if (latestApplicationStatus !== "requested" || latestManualStatus === "approved") {
+      const latestApprovalEligibility = getAdminApprovalEligibility({
+        ...latestUser,
+        membershipStatus: latestMembershipStatus,
+        manualApprovalStatus: latestManualStatus,
+        applicationStatus: latestApplicationStatus,
+      });
+      if (
+        latestApprovalEligibility !== "requested" &&
+        !(allowUnsubmitted && latestApprovalEligibility === "unsubmitted_override")
+      ) {
         throw new ManualApprovalError(
           latestMembershipStatus === "invited"
             ? "This member is in the invitation flow. They must sign in and accept the invitation."
@@ -327,6 +358,7 @@ export async function approveManualApproval({
     manualApprovalStatus: "approved" as const,
     manualApprovalApprovedAt: now,
     applicationStatus: "approved" as const,
+    applicationApprovalSource: approvalSource,
     communitySync: {
       status: "queued" as const,
       jobId: communitySyncJob.job.id,

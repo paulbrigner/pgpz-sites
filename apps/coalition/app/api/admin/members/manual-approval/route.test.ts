@@ -54,7 +54,8 @@ describe("manual approval admin route", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
-      error: 'Action must be either "approve" or "decline".',
+      error:
+        'Action must be "approve", "approve_unsubmitted", or "decline".',
     });
     expect(mocks.approveManualApproval).not.toHaveBeenCalled();
     expect(mocks.declineAccessApplication).not.toHaveBeenCalled();
@@ -67,6 +68,22 @@ describe("manual approval admin route", () => {
     expect(mocks.approveManualApproval).toHaveBeenCalledWith({
       userId: "user-1",
       adminUserId: "admin-1",
+      allowUnsubmitted: false,
+    });
+    expect(mocks.declineAccessApplication).not.toHaveBeenCalled();
+  });
+
+  it("dispatches the guarded unsubmitted-account override explicitly", async () => {
+    const response = await post({
+      userId: " user-1 ",
+      action: "approve_unsubmitted",
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.approveManualApproval).toHaveBeenCalledWith({
+      userId: "user-1",
+      adminUserId: "admin-1",
+      allowUnsubmitted: true,
     });
     expect(mocks.declineAccessApplication).not.toHaveBeenCalled();
   });

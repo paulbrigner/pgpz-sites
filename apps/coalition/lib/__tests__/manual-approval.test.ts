@@ -215,7 +215,8 @@ describe("manual approval admin flow", () => {
         }),
       }),
     );
-    expect(update.ExpressionAttributeValues).not.toHaveProperty(":none");
+    expect(update.ConditionExpression).toContain("#membershipStatus = :none");
+    expect(update.ExpressionAttributeValues).toHaveProperty(":none", "none");
     expectActiveAccountCondition(update);
     expect(jobMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
       kind: "community_sync",
@@ -242,6 +243,40 @@ describe("manual approval admin flow", () => {
       approveManualApproval({ userId: "user-1", adminUserId: "admin-1" }),
     ).rejects.toMatchObject({ message: "This member is not eligible for approval.", status: 409 });
     expect(dynamoMocks.transactWrite).not.toHaveBeenCalled();
+  });
+
+  it("allows an explicit admin override for an active unsubmitted account", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: {
+        id: "user-1",
+        email: "prospect@example.com",
+        membershipStatus: "none",
+        manualApprovalStatus: "none",
+        applicationStatus: "none",
+        accountStatus: "active",
+      },
+    });
+
+    const result = await approveManualApproval({
+      userId: "user-1",
+      adminUserId: "admin-1",
+      allowUnsubmitted: true,
+    });
+
+    const update = dynamoMocks.transactWrite.mock.calls[0][0].TransactItems[0].Update;
+    expect(update.ConditionExpression).toContain("applicationStatus = :none");
+    expect(update.ConditionExpression).toContain("#manualApprovalStatus = :none");
+    expect(update.ConditionExpression).toContain("#membershipStatus = :none");
+    expect(update.ExpressionAttributeValues).toMatchObject({
+      ":none": "none",
+      ":approvalSource": "admin_override",
+    });
+    expect(update.UpdateExpression).toContain("applicationApprovalSource");
+    expect(result).toMatchObject({
+      membershipStatus: "active",
+      applicationStatus: "approved",
+      applicationApprovalSource: "admin_override",
+    });
   });
 
   it("records explicit declined and withdrawn application states", async () => {
@@ -358,7 +393,11 @@ describe("manual approval admin flow", () => {
     });
 
     await expect(
-      approveManualApproval({ userId: "user-2", adminUserId: "admin-1" }),
+      approveManualApproval({
+        userId: "user-2",
+        adminUserId: "admin-1",
+        allowUnsubmitted: true,
+      }),
     ).rejects.toMatchObject({
       message: "This member is in the invitation flow. They must sign in and accept the invitation.",
       status: 409,

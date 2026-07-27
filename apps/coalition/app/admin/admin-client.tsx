@@ -25,6 +25,7 @@ import {
 } from "@pgpz/ui";
 import { SensitiveDataText, useAdminSensitiveData } from "@/components/admin/sensitive-data";
 import type { AdminMember, AdminRoster } from "@/lib/admin/roster";
+import { getAdminApprovalEligibility } from "@/lib/admin/approval-eligibility";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { policyInterestGroupLabel, policyInterestGroupOptions } from "@/lib/policy-interest-groups";
@@ -169,9 +170,10 @@ const promptForMemberAction = (member: AdminMember, verb: "OPT OUT" | "DEACTIVAT
 };
 
 const memberCanBeApproved = (member: AdminMember) =>
-  member.accountStatus !== "deactivated" &&
-  member.membershipStatus !== "active" &&
-  member.applicationStatus === "requested";
+  getAdminApprovalEligibility(member) === "requested";
+
+const memberCanBeApprovedWithoutRequest = (member: AdminMember) =>
+  getAdminApprovalEligibility(member) === "unsubmitted_override";
 
 const memberCanBeInvited = (member: AdminMember) =>
   member.accountStatus !== "deactivated" &&
@@ -212,7 +214,9 @@ const communitySyncIsHealthy = (status: string | null) =>
 const memberNeedsAction = (member: AdminMember) => {
   if (member.accountStatus === "deactivated") return false;
   const active = member.membershipStatus === "active";
-  if (memberCanBeApproved(member)) return true;
+  if (memberCanBeApproved(member) || memberCanBeApprovedWithoutRequest(member)) {
+    return true;
+  }
   if (active && !member.welcomeEmailSentAt && !!member.email && !member.emailSuppressed) return true;
   return memberCanBeInvited(member) && !member.invitationEmailSentAt;
 };
@@ -498,7 +502,18 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
     }
   };
 
-  const approveManual = async (member: AdminMember) => {
+  const approveManual = async (
+    member: AdminMember,
+    { allowUnsubmitted = false }: { allowUnsubmitted?: boolean } = {},
+  ) => {
+    if (
+      allowUnsubmitted &&
+      !window.confirm(
+        `Approve ${displayName(member)} even though no application request is recorded?`,
+      )
+    ) {
+      return;
+    }
     setApprovalLoading((current) => ({ ...current, [member.id]: true }));
     setNotice(null);
     setError(null);
@@ -506,7 +521,10 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
       const res = await fetch("/api/admin/members/manual-approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: member.id, action: "approve" }),
+        body: JSON.stringify({
+          userId: member.id,
+          action: allowUnsubmitted ? "approve_unsubmitted" : "approve",
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Failed to approve member");
@@ -1127,6 +1145,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               const welcomeSent = !!member.welcomeEmailSentAt;
               const inviteSent = !!member.invitationEmailSentAt;
               const approvalReady = memberCanBeApproved(member);
+              const approvalOverride = memberCanBeApprovedWithoutRequest(member);
               const manualPending = member.manualApprovalStatus === "pending" && approvalReady;
               const expanded = !!expandedRows[member.id];
               const profileDraft = profileDrafts[member.id] ?? profileDraftFromMember(member);
@@ -1201,6 +1220,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           Approval ready
                         </div>
                       ) : null}
+                      {approvalOverride ? (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Admin approval available
+                        </div>
+                      ) : null}
                       {active ? (
                         <div
                           className={cn(
@@ -1257,7 +1282,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           <UserCheck className="h-3.5 w-3.5" />
                           Approval needed
                         </div>
-                      ) : (
+                      ) : approvalOverride ? (
+                        <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Request not recorded
+                        </div>
+                      ) : invited ? (
                         <div
                           className={cn(
                             "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
@@ -1267,6 +1297,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           <MailCheck className="h-3.5 w-3.5" />
                           {inviteSent ? "Invite sent" : "Invite pending"}
                         </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                          <MailCheck className="h-3.5 w-3.5" />
+                          No email action
+                        </div>
                       )}
                       <div className="text-xs text-slate-500">
                         {active
@@ -1275,9 +1310,13 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                             : "Not sent"
                           : approvalReady
                             ? "Approve before onboarding email"
-                          : inviteSent
+                          : approvalOverride
+                            ? "Approve only after independent verification"
+                          : invited && inviteSent
                             ? `Sent ${formatDate(member.invitationEmailSentAt)}`
-                            : "Not sent"}
+                            : invited
+                              ? "Not sent"
+                              : "Not applicable"}
                       </div>
                       {member.emailSuppressed ? (
                         <div className="text-xs text-rose-700">Suppressed</div>
@@ -1306,6 +1345,19 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           </Button>
                         </>
                       ) : null}
+                      {approvalOverride ? (
+                        <Button
+                          size="sm"
+                          disabled={approvalLoading[member.id]}
+                          isLoading={!!approvalLoading[member.id]}
+                          onClick={() =>
+                            approveManual(member, { allowUnsubmitted: true })
+                          }
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Approve member
+                        </Button>
+                      ) : null}
                       {active ? (
                         <Button
                           size="sm"
@@ -1317,7 +1369,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                           <MailPlus className="h-4 w-4" />
                           {welcomeSent ? "Resend welcome" : "Send welcome"}
                         </Button>
-                      ) : approvalReady ? null : (
+                      ) : approvalReady || approvalOverride || !invited ? null : (
                         <Button
                           size="sm"
                           variant="outline"
