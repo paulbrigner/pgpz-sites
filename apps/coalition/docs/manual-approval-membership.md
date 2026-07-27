@@ -10,6 +10,14 @@ PGPZ Coalition membership can be activated through manual admin approval or thro
 4. The admin roster surfaces pending requests.
 5. `POST /api/admin/members/manual-approval` activates membership with `membershipProvider = manual`.
 
+If an active profile predates the application-state fields or its request marker
+is otherwise absent, the admin roster exposes a separate guarded approval
+action. The administrator must confirm the override, the API rechecks that the
+profile is active, unapproved, not invited, and has no declined or withdrawn
+application, and the resulting record is audited with
+`applicationApprovalSource = admin_override`. The standard approval action
+still requires a recorded request.
+
 ## Admin Invitation Flow
 
 1. An admin adds a member from `/admin` with email, name, corporate affiliation, job title, policy interest groups, LinkedIn URL, X handle, and directory preference.

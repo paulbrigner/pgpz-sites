@@ -21,9 +21,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const userId = typeof body?.userId === "string" ? body.userId.trim() : "";
     const action = body?.action;
-    if (action !== "approve" && action !== "decline") {
+    if (
+      action !== "approve" &&
+      action !== "approve_unsubmitted" &&
+      action !== "decline"
+    ) {
       return NextResponse.json(
-        { error: 'Action must be either "approve" or "decline".' },
+        {
+          error:
+            'Action must be "approve", "approve_unsubmitted", or "decline".',
+        },
         { status: 400 },
       );
     }
@@ -34,7 +41,11 @@ export async function POST(request: NextRequest) {
           adminUserId,
           reason: typeof body?.reason === "string" ? body.reason : null,
         })
-      : await approveManualApproval({ userId, adminUserId });
+      : await approveManualApproval({
+          userId,
+          adminUserId,
+          allowUnsubmitted: action === "approve_unsubmitted",
+        });
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof ManualApprovalError) {
