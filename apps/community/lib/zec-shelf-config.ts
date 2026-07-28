@@ -52,6 +52,13 @@ export const COMMUNITY_ZEC_SHELF_INITIAL_RESOURCES = [
     description: "The free source repository, PDF, and EPUB for Frank Michael Porter's book on financial surveillance, zero-knowledge proofs, and Zcash.",
     category: "Learning",
   },
+  {
+    id: "how-zcash-works",
+    title: "How Zcash Works",
+    url: "https://community.pgpz.org/zec-shelf/how-zcash-works.html",
+    description: "An interactive, source-backed guide to Zcash's shielded transaction model, from notes, commitments, and nullifiers through proofs, settlement, Ironwood, and the Tachyon roadmap.",
+    category: "Learning",
+  },
 ] as const satisfies readonly ZecShelfSeedResource[];
 
 export const COMMUNITY_ZEC_SHELF_CLIENT_CONFIG = {
@@ -102,6 +109,10 @@ export const COMMUNITY_ZEC_SHELF_CLIENT_CONFIG = {
     "perfect-money": {
       url: "https://github.com/perfect-money/perfect-money-book",
       src: "/zec-shelf/perfect-money.png",
+    },
+    "how-zcash-works": {
+      url: "https://community.pgpz.org/zec-shelf/how-zcash-works.html",
+      src: "/zec-shelf/how-zcash-works.png",
     },
   },
   theme: {
