@@ -23,7 +23,9 @@ import {
   createInvitationActivationLink,
   inspectInvitationActivationToken,
   markInvitationEmailSent,
+  releaseInvitationEmailDelivery,
 } from "@/lib/admin/invitations";
+import { expectExpressionAttributesToMatch } from "@/lib/__tests__/helpers/dynamodb-expressions";
 
 describe("invitation activation link lifecycle", () => {
   beforeEach(() => {
@@ -51,6 +53,8 @@ describe("invitation activation link lifecycle", () => {
     expect(result.activationUrl).toContain("/api/invitations/activate?token=");
     const transaction = dynamoMocks.transactWrite.mock.calls[0][0];
     expect(transaction.TransactItems).toHaveLength(2);
+    expectExpressionAttributesToMatch(transaction.TransactItems[0].Put);
+    expectExpressionAttributesToMatch(transaction.TransactItems[1].Update);
     expect(transaction.TransactItems[1].Update).toEqual(
       expect.objectContaining({
         ConditionExpression: expect.stringMatching(/#membershipStatus = :invited.*#accountStatus.*#deactivatedAt/),
@@ -81,12 +85,34 @@ describe("invitation activation link lifecycle", () => {
   });
 
   it("atomically prevents the sent marker from recreating invited membership", async () => {
-    await markInvitationEmailSent({ userId: "user-1", adminUserId: "admin-1" });
+    await markInvitationEmailSent({
+      userId: "user-1",
+      adminUserId: "admin-1",
+      deliveryJobId: "job-1",
+      sentAt: "2026-07-28T02:58:03.976Z",
+    });
 
-    expect(dynamoMocks.update).toHaveBeenCalledWith(
+    const request = dynamoMocks.update.mock.calls[0][0];
+    expectExpressionAttributesToMatch(request);
+    expect(request).toEqual(
       expect.objectContaining({
-        ConditionExpression: expect.stringMatching(/#membershipStatus = :invited.*#accountStatus.*#deactivatedAt/),
+        UpdateExpression: expect.stringMatching(
+          /invitationEmailSentAt.*:sentAt.*updatedAt = :now.*invitationEmailSentJobId.*REMOVE invitationEmailJobId, invitationEmailClaimedAt/,
+        ),
+        ConditionExpression: expect.stringMatching(
+          /#membershipStatus = :invited.*#accountStatus.*:deactivated.*#deactivatedAt.*invitationEmailJobId = :deliveryJobId/,
+        ),
+        ExpressionAttributeValues: expect.objectContaining({
+          ":sentAt": "2026-07-28T02:58:03.976Z",
+          ":now": expect.any(String),
+          ":invited": "invited",
+          ":deactivated": "deactivated",
+          ":deliveryJobId": "job-1",
+        }),
       }),
+    );
+    expect(request.ExpressionAttributeValues[":now"]).not.toBe(
+      request.ExpressionAttributeValues[":sentAt"],
     );
   });
 
@@ -108,6 +134,30 @@ describe("invitation activation link lifecycle", () => {
           ":deactivated": "deactivated",
           ":false": false,
           ":manualPending": "pending",
+        }),
+      }),
+    );
+    expectExpressionAttributesToMatch(dynamoMocks.update.mock.calls[0][0]);
+  });
+
+  it("releases only the matching unsent invitation delivery claim", async () => {
+    await releaseInvitationEmailDelivery({
+      userId: "user-1",
+      deliveryJobId: "job-1",
+    });
+
+    const request = dynamoMocks.update.mock.calls[0][0];
+    expectExpressionAttributesToMatch(request);
+    expect(request).toEqual(
+      expect.objectContaining({
+        Key: { pk: "USER#user-1", sk: "USER#user-1" },
+        UpdateExpression: expect.stringContaining(
+          "REMOVE invitationEmailJobId, invitationEmailClaimedAt",
+        ),
+        ConditionExpression:
+          "invitationEmailJobId = :deliveryJobId AND attribute_not_exists(invitationEmailSentAt)",
+        ExpressionAttributeValues: expect.objectContaining({
+          ":deliveryJobId": "job-1",
         }),
       }),
     );

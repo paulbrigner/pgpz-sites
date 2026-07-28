@@ -349,17 +349,24 @@ export async function markInvitationEmailSent({
   userId,
   adminUserId,
   deliveryJobId,
+  sentAt,
 }: {
   userId: string;
   adminUserId?: string | null;
   deliveryJobId?: string | null;
+  sentAt?: string | null;
 }) {
+  const providedSentAt = normalizeText(sentAt);
+  const sentTimestamp =
+    providedSentAt && !Number.isNaN(Date.parse(providedSentAt))
+      ? providedSentAt
+      : new Date().toISOString();
   const now = new Date().toISOString();
   await documentClient.update({
     TableName: TABLE_NAME,
     Key: userKey(userId),
     UpdateExpression:
-      `SET invitationEmailSentAt = if_not_exists(invitationEmailSentAt, :now), invitationEmailSentBy = if_not_exists(invitationEmailSentBy, :adminUserId), invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now${deliveryJobId ? ", invitationEmailSentJobId = :deliveryJobId" : ""}${deliveryJobId ? " REMOVE invitationEmailJobId, invitationEmailClaimedAt" : ""}`,
+      `SET invitationEmailSentAt = if_not_exists(invitationEmailSentAt, :sentAt), invitationEmailSentBy = if_not_exists(invitationEmailSentBy, :adminUserId), invitationStatus = :pending, membershipStatus = :invited, membershipProvider = :provider, updatedAt = :now${deliveryJobId ? ", invitationEmailSentJobId = :deliveryJobId" : ""}${deliveryJobId ? " REMOVE invitationEmailJobId, invitationEmailClaimedAt" : ""}`,
     ConditionExpression:
       `attribute_exists(#pk) AND #membershipStatus = :invited AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)${deliveryJobId ? " AND (invitationEmailJobId = :deliveryJobId OR invitationEmailSentJobId = :deliveryJobId)" : ""}`,
     ExpressionAttributeNames: {
@@ -369,15 +376,17 @@ export async function markInvitationEmailSent({
       "#deactivatedAt": "deactivatedAt",
     },
     ExpressionAttributeValues: {
+      ":sentAt": sentTimestamp,
       ":now": now,
       ":adminUserId": adminUserId || null,
       ":pending": "pending",
       ":invited": "invited",
+      ":deactivated": "deactivated",
       ":provider": "admin_invite",
       ...(deliveryJobId ? { ":deliveryJobId": deliveryJobId } : {}),
     },
   });
-  return now;
+  return sentTimestamp;
 }
 
 export async function acceptAuthenticatedInvitation({
@@ -442,7 +451,7 @@ export async function acceptAuthenticatedInvitation({
             TableName: TABLE_NAME,
             Key: userKey(id),
             UpdateExpression:
-              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationTokenHash, invitationTokenCreatedAt, invitationTokenCreatedBy, communitySyncError",
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :now, invitationStatus = :accepted, invitationAcceptedAt = :now, invitationAcceptedVia = :acceptedVia, updatedAt = :now, communitySyncStatus = :queued, communitySyncMessage = :syncMessage REMOVE invitationTokenHash, invitationTokenCreatedAt, invitationTokenCreatedBy, invitationEmailJobId, invitationEmailClaimedAt, communitySyncError",
             ConditionExpression:
               "attribute_exists(#pk) AND #membershipStatus = :invited AND #invitationStatus = :pending AND #email = :email AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
             ExpressionAttributeNames: {
@@ -456,6 +465,7 @@ export async function acceptAuthenticatedInvitation({
             ExpressionAttributeValues: {
               ":active": "active",
               ":invited": "invited",
+              ":pending": "pending",
               ":provider": "admin_invite",
               ":accepted": "accepted",
               ":acceptedVia": "authenticated_session",

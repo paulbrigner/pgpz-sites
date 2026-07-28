@@ -64,7 +64,10 @@ vi.mock("@/lib/system-email", () => ({
   }),
 }));
 
-import { processCoalitionBackgroundJobTask } from "@/lib/admin/coalition-background-job-processor";
+import {
+  processCoalitionBackgroundJobTask,
+  reconcileCoalitionBackgroundJobProjections,
+} from "@/lib/admin/coalition-background-job-processor";
 
 const recipient = {
   recipientKey: "user-1",
@@ -133,6 +136,8 @@ describe("Coalition invitation background-job delivery boundary", () => {
     jobMocks.deliveryStarted.mockResolvedValue(undefined);
     jobMocks.projectionCompleted.mockResolvedValue(undefined);
     jobMocks.releaseForRetry.mockResolvedValue(undefined);
+    jobMocks.listJobs.mockResolvedValue([]);
+    jobMocks.listTasks.mockResolvedValue([]);
     invitationMocks.claim.mockResolvedValue(true);
     invitationMocks.createLink.mockResolvedValue({
       activationUrl: "https://coalition.example.test/api/invitations/activate?token=test",
@@ -198,6 +203,11 @@ describe("Coalition invitation background-job delivery boundary", () => {
       expect(receiptPersistedAt).toBeLessThan(
         emailLogMocks.record.mock.invocationCallOrder[0],
       );
+      const providerAcceptedAt =
+        jobMocks.complete.mock.calls[0][0].result.providerAcceptedAt;
+      expect(invitationMocks.markSent).toHaveBeenCalledWith(
+        expect.objectContaining({ sentAt: providerAcceptedAt }),
+      );
       expect(jobMocks.releaseForRetry).not.toHaveBeenCalled();
       expect(jobMocks.complete).not.toHaveBeenCalledWith(
         expect.objectContaining({ status: "delivery_unknown" }),
@@ -206,5 +216,45 @@ describe("Coalition invitation background-job delivery boundary", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it("reconciles a sent invitation using the provider acceptance timestamp", async () => {
+    const providerAcceptedAt = "2026-07-28T02:58:03.976Z";
+    jobMocks.listJobs.mockResolvedValue([
+      job({ status: "completed" }),
+    ]);
+    jobMocks.listTasks.mockResolvedValue([
+      {
+        ...task,
+        status: "sent",
+        providerMessageId: "ses-message-1",
+        result: {
+          subject: "Coalition invitation",
+          providerAcceptedAt,
+        },
+        projectionCompletedAt: null,
+      },
+    ]);
+
+    await expect(
+      reconcileCoalitionBackgroundJobProjections(),
+    ).resolves.toEqual({
+      inspectedInvitationJobs: 1,
+      repairedInvitationTasks: 1,
+      failedInvitationRepairs: 0,
+    });
+    expect(invitationMocks.markSent).toHaveBeenCalledWith({
+      userId: "user-1",
+      adminUserId: "admin-1",
+      deliveryJobId: "job-1",
+      sentAt: providerAcceptedAt,
+    });
+    expect(emailLogMocks.record).toHaveBeenCalledWith(
+      expect.objectContaining({ occurredAt: providerAcceptedAt }),
+    );
+    expect(jobMocks.projectionCompleted).toHaveBeenCalledWith(
+      "job-1",
+      "task-1",
+    );
   });
 });

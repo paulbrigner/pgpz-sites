@@ -145,6 +145,7 @@ async function processInvitation(
       userId: task.recipient.userId!,
       adminUserId: payload.adminUserId || null,
       deliveryJobId: job.id,
+      sentAt: providerAcceptedAt,
     }).catch((projectionError) => {
       projectionsCompleted = false;
       console.error("Invitation delivery was recorded but member projection failed", {
@@ -293,6 +294,7 @@ export async function reconcileCoalitionBackgroundJobProjections(limit = 100) {
           userId: task.recipient.userId,
           adminUserId: payload.adminUserId || null,
           deliveryJobId: job.id,
+          sentAt: providerAcceptedAt,
         });
         await recordEmailEvent({
           eventId: `background:${job.id}:${task.taskId}:sent`,

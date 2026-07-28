@@ -23,6 +23,7 @@ vi.mock("@/lib/admin/background-jobs", () => ({
 }));
 
 import { acceptAuthenticatedInvitation } from "@/lib/admin/invitations";
+import { expectExpressionAttributesToMatch } from "@/lib/__tests__/helpers/dynamodb-expressions";
 
 describe("authenticated invitation acceptance", () => {
   beforeEach(() => {
@@ -55,14 +56,20 @@ describe("authenticated invitation acceptance", () => {
     });
 
     const transaction = dynamoMocks.transactWrite.mock.calls[0][0].TransactItems;
-    expect(transaction[0].Update).toEqual(
+    const acceptanceUpdate = transaction[0].Update;
+    expectExpressionAttributesToMatch(acceptanceUpdate);
+    expect(acceptanceUpdate).toEqual(
       expect.objectContaining({
         TableName: "TestTable",
         Key: { pk: "USER#user-1", sk: "USER#user-1" },
+        UpdateExpression: expect.stringMatching(
+          /REMOVE invitationTokenHash.*invitationEmailJobId, invitationEmailClaimedAt/,
+        ),
         ConditionExpression: expect.stringMatching(/#invitationStatus = :pending.*#email = :email.*#accountStatus.*#deactivatedAt/),
         ExpressionAttributeValues: expect.objectContaining({
           ":active": "active",
           ":invited": "invited",
+          ":pending": "pending",
           ":acceptedVia": "authenticated_session",
           ":email": "invitee@example.com",
         }),
