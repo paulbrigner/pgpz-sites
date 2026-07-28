@@ -155,9 +155,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [memberActionLoading, setMemberActionLoading] = useState<Record<string, boolean>>({});
   const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
   const [notesSaving, setNotesSaving] = useState<Record<string, boolean>>({});
-  const [sortKey, setSortKey] = useState<CommunityRosterSortKey>("lastName");
-  const [sortDirection, setSortDirection] = useState<CommunityRosterSortDirection>("asc");
-  const [actionsFirst, setActionsFirst] = useState(false);
+  const [sortKey, setSortKey] = useState<CommunityRosterSortKey>("joinedAt");
+  const [sortDirection, setSortDirection] = useState<CommunityRosterSortDirection>("desc");
+  const [actionsFirst, setActionsFirst] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadRoster = async () => {

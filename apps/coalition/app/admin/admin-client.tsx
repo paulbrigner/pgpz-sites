@@ -268,9 +268,9 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
   const [templateDraftSending, setTemplateDraftSending] = useState(false);
   const [bulkInviting, setBulkInviting] = useState(false);
   const [bulkInvitationJob, setBulkInvitationJob] = useState<BackgroundJobView | null>(null);
-  const [sortKey, setSortKey] = useState<CoalitionRosterSortKey>("lastName");
-  const [sortDirection, setSortDirection] = useState<CoalitionRosterSortDirection>("asc");
-  const [actionsFirst, setActionsFirst] = useState(false);
+  const [sortKey, setSortKey] = useState<CoalitionRosterSortKey>("joinedAt");
+  const [sortDirection, setSortDirection] = useState<CoalitionRosterSortDirection>("desc");
+  const [actionsFirst, setActionsFirst] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
   const loadInvitationTemplate = async () => {
