@@ -343,6 +343,81 @@ h2 {
   font-size: 18px;
 }
 .chapter-intro strong { color: var(--ink); }
+.chapter-intro-plain {
+  padding: 14px 17px 15px;
+  border-left: 4px solid var(--purple);
+  border-radius: 0 11px 11px 0;
+  color: var(--ink);
+  background: #f4effb;
+  font-size: 18px;
+  line-height: 1.55;
+}
+.reading-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--purple);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.reading-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 6px 9px 6px 7px;
+  border: 1px solid #cfc1e3;
+  border-radius: 999px;
+  color: var(--purple);
+  background: rgba(255,255,255,.66);
+  cursor: pointer;
+  font: 800 10px/1 var(--mono);
+  letter-spacing: .04em;
+}
+.reading-toggle::before {
+  content: "Aa";
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: white;
+  background: var(--purple);
+  font: 800 9px/1 var(--sans);
+  letter-spacing: 0;
+}
+.reading-toggle:hover { background: #f4effb; }
+.reading-toggle:focus-visible,
+.reading-guide-toggle:focus-visible {
+  outline: 3px solid rgba(75,49,127,.28);
+  outline-offset: 2px;
+}
+.reading-guide-toggle {
+  border-color: #cfc1e3;
+  color: var(--purple);
+  background: #f7f3fd;
+}
+.reading-guide-toggle::before {
+  content: "Aa";
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  color: white;
+  background: var(--purple);
+  font: 800 9px/1 var(--sans);
+  letter-spacing: 0;
+}
+.reading-guide-toggle[aria-pressed="true"] {
+  border-color: var(--purple);
+  color: white;
+  background: var(--purple);
+}
+.reading-guide-toggle[aria-pressed="true"]::before {
+  color: var(--purple);
+  background: white;
+}
 
 .lab {
   overflow: hidden;
@@ -2700,6 +2775,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   .hero { padding-bottom: 36px; }
   h1 { font-size: clamp(44px, 14vw, 66px); }
   .hero-grid { gap: 34px; }
+  .reading-guide-toggle { flex-basis: 100%; }
   .hero-map { padding: 18px; border-radius: 19px; }
   .map-step { grid-template-columns: 34px 1fr; }
   .map-lane { display: none; }
@@ -2843,6 +2919,9 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="hero-actions">
           <a class="btn primary" href="#why">Start with the big idea <span aria-hidden="true">↓</span></a>
           <button class="btn" id="heroPlay" type="button">Preview the five-part guide</button>
+          <button class="btn reading-guide-toggle" id="readingGuideToggle" type="button" aria-pressed="false">
+            <span id="readingGuideToggleLabel">Use plain language throughout</span>
+          </button>
         </div>
       </div>
       <div class="hero-map" aria-label="Five-part map of this guide">
@@ -2865,12 +2944,19 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">01 / PRIVACY + POOLS</div>
         <div>
           <h2>Verification does not have to mean visibility.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="whyIntroTechnical">
             A transparent chain lets everyone verify by exposing the transaction history. Zcash keeps
             public verification and replaces the exposed facts with <strong>cryptographic evidence</strong>.
             The network can reject counterfeits and double-spends without receiving the sender, recipient,
             or shielded amount.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="whyIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Zcash lets the network confirm that a payment is legitimate without publishing who paid whom or
+            how much. It proves the rules were followed while keeping the payment details private.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="whyIntroTechnical whyIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3078,11 +3164,18 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">02 / SHARED ORDER</div>
         <div>
           <h2>The chain is an ordered history and a shared clock.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="ledgerIntroTechnical">
             Transactions propagate to nodes, wait in local mempools, and become settled history when miners
             include them in blocks. Each block points to the previous block. Its <strong>height</strong> is its
             position in the one agreed sequence; later blocks add confirmations and make reversal harder.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="ledgerIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Zcash transactions wait to be added to a block. Miners put blocks in order, and each new block
+            strengthens the record of the blocks before it.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="ledgerIntroTechnical ledgerIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <aside class="primitive-primer" aria-labelledby="hash-primer-title">
@@ -3263,11 +3356,18 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">03 / PRIVATE VALUE</div>
         <div>
           <h2>A shielded balance is a collection of notes.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="notesIntroTechnical">
             Wallets do not update a private “account balance” on-chain. They control discrete <strong>notes</strong>.
             Spending consumes selected notes completely, then creates new notes for the recipient and any change.
             Your displayed balance is a wallet-side sum of the unspent notes it can decrypt.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="notesIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            A private Zcash balance is made of separate pieces called notes. Paying someone uses whole notes
+            and creates new ones for the recipient and any change—much like spending bills and receiving change.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="notesIntroTechnical notesIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3442,7 +3542,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">04 / SEALED RECORDS</div>
         <div>
           <h2>The note stays private. Its commitment and ciphertext go public.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="commitmentsIntroTechnical">
             A note contains an address, value, and randomness. The chain records a binding
             <strong>commitment</strong> to those contents and an encrypted payload for the recipient—not the
             plaintext note. Alice encrypts that payload using the <strong>public receiving key in Bob’s
@@ -3450,6 +3550,14 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             transaction’s public ephemeral key to decrypt it. The commitment and encryption do different jobs.
             The next section opens that encrypted delivery to show where an optional memo fits.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="commitmentsIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            The blockchain gets a locked fingerprint of each private note and an encrypted package that only
+            the recipient’s wallet can open. The fingerprint proves the note has not changed; encryption hides
+            what is inside it.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="commitmentsIntroTechnical commitmentsIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3543,13 +3651,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">05 / ENCRYPTED MEMOS</div>
         <div>
           <h2>A shielded output can carry a private memo.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="memosIntroTechnical">
             After Alice creates Bob’s note, her wallet can place up to <strong>512 bytes</strong> of text or
             application data in that output’s memo field. The memo is encrypted with the note, stored on-chain
             as ciphertext, and recovered when Bob’s wallet decrypts the output. It belongs to one shielded
             output—not to the transaction as a whole—and it does not change the note’s value, commitment, or
             tree position. Transparent outputs do not have this shielded memo field.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="memosIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            A shielded payment can include a private message or app data. It is encrypted for the recipient
+            and stored with that one payment output, so the public blockchain cannot read it.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="memosIntroTechnical memosIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab" id="memoLab">
@@ -3616,12 +3731,19 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">06 / MEMBERSHIP</div>
         <div>
           <h2>Every commitment joins one append-only tree.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="treeIntroTechnical">
             Nodes append note commitments in chain order and hash upward to a compact <strong>root</strong>.
             A wallet can prove one commitment belongs to that tree using only its Merkle path. The root used
             by a transaction is its <strong>anchor</strong>: a public fingerprint of a particular tree state,
             not an identifier for the hidden note.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="treeIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Every new private note leaves a fingerprint in a shared tree. A wallet can later prove its note
+            is somewhere in that tree without pointing out which entry belongs to it.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="treeIntroTechnical treeIntroPlain">Explain this more simply</button>
           <div class="primitive-note">
             <strong>Where does the tree live?</strong> Blocks carry the new note commitments, not a serialized
             copy of the whole tree. Each validating node appends those commitments in order and normally saves
@@ -3702,7 +3824,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">07 / NO REPLAY</div>
         <div>
           <h2>A nullifier says “spent” without saying which note.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="nullifiersIntroTechnical">
             To spend a shielded note, its owner proves authorization and derives that note’s unique
             <strong>nullifier</strong> with a keyed pseudo-random function: secret nullifier key material plus
             note-specific data produces a deterministic, one-time-looking serial. It is not a raw public hash of
@@ -3711,6 +3833,13 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             commitment in the tree. Nodes reject any later transaction that publishes the same nullifier, while
             observers cannot reverse the nullifier to discover which commitment was spent.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="nullifiersIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            When a private note is spent, Zcash publishes a unique “spent” marker. The network can reject the
+            same note if someone tries to spend it again, but the marker does not reveal which private note was used.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="nullifiersIntroTechnical nullifiersIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3760,13 +3889,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">08 / CAPABILITIES</div>
         <div>
           <h2>Keys separate spending, seeing, and receiving.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="keysIntroTechnical">
             Zcash key material is a hierarchy of capabilities. A spending key authorizes value movement.
             Viewing keys are wallet secrets by default: they reveal selected transaction information but
             <strong>never authorize spending</strong>. An owner can voluntarily disclose a viewing key when
             they want another party to receive that key’s read-only access. Diversified addresses let one wallet
             receive at many unlinkable-looking destinations.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="keysIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Different Zcash keys grant different powers. An address lets someone pay you, viewing keys let
+            someone see limited wallet activity, and only the spending key can move your money.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="keysIntroTechnical keysIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3838,13 +3974,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">09 / DISCOVERY</div>
         <div>
           <h2>A wallet finds money by trying to decrypt outputs.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="scanIntroTechnical">
             Shielded outputs contain no searchable plaintext address. A wallet downloads compact chain data
             and attempts trial decryption with its incoming viewing key. Almost every attempt fails. A success
             reveals the private note, which the wallet verifies against the public commitment and records with
             its position for a future Merkle path. Full output decryption also recovers that output’s memo; a
             light wallet may first detect the compact note data and fetch the full transaction afterward.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="scanIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Private payments do not show the recipient’s address, so a wallet checks new encrypted outputs
+            until it finds one it can open. That is how it discovers incoming money and private memos.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="scanIntroTechnical scanIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -3894,13 +4037,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">10 / ZERO KNOWLEDGE</div>
         <div>
           <h2>The proof compresses a private valid story.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="proofIntroTechnical">
             The wallet’s secret inputs—notes, keys, Merkle paths, and randomness—are collectively called the
             <strong>witness</strong>. Zcash checks them with a <strong>circuit</strong>: not electronic hardware,
             but a fixed mathematical rulebook for a valid shielded transaction. That rulebook checks that inputs
             exist, the spender controls them, nullifiers are correct, and value balances. A compact proof
             convinces nodes that a valid witness exists while the witness itself stays private.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="proofIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Your wallet proves that the payment follows Zcash’s rules without showing the private information
+            it checked. The network sees the proof—not your notes, keys, or payment details.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="proofIntroTechnical proofIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <aside class="primitive-primer" aria-labelledby="transcript-title">
@@ -4004,13 +4154,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">11 / PUBLIC PACKAGE</div>
         <div>
           <h2>Ironwood reuses Orchard’s paired Action structure.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="actionsIntroTechnical">
             An Ironwood transaction uses the Orchard Action shape: each Action pairs one spend side with one output
             side. When the real counts differ, dummy components fill the shape. The pairing does not mean one input
             “became” one output; value conservation is enforced across the whole transaction. The public package
             contains opaque commitments, nullifiers, randomized authorization data, note and memo ciphertexts,
             an anchor, a proof, and a binding signature.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="actionsIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Ironwood gives private inputs and outputs a standard public shape. Extra placeholders help hide
+            the real counts, while a proof shows that the whole payment still balances.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="actionsIntroTechnical actionsIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -4105,12 +4262,19 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">12 / END TO END</div>
         <div>
           <h2>One send crosses a private lane and a public lane.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="lifecycleIntroTechnical">
             Most of the work happens inside the wallet: select notes, fetch paths, derive nullifiers, create
             outputs, encrypt, and prove. The network never repeats those private computations. It checks the
             public proof and state rules, orders the transaction, then publishes new commitments and nullifiers
             for wallets to scan.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="lifecycleIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Your wallet does the private work: choosing funds, creating new notes, encrypting them, and making
+            a proof. The network only checks the public proof and records the result.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="lifecycleIntroTechnical lifecycleIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -4159,12 +4323,19 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">13 / SETTLEMENT</div>
         <div>
           <h2>Proof creation, broadcast, and confirmation are different events.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="settlementIntroTechnical">
             Proving is private local computation. Broadcasting sends the finished public transaction to a
             node. Nodes check it before holding and relaying it; a miner later includes it in a block. Inclusion
             updates the commitment tree and nullifier set. Confirmations describe how much chain has accumulated
             above that state change.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="settlementIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Making a proof does not send a payment. The wallet first builds it privately, then broadcasts it,
+            a miner adds it to a block, and later blocks add confirmations.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="settlementIntroTechnical settlementIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -4199,12 +4370,19 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">14 / BOUNDARIES</div>
         <div>
           <h2>Shielded privacy is powerful, specific, and not magical.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="privacyIntroTechnical">
             The protocol hides shielded senders, recipients, note values, and the link between a spent note’s
             commitment and nullifier. The chain still shows that a transaction exists, when it was mined,
             its public fee, and its opaque fields. Network observers may see traffic outside the cryptographic
             protocol. Optional viewing keys support selective accountability without making everyone’s ledger public.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="privacyIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Shielded Zcash hides important payment details, but not everything. People can still see that a
+            transaction happened and may learn clues from its timing, fee, or internet traffic.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="privacyIntroTechnical privacyIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -4308,12 +4486,20 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">15 / EVOLUTION</div>
         <div>
           <h2>The cryptography evolves; the mental model endures.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="evolutionIntroTechnical">
             Zcash moved from research proposals to Sprout, Sapling, Orchard, and now Ironwood as proving became
             faster, mobile-friendly, and free of trusted setup. Upgrades can change pools, circuits, formats, and
             proof systems. The durable idea is unchanged: <strong>private notes, public commitments, unlinkable
             nullifiers, encrypted delivery, and proofs of valid state transitions.</strong>
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="evolutionIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Zcash has upgraded its privacy technology several times. The machinery changes, but the basic
+            pattern stays the same: private value, public fingerprints, spent markers, encrypted delivery,
+            and proofs that the rules were followed.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="evolutionIntroTechnical evolutionIntroPlain">Explain this more simply</button>
         </div>
       </div>
       <div class="lab">
@@ -4429,7 +4615,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">16 / SCALING</div>
         <div>
           <h2>Zcash must relieve several bottlenecks—not chase one TPS number.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="scalingIntroTechnical">
             Scaling a private payment system is not one line on a chart. Wallets must create proofs and find their
             funds, blocks must carry and verify transactions, and validators must retain enough state to reject
             double-spends. Earlier upgrades made shielded payments practical on ordinary devices and removed trusted
@@ -4437,6 +4623,13 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             revealed nullifiers. The graph below shows <strong>qualitative scaling headroom</strong> across those separate
             constraints; it is a sourced direction map, not a synthetic benchmark score.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="scalingIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Zcash cannot scale by improving just one number. Wallet work, block space, wallet scanning, and
+            the data that network nodes must keep all need separate improvements.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="scalingIntroTechnical scalingIntroPlain">Explain this more simply</button>
         </div>
       </div>
 
@@ -4522,7 +4715,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="chapter-no">17 / ROADMAP</div>
         <div>
           <h2>Tachyon aims to make private payments scale without giving up privacy.</h2>
-          <p class="chapter-intro">
+          <p class="chapter-intro" id="tachyonIntroTechnical">
             Tachyon is a <strong>proposed new Zcash shielded pool</strong>, independent of today’s Ironwood pool—not a feature
             running on mainnet today. It keeps the durable model of private notes and public validity proofs, but
             redesigns the protocol around proof-carrying data so prior verified work can be compressed and carried
@@ -4530,6 +4723,13 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             revealed nullifier adds to validator state that grows with the chain. Tachyon targets smaller marginal
             transaction data, aggregated validation work, and bounded active state without weakening shielded privacy.
           </p>
+          <p class="chapter-intro chapter-intro-plain" id="tachyonIntroPlain" hidden>
+            <span class="reading-label">Plain language</span>
+            Tachyon is a proposed future design for much more Zcash activity. It aims to make private payments
+            smaller and cheaper to check while stopping the data every node must keep from growing forever.
+          </p>
+          <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
+            aria-pressed="false" aria-controls="tachyonIntroTechnical tachyonIntroPlain">Explain this more simply</button>
         </div>
       </div>
 
@@ -4901,6 +5101,46 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     }, { threshold: [0.1, 0.25, 0.5], rootMargin: "-12% 0px -55% 0px" });
     chapters.forEach((s) => obs.observe(s));
   }
+
+  // Plain-language reading layer
+  const readingSections = $$(".chapter-head").map((head) => ({
+    technical: $(".chapter-intro:not(.chapter-intro-plain)", head),
+    plain: $(".chapter-intro-plain", head),
+    toggle: $("[data-reading-toggle]", head)
+  })).filter((section) => section.technical && section.plain && section.toggle);
+  const readingGuideToggle = $("#readingGuideToggle");
+  const readingGuideToggleLabel = $("#readingGuideToggleLabel");
+  const setReadingSection = (section, mode) => {
+    const plain = mode === "plain";
+    section.technical.hidden = plain;
+    section.plain.hidden = !plain;
+    section.toggle.dataset.readingMode = mode;
+    section.toggle.setAttribute("aria-pressed", plain ? "true" : "false");
+    section.toggle.textContent = plain ? "Show technical detail" : "Explain this more simply";
+  };
+  const updateReadingGuideToggle = () => {
+    const allPlain = readingSections.length > 0 &&
+      readingSections.every((section) => section.toggle.dataset.readingMode === "plain");
+    readingGuideToggle.setAttribute("aria-pressed", allPlain ? "true" : "false");
+    readingGuideToggleLabel.textContent = allPlain
+      ? "Show technical detail throughout"
+      : "Use plain language throughout";
+  };
+  readingSections.forEach((section) => {
+    setReadingSection(section, "technical");
+    section.toggle.addEventListener("click", () => {
+      setReadingSection(section, section.toggle.dataset.readingMode === "plain" ? "technical" : "plain");
+      updateReadingGuideToggle();
+    });
+  });
+  readingGuideToggle.addEventListener("click", () => {
+    const nextMode = readingSections.every((section) => section.toggle.dataset.readingMode === "plain")
+      ? "technical"
+      : "plain";
+    readingSections.forEach((section) => setReadingSection(section, nextMode));
+    updateReadingGuideToggle();
+  });
+  updateReadingGuideToggle();
 
   // Hero overview
   const heroSteps = $$("#heroFlow .map-step");
