@@ -1075,6 +1075,88 @@ h2 {
   text-transform: uppercase;
 }
 .field code { display: block; overflow: hidden; text-overflow: ellipsis; font: 11px/1.35 var(--mono); }
+.memo-compose label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 750;
+}
+.memo-input {
+  width: 100%;
+  min-height: 112px;
+  padding: 12px 13px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--white);
+  font: 13px/1.5 var(--sans);
+}
+.memo-input:focus { outline: 2px solid rgba(75,49,127,.24); border-color: var(--purple); }
+.memo-meter {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.memo-meter strong { color: var(--purple); font-family: var(--mono); }
+.memo-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.memo-fact {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper-2);
+}
+.memo-fact span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font: 700 8px/1.2 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.memo-fact strong { display: block; font-size: 11px; }
+.memo-envelope {
+  min-height: 188px;
+  padding: 16px;
+  border: 1px dashed #aa9c83;
+  border-radius: 14px;
+  background: rgba(255,255,255,.58);
+}
+.memo-envelope .memo-badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: var(--white);
+  background: var(--purple);
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.memo-envelope code {
+  display: block;
+  margin: 8px 0 12px;
+  color: var(--purple);
+  font: 11px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+.memo-envelope blockquote {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--green);
+  color: #155d46;
+  background: var(--green-soft);
+  font-size: 14px;
+}
+.memo-envelope p { margin: 6px 0; }
 .seal {
   display: grid;
   place-items: center;
@@ -2485,6 +2567,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   .digest-result { grid-template-columns: 1fr; }
   .recap-grid { grid-template-columns: 1fr; }
   .field-grid { grid-template-columns: 1fr; }
+  .memo-facts { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2498,23 +2581,24 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 
 <aside class="rail" aria-label="Guide navigation">
   <a class="brand" href="#top"><span class="brand-logo" aria-hidden="true"></span><span>How Zcash works</span></a>
-  <div class="eyebrow">One guide · 15 sections</div>
+  <div class="eyebrow">One guide · 16 sections</div>
   <nav id="chapterNav">
     <a href="#why"><span class="num">01</span><span>Privacy &amp; shielded pools</span></a>
     <a href="#ledger"><span class="num">02</span><span>The shared ledger</span></a>
     <a href="#notes"><span class="num">03</span><span>Money becomes notes</span></a>
     <a href="#commitments"><span class="num">04</span><span>Commitments &amp; encryption</span></a>
-    <a href="#tree"><span class="num">05</span><span>The commitment tree</span></a>
-    <a href="#nullifiers"><span class="num">06</span><span>Stopping double-spends</span></a>
-    <a href="#keys"><span class="num">07</span><span>Keys &amp; disclosure</span></a>
-    <a href="#scan"><span class="num">08</span><span>How wallets find funds</span></a>
-    <a href="#proof"><span class="num">09</span><span>Proving without revealing</span></a>
-    <a href="#actions"><span class="num">10</span><span>What goes on-chain</span></a>
-    <a href="#lifecycle"><span class="num">11</span><span>The full send lifecycle</span></a>
-    <a href="#settlement"><span class="num">12</span><span>Broadcast &amp; settlement</span></a>
-    <a href="#privacy"><span class="num">13</span><span>Privacy boundaries</span></a>
-    <a href="#evolution"><span class="num">14</span><span>Protocol evolution</span></a>
-    <a href="#tachyon"><span class="num">15</span><span>Tachyon roadmap</span></a>
+    <a href="#memos"><span class="num">05</span><span>Encrypted memos</span></a>
+    <a href="#tree"><span class="num">06</span><span>The commitment tree</span></a>
+    <a href="#nullifiers"><span class="num">07</span><span>Stopping double-spends</span></a>
+    <a href="#keys"><span class="num">08</span><span>Keys &amp; disclosure</span></a>
+    <a href="#scan"><span class="num">09</span><span>How wallets find funds</span></a>
+    <a href="#proof"><span class="num">10</span><span>Proving without revealing</span></a>
+    <a href="#actions"><span class="num">11</span><span>What goes on-chain</span></a>
+    <a href="#lifecycle"><span class="num">12</span><span>The full send lifecycle</span></a>
+    <a href="#settlement"><span class="num">13</span><span>Broadcast &amp; settlement</span></a>
+    <a href="#privacy"><span class="num">14</span><span>Privacy boundaries</span></a>
+    <a href="#evolution"><span class="num">15</span><span>Protocol evolution</span></a>
+    <a href="#tachyon"><span class="num">16</span><span>Tachyon roadmap</span></a>
     <a href="#sources"><span class="num">↗</span><span>Sources &amp; notes</span></a>
   </nav>
   <div class="rail-foot">
@@ -2548,10 +2632,10 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="map-label">The guide · five connected parts</div>
         <div class="map-flow" id="heroFlow">
           <a class="map-step on" href="#why"><span class="map-icon">01</span><span><strong>Start with shared rules</strong><small>Privacy choices, pools, hashes, mining, and the shared chain.</small></span><span class="map-lane">01–02</span></a>
-          <a class="map-step" href="#notes"><span class="map-icon">02</span><span><strong>Build private value</strong><small>Notes, encryption, commitments, trees, and nullifiers.</small></span><span class="map-lane">03–06</span></a>
-          <a class="map-step" href="#keys"><span class="map-icon">03</span><span><strong>Understand the wallet</strong><small>Keys, selective disclosure, and scanning for funds.</small></span><span class="map-lane">07–08</span></a>
-          <a class="map-step" href="#proof"><span class="map-icon">04</span><span><strong>Follow a shielded send</strong><small>Proofs, public fields, wallet work, and settlement.</small></span><span class="map-lane">09–12</span></a>
-          <a class="map-step" href="#privacy"><span class="map-icon">05</span><span><strong>Know the boundaries</strong><small>Privacy limits, protocol evolution, and the Tachyon proposal.</small></span><span class="map-lane">13–15</span></a>
+          <a class="map-step" href="#notes"><span class="map-icon">02</span><span><strong>Build private value</strong><small>Notes, commitments, encrypted memos, trees, and nullifiers.</small></span><span class="map-lane">03–07</span></a>
+          <a class="map-step" href="#keys"><span class="map-icon">03</span><span><strong>Understand the wallet</strong><small>Keys, selective disclosure, and scanning for funds.</small></span><span class="map-lane">08–09</span></a>
+          <a class="map-step" href="#proof"><span class="map-icon">04</span><span><strong>Follow a shielded send</strong><small>Proofs, public fields, wallet work, and settlement.</small></span><span class="map-lane">10–13</span></a>
+          <a class="map-step" href="#privacy"><span class="map-icon">05</span><span><strong>Know the boundaries</strong><small>Privacy limits, protocol evolution, and the Tachyon proposal.</small></span><span class="map-lane">14–16</span></a>
         </div>
         <div class="mini-readout" id="heroReadout">Start here: why Zcash can verify without exposing payment details.</div>
       </div>
@@ -3140,13 +3224,14 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
       <div class="chapter-head">
         <div class="chapter-no">04 / SEALED RECORDS</div>
         <div>
-          <h2>The note stays private. Its commitment goes public.</h2>
+          <h2>The note stays private. Its commitment and ciphertext go public.</h2>
           <p class="chapter-intro">
             A note contains an address, value, and randomness. The chain records a binding
             <strong>commitment</strong> to those contents and an encrypted payload for the recipient—not the
             plaintext note. Alice encrypts that payload using the <strong>public receiving key in Bob’s
             shielded receiver</strong>. Bob later combines the incoming viewing key (IVK) introduced above with the
             transaction’s public ephemeral key to decrypt it. The commitment and encryption do different jobs.
+            The next section opens that encrypted delivery to show where an optional memo fits.
           </p>
         </div>
       </div>
@@ -3235,10 +3320,83 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     </div>
   </section>
 
+  <section class="chapter" id="memos">
+    <div class="wrap">
+      <div class="chapter-head">
+        <div class="chapter-no">05 / ENCRYPTED MEMOS</div>
+        <div>
+          <h2>A shielded output can carry a private memo.</h2>
+          <p class="chapter-intro">
+            After Alice creates Bob’s note, her wallet can place up to <strong>512 bytes</strong> of text or
+            application data in that output’s memo field. The memo is encrypted with the note, stored on-chain
+            as ciphertext, and recovered when Bob’s wallet decrypts the output. It belongs to one shielded
+            output—not to the transaction as a whole—and it does not change the note’s value, commitment, or
+            tree position. Transparent outputs do not have this shielded memo field.
+          </p>
+        </div>
+      </div>
+      <div class="lab" id="memoLab">
+        <div class="lab-top">
+          <div class="lab-title"><span class="live">Memo envelope</span> Compare the chain and recipient views</div>
+          <div class="controls">
+            <div class="segmented" role="group" aria-label="Memo visibility">
+              <button class="choice on" type="button" data-memo-view="observer" aria-pressed="true">Chain view</button>
+              <button class="choice" type="button" data-memo-view="recipient" aria-pressed="false">Bob decrypts</button>
+            </div>
+            <button class="btn small" id="clearMemo" type="button">Use no memo</button>
+          </div>
+        </div>
+        <div class="lab-body">
+          <div class="lab-grid">
+            <div class="panel memo-compose">
+              <label for="memoInput">Alice’s optional memo for Bob’s output</label>
+              <textarea class="memo-input" id="memoInput" rows="4">Invoice 1847 · Thank you for supporting the community.</textarea>
+              <div class="memo-meter">
+                <span>UTF-8 capacity, not character count</span>
+                <strong id="memoBytes">0 / 512 bytes</strong>
+              </div>
+              <div class="memo-facts">
+                <div class="memo-fact"><span>Attaches to</span><strong>One shielded output</strong></div>
+                <div class="memo-fact"><span>Plaintext slot</span><strong>Always 512 bytes</strong></div>
+                <div class="memo-fact"><span>Changes</span><strong>Ciphertext, not cmx</strong></div>
+              </div>
+            </div>
+            <div class="panel purple">
+              <h3 id="memoViewTitle">What the chain carries</h3>
+              <div class="memo-envelope" id="memoOutput" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="status info" id="memoStatus" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="primitive-note">
+        <strong>Privacy boundary:</strong> a memo is encrypted, not ephemeral or automatically authenticated as
+        a real-world identity. Its ciphertext remains on-chain. The recipient—and anyone later given the relevant
+        viewing capability—can read what the sender chose to include, so a memo can deliberately reveal an invoice
+        number, name, reply address, or other identifying context.
+      </div>
+      <div class="source-line">
+        <span class="source-mark">READ</span>
+        <span>
+          <a href="https://zcash.github.io/orchard/design/actions.html" target="_blank" rel="noopener">The Orchard Book’s Action design</a>
+          assigns one memo field to each output side of an Action; Ironwood reuses that Action encoding under
+          <a href="https://zips.z.cash/zip-0229" target="_blank" rel="noopener">ZIP 229</a>.
+          <a href="https://zips.z.cash/zip-0302" target="_blank" rel="noopener">ZIP 302</a> defines the 512-byte text,
+          no-memo, and application-data encodings, while <a href="https://zips.z.cash/zip-0321" target="_blank" rel="noopener">ZIP 321</a>
+          limits payment-request memos to destinations that support shielded memos.
+          <a href="https://zips.z.cash/zip-0307" target="_blank" rel="noopener">ZIP 307</a> explains how compact wallet
+          scanning can detect a note before fetching its full encrypted memo, and the
+          <a href="https://zcash.github.io/ironwood/design/transaction-format.html" target="_blank" rel="noopener">Ironwood transaction-format chapter</a>
+          shows memo ciphertext in the current Ironwood-pool bundle digest.
+        </span>
+      </div>
+    </div>
+  </section>
+
   <section class="chapter" id="tree">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">05 / MEMBERSHIP</div>
+        <div class="chapter-no">06 / MEMBERSHIP</div>
         <div>
           <h2>Every commitment joins one append-only tree.</h2>
           <p class="chapter-intro">
@@ -3324,7 +3482,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="nullifiers">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">06 / NO REPLAY</div>
+        <div class="chapter-no">07 / NO REPLAY</div>
         <div>
           <h2>A nullifier says “spent” without saying which note.</h2>
           <p class="chapter-intro">
@@ -3382,7 +3540,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="keys">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">07 / CAPABILITIES</div>
+        <div class="chapter-no">08 / CAPABILITIES</div>
         <div>
           <h2>Keys separate spending, seeing, and receiving.</h2>
           <p class="chapter-intro">
@@ -3460,14 +3618,15 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="scan">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">08 / DISCOVERY</div>
+        <div class="chapter-no">09 / DISCOVERY</div>
         <div>
           <h2>A wallet finds money by trying to decrypt outputs.</h2>
           <p class="chapter-intro">
             Shielded outputs contain no searchable plaintext address. A wallet downloads compact chain data
             and attempts trial decryption with its incoming viewing key. Almost every attempt fails. A success
             reveals the private note, which the wallet verifies against the public commitment and records with
-            its position for a future Merkle path.
+            its position for a future Merkle path. Full output decryption also recovers that output’s memo; a
+            light wallet may first detect the compact note data and fetch the full transaction afterward.
           </p>
         </div>
       </div>
@@ -3504,7 +3663,9 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           The <a href="https://zips.z.cash/protocol/protocol.pdf#page=71">Zcash Protocol Specification, §4.20.2, PDF pp. 71–73</a>
           specifies trial decryption with an incoming viewing key, and <a href="https://zips.z.cash/protocol/protocol.pdf#page=75">§4.22, PDF pp. 75–76</a>
           defines Sapling and Orchard block-chain scanning. <a href="https://zips.z.cash/zip-0326" target="_blank" rel="noopener">ZIP 326</a>
-          explains how Ironwood keeps the Orchard protocol’s incoming-viewing-key scanning capability.
+          explains how Ironwood keeps the Orchard protocol’s incoming-viewing-key scanning capability, while
+          <a href="https://zips.z.cash/zip-0307" target="_blank" rel="noopener">ZIP 307</a> distinguishes compact
+          note detection from full memo retrieval.
         </span>
       </div>
     </div>
@@ -3513,7 +3674,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="proof">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">09 / ZERO KNOWLEDGE</div>
+        <div class="chapter-no">10 / ZERO KNOWLEDGE</div>
         <div>
           <h2>The proof compresses a private valid story.</h2>
           <p class="chapter-intro">
@@ -3623,15 +3784,15 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="actions">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">10 / PUBLIC PACKAGE</div>
+        <div class="chapter-no">11 / PUBLIC PACKAGE</div>
         <div>
           <h2>Ironwood reuses Orchard’s paired Action structure.</h2>
           <p class="chapter-intro">
             An Ironwood transaction uses the Orchard Action shape: each Action pairs one spend side with one output
             side. When the real counts differ, dummy components fill the shape. The pairing does not mean one input
             “became” one output; value conservation is enforced across the whole transaction. The public package
-            contains opaque commitments, nullifiers, randomized authorization data, ciphertexts, an anchor, a proof,
-            and a binding signature.
+            contains opaque commitments, nullifiers, randomized authorization data, note and memo ciphertexts,
+            an anchor, a proof, and a binding signature.
           </p>
         </div>
       </div>
@@ -3724,7 +3885,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="lifecycle">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">11 / END TO END</div>
+        <div class="chapter-no">12 / END TO END</div>
         <div>
           <h2>One send crosses a private lane and a public lane.</h2>
           <p class="chapter-intro">
@@ -3778,7 +3939,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="settlement">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">12 / SETTLEMENT</div>
+        <div class="chapter-no">13 / SETTLEMENT</div>
         <div>
           <h2>Proof creation, broadcast, and confirmation are different events.</h2>
           <p class="chapter-intro">
@@ -3818,7 +3979,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="privacy">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">13 / BOUNDARIES</div>
+        <div class="chapter-no">14 / BOUNDARIES</div>
         <div>
           <h2>Shielded privacy is powerful, specific, and not magical.</h2>
           <p class="chapter-intro">
@@ -3849,6 +4010,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
                 <div class="reveal"><span>Sender / recipient</span><span class="tag hide">hidden</span></div>
                 <div class="reveal"><span>Shielded note values</span><span class="tag hide">hidden</span></div>
                 <div class="reveal"><span>Commitment ↔ nullifier link</span><span class="tag hide">hidden</span></div>
+                <div class="reveal"><span>Memo plaintext</span><span class="tag hide">recipient only</span></div>
                 <div class="reveal"><span>Transaction exists / mined time</span><span class="tag show">public</span></div>
                 <div class="reveal"><span>Fee and opaque protocol fields</span><span class="tag show">public</span></div>
                 <div class="reveal"><span>IP / wallet sync behavior</span><span class="tag edge">network layer</span></div>
@@ -3926,7 +4088,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="evolution">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">14 / EVOLUTION</div>
+        <div class="chapter-no">15 / EVOLUTION</div>
         <div>
           <h2>The cryptography evolves; the mental model endures.</h2>
           <p class="chapter-intro">
@@ -3984,7 +4146,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="tachyon">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">15 / ROADMAP</div>
+        <div class="chapter-no">16 / ROADMAP</div>
         <div>
           <h2>Tachyon aims to make the private ledger compressible.</h2>
           <p class="chapter-intro">
@@ -4199,7 +4361,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
       </p>
       <div class="recap-grid">
         <div class="recap-card"><span class="n">01</span><strong>Wallets hold capabilities</strong><p>Keys let a wallet receive, see, disclose, or spend.</p></div>
-        <div class="recap-card"><span class="n">02</span><strong>Value lives in notes</strong><p>Spends consume old notes and create fresh ones.</p></div>
+        <div class="recap-card"><span class="n">02</span><strong>Value lives in notes</strong><p>Spends create fresh notes; their outputs may also carry encrypted memos.</p></div>
         <div class="recap-card"><span class="n">03</span><strong>Commitments enter the tree</strong><p>The public root summarizes private-note commitments.</p></div>
         <div class="recap-card"><span class="n">04</span><strong>Nullifiers stop replay</strong><p>A unique public serial is unlinkable to the spent leaf.</p></div>
         <div class="recap-card"><span class="n">05</span><strong>A proof enforces the rules</strong><p>Existence, control, correctness, and balance—without the witness.</p></div>
@@ -4353,7 +4515,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   const heroSteps = $$("#heroFlow .map-step");
   const heroLines = [
     "Start here: why Zcash can verify without exposing payment details.",
-    "Next: represent value as notes and stop hidden double-spends.",
+    "Next: represent value as notes, carry private memo context, and stop hidden double-spends.",
     "Then: see what keys reveal and how wallets discover funds.",
     "Follow one send: prove privately, verify publicly, and settle on-chain.",
     "Finish with privacy limits, protocol evolution, and what is only proposed."
@@ -4850,6 +5012,71 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   $("#viewAsRecipient").addEventListener("click", () => { if (sealed) renderSeal("recipient"); });
   $("#resetSeal").addEventListener("click", () => resetSealDemo(true));
   resetSealDemo(true);
+
+  // Encrypted memo demo
+  const MEMO_LIMIT = 512;
+  const memoEncoder = new TextEncoder();
+  let memoView = "observer";
+  const fitMemoToBytes = (value) => {
+    let fitted = "";
+    for (const character of value) {
+      if (memoEncoder.encode(fitted + character).length > MEMO_LIMIT) break;
+      fitted += character;
+    }
+    return fitted;
+  };
+  const renderMemo = () => {
+    const input = $("#memoInput");
+    const fitted = fitMemoToBytes(input.value);
+    if (fitted !== input.value) input.value = fitted;
+    const memo = input.value;
+    const byteCount = memoEncoder.encode(memo).length;
+    const hasMemo = byteCount > 0;
+    const memoCiphertext = illustrativeCiphertext(
+      hasMemo ? `utf8-memo|${memo}` : "no-memo|f6|" + "00".repeat(511)
+    );
+    $("#memoBytes").textContent = `${byteCount} / ${MEMO_LIMIT} bytes`;
+    $$("[data-memo-view]", $("#memoLab")).forEach((button) => {
+      const on = button.dataset.memoView === memoView;
+      button.classList.toggle("on", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    if (memoView === "recipient") {
+      $("#memoViewTitle").textContent = "What Bob’s wallet recovers";
+      $("#memoOutput").innerHTML =
+        '<div class="memo-badge">incoming viewing key ✓</div>' +
+        '<p class="tiny muted">Decrypted memo for Bob’s output</p>' +
+        '<blockquote id="memoPlaintext"></blockquote>' +
+        '<p class="tiny">The wallet strips text padding before display. Application-formatted bytes may be handled without showing them as text.</p>';
+      $("#memoPlaintext").textContent = hasMemo ? memo : "No memo supplied";
+      $("#memoStatus").className = "status ok";
+      $("#memoStatus").textContent = hasMemo
+        ? "Bob’s wallet decrypted the output and recovered its memo. The memo adds private context, but it does not identify Alice unless she chose to identify herself in the content."
+        : "Bob’s wallet decrypted the standard no-memo encoding. The output occupied the same fixed-size field on-chain.";
+    } else {
+      $("#memoViewTitle").textContent = "What the chain carries";
+      $("#memoOutput").innerHTML =
+        '<div class="memo-badge">public · opaque</div>' +
+        '<p class="tiny muted">Fixed-size encrypted memo field</p>' +
+        '<code id="memoCiphertext"></code>' +
+        '<p class="tiny">The transaction binds these bytes, but an observer cannot read the plaintext or tell whether Alice entered text.</p>';
+      $("#memoCiphertext").textContent = `ciphertext · ${memoCiphertext}…`;
+      $("#memoStatus").className = "status info";
+      $("#memoStatus").textContent =
+        "Typing, changing, or clearing the memo changes the ciphertext—not the note’s value or commitment. The 512-byte plaintext slot is present even when the wallet uses the standard no-memo marker.";
+    }
+  };
+  $$("[data-memo-view]", $("#memoLab")).forEach((button) => button.addEventListener("click", () => {
+    memoView = button.dataset.memoView;
+    renderMemo();
+  }));
+  $("#memoInput").addEventListener("input", renderMemo);
+  $("#clearMemo").addEventListener("click", () => {
+    $("#memoInput").value = "";
+    memoView = "observer";
+    renderMemo();
+  });
+  renderMemo();
 
   // Chain-to-Merkle-tree demo
   const TREE_CAPACITY = 32;
@@ -5400,12 +5627,12 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     ["Select", "Select spendable notes", "Alice’s wallet chooses 3 ZEC + 4 ZEC notes to cover payment, change, and fee.", "No transaction yet", "The public ledger is unchanged."],
     ["Paths", "Fetch membership paths", "For each selected commitment, the wallet obtains a Merkle path to a valid anchor.", "Publish an anchor", "The root is already public chain state; it does not identify Alice’s leaves."],
     ["Nullify", "Derive nullifiers", "Secret key material plus note data yields one unlinkable serial for each spent note.", "Prepare replay checks", "Nodes will check that neither serial is already in the nullifier set."],
-    ["Outputs", "Create recipient + change notes", "Fresh randomness creates Bob’s 5 ZEC note and Alice’s 1.999 ZEC change note.", "Commit to new notes", "Only commitments and encrypted payloads will become public."],
-    ["Encrypt", "Encrypt note payloads", "Bob’s payload is encrypted so his incoming key can recover it; Alice encrypts her change.", "Opaque ciphertexts", "The chain will carry data that looks random to everyone else."],
+    ["Outputs", "Create recipient + change notes", "Fresh randomness creates Bob’s 5 ZEC note and Alice’s 1.999 ZEC change note. Bob’s output may also carry a memo.", "Commit to new notes", "Commitments bind the notes; the memo does not change their tree positions."],
+    ["Encrypt", "Encrypt note + memo payloads", "Bob’s note and optional memo are encrypted so his incoming key can recover them; Alice encrypts her change output.", "Opaque ciphertexts", "The chain carries fixed-size encrypted output data that looks random to everyone else."],
     ["Prove", "Run the proof rulebook", "The circuit checks that private witness data satisfies membership, control, nullifier, and balance rules.", "Compact validity claim", "A proof can be verified without receiving the witness."],
     ["Broadcast", "Send finished transaction", "Alice’s wallet submits proof, actions, signatures, anchor, nullifiers, and fee.", "Validate and relay", "A node checks public rules, adds the valid transaction to its mempool, and relays it."],
     ["Mine", "Wait for inclusion", "No further private construction is required.", "Update shared state", "A miner includes the transaction; commitments append and nullifiers enter the set."],
-    ["Scan", "Bob trial-decrypts outputs", "Bob’s incoming viewing key succeeds, the commitment matches, and his wallet records the new note.", "No public ownership link", "Observers still see no address or link from Bob to the new commitment."]
+    ["Scan", "Bob trial-decrypts outputs", "Bob’s incoming viewing key succeeds, the commitment matches, and his wallet records the new note and retrieves its memo.", "No public ownership link", "Observers still see no address, memo plaintext, or link from Bob to the new commitment."]
   ];
   let lifeIndex = 0, lifeTimer = null;
   const renderLifecycle = () => {
