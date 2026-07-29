@@ -2008,6 +2008,145 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 }
 .primitive-source a { text-underline-offset: 2px; }
 
+.mining-primer {
+  position: relative;
+  margin: 0 0 18px;
+  padding: clamp(20px, 3vw, 30px);
+  overflow: hidden;
+  border: 1px solid #dec27d;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(244,183,40,.12), rgba(13,118,86,.055)),
+    var(--white);
+}
+.mining-primer::after {
+  content: "";
+  position: absolute;
+  right: -58px;
+  top: -70px;
+  width: 190px;
+  height: 190px;
+  border: 30px solid rgba(244,183,40,.09);
+  border-radius: 50%;
+}
+.mining-primer-head {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(260px, .9fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: end;
+}
+.mining-label {
+  color: var(--gold-dark);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.mining-primer h3 {
+  margin: 10px 0 0;
+  font: 700 clamp(25px, 3.2vw, 38px)/1.05 var(--serif);
+  letter-spacing: -.025em;
+}
+.mining-primer-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.mining-flow {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+}
+.mining-step {
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid rgba(154,101,0,.22);
+  border-radius: 12px;
+  background: rgba(255,253,248,.86);
+}
+.mining-step span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--gold-dark);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mining-step strong { display: block; font-size: 13px; }
+.mining-step p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.mining-arrow { color: var(--gold-dark); font-weight: 800; }
+.mining-workbench {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 13px;
+  margin-top: 13px;
+}
+.mining-card {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(154,101,0,.2);
+  border-radius: 12px;
+  background: rgba(255,253,248,.88);
+}
+.mining-card-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.mining-header-fields {
+  display: grid;
+  gap: 6px;
+}
+.mining-header-fields code {
+  padding: 7px 9px;
+  border-radius: 7px;
+  color: #5e5032;
+  background: #f6efdd;
+  font: 10px/1.35 var(--mono);
+  overflow-wrap: anywhere;
+}
+.mining-card p { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
+.mining-result {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.mining-result div {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 8px;
+  background: #f6efdd;
+}
+.mining-result span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.mining-result code {
+  display: block;
+  color: var(--ink);
+  font: 800 11px/1.3 var(--mono);
+  overflow-wrap: anywhere;
+}
+.mining-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.mining-source {
+  position: relative;
+  z-index: 1;
+  margin-top: 11px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.mining-source a { text-underline-offset: 2px; }
+
 .chain-row .block { transition: opacity .2s ease, border-color .2s ease; }
 .block .prev { display: block; margin-top: 5px; color: #9b9386; font: 8px/1.3 var(--mono); }
 .block.tampered { border-color: var(--red); background: var(--red-soft); }
@@ -2314,7 +2453,13 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   }
   .primitive-head,
   .hash-workbench,
+  .mining-primer-head,
+  .mining-workbench,
   .digest-workbench { grid-template-columns: 1fr; }
+  .mining-flow { grid-template-columns: 1fr; }
+  .mining-arrow { transform: rotate(90deg); text-align: center; }
+  .mining-step { min-height: auto; }
+  .mining-result { grid-template-columns: 1fr; }
   .transcript-grid { grid-template-columns: 1fr; }
   .transcript-step { min-height: auto; }
   .transcript-step + .transcript-step::before {
@@ -2682,6 +2827,80 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           defines the protocol’s hash functions, personalization, and domain-separated pseudo-random functions.
           <a href="https://maxdesalle.com/downloads/mastering-zcash.pdf#page=4">Mastering Zcash, §3.1, PDF pp. 4–7</a>
           introduces hashes as the links and fingerprints that make shared history tamper-evident.
+        </div>
+      </aside>
+      <aside class="mining-primer" aria-labelledby="mining-primer-title">
+        <div class="mining-primer-head">
+          <div>
+            <span class="mining-label">Then · proof of work</span>
+            <h3 id="mining-primer-title">A miner searches for a block header the network will accept.</h3>
+          </div>
+          <p>
+            A miner assembles a candidate block, including transactions from its mempool, and commits to that
+            candidate in a header. Most header fields stay fixed while the miner varies a <strong>nonce</strong>
+            and computes trial results. Because each result is unpredictable, the practical strategy is repeated
+            search—not solving backward from the target.
+          </p>
+        </div>
+        <div class="mining-flow" aria-label="Three stages of proof-of-work mining">
+          <div class="mining-step">
+            <span>01 · Build</span>
+            <strong>Commit to a candidate block</strong>
+            <p>The header binds the previous block, time, difficulty, and commitments to this block’s contents.</p>
+          </div>
+          <div class="mining-arrow" aria-hidden="true">→</div>
+          <div class="mining-step">
+            <span>02 · Search</span>
+            <strong>Change the nonce and try again</strong>
+            <p>Each nonce produces a different candidate result. Most attempts fail the network target.</p>
+          </div>
+          <div class="mining-arrow" aria-hidden="true">→</div>
+          <div class="mining-step">
+            <span>03 · Verify</span>
+            <strong>Broadcast a valid solution</strong>
+            <p>Other nodes cheaply check the proof of work, every transaction, and the block’s structure.</p>
+          </div>
+        </div>
+        <div class="mining-workbench">
+          <div class="mining-card">
+            <span class="mining-card-label">Illustrative candidate header · fixed fields</span>
+            <div class="mining-header-fields">
+              <code>previous block · 503774c3…</code>
+              <code>transaction root · 9ab3cc41…</code>
+              <code>time + difficulty · fixed for this search</code>
+            </div>
+            <p>
+              The teaching search changes only the nonce. A real miner may refresh other permitted header or
+              candidate-block fields when it needs a new search space.
+            </p>
+          </div>
+          <div class="mining-card">
+            <span class="mining-card-label">Toy target · digest begins with 00</span>
+            <div class="mining-result">
+              <div><span>Nonce</span><code id="miningNonce">0</code></div>
+              <div><span>Trial digest</span><code id="miningDigest">waiting</code></div>
+              <div><span>Attempts</span><code id="miningAttempts">0</code></div>
+            </div>
+            <div class="mining-actions">
+              <button class="btn small gold" id="searchNonce" type="button">Search for a nonce</button>
+              <button class="btn small" id="resetNonce" type="button">Reset</button>
+            </div>
+          </div>
+        </div>
+        <div class="status info" id="miningStatus" aria-live="polite">
+          Teaching stand-in: press “Search for a nonce” to watch trial values change until one meets the toy target.
+        </div>
+        <div class="mining-source">
+          <strong>Zcash reality:</strong> the block header nonce is 32 bytes, and a mining submission also carries
+          an Equihash solution. Nodes require that solution to be valid and the proposed block hash to be at or
+          below the current target. The tiny search above demonstrates the asymmetry—finding acceptable work is
+          costly; checking it is fast—not the production algorithm.
+          <a href="https://maxdesalle.com/downloads/mastering-zcash.pdf#page=4">Mastering Zcash, §3.1, PDF pp. 4–7</a>
+          introduces the nonce-and-target search;
+          <a href="https://maxdesalle.com/downloads/mastering-zcash.pdf#page=17">§§4.8–4.9, PDF pp. 17–19</a>
+          applies it to Zcash and Equihash.
+          <a href="https://zips.z.cash/zip-0301#nonce-parts" target="_blank" rel="noopener">ZIP 301</a>
+          specifies Zcash’s nonce, target test, and Equihash mining submission.
         </div>
       </aside>
       <div class="lab">
@@ -4249,6 +4468,69 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     renderHashPrimer();
   });
   renderHashPrimer();
+
+  // Proof-of-work nonce primer. This is intentionally a tiny target search, not Equihash.
+  const MINING_HEADER = "prev=503774c3|txRoot=9ab3cc41|time=demo";
+  let miningNonce = 0, miningAttempts = 0, miningTimer = null;
+  const miningDigestFor = (nonce) =>
+    toyDigest("illustrative:pow-header", `${MINING_HEADER}|nonce=${nonce}`, 12);
+  const renderMiningAttempt = () => {
+    $("#miningNonce").textContent = fmt(miningNonce, 0);
+    $("#miningDigest").textContent = miningDigestFor(miningNonce);
+    $("#miningAttempts").textContent = fmt(miningAttempts, 0);
+  };
+  const stopMiningSearch = () => {
+    clearInterval(miningTimer);
+    miningTimer = null;
+  };
+  const resetMiningSearch = () => {
+    stopMiningSearch();
+    miningNonce = 0;
+    miningAttempts = 0;
+    renderMiningAttempt();
+    $("#searchNonce").disabled = false;
+    $("#searchNonce").textContent = "Search for a nonce";
+    $("#miningStatus").className = "status info";
+    $("#miningStatus").textContent =
+      "Teaching stand-in: press “Search for a nonce” to watch trial values change until one meets the toy target.";
+  };
+  const runMiningBatch = () => {
+    for (let i = 0; i < 12; i++) {
+      const digest = miningDigestFor(miningNonce);
+      miningAttempts += 1;
+      if (digest.startsWith("00")) {
+        stopMiningSearch();
+        renderMiningAttempt();
+        $("#searchNonce").disabled = false;
+        $("#searchNonce").textContent = "Replay the search";
+        $("#miningStatus").className = "status ok";
+        $("#miningStatus").textContent =
+          `Accepted teaching nonce ${fmt(miningNonce, 0)} after ${fmt(miningAttempts, 0)} attempts: ${digest} meets the toy target. A node can verify that result once.`;
+        return;
+      }
+      miningNonce += 1;
+    }
+    renderMiningAttempt();
+  };
+  $("#searchNonce").addEventListener("click", () => {
+    resetMiningSearch();
+    $("#searchNonce").disabled = true;
+    $("#searchNonce").textContent = "Searching…";
+    $("#miningStatus").className = "status";
+    $("#miningStatus").textContent =
+      "Searching candidate nonces. Each attempt changes the digest unpredictably; only a result beginning with 00 passes this toy target.";
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      while (miningTimer === null && miningAttempts < 10000 && !miningDigestFor(miningNonce).startsWith("00")) {
+        miningAttempts += 1;
+        miningNonce += 1;
+      }
+      runMiningBatch();
+    } else {
+      miningTimer = setInterval(runMiningBatch, 45);
+    }
+  });
+  $("#resetNonce").addEventListener("click", resetMiningSearch);
+  resetMiningSearch();
 
   // Chain demo
   const CHAIN_START = 3500000;
