@@ -3247,6 +3247,14 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             by a transaction is its <strong>anchor</strong>: a public fingerprint of a particular tree state,
             not an identifier for the hidden note.
           </p>
+          <div class="primitive-note">
+            <strong>Where does the tree live?</strong> Blocks carry the new note commitments, not a serialized
+            copy of the whole tree. Each validating node appends those commitments in order and normally saves
+            a compact representation of the resulting tree in its own database, so it can resume without rebuilding
+            from genesis. The storage format is an implementation choice; every node must derive the same root from
+            the validated chain. Block headers also commit to chain history that includes the shielded pools’
+            recent roots, with the newest root appearing one block later.
+          </div>
         </div>
       </div>
       <div class="lab" id="chainTreeLab">
@@ -3303,6 +3311,11 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           incremental note-commitment tree; <a href="https://zips.z.cash/protocol/protocol.pdf#page=52">§4.9, PDF pp. 52–53</a> specifies
           level-aware Merkle hashing and path validity, and <a href="https://zips.z.cash/protocol/protocol.pdf#page=79">§5.4.1.3, PDF pp. 79–80</a>
           defines Orchard’s Sinsemilla-based tree hash that Ironwood reuses.
+          <a href="https://zebra.zfnd.org/dev/rfcs/0007-treestate.html">Zebra’s tree-state design</a> shows one node implementation
+          deriving trees from commitments and persisting the latest finalized state.
+          <a href="https://zips.z.cash/zip-0221">ZIP 221</a> specifies how the block-header chain-history commitment binds
+          Sapling and Orchard roots one block later; <a href="https://zips.z.cash/zip-0258">ZIP 258</a> extends the same mechanism
+          to Ironwood.
         </span>
       </div>
     </div>
