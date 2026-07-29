@@ -201,6 +201,22 @@ h1 em { color: var(--purple); font-style: italic; }
   font-size: clamp(18px, 2vw, 22px);
   line-height: 1.48;
 }
+.reader-mode-note {
+  max-width: 670px;
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--gold-dark);
+  color: var(--muted);
+  background: rgba(255,253,248,.62);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.reader-mode-note strong { color: var(--ink); }
+.reader-mode-note a {
+  color: inherit;
+  font-weight: 700;
+  text-underline-offset: 2px;
+}
 .hero-actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 28px; }
 .btn {
   display: inline-flex;
@@ -2915,6 +2931,11 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <p class="lede">
           Build a working model of Zcash from the privacy goal and shared chain to private notes,
           wallet behavior, proofs, settlement, privacy boundaries, and future protocol work.
+        </p>
+        <p class="reader-mode-note">
+          <strong>Interactive guide:</strong> Reader or Reading mode may omit diagrams, controls,
+          and demonstrations. <a href="https://community.pgpz.org/zec-shelf/how-zcash-works.html">Open
+          this page normally</a> or exit Reader mode to use them.
         </p>
         <div class="hero-actions">
           <a class="btn primary" href="#why">Start with the big idea <span aria-hidden="true">↓</span></a>
