@@ -1584,6 +1584,13 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 }
 .tachyon-proposal strong { display: block; margin-bottom: 5px; }
 .tachyon-proposal p { margin: 0; color: var(--muted); font-size: 12px; }
+.tachyon-proposal.scale-target {
+  margin-bottom: 10px;
+  border-color: #d8b25d;
+  background: #fff7df;
+}
+.tachyon-proposal.scale-target .flag { background: var(--gold-dark); }
+.tachyon-proposal.scale-target + .tachyon-proposal { margin-top: 0; }
 .tachyon-goals {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1822,6 +1829,207 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 .tachyon-caveat {
   margin-top: 10px;
   color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.scaling-metric-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 16px;
+}
+.scaling-metric {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--white);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.scaling-metric.on {
+  color: white;
+  border-color: var(--purple);
+  background: var(--purple);
+}
+.scaling-chart-shell {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fbf8f1;
+}
+.scaling-chart-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.scaling-chart-head h3 { margin: 0; font: 700 25px/1.08 var(--serif); }
+.scaling-chart-head p { max-width: 520px; margin: 0; color: var(--muted); font-size: 11px; }
+.scaling-direction {
+  display: flex;
+  justify-content: space-between;
+  margin: 15px 8px 0;
+  color: var(--muted);
+  font: 700 8px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.scaling-chart { width: 100%; height: auto; margin-top: 4px; overflow: visible; }
+.scaling-grid { stroke: #ddd5c6; stroke-width: 1; stroke-dasharray: 4 5; }
+.scaling-guide { stroke: rgba(75,49,127,.38); stroke-width: 2; stroke-dasharray: 3 5; }
+.scaling-line {
+  fill: none;
+  stroke: var(--purple);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.scaling-dot {
+  fill: var(--white);
+  stroke: var(--purple);
+  stroke-width: 4;
+}
+.scaling-dot.selected { fill: var(--gold); stroke: var(--purple); stroke-width: 5; }
+.scaling-dot.proposed { stroke-dasharray: 3 2; }
+.scaling-era-buttons {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+.scaling-era {
+  min-height: 38px;
+  padding: 7px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--white);
+  cursor: pointer;
+  font: 800 9px/1.2 var(--mono);
+}
+.scaling-era.on { color: white; border-color: var(--purple); background: var(--purple); }
+.scaling-detail {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 17px;
+  border-left: 4px solid var(--purple);
+  background: #f3eefb;
+}
+.scaling-detail span {
+  color: var(--purple);
+  font: 800 9px/1.35 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.scaling-detail strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.scaling-detail p { margin: 0; color: var(--muted); font-size: 11px; }
+.scaling-benchmarks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 16px;
+}
+.scaling-benchmark {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+.scaling-benchmark span {
+  color: var(--gold-dark);
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.scaling-benchmark strong { display: block; margin: 9px 0 6px; font: 700 22px/1 var(--serif); }
+.scaling-benchmark p { margin: 0; color: var(--muted); font-size: 10px; }
+.scaling-benchmark.proposed { border-style: dashed; border-color: #bca9dc; background: #f7f3fd; }
+.scaling-caveat { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+.quantum-bridge {
+  margin-top: 18px;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid #8bc6b1;
+  border-radius: 17px;
+  background: var(--green-soft);
+}
+.quantum-bridge-head {
+  display: grid;
+  grid-template-columns: minmax(210px, .8fr) 1.2fr;
+  gap: 24px;
+  align-items: start;
+}
+.quantum-bridge-head .eyebrow { color: var(--green); }
+.quantum-bridge-head h3 { margin: 9px 0 0; font: 700 29px/1.05 var(--serif); }
+.quantum-bridge-head p { margin: 0; color: #426056; font-size: 12px; }
+.quantum-path {
+  display: grid;
+  grid-template-columns: 1fr 28px 1fr 28px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-top: 20px;
+}
+.quantum-stage {
+  min-height: 132px;
+  padding: 14px;
+  border: 1px solid rgba(13,118,86,.24);
+  border-radius: 12px;
+  background: rgba(255,255,255,.7);
+}
+.quantum-stage span {
+  color: var(--green);
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.quantum-stage strong { display: block; margin: 9px 0 7px; font-size: 12px; }
+.quantum-stage p { margin: 0; color: #426056; font-size: 10px; }
+.quantum-arrow { color: var(--green); text-align: center; font-weight: 900; }
+.quantum-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 16px;
+}
+.quantum-choice {
+  padding: 10px;
+  border: 1px solid rgba(13,118,86,.24);
+  border-radius: 9px;
+  color: #426056;
+  background: rgba(255,255,255,.68);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.quantum-choice.on { color: white; border-color: var(--green); background: var(--green); }
+.quantum-detail {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 18px;
+  margin-top: 8px;
+  padding: 16px;
+  border-left: 4px solid var(--green);
+  background: rgba(255,255,255,.72);
+}
+.quantum-detail span {
+  color: var(--green);
+  font: 800 9px/1.35 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.quantum-detail strong { display: block; margin-bottom: 6px; font-size: 13px; }
+.quantum-detail p { margin: 0; color: #426056; font-size: 11px; }
+.quantum-warning {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(13,118,86,.2);
+  color: #426056;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -2536,6 +2744,14 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   .sync-boundary { grid-template-columns: 1fr; }
   .tachyon-roadmap { grid-template-columns: 1fr; }
   .roadmap-step-list { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .scaling-metric-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scaling-chart-head, .scaling-detail { grid-template-columns: 1fr; display: grid; }
+  .scaling-era-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scaling-benchmarks { grid-template-columns: 1fr; }
+  .quantum-bridge-head, .quantum-detail { grid-template-columns: 1fr; }
+  .quantum-path { grid-template-columns: 1fr; }
+  .quantum-arrow { transform: rotate(90deg); }
+  .quantum-controls { grid-template-columns: 1fr; }
   .timeline { grid-template-columns: 1fr; }
   .era-list { grid-template-columns: repeat(2, 1fr); }
   .constant-model { grid-template-columns: repeat(2, 1fr); }
@@ -2581,7 +2797,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 
 <aside class="rail" aria-label="Guide navigation">
   <a class="brand" href="#top"><span class="brand-logo" aria-hidden="true"></span><span>How Zcash works</span></a>
-  <div class="eyebrow">One guide · 16 sections</div>
+  <div class="eyebrow">One guide · 17 sections</div>
   <nav id="chapterNav">
     <a href="#why"><span class="num">01</span><span>Privacy &amp; shielded pools</span></a>
     <a href="#ledger"><span class="num">02</span><span>The shared ledger</span></a>
@@ -2598,7 +2814,8 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     <a href="#settlement"><span class="num">13</span><span>Broadcast &amp; settlement</span></a>
     <a href="#privacy"><span class="num">14</span><span>Privacy boundaries</span></a>
     <a href="#evolution"><span class="num">15</span><span>Protocol evolution</span></a>
-    <a href="#tachyon"><span class="num">16</span><span>Tachyon roadmap</span></a>
+    <a href="#scaling"><span class="num">16</span><span>Scaling Zcash</span></a>
+    <a href="#tachyon"><span class="num">17</span><span>Tachyon roadmap</span></a>
     <a href="#sources"><span class="num">↗</span><span>Sources &amp; notes</span></a>
   </nav>
   <div class="rail-foot">
@@ -2635,7 +2852,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           <a class="map-step" href="#notes"><span class="map-icon">02</span><span><strong>Build private value</strong><small>Notes, commitments, encrypted memos, trees, and nullifiers.</small></span><span class="map-lane">03–07</span></a>
           <a class="map-step" href="#keys"><span class="map-icon">03</span><span><strong>Understand the wallet</strong><small>Keys, selective disclosure, and scanning for funds.</small></span><span class="map-lane">08–09</span></a>
           <a class="map-step" href="#proof"><span class="map-icon">04</span><span><strong>Follow a shielded send</strong><small>Proofs, public fields, wallet work, and settlement.</small></span><span class="map-lane">10–13</span></a>
-          <a class="map-step" href="#privacy"><span class="map-icon">05</span><span><strong>Know the boundaries</strong><small>Privacy limits, protocol evolution, and the Tachyon proposal.</small></span><span class="map-lane">14–16</span></a>
+          <a class="map-step" href="#privacy"><span class="map-icon">05</span><span><strong>Know the boundaries</strong><small>Privacy limits, protocol evolution, scaling, and the Tachyon proposal.</small></span><span class="map-lane">14–17</span></a>
         </div>
         <div class="mini-readout" id="heroReadout">Start here: why Zcash can verify without exposing payment details.</div>
       </div>
@@ -4120,6 +4337,57 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           </div>
         </div>
       </div>
+      <aside class="quantum-bridge" id="quantumBridge" aria-labelledby="quantumBridgeTitle">
+        <div class="quantum-bridge-head">
+          <div>
+            <span class="eyebrow">Ironwood · quantum resilience</span>
+            <h3 id="quantumBridgeTitle">Recoverability is a bridge—not post-quantum security today.</h3>
+          </div>
+          <p>
+            Ironwood outputs use ZIP 2005’s quantum-recoverable note format. The deployed change binds the note’s
+            contents into a derivation that a future recovery proof can check. It does <strong>not</strong> make today’s
+            Halo 2 proof system quantum-safe, automatically detect a cryptographically relevant quantum computer, or
+            deploy the future recovery verifier.
+          </p>
+        </div>
+        <div class="quantum-path" aria-label="Potential Ironwood quantum recovery path">
+          <div class="quantum-stage">
+            <span>01 · Deployed prerequisite</span>
+            <strong>Create recovery-ready Ironwood notes</strong>
+            <p>Lead-byte 0x03 notes derive commitment randomness from the note fields a recovery statement must bind, leaving a checkable relationship for that future proof.</p>
+          </div>
+          <div class="quantum-arrow" aria-hidden="true">→</div>
+          <div class="quantum-stage">
+            <span>02 · Future threat response</span>
+            <strong>Disable vulnerable spending</strong>
+            <p>If discrete-log breaking became credible, the community would need consensus rules that freeze vulnerable spends before opening recovery. This is not automatic.</p>
+          </div>
+          <div class="quantum-arrow" aria-hidden="true">→</div>
+          <div class="quantum-stage">
+            <span>03 · Not implemented</span>
+            <strong>Prove and migrate ownership</strong>
+            <p>A future post-quantum recovery proof could validate a real Ironwood note and move its value into a new secure shielded protocol.</p>
+          </div>
+        </div>
+        <div class="quantum-controls" role="group" aria-label="Quantum readiness property">
+          <button class="quantum-choice on" type="button" data-quantum-state="recoverability" aria-pressed="true">Recoverability</button>
+          <button class="quantum-choice" type="button" data-quantum-state="privacy" aria-pressed="false">Post-quantum privacy</button>
+          <button class="quantum-choice" type="button" data-quantum-state="soundness" aria-pressed="false">Post-quantum soundness</button>
+        </div>
+        <div class="quantum-detail" aria-live="polite">
+          <span id="quantumStatus"></span>
+          <div>
+            <strong id="quantumTitle"></strong>
+            <p id="quantumBody"></p>
+          </div>
+        </div>
+        <p class="quantum-warning">
+          <strong>Migration matters:</strong> ZIP 2005’s recovery path applies to Ironwood-pool notes, not funds left in
+          Sprout, Sapling, or Orchard. The ZIP recommends moving supported funds into recoverable Ironwood notes. A
+          future transition would still depend on a post-quantum proof system, new consensus rules, wallet support, and
+          recognizing the threat early enough to disable vulnerable protocols.
+        </p>
+      </aside>
       <div class="source-line">
         <span class="source-mark">READ</span>
         <span>
@@ -4137,7 +4405,112 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           summarizes the collaboration, while its
           <a href="https://tachyon.z.cash/blog/ironwood-verification-complete/" target="_blank" rel="noopener">technical report</a>
           and the public <a href="https://zcash.github.io/ironwood/formal-verification.html" target="_blank" rel="noopener">Ironwood verification book</a>
-          describe the 2,700-plus Lean theorems, proof chain, assumptions, and scope.
+          describe the 2,700-plus Lean theorems, proof chain, assumptions, and scope. For the forward-looking timeline,
+          <a href="https://zips.z.cash/zip-2005" target="_blank" rel="noopener">ZIP 2005</a> and the
+          <a href="https://zcash.github.io/ironwood/concepts/quantum-recoverability.html" target="_blank" rel="noopener">Ironwood Book’s quantum-recoverability chapter</a>
+          distinguish Ironwood’s deployed note-format prerequisite from the future recovery protocol. An
+          <a href="https://x.com/apruden08/thread/2082215478869778905" target="_blank" rel="noopener">Alex Pruden explainer thread</a>
+          emphasizes the trigger, implementation, and pool-scope caveats, while a
+          <a href="https://x.com/TachyonZcash/thread/2040174642741342598" target="_blank" rel="noopener">Project Tachyon roadmap thread</a>
+          separates near-term recoverability, post-quantum-private payment delivery, and future post-quantum soundness.
+          For scaling,
+          the <a href="https://tachyon.z.cash/overview/" target="_blank" rel="noopener">official Tachyon overview</a>
+          identifies transaction size, verification cost, and unbounded validator state as scaling constraints, while a
+          <a href="https://forum.zcashcommunity.com/t/march-17-16-00-utc-zcash-engineering-office-hours-5-project-tachyon-with-sean-bowe/54923" target="_blank" rel="noopener">Zcash Engineering Office Hours description</a>
+          characterizes the design as a path to thousands of shielded transactions per second—not a deployed benchmark.
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="chapter" id="scaling">
+    <div class="wrap">
+      <div class="chapter-head">
+        <div class="chapter-no">16 / SCALING</div>
+        <div>
+          <h2>Zcash must relieve several bottlenecks—not chase one TPS number.</h2>
+          <p class="chapter-intro">
+            Scaling a private payment system is not one line on a chart. Wallets must create proofs and find their
+            funds, blocks must carry and verify transactions, and validators must retain enough state to reject
+            double-spends. Earlier upgrades made shielded payments practical on ordinary devices and removed trusted
+            setup, but today’s protocol still makes every wallet scan public output data and every validator retain
+            revealed nullifiers. The graph below shows <strong>qualitative scaling headroom</strong> across those separate
+            constraints; it is a sourced direction map, not a synthetic benchmark score.
+          </p>
+        </div>
+      </div>
+
+      <div class="lab" id="scalingLab">
+        <div class="lab-top">
+          <div class="lab-title"><span class="live">Scaling profile</span> Follow one bottleneck across protocol eras</div>
+        </div>
+        <div class="lab-body">
+          <div class="scaling-metric-controls" id="scalingMetricControls" role="group" aria-label="Scaling dimension"></div>
+          <div class="scaling-chart-shell">
+            <div class="scaling-chart-head">
+              <h3 id="scalingGraphTitle"></h3>
+              <p id="scalingGraphSummary"></p>
+            </div>
+            <div class="scaling-direction" aria-hidden="true"><span>More scaling headroom ↑</span><span>Protocol eras →</span></div>
+            <svg class="scaling-chart" viewBox="0 0 680 250" role="img" aria-labelledby="scalingGraphTitle scalingGraphSummary">
+              <g class="scaling-grid" aria-hidden="true">
+                <line x1="50" y1="32" x2="630" y2="32"></line>
+                <line x1="50" y1="125" x2="630" y2="125"></line>
+                <line x1="50" y1="218" x2="630" y2="218"></line>
+              </g>
+              <line class="scaling-guide" id="scalingGuide" x1="0" y1="22" x2="0" y2="228" aria-hidden="true"></line>
+              <path class="scaling-line" id="scalingLine" d="" aria-hidden="true"></path>
+              <g id="scalingDots" aria-hidden="true"></g>
+            </svg>
+            <div class="scaling-era-buttons" id="scalingEraButtons" role="group" aria-label="Protocol era"></div>
+            <div class="scaling-detail" aria-live="polite">
+              <span id="scalingEraStatus"></span>
+              <div>
+                <strong id="scalingDetailTitle"></strong>
+                <p id="scalingDetailBody"></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="scaling-benchmarks" aria-label="Published throughput anchors">
+            <div class="scaling-benchmark">
+              <span>Current parameters · estimate</span>
+              <strong>≈2.9 shielded TPS</strong>
+              <p>A draft NU7 analysis estimates the theoretical ceiling for two-Action Orchard-format transactions under today’s 75-second, 2 MB block parameters.</p>
+            </div>
+            <div class="scaling-benchmark proposed">
+              <span>NU7 candidate · proposed</span>
+              <strong>≈6.1 shielded TPS</strong>
+              <p>The same draft proposes 25-second blocks plus action limits. This is a separate consensus-capacity step, not Tachyon and not active today.</p>
+            </div>
+            <div class="scaling-benchmark proposed">
+              <span>Tachyon · architectural target</span>
+              <strong>≈100× smaller data</strong>
+              <p>Project Tachyon describes two orders of magnitude less transaction data and a path to throughput in the thousands, pending implementation and review.</p>
+            </div>
+          </div>
+          <p class="scaling-caveat">
+            These anchors are intentionally not plotted as one continuous TPS series: the first two are block-parameter
+            capacity estimates for the current protocol, while Tachyon is a proposed protocol redesign without a
+            production benchmark or final consensus parameters.
+          </p>
+        </div>
+      </div>
+
+      <div class="source-line">
+        <span class="source-mark">READ</span>
+        <span>
+          Zcash’s <a href="https://z.cash/reducing-shielded-proving-time-in-sapling-2/" target="_blank" rel="noopener">Sapling proving retrospective</a>
+          explains the work that reduced proving time and memory costs; <a href="https://zips.z.cash/zip-0307" target="_blank" rel="noopener">ZIP 307</a>
+          specifies compact wallet scanning, and the <a href="https://zcash.github.io/orchard/design/actions.html" target="_blank" rel="noopener">Orchard Action design</a>
+          explains paired Actions and proof tradeoffs. The
+          <a href="https://zips.z.cash/draft-valargroup-blocktime-reduction" target="_blank" rel="noopener">draft 25-second block-spacing ZIP</a>
+          supplies the current 2.9 TPS estimate and proposed 6.1 TPS capacity. Project Tachyon’s
+          <a href="https://tachyon.z.cash/" target="_blank" rel="noopener">homepage</a> and
+          <a href="https://tachyon.z.cash/overview/" target="_blank" rel="noopener">technical overview</a>
+          state the proposed transaction-size and bounded-state goals; the
+          <a href="https://forum.zcashcommunity.com/t/march-17-16-00-utc-zcash-engineering-office-hours-5-project-tachyon-with-sean-bowe/54923" target="_blank" rel="noopener">Zcash Engineering Office Hours description</a>
+          characterizes them as a path to thousands of shielded transactions per second.
         </span>
       </div>
     </div>
@@ -4146,15 +4519,29 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="tachyon">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">16 / ROADMAP</div>
+        <div class="chapter-no">17 / ROADMAP</div>
         <div>
-          <h2>Tachyon aims to make the private ledger compressible.</h2>
+          <h2>Tachyon aims to make private payments scale without giving up privacy.</h2>
           <p class="chapter-intro">
             Tachyon is a <strong>proposed new Zcash shielded pool</strong>, independent of today’s Ironwood pool—not a feature
             running on mainnet today. It keeps the durable model of private notes and public validity proofs, but
             redesigns the protocol around proof-carrying data so prior verified work can be compressed and carried
-            forward. The target is to reduce per-transaction proof overhead, aggregate validation work, and stop the
-            active nullifier state from growing forever without weakening shielded privacy.
+            forward. The reason is scale: today’s shielded transactions are large and costly to verify, while every
+            revealed nullifier adds to validator state that grows with the chain. Tachyon targets smaller marginal
+            transaction data, aggregated validation work, and bounded active state without weakening shielded privacy.
+          </p>
+        </div>
+      </div>
+
+      <div class="tachyon-proposal scale-target">
+        <span class="flag">Scale target</span>
+        <div>
+          <strong>A path to thousands of shielded transactions per second—not a benchmark.</strong>
+          <p>
+            Project Tachyon describes a proposed two-orders-of-magnitude reduction in transaction data, horizontally
+            scalable proof aggregation, and removal of unbounded nullifier-state growth. Together those changes are
+            intended to make throughput in the thousands plausible. The final rate will depend on implementation
+            performance, consensus parameters, network capacity, and review; no production Tachyon network exists yet.
           </p>
         </div>
       </div>
@@ -4164,7 +4551,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div>
           <strong>Active development, not an activation promise</strong>
           <p>
-            As of July 28, 2026, Ragu and the Tachyon protocol are under construction. Testnet work, optimization,
+            As of July 29, 2026, Ragu and the Tachyon protocol are under construction. Testnet work, optimization,
             security review, a Zcash Improvement Proposal, and community consensus are gates before any mainnet activation.
           </p>
         </div>
@@ -4246,6 +4633,10 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <span>
           The <a href="https://tachyon.z.cash/overview/" target="_blank" rel="noopener">official Tachyon overview</a>
           describes PCD aggregation at block production and its goal of reducing marginal size and verification cost.
+          The <a href="https://tachyon.z.cash/" target="_blank" rel="noopener">project homepage</a> summarizes the proposed
+          transaction-data reduction as two orders of magnitude, and the
+          <a href="https://forum.zcashcommunity.com/t/march-17-16-00-utc-zcash-engineering-office-hours-5-project-tachyon-with-sean-bowe/54923" target="_blank" rel="noopener">Zcash Engineering Office Hours description</a>
+          frames the result as a path to thousands of shielded transactions per second.
           <a href="https://tachyon.z.cash/ragu/" target="_blank" rel="noopener">The Ragu Book</a> is the project’s
           technical guide to the recursive proving machinery beneath those PCD claims.
           The <a href="https://github.com/tachyon-zcash/ragu" target="_blank" rel="noopener">Ragu repository</a>
@@ -4441,7 +4832,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         supplied NU6.2 Zcash Protocol Specification, using each PDF’s displayed page numbers. Because that PDF predates
         NU6.3, current Ironwood pool, routing, and migration statements are grounded in the linked ZIPs and live project
         sources. The Tachyon chapter additionally reflects the linked official project sources, including The Ragu Book,
-        as of July 28, 2026. This is an educational model, not a substitute for the normative protocol specification.
+        as of July 29, 2026. This is an educational model, not a substitute for the normative protocol specification.
         Hashes, addresses, note values, tree sizes, transaction IDs, checkpoints, state units, and timings inside the
         demos are illustrative.
       </div>
@@ -5711,8 +6102,8 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     { id:"sapling", label:"Sapling", year:"2018 · USABILITY", title:"Shielded proving reaches ordinary devices", body:"Sapling dramatically reduced proving time and memory requirements, making shielded transactions practical on mobile hardware. It also expanded viewing and diversified-address capabilities." },
     { id:"halo", label:"Halo", year:"2019–2020 · RESEARCH", title:"Remove the need for a founding secret", body:"Halo’s recursive-proof techniques eliminated the structural need for trusted setup. The trust assumption was engineered away rather than merely distributed across a larger ceremony." },
     { id:"orchard", label:"Orchard", year:"2022–2026 · RESTRICTED LEGACY POOL", title:"Halo 2 brings modern shielded Actions", body:"Orchard introduced a paired Action structure and a Halo 2 proving system with no trusted setup. At NU6.3 the original Orchard pool was restricted: existing balances remain shielded and spendable toward migration, but no new value may enter." },
-    { id:"ironwood", label:"Ironwood", year:"2026 · ACTIVE SHIELDED POOL", title:"Fresh state, inherited protocol, machine-checked assurance", body:"Ironwood deploys the corrected Orchard protocol and keeps existing receivers, but starts separate pool state in version 6 transactions. Its balance-integrity argument is backed by more than 2,700 public Lean theorems connecting the deployed verifier, Action circuit, and ledger rules under named assumptions." },
-    { id:"tachyon", label:"Tachyon", year:"PROPOSED · ACTIVE DEVELOPMENT", title:"Make proofs and active state compressible", body:"Tachyon proposes a new shielded pool built around proof-carrying data. Its goals are to aggregate shielded transaction proofs, enable oblivious synchronization and nullifier pruning, and separate private payment delivery from the on-chain protocol." },
+    { id:"ironwood", label:"Ironwood", year:"2026 · ACTIVE SHIELDED POOL", title:"Fresh state, machine-checked assurance, recovery-ready notes", body:"Ironwood deploys the corrected Orchard protocol with separate pool state and more than 2,700 public Lean theorems supporting its balance-integrity argument. Its ZIP 2005 note format also preserves a relationship that a future post-quantum recovery proof could check. That is a deployed prerequisite for recovery—not a post-quantum proof system or recovery protocol today." },
+    { id:"tachyon", label:"Tachyon", year:"PROPOSED · ACTIVE DEVELOPMENT", title:"Remove the limits on high-throughput private payments", body:"Why Tachyon: today’s shielded transactions are large and costly to verify, while every revealed nullifier adds to validator state that grows without bound. Proof aggregation and oblivious synchronization are intended to shrink marginal on-chain work and bound active state—opening a path to thousands of shielded transactions per second. That is a scaling goal, not a measured production benchmark." },
     { id:"upgrades", label:"Upgrades", year:"ONGOING · PROTOCOL EVOLUTION", title:"Treat migrations as implementation change", body:"Network upgrades may replace pools or formats and move value between them. To understand everyday Zcash, keep the stable model in view: notes are committed, spends are nullified, outputs are encrypted, and validity is proven." }
   ];
   let eraId = "ironwood";
@@ -5722,6 +6113,146 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     const e=eras.find((x)=>x.id===eraId); $("#eraYear").textContent=e.year; $("#eraTitle").textContent=e.title; $("#eraBody").textContent=e.body;
   };
   renderEra();
+
+  // Scaling Zcash direction graph
+  const scalingEras = [
+    { id: "sprout", label: "Sprout", status: "Deployed · 2016" },
+    { id: "sapling", label: "Sapling", status: "Deployed · 2018" },
+    { id: "halo", label: "Halo", status: "Research · 2019–2020" },
+    { id: "orchard", label: "Orchard", status: "Deployed · 2022" },
+    { id: "ironwood", label: "Ironwood", status: "Active pool · 2026" },
+    { id: "tachyon", label: "Tachyon", status: "Proposed · active development" }
+  ];
+  const scalingMetrics = {
+    proving: {
+      label: "Wallet proving",
+      title: "Can ordinary wallets create shielded transactions?",
+      summary: "The largest deployed leap came with Sapling. Later systems changed trust assumptions and transaction structure; Tachyon client proving performance is not yet a production benchmark.",
+      values: [1, 4, 4, 4, 4, 4],
+      details: [
+        "Sprout proving required substantial memory and CPU, keeping shielded creation away from ordinary mobile devices.",
+        "Sapling reduced proving time and memory enough to make shielded transactions practical on mobile-class hardware.",
+        "Halo removed the structural need for trusted setup, but it was a proving-system research milestone rather than a deployed payment pool.",
+        "Orchard deployed Halo 2 without trusted setup while preserving wallet-side shielded proving.",
+        "Ironwood inherits Orchard’s proving machinery; its 2026 change is about corrected, formally checked pool state and recoverable notes, not a proving-speed leap.",
+        "Tachyon’s Ragu work targets recursive proof-carrying data, but final wallet proving cost remains under development and unbenchmarked."
+      ]
+    },
+    chain: {
+      label: "Chain capacity",
+      title: "How much marginal data and verification does each payment add?",
+      summary: "Proof and transaction formats improved, but today’s bandwidth envelope still limits shielded throughput. Tachyon targets a qualitatively different aggregation model.",
+      values: [1, 2, 2, 3, 3, 5],
+      details: [
+        "Sprout JoinSplits carried resource-heavy proof machinery and a rigid two-input, two-output structure.",
+        "Sapling used smaller Groth16 proofs and more flexible spends and outputs, improving marginal transaction efficiency.",
+        "Halo supplied recursive-proof foundations, but did not itself change mainnet block capacity.",
+        "Orchard pairs a spend and output in each Action and supports effective batch verification. Under current block parameters, a draft NU7 analysis estimates about 2.9 two-Action transactions per second.",
+        "Ironwood deliberately reuses Orchard’s Action encoding and proving system, so NU6.3 is a security and state-boundary transition rather than a capacity upgrade.",
+        "Tachyon proposes horizontal proof aggregation and about two orders of magnitude less transaction data, creating a path toward throughput in the thousands if implementation and consensus work succeed."
+      ]
+    },
+    sync: {
+      label: "Wallet sync",
+      title: "How much public activity must every wallet process?",
+      summary: "Compact blocks reduced bandwidth, but current wallets still examine public output data. Tachyon targets oblivious synchronization instead of universal scanning.",
+      values: [1, 3, 3, 3, 3, 5],
+      details: [
+        "Early shielded wallets relied on scanning large encrypted transaction data to discover incoming funds.",
+        "Sapling’s compact-block protocol lets wallets detect payments without first downloading full memo ciphertexts and unrelated transaction data.",
+        "Halo changed proof construction, not the deployed wallet-discovery model.",
+        "Orchard wallets still process compact output data and attempt trial decryption to find their notes.",
+        "Ironwood keeps the Orchard receiver and compact-scanning model; recoverable notes do not remove wallet synchronization cost.",
+        "Tachyon’s oblivious-synchronization design aims to let an untrusted service update proof work without learning the wallet’s actual note or nullifier."
+      ]
+    },
+    state: {
+      label: "Validator state",
+      title: "Can active consensus state stay bounded as usage grows?",
+      summary: "Every deployed shielded pool retains revealed nullifiers to prevent double-spends. Tachyon’s proposed recovery proofs and evolving nullifiers target this asymptotic limit.",
+      values: [1, 1, 1, 1, 1, 5],
+      details: [
+        "Sprout validators retain the public data needed to reject reused nullifiers.",
+        "Sapling improved payment usability but kept a growing nullifier set.",
+        "Halo changed proof assumptions and recursion; it did not remove deployed nullifier-state growth.",
+        "Orchard validators must retain revealed nullifiers for the pool’s lifetime.",
+        "Ironwood starts a fresh nullifier set, but that set still grows with each spend. Fresh state resets the starting point; it does not bound long-term growth.",
+        "Tachyon targets evolving nullifiers and oblivious synchronization so proof-backed state can replace permanently active nullifier history."
+      ]
+    }
+  };
+  const scalingXs = [50, 166, 282, 398, 514, 630];
+  const scalingY = (value) => 218 - ((value - 1) * 46.5);
+  let scalingMetricId = "chain", scalingEraId = "ironwood";
+  const renderScaling = () => {
+    const metric = scalingMetrics[scalingMetricId];
+    const eraIndex = scalingEras.findIndex((era) => era.id === scalingEraId);
+    $("#scalingMetricControls").innerHTML = Object.entries(scalingMetrics).map(([id, item]) =>
+      `<button class="scaling-metric ${id === scalingMetricId ? "on" : ""}" type="button" data-scaling-metric="${id}" aria-pressed="${id === scalingMetricId}">${item.label}</button>`
+    ).join("");
+    $$("[data-scaling-metric]", $("#scalingLab")).forEach((button) => button.addEventListener("click", () => {
+      scalingMetricId = button.dataset.scalingMetric;
+      renderScaling();
+    }));
+    $("#scalingGraphTitle").textContent = metric.title;
+    $("#scalingGraphSummary").textContent = metric.summary;
+    $("#scalingLine").setAttribute("d", metric.values.map((value, index) =>
+      `${index === 0 ? "M" : "L"} ${scalingXs[index]} ${scalingY(value)}`
+    ).join(" "));
+    $("#scalingDots").innerHTML = metric.values.map((value, index) =>
+      `<circle class="scaling-dot ${index === eraIndex ? "selected" : ""} ${scalingEras[index].id === "tachyon" ? "proposed" : ""}" cx="${scalingXs[index]}" cy="${scalingY(value)}" r="${index === eraIndex ? 10 : 8}"></circle>`
+    ).join("");
+    $("#scalingGuide").setAttribute("x1", scalingXs[eraIndex]);
+    $("#scalingGuide").setAttribute("x2", scalingXs[eraIndex]);
+    $("#scalingEraButtons").innerHTML = scalingEras.map((era) =>
+      `<button class="scaling-era ${era.id === scalingEraId ? "on" : ""}" type="button" data-scaling-era="${era.id}" aria-pressed="${era.id === scalingEraId}">${era.label}</button>`
+    ).join("");
+    $$("[data-scaling-era]", $("#scalingLab")).forEach((button) => button.addEventListener("click", () => {
+      scalingEraId = button.dataset.scalingEra;
+      renderScaling();
+    }));
+    const era = scalingEras[eraIndex];
+    $("#scalingEraStatus").textContent = era.status;
+    $("#scalingDetailTitle").textContent = `${metric.label} · ${era.label}`;
+    $("#scalingDetailBody").textContent = metric.details[eraIndex];
+  };
+  renderScaling();
+
+  // Ironwood quantum resilience
+  const quantumStates = {
+    recoverability: {
+      status: "Prerequisite deployed",
+      title: "Ironwood notes preserve what a future recovery proof will need.",
+      body: "ZIP 2005 changes note derivation so a future post-quantum statement can bind recovered note fields to a real on-chain commitment. The note format is live; the recovery verifier, migration transaction, and activation rules are future work."
+    },
+    privacy: {
+      status: "Future roadmap",
+      title: "Ironwood does not make today’s encrypted payment delivery post-quantum private.",
+      body: "ZIP 2005 focuses on recovering value and explicitly does not solve post-quantum privacy. Project Tachyon’s parallel payment-layer work explores Private Information Retrieval and post-quantum key exchange so note delivery can remain private in that threat model."
+    },
+    soundness: {
+      status: "Not post-quantum today",
+      title: "Current Ironwood validity proofs still rely on discrete-log hardness.",
+      body: "A cryptographically relevant quantum computer could threaten Halo 2 soundness and allow forged notes. A future recovery protocol therefore needs a post-quantum proof system and new consensus rules; neither is part of the deployed Ironwood spend path."
+    }
+  };
+  let quantumStateId = "recoverability";
+  const renderQuantumState = () => {
+    const state = quantumStates[quantumStateId];
+    $$("[data-quantum-state]", $("#quantumBridge")).forEach((button) => {
+      const on = button.dataset.quantumState === quantumStateId;
+      button.classList.toggle("on", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    $("#quantumStatus").textContent = state.status;
+    $("#quantumTitle").textContent = state.title;
+    $("#quantumBody").textContent = state.body;
+  };
+  $$("[data-quantum-state]", $("#quantumBridge")).forEach((button) => button.addEventListener("click", () => {
+    quantumStateId = button.dataset.quantumState;
+    renderQuantumState();
+  }));
+  renderQuantumState();
 
   // Ironwood formal-assurance explainer
   const assuranceModes = {
