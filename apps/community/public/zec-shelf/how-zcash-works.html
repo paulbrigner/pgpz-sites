@@ -220,7 +220,7 @@ h1 em { color: var(--purple); font-style: italic; }
   box-shadow: 0 1px 0 rgba(24,23,19,.04);
 }
 .btn:hover { border-color: #b9af9f; transform: translateY(-1px); }
-.btn:focus-visible, .choice:focus-visible, .step-tab:focus-visible {
+.btn:focus-visible, .choice:focus-visible, .step-tab:focus-visible, .map-step:focus-visible {
   outline: 3px solid rgba(75,49,127,.24);
   outline-offset: 2px;
 }
@@ -270,9 +270,12 @@ h1 em { color: var(--purple); font-style: italic; }
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: 12px;
+  color: var(--ink);
   background: var(--white);
+  text-decoration: none;
   transition: .25s ease;
 }
+.map-step:hover { border-color: #b9af9f; transform: translateX(3px); }
 .map-step.on {
   border-color: var(--purple);
   box-shadow: 0 0 0 3px rgba(75,49,127,.09);
@@ -300,6 +303,16 @@ h1 em { color: var(--purple); font-style: italic; }
   color: #dbeee8;
   background: #17372d;
   font: 12px/1.5 var(--mono);
+}
+.hero-map .mini-readout::before {
+  content: "Guide preview";
+  display: block;
+  margin-bottom: 5px;
+  color: #8cc8b6;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 
 .chapter {
@@ -2485,9 +2498,9 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
 
 <aside class="rail" aria-label="Guide navigation">
   <a class="brand" href="#top"><span class="brand-logo" aria-hidden="true"></span><span>How Zcash works</span></a>
-  <div class="eyebrow">From value to proof</div>
+  <div class="eyebrow">One guide · 15 sections</div>
   <nav id="chapterNav">
-    <a href="#why"><span class="num">01</span><span>What privacy changes</span></a>
+    <a href="#why"><span class="num">01</span><span>Privacy &amp; shielded pools</span></a>
     <a href="#ledger"><span class="num">02</span><span>The shared ledger</span></a>
     <a href="#notes"><span class="num">03</span><span>Money becomes notes</span></a>
     <a href="#commitments"><span class="num">04</span><span>Commitments &amp; encryption</span></a>
@@ -2505,7 +2518,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
     <a href="#sources"><span class="num">↗</span><span>Sources &amp; notes</span></a>
   </nav>
   <div class="rail-foot">
-    Three references, one working mental model.<br>
+    Primary sources are cited inline.<br>
     All demos run locally.
     <div class="progress" aria-hidden="true"><span id="readProgress"></span></div>
   </div>
@@ -2523,24 +2536,24 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div class="kicker"><span class="dot"></span> Interactive · source-backed</div>
         <h1>How Zcash <em>works.</em></h1>
         <p class="lede">
-          Follow one shielded payment from private notes to public settlement. See what a wallet knows,
-          what the network can verify, and what an observer never receives.
+          Build a working model of Zcash from the privacy goal and shared chain to private notes,
+          wallet behavior, proofs, settlement, privacy boundaries, and future protocol work.
         </p>
         <div class="hero-actions">
           <a class="btn primary" href="#why">Start with the big idea <span aria-hidden="true">↓</span></a>
-          <button class="btn" id="heroPlay" type="button">Play the 20-second overview</button>
+          <button class="btn" id="heroPlay" type="button">Preview the five-part guide</button>
         </div>
       </div>
-      <div class="hero-map" aria-label="Overview of a shielded transaction">
-        <div class="map-label">One shielded payment · two domains</div>
+      <div class="hero-map" aria-label="Five-part map of this guide">
+        <div class="map-label">The guide · five connected parts</div>
         <div class="map-flow" id="heroFlow">
-          <div class="map-step on"><span class="map-icon">01</span><span><strong>Select private notes</strong><small>The wallet chooses spendable value.</small></span><span class="map-lane">wallet</span></div>
-          <div class="map-step"><span class="map-icon">02</span><span><strong>Create new notes</strong><small>Recipient, change, and encrypted payloads.</small></span><span class="map-lane">wallet</span></div>
-          <div class="map-step"><span class="map-icon">03</span><span><strong>Generate a proof</strong><small>The rules hold; the facts stay private.</small></span><span class="map-lane">wallet</span></div>
-          <div class="map-step"><span class="map-icon">04</span><span><strong>Verify &amp; include</strong><small>Nodes check proof, nullifiers, and signatures.</small></span><span class="map-lane">network</span></div>
-          <div class="map-step"><span class="map-icon">05</span><span><strong>Recipient scans</strong><small>Bob’s wallet recognizes and decrypts the note.</small></span><span class="map-lane">wallet</span></div>
+          <a class="map-step on" href="#why"><span class="map-icon">01</span><span><strong>Start with shared rules</strong><small>Privacy choices, pools, hashes, mining, and the shared chain.</small></span><span class="map-lane">01–02</span></a>
+          <a class="map-step" href="#notes"><span class="map-icon">02</span><span><strong>Build private value</strong><small>Notes, encryption, commitments, trees, and nullifiers.</small></span><span class="map-lane">03–06</span></a>
+          <a class="map-step" href="#keys"><span class="map-icon">03</span><span><strong>Understand the wallet</strong><small>Keys, selective disclosure, and scanning for funds.</small></span><span class="map-lane">07–08</span></a>
+          <a class="map-step" href="#proof"><span class="map-icon">04</span><span><strong>Follow a shielded send</strong><small>Proofs, public fields, wallet work, and settlement.</small></span><span class="map-lane">09–12</span></a>
+          <a class="map-step" href="#privacy"><span class="map-icon">05</span><span><strong>Know the boundaries</strong><small>Privacy limits, protocol evolution, and the Tachyon proposal.</small></span><span class="map-lane">13–15</span></a>
         </div>
-        <div class="mini-readout" id="heroReadout">wallet.private → notes + keys + Merkle paths</div>
+        <div class="mini-readout" id="heroReadout">Start here: why Zcash can verify without exposing payment details.</div>
       </div>
     </div>
   </header>
@@ -2548,7 +2561,7 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   <section class="chapter" id="why">
     <div class="wrap">
       <div class="chapter-head">
-        <div class="chapter-no">01 / THE IDEA</div>
+        <div class="chapter-no">01 / PRIVACY + POOLS</div>
         <div>
           <h2>Verification does not have to mean visibility.</h2>
           <p class="chapter-intro">
@@ -4326,11 +4339,11 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   // Hero overview
   const heroSteps = $$("#heroFlow .map-step");
   const heroLines = [
-    "wallet.private → notes + keys + Merkle paths",
-    "wallet.private → new notes + ciphertexts + commitments",
-    "wallet.private → circuit(witness) → compact proof",
-    "network.public → verify proof + nullifiers + signatures",
-    "wallet.private → trial-decrypt public ciphertexts"
+    "Start here: why Zcash can verify without exposing payment details.",
+    "Next: represent value as notes and stop hidden double-spends.",
+    "Then: see what keys reveal and how wallets discover funds.",
+    "Follow one send: prove privately, verify publicly, and settle on-chain.",
+    "Finish with privacy limits, protocol evolution, and what is only proposed."
   ];
   let heroIndex = 0, heroTimer = null;
   const setHeroStep = (i) => {
@@ -4344,15 +4357,15 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   $("#heroPlay").addEventListener("click", () => {
     clearInterval(heroTimer);
     setHeroStep(0);
-    $("#heroPlay").textContent = "Playing…";
+    $("#heroPlay").textContent = "Previewing…";
     heroTimer = setInterval(() => {
       if (heroIndex >= heroSteps.length - 1) {
         clearInterval(heroTimer);
-        $("#heroPlay").textContent = "Replay the overview";
+        $("#heroPlay").textContent = "Replay the guide preview";
         return;
       }
       setHeroStep(heroIndex + 1);
-    }, 1150);
+    }, 1600);
   });
 
   // Visibility comparison
