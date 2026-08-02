@@ -545,6 +545,33 @@ h2 {
   font-size: 11px !important;
 }
 .pool-definition strong { color: var(--purple); }
+.pool-vocabulary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 12px;
+}
+.pool-term {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+}
+.pool-term span {
+  display: block;
+  color: var(--muted);
+  font: 700 8px/1 var(--mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.pool-term strong { display: block; margin: 7px 0 4px; color: var(--ink); font-size: 12px; }
+.pool-term p { font-size: 10px; line-height: 1.45; }
+.pool-vocabulary-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px !important;
+}
 .pool-transition {
   display: grid;
   grid-template-columns: 1fr 28px 1fr 28px 1fr;
@@ -596,6 +623,192 @@ h2 {
   font-size: 12px;
   font-weight: 750;
 }
+.mental-model {
+  position: relative;
+  margin: 22px 0;
+  padding: clamp(20px, 3vw, 30px);
+  overflow: hidden;
+  border: 1px solid #d8c174;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(244,183,40,.12), rgba(75,49,127,.055)),
+    var(--white);
+}
+.mental-model-head {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(250px,.78fr) minmax(0,1.22fr);
+  gap: 28px;
+  align-items: end;
+}
+.mental-model-label {
+  color: var(--gold-dark);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.mental-model h3 {
+  margin: 10px 0 0;
+  font: 700 clamp(25px, 3.2vw, 38px)/1.05 var(--serif);
+  letter-spacing: -.025em;
+}
+.mental-model-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.mental-model-flow {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+.mental-model-card {
+  min-height: 156px;
+  padding: 14px;
+  border: 1px solid rgba(75,49,127,.18);
+  border-radius: 11px;
+  background: rgba(255,253,248,.84);
+}
+.mental-model-card .n { color: var(--purple); font: 800 9px/1 var(--mono); }
+.mental-model-card .visibility-tag {
+  display: inline-block;
+  margin: 9px 0 8px;
+  padding: 4px 6px;
+  border-radius: 99px;
+  color: #2d6351;
+  background: #e4f2ec;
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.mental-model-card .visibility-tag.private { color: #5a3c86; background: #eee7f8; }
+.mental-model-card strong { display: block; margin-bottom: 5px; font-size: 12px; }
+.mental-model-card p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.ledger-comparison {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  padding: clamp(16px, 2.4vw, 22px);
+  border: 1px solid rgba(75,49,127,.18);
+  border-radius: 14px;
+  background: rgba(255,253,248,.72);
+}
+.ledger-comparison-head {
+  display: grid;
+  grid-template-columns: minmax(230px,.82fr) minmax(0,1.18fr);
+  gap: 22px;
+  align-items: end;
+}
+.ledger-comparison-label {
+  display: block;
+  color: var(--gold-dark);
+  font: 800 8px/1 var(--mono);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.ledger-comparison h4 {
+  margin: 8px 0 0;
+  font: 700 clamp(20px, 2.4vw, 28px)/1.08 var(--serif);
+  letter-spacing: -.02em;
+}
+.ledger-comparison-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.ledger-entry-grid {
+  display: grid;
+  grid-template-columns: .84fr 1.16fr;
+  align-items: start;
+  gap: 10px;
+  margin-top: 15px;
+}
+.ledger-entry {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(75,49,127,.18);
+  border-radius: 11px;
+  background: var(--white);
+}
+.ledger-entry.shielded { border-color: rgba(75,49,127,.34); }
+.ledger-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(75,49,127,.14);
+  background: #f6f1e8;
+}
+.ledger-entry.shielded .ledger-entry-head { color: #fff; background: var(--purple); }
+.ledger-entry-head strong { font-size: 11px; }
+.ledger-entry-head span { align-self: center; font: 800 8px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.ledger-fields { display: grid; }
+.ledger-field-phase {
+  padding: 7px 12px;
+  color: var(--gold-dark);
+  background: #fbf4df;
+  font: 800 8px/1.3 var(--mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.ledger-field {
+  display: grid;
+  grid-template-columns: minmax(118px,.82fr) minmax(0,1.18fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(75,49,127,.1);
+}
+.ledger-field:first-child { border-top: 0; }
+.ledger-field-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--purple);
+  font: 800 9px/1.4 var(--mono);
+  overflow-wrap: anywhere;
+}
+.ledger-object-index {
+  flex: 0 0 auto;
+  padding: 3px 4px;
+  border-radius: 4px;
+  color: #fff;
+  background: var(--purple);
+  font: 800 7px/1 var(--mono);
+}
+.ledger-field-value code {
+  display: block;
+  color: var(--ink);
+  font: 750 9px/1.35 var(--mono);
+  overflow-wrap: anywhere;
+}
+.ledger-field-value small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.ledger-object-key {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.ledger-object-key-item {
+  padding: 9px;
+  border-radius: 8px;
+  background: #f4effa;
+}
+.ledger-object-key-item strong { display: block; margin: 6px 0 3px; font-size: 10px; }
+.ledger-object-key-item span:last-child { display: block; color: var(--muted); font-size: 8px; line-height: 1.4; }
+.ledger-comparison-note {
+  margin: 11px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.ledger-comparison-note a { color: inherit; text-underline-offset: 2px; }
+.mental-model-caveat,
+.mental-model-source {
+  position: relative;
+  z-index: 1;
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.mental-model-caveat { padding-top: 12px; border-top: 1px solid rgba(75,49,127,.14); }
+.mental-model-source a { color: inherit; text-underline-offset: 2px; }
 .crypto-primer {
   position: relative;
   margin-bottom: 18px;
@@ -1402,6 +1615,51 @@ h2 {
   color: var(--red);
   font: 800 10px/1.2 var(--mono);
 }
+.unlink-story {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid #c8b9eb;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #faf7ff, #fffaf0);
+}
+.unlink-story-head {
+  display: grid;
+  grid-template-columns: minmax(230px,.72fr) minmax(0,1.28fr);
+  gap: 24px;
+  align-items: end;
+}
+.unlink-story-label {
+  color: var(--purple);
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.unlink-story h3 { margin: 8px 0 0; font: 700 27px/1.08 var(--serif); }
+.unlink-story-head p { margin: 0; color: var(--muted); font-size: 12px; }
+.unlink-story-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 9px;
+  margin-top: 15px;
+}
+.unlink-story-step {
+  min-height: 112px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.76);
+}
+.unlink-story-step span { color: var(--gold-dark); font: 800 9px/1 var(--mono); text-transform: uppercase; }
+.unlink-story-step strong { display: block; margin: 9px 0 5px; font-size: 12px; }
+.unlink-story-step p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.unlink-story-rule {
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid rgba(75,49,127,.15);
+  color: var(--muted);
+  font-size: 11px;
+}
+.unlink-story-rule strong { color: var(--purple); }
 
 .key-tree { display: grid; justify-items: center; gap: 10px; }
 .key-viewing-group {
@@ -2806,10 +3064,21 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
   .pool-primer-head { grid-template-columns: 1fr; gap: 5px; }
   .pool-primer-map { grid-template-columns: 1fr; }
   .pool-family { grid-template-columns: 1fr; }
+  .pool-vocabulary { grid-template-columns: 1fr; }
+  .pool-vocabulary-note { grid-column: auto; }
   .pool-transition { grid-template-columns: 1fr; }
   .pool-transition .bridge-arrow { transform: rotate(90deg); }
   .bridge-steps { grid-template-columns: 1fr; }
   .bridge-arrow { transform: rotate(90deg); }
+  .mental-model-head,
+  .mental-model-flow,
+  .ledger-comparison-head,
+  .ledger-entry-grid,
+  .ledger-object-key,
+  .unlink-story-head,
+  .unlink-story-flow { grid-template-columns: 1fr; }
+  .mental-model-card { min-height: auto; }
+  .ledger-field { grid-template-columns: 1fr; gap: 4px; }
   .crypto-primer-head { grid-template-columns: 1fr; gap: 14px; }
   .crypto-flow { grid-template-columns: 1fr; }
   .crypto-arrow { min-height: 20px; transform: rotate(90deg); }
@@ -2966,15 +3235,18 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
         <div>
           <h2>Verification does not have to mean visibility.</h2>
           <p class="chapter-intro" id="whyIntroTechnical">
-            A transparent chain lets everyone verify by exposing the transaction history. Zcash keeps
-            public verification and replaces the exposed facts with <strong>cryptographic evidence</strong>.
+            A transparent chain lets everyone verify by exposing the transaction history. Its addresses are
+            <strong>pseudonymous, not automatically anonymous</strong>: they omit names, but their public payment
+            graph can be followed and may later be connected to real identities. Zcash keeps public verification
+            and replaces the exposed facts with <strong>cryptographic evidence</strong>.
             The network can reject counterfeits and double-spends without receiving the sender, recipient,
             or shielded amount.
           </p>
           <p class="chapter-intro chapter-intro-plain" id="whyIntroPlain" hidden>
             <span class="reading-label">Plain language</span>
-            Zcash lets the network confirm that a payment is legitimate without publishing who paid whom or
-            how much. It proves the rules were followed while keeping the payment details private.
+            A public address does not show your name, but anyone can follow its payment history and may later
+            connect that address to you. Zcash lets the network confirm that a payment is legitimate without
+            publishing who paid whom or how much.
           </p>
           <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
             aria-pressed="false" aria-controls="whyIntroTechnical whyIntroPlain">Explain this more simply</button>
@@ -3053,6 +3325,21 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
                 </div>
               </div>
             </div>
+          </div>
+          <div class="pool-vocabulary" aria-label="Shielding and deshielding vocabulary">
+            <div class="pool-term">
+              <span>Transparent → shielded</span>
+              <strong>Shielding</strong>
+              <p>Move ZEC from the transparent pool into a shielded pool. The net value crossing the boundary is public; the new shielded note is private.</p>
+            </div>
+            <div class="pool-term">
+              <span>Shielded → transparent</span>
+              <strong>Deshielding</strong>
+              <p>Move ZEC from a shielded pool into the transparent pool. The net value crossing the boundary becomes public along with the transparent destination.</p>
+            </div>
+            <p class="pool-vocabulary-note">
+              Moving between two shielded pools—such as Orchard → Ironwood—is a shielded-pool migration, not shielding or deshielding.
+            </p>
           </div>
           <p class="pool-definition">
             <strong>Ironwood is now the destination for new Orchard-protocol shielded payments.</strong>
@@ -3157,6 +3444,133 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           </div>
         </div>
       </div>
+      <aside class="mental-model" aria-labelledby="mentalModelTitle">
+        <div class="mental-model-head">
+          <div>
+            <span class="mental-model-label">Mental model · the shielded-note lifecycle</span>
+            <h3 id="mentalModelTitle">Keep this map in mind as the guide adds detail.</h3>
+          </div>
+          <p>
+            A shielded transaction consumes old notes and creates new ones without exposing a payment trail.
+            Wallets keep the plaintext facts; the chain receives public cryptographic state and evidence instead.
+          </p>
+        </div>
+        <div class="mental-model-flow">
+          <div class="mental-model-card">
+            <span class="n">01</span><span class="visibility-tag private">plaintext private</span>
+            <strong>Note</strong>
+            <p>A record of value, recipient information, and randomness. Its encrypted form is public; authorized wallets recover the plaintext.</p>
+          </div>
+          <div class="mental-model-card">
+            <span class="n">02</span><span class="visibility-tag">public</span>
+            <strong>Commitment</strong>
+            <p>A binding fingerprint that represents the note on-chain while hiding its contents.</p>
+          </div>
+          <div class="mental-model-card">
+            <span class="n">03</span><span class="visibility-tag">public state</span>
+            <strong>Commitment tree</strong>
+            <p>A pool-specific, append-only history whose root summarizes the commitments accepted so far.</p>
+          </div>
+          <div class="mental-model-card">
+            <span class="n">04</span><span class="visibility-tag">public</span>
+            <strong>Nullifier</strong>
+            <p>A deterministic spent marker that stops replay without identifying the commitment it spends.</p>
+          </div>
+          <div class="mental-model-card">
+            <span class="n">05</span><span class="visibility-tag">public evidence</span>
+            <strong>Zero-knowledge proof</strong>
+            <p>Evidence that membership, nullifier derivation, output construction, and value rules hold without publishing the private witness.</p>
+          </div>
+        </div>
+        <div class="ledger-comparison" aria-labelledby="ledgerComparisonTitle">
+          <div class="ledger-comparison-head">
+            <div>
+              <span class="ledger-comparison-label">Same ledger · two field-level views</span>
+              <h4 id="ledgerComparisonTitle">What the public record actually looks like.</h4>
+            </div>
+            <p>
+              A transparent entry exposes a Bitcoin-like chain of inputs and outputs. A shielded entry is still public,
+              but it substitutes commitments, spent markers, ciphertexts, and proof material for the payment facts.
+            </p>
+          </div>
+          <div class="ledger-entry-grid">
+            <article class="ledger-entry transparent">
+              <div class="ledger-entry-head">
+                <strong>Transparent entry</strong>
+                <span>Bitcoin-like</span>
+              </div>
+              <div class="ledger-fields" role="list" aria-label="Illustrative transparent transaction fields">
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name">tx_in[0].prevout</code>
+                  <div class="ledger-field-value"><code>91c4…7a2f : output 1</code><small>Publicly links this spend to an earlier transaction output.</small></div>
+                </div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name">tx_out[0].value</code>
+                  <div class="ledger-field-value"><code>5.00000000 ZEC</code><small>The transferred amount is readable by everyone.</small></div>
+                </div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name">tx_out[0].scriptPubKey</code>
+                  <div class="ledger-field-value"><code>P2PKH · 3f2a…81c0</code><small>The destination script is visible and can be followed when spent.</small></div>
+                </div>
+              </div>
+            </article>
+            <article class="ledger-entry shielded">
+              <div class="ledger-entry-head">
+                <strong>Shielded entry</strong>
+                <span>Ironwood v6</span>
+              </div>
+              <div class="ledger-fields" role="list" aria-label="Illustrative Ironwood transaction fields">
+                <div class="ledger-field-phase">Spend side · consume an older private note</div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name"><span class="ledger-object-index">04</span>vActionsIronwood[0].nullifier</code>
+                  <div class="ledger-field-value"><code>a6c149d0…</code><small>A public spent marker, with no public pointer back to the commitment it spends.</small></div>
+                </div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name"><span class="ledger-object-index">03</span>anchorIronwood</code>
+                  <div class="ledger-field-value"><code>18078e8e…</code><small>A prior commitment-tree root. The whole tree is shared chain state, not copied into this entry.</small></div>
+                </div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name"><span class="ledger-object-index">05</span>proofsIronwood</code>
+                  <div class="ledger-field-value"><code>92de4a70…</code><small>Aggregated proof bytes show that the hidden state transition follows the circuit rules.</small></div>
+                </div>
+                <div class="ledger-field-phase">Output side · create a different private note</div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name"><span class="ledger-object-index">02</span>vActionsIronwood[0].cmx</code>
+                  <div class="ledger-field-value"><code>4b8e20a1…</code><small>The new note commitment that nodes append to the pool’s commitment tree after inclusion.</small></div>
+                </div>
+                <div class="ledger-field" role="listitem">
+                  <code class="ledger-field-name"><span class="ledger-object-index">01</span>vActionsIronwood[0].encCiphertext</code>
+                  <div class="ledger-field-value"><code>84b7e12c…</code><small>The recipient can decrypt the new note and memo; their plaintext is not on-chain.</small></div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div class="ledger-object-key" aria-label="Where the five objects appear">
+            <div class="ledger-object-key-item"><span class="ledger-object-index">01</span><strong>Note</strong><span>Recovered privately from ciphertext; never published as plaintext.</span></div>
+            <div class="ledger-object-key-item"><span class="ledger-object-index">02</span><strong>Commitment</strong><span>Appears directly as <code>cmx</code>.</span></div>
+            <div class="ledger-object-key-item"><span class="ledger-object-index">03</span><strong>Tree</strong><span>Referenced by its <code>anchor</code> root; updated with new commitments.</span></div>
+            <div class="ledger-object-key-item"><span class="ledger-object-index">04</span><strong>Nullifier</strong><span>Appears directly, but is not linked to the spent commitment.</span></div>
+            <div class="ledger-object-key-item"><span class="ledger-object-index">05</span><strong>Proof</strong><span>Appears as the bundle’s aggregated proof bytes.</span></div>
+          </div>
+          <p class="ledger-comparison-note">
+            <strong>Field categories are real; values are shortened teaching samples.</strong> The shielded entry is not wholly encrypted:
+            its cryptographic fields are public, while the note and memo payloads are ciphertext. It also carries keys, signatures,
+            flags, balances, and other fields omitted here. The nullifier and <code>cmx</code> in one Action describe opposite sides:
+            an old note consumed and a different note created—not a public link between the two.
+            <a href="#actions">Section 11 opens the fuller public package.</a>
+          </p>
+        </div>
+        <p class="mental-model-caveat">
+          <strong>Mental model, not literal transaction layout:</strong> real transactions may contain several notes or Actions;
+          they also carry ciphertexts, signatures, balances, and other public fields, and the whole transaction determines
+          a public fee. Every shielded pool maintains its own commitment tree and nullifier set.
+        </p>
+        <p class="mental-model-source">
+          The five-object mental model adapts the newcomer framing in
+          <a href="https://x.com/ZecHub/status/2079929246021976473" target="_blank" rel="noopener">ZecHub’s “Zcash from First Principles · Shielded Transactions”</a>;
+          the definitions here remain grounded in the books, specification, and current protocol sources cited throughout this guide.
+        </p>
+      </aside>
       <div class="source-line">
         <span class="source-mark">READ</span>
         <span>
@@ -3168,7 +3582,10 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           defines shielded pools, notes, transactions, treestates, and anchors; <a href="https://zips.z.cash/protocol/protocol.pdf#page=121">§5.6.4, PDF pp. 121–123</a>
           specifies Unified and Orchard address encodings. For the current network,
           <a href="https://zodl.com/ironwood-is-live-on-zcash/" target="_blank" rel="noopener">ZODL’s activation notice</a>
-          confirms Ironwood is live, <a href="https://zips.z.cash/zip-0258" target="_blank" rel="noopener">ZIP 258</a>
+          confirms Ironwood is live, <a href="https://zips.z.cash/zip-0229" target="_blank" rel="noopener">ZIP 229</a>
+          specifies the version 6 transaction fields illustrated above, the
+          <a href="https://zcash.github.io/ironwood/design/transaction-format.html" target="_blank" rel="noopener">Ironwood transaction-format chapter</a>
+          explains how those fields are grouped and hashed, and <a href="https://zips.z.cash/zip-0258" target="_blank" rel="noopener">ZIP 258</a>
           defines Orchard’s post-activation restrictions and Ironwood’s separate pool state, and
           <a href="https://zips.z.cash/zip-0318" target="_blank" rel="noopener">ZIP 318</a> explains receiver routing
           and privacy-preserving migration. <a href="https://support.zodl.com/article/42-moving-your-funds-to-ironwood" target="_blank" rel="noopener">ZODL’s migration guide</a>
@@ -3379,13 +3796,16 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           <h2>A shielded balance is a collection of notes.</h2>
           <p class="chapter-intro" id="notesIntroTechnical">
             Wallets do not update a private “account balance” on-chain. They control discrete <strong>notes</strong>.
-            Spending consumes selected notes completely, then creates new notes for the recipient and any change.
-            Your displayed balance is a wallet-side sum of the unspent notes it can decrypt.
+            Think of a shielded note as a private Bitcoin <strong>unspent transaction output (UTXO)</strong>: a discrete
+            chunk of value consumed whole and replaced by new notes for the recipient and change, but with its value
+            and owner hidden on-chain rather than published. Your displayed balance is a wallet-side sum of the
+            unspent notes it can decrypt.
           </p>
           <p class="chapter-intro chapter-intro-plain" id="notesIntroPlain" hidden>
             <span class="reading-label">Plain language</span>
-            A private Zcash balance is made of separate pieces called notes. Paying someone uses whole notes
-            and creates new ones for the recipient and any change—much like spending bills and receiving change.
+            A private Zcash balance is made of separate pieces called notes. A note works a little like a private
+            Bitcoin UTXO: the wallet uses it whole and creates new notes for the recipient and change, while the
+            public cannot see the notes’ amounts or owners.
           </p>
           <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
             aria-pressed="false" aria-controls="notesIntroTechnical notesIntroPlain">Explain this more simply</button>
@@ -3852,12 +4272,15 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
             the commitment. The spend publishes the
             nullifier, so accepting it marks the note as spent without removing—or publicly identifying—its
             commitment in the tree. Nodes reject any later transaction that publishes the same nullifier, while
-            observers cannot reverse the nullifier to discover which commitment was spent.
+            observers cannot reverse the nullifier to discover which commitment was spent. The chain exposes commitments
+            when notes are created and nullifiers when notes are spent, but no public field joins a nullifier back to the
+            earlier commitment it consumes.
           </p>
           <p class="chapter-intro chapter-intro-plain" id="nullifiersIntroPlain" hidden>
             <span class="reading-label">Plain language</span>
             When a private note is spent, Zcash publishes a unique “spent” marker. The network can reject the
             same note if someone tries to spend it again, but the marker does not reveal which private note was used.
+            Creating the note and later spending it both leave public records; their connection stays private.
           </p>
           <button class="reading-toggle" type="button" data-reading-toggle data-reading-mode="technical"
             aria-pressed="false" aria-controls="nullifiersIntroTechnical nullifiersIntroPlain">Explain this more simply</button>
@@ -3888,6 +4311,39 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
           <div class="status" id="nfStatus">Spending note A will leave its commitment in the tree and publish its unique nullifier.</div>
         </div>
       </div>
+      <aside class="unlink-story" aria-labelledby="unlinkStoryTitle">
+        <div class="unlink-story-head">
+          <div>
+            <span class="unlink-story-label">One note · two public events</span>
+            <h3 id="unlinkStoryTitle">Creation and spend are visible. Their link is not.</h3>
+          </div>
+          <p>
+            This severed on-chain link is the central privacy move: everyone can verify valid state changes
+            without reconstructing an individual note’s payment history.
+          </p>
+        </div>
+        <div class="unlink-story-flow">
+          <div class="unlink-story-step">
+            <span>01 · create</span>
+            <strong>A commitment joins the tree</strong>
+            <p>The chain records an opaque fingerprint of the new note, not its owner or value.</p>
+          </div>
+          <div class="unlink-story-step">
+            <span>02 · hold</span>
+            <strong>The wallet keeps the private note</strong>
+            <p>The commitment remains public while the spend authority and note contents stay with the wallet.</p>
+          </div>
+          <div class="unlink-story-step">
+            <span>03 · spend</span>
+            <strong>A nullifier joins the spent set</strong>
+            <p>The network learns that one valid note was consumed and can reject the same marker if it appears again.</p>
+          </div>
+        </div>
+        <p class="unlink-story-rule">
+          <strong>What an observer cannot do:</strong> match that nullifier to one earlier commitment merely from the public chain data.
+          Participants, voluntarily shared viewing keys, and external metadata still define the privacy boundaries described later.
+        </p>
+      </aside>
       <div class="source-line">
         <span class="source-mark">READ</span>
         <span>
@@ -4969,13 +5425,14 @@ input[type="range"] { width: 100%; accent-color: var(--purple); }
       <h2 id="recapTitle">The whole mechanism in six moves.</h2>
       <p>
         Zcash is not an invisible ledger. It is a public ledger of cryptographic state transitions whose
-        private facts remain with the participants.
+        private facts remain with the participants. A note’s creation and later spend are both public state
+        changes, but their connection is not published.
       </p>
       <div class="recap-grid">
         <div class="recap-card"><span class="n">01</span><strong>Wallets hold capabilities</strong><p>Keys let a wallet receive, see, disclose, or spend.</p></div>
         <div class="recap-card"><span class="n">02</span><strong>Value lives in notes</strong><p>Spends create fresh notes; their outputs may also carry encrypted memos.</p></div>
-        <div class="recap-card"><span class="n">03</span><strong>Commitments enter the tree</strong><p>The public root summarizes private-note commitments.</p></div>
-        <div class="recap-card"><span class="n">04</span><strong>Nullifiers stop replay</strong><p>A unique public serial is unlinkable to the spent leaf.</p></div>
+        <div class="recap-card"><span class="n">03</span><strong>A commitment marks creation</strong><p>A public fingerprint represents a new private note without revealing its contents.</p></div>
+        <div class="recap-card"><span class="n">04</span><strong>A nullifier marks a spend</strong><p>The spent marker stops replay without revealing which earlier commitment it closes.</p></div>
         <div class="recap-card"><span class="n">05</span><strong>A proof enforces the rules</strong><p>Existence, control, correctness, and balance—without the witness.</p></div>
         <div class="recap-card"><span class="n">06</span><strong>The chain orders the result</strong><p>New commitments and nullifiers become shared state for the next send.</p></div>
       </div>
