@@ -1,9 +1,10 @@
 # PGPZ sites
 
 This repository contains the independently deployed PGPZ Community and PGPZ
-Coalition applications plus narrowly scoped packages that keep shared behavior
-consistent. A shared repository does not merge the applications' membership
-workflows, data, sessions, environment variables, domains, or release controls.
+Coalition applications, the private PGPZ Board of Directors portal, and
+narrowly scoped packages that keep shared behavior consistent. A shared
+repository does not merge the applications' membership workflows, data,
+sessions, environment variables, domains, or release controls.
 
 ## Repository layout
 
@@ -11,6 +12,7 @@ workflows, data, sessions, environment variables, domains, or release controls.
 apps/community/         PGPZ Community Next.js application
 apps/coalition/         PGPZ Coalition Next.js application
 apps/reference/         Neutral executable example and CI proving ground
+apps/board/             Private PGPZ Board of Directors portal
 packages/core/          Public and server-only configuration contracts
 packages/auth-dynamodb/ Injected Better Auth persistence and rate limits
 packages/ui/            Brand-neutral interface primitives
@@ -44,10 +46,12 @@ Common commands:
 npm run dev:community
 npm run dev:coalition
 npm run dev:reference
+npm run dev:board
 npm run check
 npm run build:community
 npm run build:coalition
 npm run build:reference
+npm run build:board
 npm run history:verify
 npm run parity:check
 npm run boundaries:check
@@ -60,11 +64,14 @@ manifest and extracted-feature placement, checks workspace import and direct
 dependency boundaries, typechecks both apps and package workspaces, runs all
 tests, and runs each available workspace linter.
 
-`npm run test:e2e` starts both branded applications on isolated local ports and
-runs the same anonymous critical journeys against each: server-rendered public
-content, protected-admin redirects, mobile navigation, and serious/critical
-axe accessibility findings. It uses only local test configuration and does not
-send email or require a production login.
+`npm run test:e2e` starts the two branded applications and the private Board
+portal on isolated local ports and runs the same anonymous critical journeys
+against Community and Coalition (server-rendered public content,
+protected-admin redirects, mobile navigation, and serious/critical axe
+accessibility findings), plus the Board portal's privacy-boundary journeys
+(anonymous document/RSC payload checks, malicious post-sign-in callback
+validation, robots and hardening headers). It uses only local test
+configuration and does not send email or require a production login.
 
 ## Dependency boundaries
 
@@ -85,15 +92,16 @@ manifest and ZEC Shelf extraction placement.
 
 ## Deployment
 
-The root `amplify.yml` describes three independently deployed Amplify
-applications. Community and Coalition retain their own domains, environment
-variables, IAM roles, and DynamoDB tables. Reference is an isolated,
-seed-backed, read-only demonstration with no application data plane. Configure
-the matching monorepo root on each Amplify project:
+The root `amplify.yml` describes four independently deployed Amplify
+applications. Community, Coalition, and Board retain their own domains,
+environment variables, IAM roles, and DynamoDB tables. Reference is an
+isolated, seed-backed, read-only demonstration with no application data
+plane. Configure the matching monorepo root on each Amplify project:
 
 - Community: `AMPLIFY_MONOREPO_APP_ROOT=apps/community`
 - Coalition: `AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`
 - Reference: `AMPLIFY_MONOREPO_APP_ROOT=apps/reference`
+- Board: `AMPLIFY_MONOREPO_APP_ROOT=apps/board`
 
 The build helper writes only the selected application's allowlisted variables
 to its own `.env.production`; it overwrites atomically and never prints values.
@@ -120,6 +128,20 @@ non-production, read-only, non-indexed, and isolated from both branded apps.
 See [`docs/reference-application-plan.md`](docs/reference-application-plan.md)
 for its configuration contract, dependency rules, acceptance gates, and the
 later `create-pgpz-site` generator decision.
+
+## Board portal
+
+`apps/board` is the private portal for the PGPZ Board of Directors at
+`board.pgpz.org`. Every route except the sign-in page and the Better Auth API
+is gated by an authenticated layout, and access further requires the email to
+be on the `BOARD_MEMBER_EMAILS` allowlist. Self-registration is disabled;
+accounts are provisioned with
+`apps/board/scripts/provision-board-member.ts`. The site refuses search
+indexing at every layer and ships without outbound email.
+
+See [`docs/board-deployment.md`](docs/board-deployment.md) for the Amplify
+app, DynamoDB table, IAM role, environment variables, and director
+provisioning runbook.
 
 ## License
 
