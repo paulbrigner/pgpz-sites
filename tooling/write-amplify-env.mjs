@@ -138,6 +138,30 @@ const applications = {
       "ZEC_SHELF_PARTITION_KEY",
     ],
   },
+  board: {
+    output: "apps/board/.env.production",
+    required: [
+      "NEXT_PUBLIC_SITE_URL",
+      "REGION_AWS",
+      "NEXTAUTH_TABLE",
+      "BETTER_AUTH_SECRET",
+      "BOARD_MEMBER_EMAILS",
+    ],
+    // The private board portal shares none of the branded applications'
+    // tables, credentials, buckets, or senders. Membership is decided only by
+    // its own allowlist; an unset allowlist locks every account out.
+    keys: [
+      "NEXT_PUBLIC_SITE_URL",
+      "BETTER_AUTH_URL",
+      "BETTER_AUTH_SECRET",
+      "BETTER_AUTH_TRUSTED_ORIGINS",
+      "NEXTAUTH_TABLE",
+      "REGION_AWS",
+      "AWS_REGION",
+      "BOARD_MEMBER_EMAILS",
+      "EMAIL_FROM",
+    ],
+  },
 };
 
 const applicationName = process.argv[2];

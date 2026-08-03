@@ -20,12 +20,15 @@
     "dev:community": "npm run dev --workspace=apps/community",
     "dev:coalition": "npm run dev --workspace=apps/coalition",
     "dev:reference": "npm run dev --workspace=apps/reference",
+    "dev:board": "npm run dev --workspace=apps/board",
     "build:community": "npm run build --workspace=apps/community",
     "build:coalition": "npm run build --workspace=apps/coalition",
     "build:reference": "npm run build --workspace=apps/reference",
+    "build:board": "npm run build --workspace=apps/board",
     "start:community": "npm run start --workspace=apps/community",
     "start:coalition": "npm run start --workspace=apps/coalition",
     "start:reference": "npm run start --workspace=apps/reference",
+    "start:board": "npm run start --workspace=apps/board",
     "storybook:community": "npm run storybook --workspace=apps/community",
     "storybook:coalition": "npm run storybook --workspace=apps/coalition",
     "test": "npm run xmonitor:verify-vendor && npm run test --workspaces --if-present && npm run test:policy-update-email-asset-backfill && npm run test:public-file-migration && npm run test:amplify-custom-headers && npm run test:production-config && npm run test:compute-role && npm run test:durable-jobs-infra && npm run test:session-revocation && npm run test:identity-integrity-tooling && npm run test:better-auth-user-index-tooling",
@@ -33,6 +36,7 @@
     "typecheck:community": "npm exec --workspace=apps/community -- tsc --noEmit --pretty false",
     "typecheck:coalition": "npm exec --workspace=apps/coalition -- tsc --noEmit --pretty false",
     "typecheck:reference": "npm exec --workspace=apps/reference -- tsc --noEmit --pretty false",
+    "typecheck:board": "npm exec --workspace=apps/board -- tsc --noEmit --pretty false",
     "typecheck:workspaces": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "history:verify": "node scripts/verify-history-import.mjs",
@@ -57,7 +61,7 @@
     "test:e2e": "playwright test",
     "audit:production": "npm audit --omit=dev --audit-level=moderate",
     "check": "npm run history:verify && npm run parity:check && npm run boundaries:check && npm run typecheck && npm test && npm run lint",
-    "build": "npm run build:community && npm run build:coalition && npm run build:reference"
+    "build": "npm run build:community && npm run build:coalition && npm run build:reference && npm run build:board"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
