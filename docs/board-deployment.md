@@ -85,11 +85,13 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `NEXTAUTH_TABLE` | yes | `PGPZBoardNextAuth` |
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
+| `BOARD_ADMIN_EMAILS` | yes | administrator allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` |
 | `EMAIL_FROM` | no | unused until email delivery is added |
 
 `tooling/write-amplify-env.mjs board` fails the build if any required variable
-is missing. `BOARD_MEMBER_EMAILS` is intentionally required: an unset
-allowlist locks every account out (safe default).
+is missing. Both roster variables are intentionally required. An unset member
+allowlist locks every account out, and an administrator outside the member
+roster fails configuration instead of gaining access.
 
 ## 4. Provisioning directors
 
@@ -120,9 +122,14 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
   `@pgpz/auth-dynamodb` adapter reads, with Better Auth's own scrypt hash
   (`better-auth/crypto`), so sign-in works through the normal flow.
 
+Administrator authorization is environment-managed rather than stored in the
+user record. Add an existing roster email to `BOARD_ADMIN_EMAILS` and redeploy;
+the server derives `isAdmin` only after confirming active Board membership.
+
 ## 5. Removing a director
 
-1. Remove the address from `BOARD_MEMBER_EMAILS` in Amplify (takes effect on
+1. Remove the address from `BOARD_ADMIN_EMAILS`, then from
+   `BOARD_MEMBER_EMAILS` in Amplify (takes effect on
    next deploy; until then the roster still admits them).
 2. Delete the account records (user + credential account) from
    `PGPZBoardNextAuth`, e.g. `aws dynamodb delete-item` on
@@ -139,6 +146,8 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 - Malicious `callbackUrl` values (`javascript:`, `//host`, absolute URLs)
   resolve to `/` instead of navigating.
 - Signing in with a roster email + provisioned password reaches the dashboard.
+- An email present in both roster variables sees the Board administrator badge
+  and can reach `/admin`; ordinary directors receive a concealed 404 there.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
 - Rotating a director's password signs their other devices out (sessions
   revoked), and `--dry-run` reports the revocation count first.

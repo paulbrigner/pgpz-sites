@@ -128,12 +128,14 @@ jobs:
         env:
           NEXTAUTH_TABLE: PGPZBoardCi
           BOARD_MEMBER_EMAILS: ci@example.invalid
+          BOARD_ADMIN_EMAILS: ci@example.invalid
         run: node tooling/write-amplify-env.mjs board
       - name: Build board application
         if: matrix.application == 'board'
         env:
           NEXTAUTH_TABLE: PGPZBoardCi
           BOARD_MEMBER_EMAILS: ci@example.invalid
+          BOARD_ADMIN_EMAILS: ci@example.invalid
         run: npm run build:board
 
   browser-tests:

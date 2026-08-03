@@ -39,10 +39,10 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, route))).toBe(false);
   });
 
-  it("exposes only the sign-in page as anonymous surface", () => {
+  it("exposes only sign-in anonymously and keeps administration server-rendered", () => {
     expect(existsSync(path.join(appRoot, "signin"))).toBe(true);
     expect(existsSync(path.join(appRoot, "signup"))).toBe(false);
-    expect(existsSync(path.join(appRoot, "admin"))).toBe(false);
+    expect(existsSync(path.join(appRoot, "(portal)", "admin", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "api", "admin"))).toBe(false);
   });
 

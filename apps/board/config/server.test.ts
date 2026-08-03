@@ -13,6 +13,7 @@ const BOARD_ENV = {
   BETTER_AUTH_TRUSTED_ORIGINS: "http://localhost:3000",
   BETTER_AUTH_SECRET: "board-test-secret-at-least-32-characters",
   BOARD_MEMBER_EMAILS: "ada@example.org, Grace@Example.org",
+  BOARD_ADMIN_EMAILS: "ada@example.org",
 } satisfies Record<string, string>;
 
 describe("board server-only configuration", () => {
@@ -51,13 +52,39 @@ describe("board server-only configuration", () => {
     });
   });
 
+  it("derives administrators only from the member-subset admin allowlist", async () => {
+    const adapter = createBoardServerConfig(BOARD_ENV).membership.adapter;
+    await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "admin", isAdmin: true },
+    });
+    await expect(resolveActiveMembership(adapter, { email: "grace@example.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "member", isAdmin: false },
+    });
+    expect(() =>
+      createBoardServerConfig({
+        ...BOARD_ENV,
+        BOARD_ADMIN_EMAILS: "outsider@example.org",
+      }),
+    ).toThrow(/subset/);
+  });
+
   it("locks every account out when the allowlist is empty or missing", async () => {
-    const locked = createBoardServerConfig({ ...BOARD_ENV, BOARD_MEMBER_EMAILS: "" });
+    const locked = createBoardServerConfig({
+      ...BOARD_ENV,
+      BOARD_MEMBER_EMAILS: "",
+      BOARD_ADMIN_EMAILS: "",
+    });
     await expect(
       resolveActiveMembership(locked.membership.adapter, { email: "ada@example.org" }),
     ).resolves.toMatchObject({ active: false });
 
-    const unset = createBoardServerConfig({ ...BOARD_ENV, BOARD_MEMBER_EMAILS: undefined });
+    const unset = createBoardServerConfig({
+      ...BOARD_ENV,
+      BOARD_MEMBER_EMAILS: undefined,
+      BOARD_ADMIN_EMAILS: undefined,
+    });
     await expect(
       resolveActiveMembership(unset.membership.adapter, { email: "ada@example.org" }),
     ).resolves.toMatchObject({ active: false });
