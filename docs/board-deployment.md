@@ -9,9 +9,10 @@ sender.
 
 ## 1. DynamoDB table
 
-Create one table for the board portal (e.g. `PGPZBoardNextAuth`) in the same
-region as the Amplify app. The Better Auth adapter (`@pgpz/auth-dynamodb`)
-uses the same schema as Community and Coalition:
+The versioned `PgpzBoardBackend` CloudFormation stack creates a dedicated
+`PGPZBoardNextAuth` table in the same region as the Amplify app. The Better
+Auth adapter (`@pgpz/auth-dynamodb`) uses the same schema as Community and
+Coalition:
 
 | Attribute | Type | Purpose |
 | --- | --- | --- |
@@ -21,11 +22,22 @@ uses the same schema as Community and Coalition:
 | `GSI2PK`/`GSI2SK` | String | GSI `GSI2` — sessions/accounts by userId |
 | `expires` | Number | TTL (sessions, verifications, rate limits) |
 
-Enable TTL on `expires`. Billing: `PAY_PER_REQUEST` is fine for a board-sized
-workload. The Coalition script
-`apps/coalition/scripts/setup/create-dynamodb-tables.mjs` can be run with
-`--nextauth-table PGPZBoardNextAuth` to create and verify the identical
-schema.
+The stack enables on-demand billing, server-side encryption, TTL on `expires`,
+point-in-time recovery, DynamoDB deletion protection, retained replacement and
+deletion policies, and CloudFormation termination protection. Plan, validate,
+and explicitly deploy it with:
+
+```bash
+npm run provision:board-backend -- --account-id 860091316962
+npm run provision:board-backend -- --account-id 860091316962 \
+  --profile zodldashboard --validate-only
+npm run provision:board-backend -- --account-id 860091316962 \
+  --profile zodldashboard --apply --confirm PROVISION-BOARD-BACKEND
+```
+
+The default invocation is local-only and makes no AWS calls. The apply mode
+verifies the selected account, table status, TTL, point-in-time recovery, and
+deletion protection before reporting success.
 
 ## 2. Amplify application
 
@@ -48,16 +60,17 @@ needed. Do **not** add Board to a repository-root `customHttp.yml`.
 
 ### IAM role
 
-Create the Amplify compute role or extend an existing one scoped to this app,
-granting at minimum:
+The `PgpzBoardBackend` stack creates the dedicated
+`PgpzBoardAmplifyMainCompute` role, granting only:
 
-- `dynamodb` on `PGPZBoardNextAuth`: `GetItem`, `PutItem`, `Query`, `UpdateItem`,
-  `DeleteItem`, `TransactWriteItems` (no `DescribeTable`)
+- `dynamodb` on `PGPZBoardNextAuth` and its indexes: `GetItem`, `PutItem`,
+  `Query`, `Scan`, `UpdateItem`, `DeleteItem`, `TransactWriteItems` (no
+  `DescribeTable`)
 - no other tables, buckets, or SES identities
 
-The workflow `tooling/amplify-compute-role.mjs` plans Community/Coalition
-roles; copy its shape for the board app with the board table ARN only. SES is
-not required — the portal ships with outbound email disabled.
+`Scan` is required for the adapter's safe fallback when a query cannot be
+served by the modeled indexes. Its resource remains restricted to the Board
+table. SES is not required — the portal ships with outbound email disabled.
 
 ## 3. Environment variables
 
