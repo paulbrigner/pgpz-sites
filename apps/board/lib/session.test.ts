@@ -10,6 +10,7 @@ const requestHeaders = new Headers();
 const rosterAdapter = () =>
   createBoardMembershipAdapter({
     BOARD_MEMBER_EMAILS: "ada@example.org, grace@example.org",
+    BOARD_ADMIN_EMAILS: "ada@example.org",
   });
 
 const noSession: BoardSessionResolver = async () => null;
@@ -44,7 +45,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Ada", email: "grace@example.org" },
+      member: { name: "Ada", email: "grace@example.org", isAdmin: false },
     });
 
     await expect(
@@ -54,7 +55,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Board member", email: "ada@example.org" },
+      member: { name: "Board member", email: "ada@example.org", isAdmin: true },
     });
   });
 

@@ -146,6 +146,7 @@ const applications = {
       "NEXTAUTH_TABLE",
       "BETTER_AUTH_SECRET",
       "BOARD_MEMBER_EMAILS",
+      "BOARD_ADMIN_EMAILS",
     ],
     // The private board portal shares none of the branded applications'
     // tables, credentials, buckets, or senders. Membership is decided only by
@@ -159,6 +160,7 @@ const applications = {
       "REGION_AWS",
       "AWS_REGION",
       "BOARD_MEMBER_EMAILS",
+      "BOARD_ADMIN_EMAILS",
       "EMAIL_FROM",
     ],
   },

@@ -1,5 +1,6 @@
 import { Badge, Container, SectionHeading, Surface } from "@pgpz/ui";
-import { CalendarDays, FileText, Landmark, LockKeyhole, Users } from "lucide-react";
+import { CalendarDays, FileText, Landmark, LockKeyhole, Settings, Users } from "lucide-react";
+import Link from "next/link";
 import type { BoardMember } from "@/lib/session";
 
 export type { BoardMember };
@@ -32,6 +33,7 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
         <section>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="accent">Board of Directors</Badge>
+            {member.isAdmin ? <Badge>Board administrator</Badge> : null}
             <Badge>Private</Badge>
           </div>
           <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">
@@ -44,6 +46,15 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
           <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
             Signed in as <span className="font-semibold text-[var(--foreground)]">{member.email}</span>.
           </p>
+          {member.isAdmin ? (
+            <Link
+              href="/admin"
+              className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+            >
+              <Settings className="h-4 w-4" aria-hidden="true" />
+              Open administration
+            </Link>
+          ) : null}
         </section>
       </Container>
 

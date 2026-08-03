@@ -8,6 +8,10 @@ and an email on the `BOARD_MEMBER_EMAILS` allowlist; an empty allowlist locks
 everyone out. Self-registration is disabled, the site refuses search indexing
 at every layer, and outbound email is not wired up.
 
+Administrator status is independently granted by `BOARD_ADMIN_EMAILS`, which
+must be a subset of the member roster. Administrators receive an enforced
+server-only `/admin` surface; no browser-based account mutation API is exposed.
+
 ## Local development
 
 ```bash

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   resolveActiveMembership,
   type MembershipAdapter,
@@ -13,6 +13,7 @@ import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 export type BoardMember = Readonly<{
   name: string;
   email: string;
+  isAdmin: boolean;
 }>;
 
 export type BoardMemberState =
@@ -64,7 +65,14 @@ export async function resolveBoardMemberState(
     typeof user.name === "string" && user.name.trim()
       ? user.name.trim()
       : "Board member";
-  return { status: "member", member: { name, email } };
+  return {
+    status: "member",
+    member: {
+      name,
+      email,
+      isAdmin: membership.attributes?.isAdmin === true,
+    },
+  };
 }
 
 /**
@@ -81,4 +89,16 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
     redirect(`/signin?callbackUrl=${encodeURIComponent(resolveSafeCallbackUrl(callbackPath))}`);
   }
   return state.status === "member" ? state.member : null;
+}
+
+/**
+ * Server-only guard for administrator pages. Administrator status is derived
+ * from BOARD_ADMIN_EMAILS after membership is confirmed, so an administrator
+ * can never bypass the Board roster. Non-administrators receive a concealed
+ * 404 response instead of learning about the privileged route surface.
+ */
+export async function requireBoardAdmin(callbackPath = "/admin"): Promise<BoardMember> {
+  const member = await requireBoardMember(callbackPath);
+  if (!member?.isAdmin) notFound();
+  return member;
 }

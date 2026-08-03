@@ -3,11 +3,16 @@ import { expect, test } from "@playwright/test";
 // Markers that only exist inside the authenticated portal payload. Their
 // absence from anonymous document and RSC bodies proves the leaf-level
 // authorization guard runs before any portal content serializes.
-const PORTAL_MARKERS = ["Welcome,", "Meeting materials", "Decisions & resolutions"];
+const PORTAL_MARKERS = [
+  "Welcome,",
+  "Meeting materials",
+  "Decisions & resolutions",
+  "Administrator controls",
+];
 
 test.describe("board portal privacy boundary", () => {
   test("anonymous document requests redirect to sign-in without portal payload", async ({ request }) => {
-    for (const path of ["/", "/terms", "/privacy"]) {
+    for (const path of ["/", "/terms", "/privacy", "/admin"]) {
       const response = await request.get(path, { maxRedirects: 0 });
 
       expect(response.status(), path).toBe(307);
