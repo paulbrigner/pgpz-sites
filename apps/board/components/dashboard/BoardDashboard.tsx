@@ -1,10 +1,8 @@
 import { Badge, Container, SectionHeading, Surface } from "@pgpz/ui";
 import { CalendarDays, FileText, Landmark, LockKeyhole, Users } from "lucide-react";
+import type { BoardMember } from "@/lib/session";
 
-export type BoardMember = Readonly<{
-  name: string;
-  email: string;
-}>;
+export type { BoardMember };
 
 const workspaceSections = [
   {

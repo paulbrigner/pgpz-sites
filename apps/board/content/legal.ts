@@ -49,6 +49,7 @@ export const boardPrivacy: BoardLegalDocument = {
       title: "Account data",
       paragraphs: [
         "The portal stores only the information needed to sign directors in: name, email address, and a password hash. Password hashes use the Better Auth scrypt format and are never stored or transmitted in plain text.",
+        "Authenticated access is tracked with session records that carry the director's user identity and a signed, expiring session token. Session records are deleted when the director signs out voluntarily or when an administrator rotates their password.",
       ],
     },
     {
@@ -58,9 +59,10 @@ export const boardPrivacy: BoardLegalDocument = {
       ],
     },
     {
-      title: "Operational logs",
+      title: "Operational logs and rate limiting",
       paragraphs: [
-        "Hosting and security infrastructure may process ordinary request information such as timestamps, requested paths, network addresses, and browser details for reliability and abuse prevention.",
+        "Hosting and security infrastructure may process ordinary request information such as timestamps, requested paths, network addresses (IP), and browser user-agent details for reliability and abuse prevention.",
+        "Sign-in attempts are rate-limited. Rate-limit metadata (attempt counts keyed by network address and window) is stored in the portal's own database table and expires automatically.",
       ],
     },
     {

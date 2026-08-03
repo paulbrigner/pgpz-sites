@@ -15,15 +15,24 @@
  *   --name <name>          Display name (defaults to the email's local part)
  *   --password <secret>    Set a specific password (minimum 12 characters)
  *   --show-password        Print the password used (required for generated ones)
+ *   --keep-sessions        Do not revoke the director's existing sessions on
+ *                          rotation (revoked by default so the old password
+ *                          and old cookies both stop working)
+ *   --dry-run              Report the planned changes and session impact
+ *                          without writing anything
  *
  * Security notes:
  *   - Without --password a random 24-character password is generated and
  *     printed exactly once; deliver it over a private channel.
  *   - If BOARD_MEMBER_EMAILS is set in the environment, the script refuses to
  *     provision emails outside that allowlist.
- *   - Rerunning the script for the same email rotates the password hash and
- *     invalidates the old password immediately (existing sessions survive
- *     until their cookie expires).
+ *   - Rerunning the script for the same email rotates the password hash and,
+ *     by default, revokes every stored session for that director, so both the
+ *     old password and existing session cookies stop working immediately.
+ *   - New identities are written transactionally (user + credential account
+ *     in one TransactWriteItems), so a failure cannot leave a half-created
+ *     account. Session revocation aborts with a non-zero exit if any deletion
+ *     fails, so partial recovery is never silent.
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -41,6 +50,7 @@ const ALLOWLIST = new Set(
 
 const USER_TYPE = "BETTER_AUTH#better_auth_users";
 const ACCOUNT_TYPE = "BETTER_AUTH#better_auth_accounts";
+const SESSION_TYPE = "BETTER_AUTH#better_auth_sessions";
 
 const documentClient = DynamoDBDocument.from(new DynamoDBClient({ region: REGION }));
 
@@ -70,6 +80,42 @@ async function findAccountForUser(userId: string) {
     Limit: 5,
   });
   return (result.Items || []).find((item) => item.providerId === "credential") || null;
+}
+
+/**
+ * Deletes every stored session record for a user. Rotating a password must
+ * not leave existing session cookies usable, so successful rotation revokes
+ * sessions by default (opt out with --keep-sessions). Any deletion failure
+ * aborts with a non-zero exit so partial revocation is never silent.
+ */
+async function revokeUserSessions(userId: string): Promise<number> {
+  const sessions: Array<{ pk: unknown; sk: unknown }> = [];
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const result = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI2",
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeNames: { "#pk": "GSI2PK" },
+      ExpressionAttributeValues: { ":pk": `${SESSION_TYPE}#userId#${userId}` },
+      ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {}),
+    });
+    sessions.push(
+      ...(result.Items || []).map((item) => ({ pk: item.pk, sk: item.sk })),
+    );
+    lastEvaluatedKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastEvaluatedKey);
+
+  if (sessions.length === 0) return 0;
+
+  for (const session of sessions) {
+    await documentClient.delete({
+      TableName: TABLE_NAME,
+      Key: { pk: session.pk, sk: session.sk },
+    });
+  }
+  return sessions.length;
 }
 
 function userRecord(userId: string, email: string, name: string) {
@@ -136,7 +182,7 @@ async function main() {
   const { positional, options } = parseArgs(process.argv.slice(2));
   const email = normalizeEmail(positional[0] || "");
   if (!email.includes("@")) {
-    console.error("Usage: npx tsx scripts/provision-board-member.ts <email> [--name NAME] [--password SECRET] [--show-password]");
+    console.error("Usage: npx tsx scripts/provision-board-member.ts <email> [--name NAME] [--password SECRET] [--show-password] [--keep-sessions] [--dry-run]");
     process.exit(1);
   }
 
@@ -157,38 +203,51 @@ async function main() {
     process.exit(1);
   }
   const showPassword = explicitPassword !== undefined || options.get("show-password") === "true";
-
-  const passwordHash = await hashPassword(password);
+  const keepSessions = options.get("keep-sessions") === "true";
+  const dryRun = options.get("dry-run") === "true";
 
   const existingUser = await findUserByEmail(email);
-  let userId: string;
-  let action: "created" | "rotated";
-
-  if (existingUser?.id) {
-    userId = String(existingUser.id);
-    action = "rotated";
-  } else {
-    userId = randomUUID();
-    await documentClient.put({
-      TableName: TABLE_NAME,
-      Item: userRecord(userId, email, name),
-    });
-    action = "created";
-  }
-
+  const action: "created" | "rotated" = existingUser?.id ? "rotated" : "created";
+  const userId = existingUser?.id ? String(existingUser.id) : randomUUID();
   const existingAccount = await findAccountForUser(userId);
   const previousVersion =
     existingAccount && Number.isInteger(existingAccount.adapterVersion)
       ? Number(existingAccount.adapterVersion)
       : 0;
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: accountRecord(userId, passwordHash, previousVersion),
-  });
+  const sessionCount = keepSessions ? 0 : await revokeUserSessions(userId);
+
+  console.log(`[board] plan: ${action} account for ${email} (name: ${name}) in ${TABLE_NAME}.`);
+  console.log(`[board] plan: will ${keepSessions ? "keep" : `revoke ${sessionCount} session${sessionCount === 1 ? "" : "s"}`} for ${userId}.`);
+  if (dryRun) {
+    console.log("[board] dry-run: no writes performed.");
+    return;
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  if (action === "created") {
+    // User and credential account land atomically so a failure can never
+    // leave a user without the means to sign in (or vice versa).
+    await documentClient.transactWrite({
+      TransactItems: [
+        { Put: { TableName: TABLE_NAME, Item: userRecord(userId, email, name) } },
+        { Put: { TableName: TABLE_NAME, Item: accountRecord(userId, passwordHash, 0) } },
+      ],
+    });
+  } else {
+    await documentClient.put({
+      TableName: TABLE_NAME,
+      Item: accountRecord(userId, passwordHash, previousVersion),
+    });
+  }
 
   console.log(`[board] ${action} account for ${email} (name: ${name}) in ${TABLE_NAME}.`);
   if (action === "rotated") {
-    console.log("[board] The previous password is no longer valid.");
+    if (keepSessions) {
+      console.log("[board] WARNING: existing sessions were kept; the old password alone is invalidated.");
+    } else {
+      console.log(`[board] Revoked ${sessionCount} existing session${sessionCount === 1 ? "" : "s"}; all devices must sign in again.`);
+    }
   }
   if (showPassword) {
     console.log(`[board] Password: ${password}`);

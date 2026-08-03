@@ -5,6 +5,7 @@ import { useState } from "react";
 import { LockKeyhole, LogIn } from "lucide-react";
 import { buttonStyles } from "@pgpz/ui";
 import { betterAuthClient } from "@/lib/auth-client";
+import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 
 export function SignInForm() {
   const router = useRouter();
@@ -14,7 +15,10 @@ export function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  // The query-string callbackUrl is attacker-controlled; only a validated
+  // application-local path may be reached after sign-in (no open redirect,
+  // no javascript:/data: schemes, no protocol-relative hosts).
+  const safeCallbackUrl = resolveSafeCallbackUrl(searchParams.get("callbackUrl"));
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -26,7 +30,7 @@ export function SignInForm() {
         setError("Sign-in failed. Check your email and password, or contact the board administrator.");
         return;
       }
-      router.push(callbackUrl);
+      router.push(safeCallbackUrl);
       router.refresh();
     } catch {
       setError("Sign-in is temporarily unavailable. Please try again shortly.");
@@ -36,7 +40,7 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-5 px-8 py-8" noValidate>
+    <form onSubmit={handleSubmit} data-safe-callback={safeCallbackUrl} className="grid gap-5 px-8 py-8" noValidate>
       <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
         Email
         <input

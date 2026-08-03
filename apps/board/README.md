@@ -37,7 +37,9 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 
 The script generates a random 24-character password, prints it once, and asks
 you to deliver it privately. Rerunning it for the same email rotates the
-password hash. It refuses to provision email addresses that are not on
+password hash **and revokes the director's existing sessions by default**
+(`--keep-sessions` keeps them; `--dry-run` previews the plan and revocation
+count). It refuses to provision email addresses that are not on
 `BOARD_MEMBER_EMAILS` when that variable is set.
 
 ## Environment

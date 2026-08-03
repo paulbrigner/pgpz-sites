@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const host = "127.0.0.1";
 const communityPort = 3201;
 const coalitionPort = 3202;
+const boardPort = 3203;
 
 const applicationEnvironment = (baseUrl: string) => ({
   AWS_ACCESS_KEY_ID: "e2e-only-access-key",
@@ -25,16 +26,30 @@ const applicationEnvironment = (baseUrl: string) => ({
 
 const communityBaseUrl = `http://${host}:${communityPort}`;
 const coalitionBaseUrl = `http://${host}:${coalitionPort}`;
+const boardBaseUrl = `http://${host}:${boardPort}`;
+
+// The board portal signs nobody in during browser journeys; the anonymous
+// gate, payload-leak checks, and callback-URL validation are what matter.
+const boardEnvironment = {
+  ...applicationEnvironment(boardBaseUrl),
+  NEXTAUTH_TABLE: "PGPZE2EBoardAuth",
+  BOARD_MEMBER_EMAILS: "e2e@example.invalid",
+};
+
+// Container-friendly output knob: PLAYWRIGHT_OUTPUT_DIR relocates test
+// results and the HTML report (the default output/ folder can be a read-only
+// mount in containers).
+const reportsRoot = process.env.PLAYWRIGHT_OUTPUT_DIR || "output/playwright";
 
 export default defineConfig({
   testDir: "./e2e",
-  outputDir: "output/playwright/test-results",
+  outputDir: `${reportsRoot}/test-results`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: [
     ["list"],
-    ["html", { outputFolder: "output/playwright/report", open: "never" }],
+    ["html", { outputFolder: `${reportsRoot}/report`, open: "never" }],
   ],
   use: {
     trace: "retain-on-failure",
@@ -55,15 +70,29 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
+    {
+      command: `npm run dev --workspace=apps/board -- --hostname ${host} --port ${boardPort}`,
+      url: `${boardBaseUrl}/signin`,
+      env: boardEnvironment,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
   ],
   projects: [
     {
       name: "community-mobile",
+      testMatch: /critical-journeys\.spec\.ts/,
       use: { ...devices["Pixel 7"], baseURL: communityBaseUrl },
     },
     {
       name: "coalition-mobile",
+      testMatch: /critical-journeys\.spec\.ts/,
       use: { ...devices["Pixel 7"], baseURL: coalitionBaseUrl },
+    },
+    {
+      name: "board-mobile",
+      testMatch: /board-portal\.spec\.ts/,
+      use: { ...devices["Pixel 7"], baseURL: boardBaseUrl },
     },
   ],
 });

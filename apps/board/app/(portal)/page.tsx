@@ -1,19 +1,11 @@
-import { headers } from "next/headers";
-import { BoardDashboard, type BoardMember } from "@/components/dashboard/BoardDashboard";
-import { auth } from "@/lib/auth";
+import { BoardDashboard } from "@/components/dashboard/BoardDashboard";
+import { requireBoardMember } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function BoardHomePage() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-    query: { disableRefresh: true },
-  });
-
-  const member: BoardMember = {
-    name: session?.user?.name || "Board member",
-    email: session?.user?.email || "director@pgpz.org",
-  };
+  const member = await requireBoardMember("/");
+  if (!member) return null;
 
   return <BoardDashboard member={member} />;
 }

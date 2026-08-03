@@ -64,11 +64,14 @@ manifest and extracted-feature placement, checks workspace import and direct
 dependency boundaries, typechecks both apps and package workspaces, runs all
 tests, and runs each available workspace linter.
 
-`npm run test:e2e` starts both branded applications on isolated local ports and
-runs the same anonymous critical journeys against each: server-rendered public
-content, protected-admin redirects, mobile navigation, and serious/critical
-axe accessibility findings. It uses only local test configuration and does not
-send email or require a production login.
+`npm run test:e2e` starts the two branded applications and the private Board
+portal on isolated local ports and runs the same anonymous critical journeys
+against Community and Coalition (server-rendered public content,
+protected-admin redirects, mobile navigation, and serious/critical axe
+accessibility findings), plus the Board portal's privacy-boundary journeys
+(anonymous document/RSC payload checks, malicious post-sign-in callback
+validation, robots and hardening headers). It uses only local test
+configuration and does not send email or require a production login.
 
 ## Dependency boundaries
 

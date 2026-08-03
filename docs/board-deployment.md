@@ -90,8 +90,16 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 ```
 
 - Generates a random 24-character password, prints it once; deliver privately.
-- Rerunning for the same email rotates the password hash (old password stops
-  working immediately; existing sessions live until cookie expiry).
+- Rerunning for the same email rotates the password hash **and revokes every
+  stored session for that director by default**, so the old password and all
+  existing session cookies stop working immediately. Use `--keep-sessions` to
+  rotate the password only.
+- New identities are created transactionally (user + credential account in a
+  single `TransactWriteItems`), so a failure cannot leave a half-created
+  account. Session-revocation failures abort with a non-zero exit; partial
+  recovery is never silent.
+- `--dry-run` reports the planned action, account id, and session-revocation
+  count without writing anything.
 - Refuses emails not on `BOARD_MEMBER_EMAILS` when that variable is set in the
   shell — always set it to the same value as the Amplify allowlist to prevent
   provisioning mistakes.
@@ -112,8 +120,14 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 ## 6. Verification after deploy
 
 - `https://board.pgpz.org/signin` renders the sign-in card.
-- Any other path redirects to `/signin?callbackUrl=...` while signed out.
+- Any other path redirects to `/signin?callbackUrl=...` while signed out, and
+  neither the document nor an RSC request body contains portal content
+  (regression-covered by `e2e/board-portal.spec.ts`).
+- Malicious `callbackUrl` values (`javascript:`, `//host`, absolute URLs)
+  resolve to `/` instead of navigating.
 - Signing in with a roster email + provisioned password reaches the dashboard.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
+- Rotating a director's password signs their other devices out (sessions
+  revoked), and `--dry-run` reports the revocation count first.
 - `curl -I` shows `X-Robots-Tag: noindex`, `X-Frame-Options: DENY`, CSP.
 - `https://board.pgpz.org/robots.txt` disallows all crawlers.
