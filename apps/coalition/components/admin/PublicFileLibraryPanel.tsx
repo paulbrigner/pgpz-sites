@@ -389,7 +389,7 @@ export function PublicFileLibraryPanel() {
 
       <form
         onSubmit={submitUpload}
-        className="rounded-2xl border border-[rgba(245,168,0,0.35)] bg-white/90 p-5 shadow-sm"
+        className="rounded-2xl border border-[rgba(var(--program-accent-rgb),0.35)] bg-white/90 p-5 shadow-sm"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--brand-ink)] text-[var(--zcash-gold)]">

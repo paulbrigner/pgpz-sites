@@ -1005,7 +1005,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   className={cn(
                     "w-full rounded-xl border p-3 text-left transition",
                     selectedUpdate?.slug === update.slug
-                      ? "border-[rgba(245,168,0,0.72)] bg-[var(--brand-ice)]"
+                      ? "border-[rgba(71,85,105,0.72)] bg-[var(--brand-ice)]"
                       : "border-slate-200 bg-white hover:border-slate-300",
                   )}
                 >
@@ -1314,7 +1314,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     className={cn(
                       "rounded-lg border px-3 py-3 text-left text-sm transition",
                       audienceMode === "all_active_members"
-                        ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                        ? "border-[rgba(71,85,105,0.62)] bg-white shadow-sm"
                         : "border-slate-200 bg-white/60 hover:bg-white",
                     )}
                   >
@@ -1335,7 +1335,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     className={cn(
                       "rounded-lg border px-3 py-3 text-left text-sm transition",
                       audienceMode === "selected_members"
-                        ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                        ? "border-[rgba(71,85,105,0.62)] bg-white shadow-sm"
                         : "border-slate-200 bg-white/60 hover:bg-white",
                     )}
                   >
@@ -1439,7 +1439,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </p>
               </div>
 
-              <label className="flex items-start gap-3 rounded-xl border border-[rgba(245,168,0,0.32)] bg-[var(--brand-ice)] p-4 text-sm leading-6 text-slate-700">
+              <label className="flex items-start gap-3 rounded-xl border border-[rgba(71,85,105,0.32)] bg-[var(--brand-ice)] p-4 text-sm leading-6 text-slate-700">
                 <input
                   type="checkbox"
                   className="mt-1 h-4 w-4"

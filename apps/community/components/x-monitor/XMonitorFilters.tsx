@@ -61,9 +61,9 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
               />
               <span
                 aria-hidden="true"
-                className={`relative h-6 w-11 shrink-0 rounded-full border transition peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(245,168,0,0.18)] ${
+                className={`relative h-6 w-11 shrink-0 rounded-full border transition peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(71,85,105,0.18)] ${
                   searchMode === "semantic"
-                    ? "border-[var(--zcash-gold)] bg-[rgba(245,168,0,0.24)]"
+                    ? "border-[var(--zcash-gold)] bg-[rgba(71,85,105,0.24)]"
                     : "border-slate-500 bg-slate-300"
                 }`}
               >
@@ -94,7 +94,7 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
         <div className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
           <input
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(245,168,0,0.12)]"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(71,85,105,0.12)]"
             id="x-monitor-search-query"
             maxLength={searchMode === "semantic" ? 500 : 200}
             name="q"
@@ -117,7 +117,7 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
       <label className="space-y-2 text-sm font-medium text-[var(--brand-ink)]">
         X account
         <input
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(245,168,0,0.12)]"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(71,85,105,0.12)]"
           defaultValue={query.handle}
           maxLength={16}
           name="handle"
@@ -128,7 +128,7 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
       <label className="space-y-2 text-sm font-medium text-[var(--brand-ink)]">
         Feed
         <select
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(245,168,0,0.12)]"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--zcash-gold)] focus:ring-4 focus:ring-[rgba(71,85,105,0.12)]"
           defaultValue={query.significantMode}
           name="significant"
         >
@@ -177,7 +177,7 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
                   type="checkbox"
                   value={value}
                 />
-                <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 transition hover:border-[var(--zcash-gold)] peer-checked:border-[var(--brand-ink)] peer-checked:bg-[var(--brand-ink)] peer-checked:text-[var(--zcash-gold)] peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(245,168,0,0.18)]">
+                <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 transition hover:border-[var(--zcash-gold)] peer-checked:border-[var(--brand-ink)] peer-checked:bg-[var(--brand-ink)] peer-checked:text-[var(--zcash-gold)] peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(71,85,105,0.18)]">
                   {label}
                 </span>
               </label>
@@ -197,7 +197,7 @@ export function XMonitorFilters({ query }: { query: CommunityXMonitorQuery }) {
                   type="checkbox"
                   value={theme}
                 />
-                <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 transition hover:border-[var(--zcash-gold)] peer-checked:border-[var(--brand-ink)] peer-checked:bg-[var(--brand-ink)] peer-checked:text-[var(--zcash-gold)] peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(245,168,0,0.18)]">
+                <span className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-600 transition hover:border-[var(--zcash-gold)] peer-checked:border-[var(--brand-ink)] peer-checked:bg-[var(--brand-ink)] peer-checked:text-[var(--zcash-gold)] peer-focus-visible:ring-4 peer-focus-visible:ring-[rgba(71,85,105,0.18)]">
                   {theme}
                 </span>
               </label>

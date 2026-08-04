@@ -867,7 +867,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               className={cn(
                                 "mt-3 flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition",
                                 member.isAdmin
-                                  ? "border-[rgba(245,168,0,0.55)] bg-[var(--zcash-gold-soft)]"
+                                  ? "border-[rgba(71,85,105,0.55)] bg-[var(--zcash-gold-soft)]"
                                   : "border-slate-200 bg-slate-50",
                                 (member.id === currentAdminId || deactivated) && "cursor-not-allowed opacity-60",
                               )}

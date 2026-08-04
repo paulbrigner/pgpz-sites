@@ -53,7 +53,7 @@ export function XMonitorPostCard({
               @{item.author_handle}
             </a>
             {label ? (
-              <span className="rounded-full bg-[rgba(245,168,0,0.14)] px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-[var(--brand-denim)]">
+              <span className="rounded-full bg-[rgba(71,85,105,0.14)] px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-[var(--brand-denim)]">
                 {label}
               </span>
             ) : null}

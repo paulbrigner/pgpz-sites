@@ -34,7 +34,7 @@ export function LegalDocumentPage({ document }: Props) {
       </section>
 
       <section className="muted-card p-6 sm:p-8">
-        <div className="flex flex-wrap gap-3 border-b border-[rgba(245,168,0,0.22)] pb-5 text-sm">
+        <div className="flex flex-wrap gap-3 border-b border-[rgba(47,111,104,0.22)] pb-5 text-sm">
           <Link className="font-medium text-[var(--brand-denim)] underline" href={TERMS_PATH}>
             Terms of Service
           </Link>

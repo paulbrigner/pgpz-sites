@@ -3,13 +3,14 @@ import { Providers } from "./providers";
 import { MainNav } from "@/components/site/main-nav";
 import { AdminViewModeBanner } from "@/components/admin/AdminViewMode";
 import { Inter } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
 
 export const metadata = {
-  title: "PGPZ Community",
-  description: "Community home for PGPZ updates, resources, and early members.",
+  title: "PGPZ Community | Pretty Good Policy",
+  description: "The Pretty Good Policy community home for updates, resources, and members.",
 };
 
 const inter = Inter({
@@ -31,13 +32,36 @@ export default function RootLayout({
             <MainNav />
           </Suspense>
           <AdminViewModeBanner />
-          <main className="relative min-h-[calc(100vh-3.5rem)] bg-[linear-gradient(180deg,var(--brand-ice)_0%,#ffffff_72%)] pb-16 pt-8">
+          <main className="relative min-h-[calc(100vh-5rem)] bg-[linear-gradient(180deg,var(--brand-paper)_0%,#ffffff_58%,var(--brand-paper)_100%)] pb-16 pt-8">
             {children}
           </main>
-          <footer className="border-t border-[rgba(245,168,0,0.22)] bg-white px-5 py-6 text-sm text-slate-600">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p>PGPZ Community</p>
-              <div className="flex flex-wrap gap-4">
+          <footer className="border-t border-[rgba(71,85,105,0.22)] bg-[var(--brand-paper)] px-5 py-10 text-sm text-slate-600">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+              <div className="space-y-4">
+                <a
+                  href="https://z.cash/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Pretty Good Policy Community logo; visit the official Zcash website"
+                  title="Visit the official Zcash website"
+                  className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--brand-paper)]"
+                >
+                  <Image
+                    src="/brand/pgpz-community-on-light.svg"
+                    alt="Pretty Good Policy Community"
+                    width={1578}
+                    height={750}
+                    className="h-20 w-auto"
+                    unoptimized
+                  />
+                </a>
+                <p className="max-w-2xl text-xs leading-5 text-slate-600">
+                  Pretty Good Policy (PGPZ) is independent and is not an official Zcash or Zcash
+                  Foundation website, service, or product. It is not affiliated with or endorsed by
+                  the Zcash Foundation.
+                </p>
+              </div>
+              <nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-3 lg:justify-end">
                 <Link className="font-medium text-[var(--brand-denim)] underline" href={TERMS_PATH}>
                   Terms of Service
                 </Link>
@@ -47,7 +71,7 @@ export default function RootLayout({
                 <Link className="font-medium text-[var(--brand-denim)] underline" href={COMMUNITY_GUIDELINES_PATH}>
                   Community Guidelines
                 </Link>
-              </div>
+              </nav>
             </div>
           </footer>
         </Providers>

@@ -442,7 +442,7 @@ export function BriefingsAdminPanel() {
       <div className="space-y-5 p-5 sm:p-6">
         {showCreate ? (
           <form
-            className="rounded-2xl border border-[rgba(245,168,0,0.36)] bg-[var(--brand-ice)] p-5"
+            className="rounded-2xl border border-[rgba(71,85,105,0.36)] bg-[var(--brand-ice)] p-5"
             onSubmit={(event) => { event.preventDefault(); void createTopic(); }}
           >
             <h3 className="text-base font-semibold text-[var(--brand-ink)]">Create a curated topic</h3>
@@ -547,7 +547,7 @@ export function BriefingsAdminPanel() {
                                 key={version.version_id}
                                 type="button"
                                 onClick={() => setSelectedVersion((current) => ({ ...current, [topic.topic_id]: version.version_id }))}
-                                className={cn("w-full rounded-xl border bg-white p-3 text-left transition", selectedId === version.version_id && "border-[rgba(245,168,0,0.7)] shadow-sm")}
+                                className={cn("w-full rounded-xl border bg-white p-3 text-left transition", selectedId === version.version_id && "border-[rgba(71,85,105,0.7)] shadow-sm")}
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-sm font-semibold text-[var(--brand-ink)]">Version {version.version_number}</span>

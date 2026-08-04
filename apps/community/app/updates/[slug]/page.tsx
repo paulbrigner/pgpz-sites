@@ -100,7 +100,7 @@ function renderLinkedText(
           href={run.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(245,168,0,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
+          className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(71,85,105,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
         >
           {content}
         </a>
@@ -131,7 +131,7 @@ function renderLinkedText(
         href={link.href}
         target="_blank"
         rel="noopener noreferrer"
-        className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(245,168,0,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
+        className="font-semibold text-[var(--brand-denim)] underline decoration-[rgba(71,85,105,0.5)] underline-offset-4 hover:text-[var(--brand-ink)]"
       >
         {link.text}
       </a>,
@@ -181,7 +181,7 @@ function PgpzProgressSummaryBlock({ section }: { section: PolicyUpdateSection })
       <PolicyUpdateSectionHeading section={section} className="text-2xl font-semibold text-[var(--brand-ink)]">
         {section.heading}
       </PolicyUpdateSectionHeading>
-      <div className="rounded-lg border border-[rgba(245,168,0,0.42)] bg-[#fff7df] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+      <div className="rounded-lg border border-[rgba(71,85,105,0.42)] bg-[#fff7df] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
         <div className="space-y-4 text-sm leading-7 text-slate-800">
           {section.body.map((paragraph) => (
             <p key={paragraph} className="font-semibold text-[var(--brand-ink)]">
@@ -253,7 +253,7 @@ function PolicyUpdateSectionImages({
           <figure
             key={image.src}
             className={[
-              "overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] p-3",
+              "overflow-hidden rounded-2xl border border-[rgba(71,85,105,0.28)] p-3",
               isSocial ? "mx-auto max-w-[44rem] bg-white" : "bg-[var(--brand-ice)]",
               usesSourceDisplayWidth ? "w-full" : "",
               !isSocial && isCompact ? "max-w-xs" : "",
@@ -439,7 +439,7 @@ function PolicyUpdateSectionBlock({
 
 function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["table"]> }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-[rgba(71,85,105,0.28)] bg-white">
       <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-[0.82rem] leading-6 lg:min-w-0">
         <colgroup>
           <col style={{ width: "29%" }} />
@@ -525,11 +525,11 @@ export default async function UpdateDetailPage({ params }: Props) {
         </div>
       ) : null}
 
-      <article className="overflow-hidden rounded-[1.5rem] border border-[rgba(245,168,0,0.28)] bg-white shadow-[0_26px_46px_-30px_rgba(30,30,30,0.38)]">
-        <header className="grid gap-6 bg-[linear-gradient(135deg,var(--brand-ink),#2A2111)] p-6 text-white lg:grid-cols-[1fr_0.36fr] lg:p-8">
+      <article className="overflow-hidden rounded-[1.5rem] border border-[rgba(71,85,105,0.28)] bg-white shadow-[0_26px_46px_-30px_rgba(30,30,30,0.38)]">
+        <header className="grid gap-6 bg-[linear-gradient(135deg,var(--brand-ink),#163130)] p-6 text-white lg:grid-cols-[1fr_0.36fr] lg:p-8">
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-[rgba(245,168,0,0.16)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
+              <span className="rounded-full bg-[rgba(71,85,105,0.16)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
                 {update.categoryLabel}
               </span>
               <span className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/75">
@@ -568,7 +568,7 @@ export default async function UpdateDetailPage({ params }: Props) {
                     <hr className="border-0 border-t-[1.5pt] border-solid border-[#F79646]" aria-hidden="true" />
                   ) : null
                 ) : index > 0 && !isPolicyUpdateActionItemSection(section) ? (
-                  <hr className="border-0 border-t border-[rgba(245,168,0,0.34)]" aria-hidden="true" />
+                  <hr className="border-0 border-t border-[rgba(71,85,105,0.34)]" aria-hidden="true" />
                 ) : null}
                 <PolicyUpdateSectionBlock section={section} />
                 {update.sourceFormat === "docx" && section.dividerAfter ? (
@@ -583,7 +583,7 @@ export default async function UpdateDetailPage({ params }: Props) {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--brand-denim)]">Key takeaways</p>
               <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
                 {update.keyTakeaways.map((item) => (
-                  <li key={item} className="border-b border-[rgba(245,168,0,0.18)] pb-3 last:border-b-0 last:pb-0">
+                  <li key={item} className="border-b border-[rgba(71,85,105,0.18)] pb-3 last:border-b-0 last:pb-0">
                     {item}
                   </li>
                 ))}

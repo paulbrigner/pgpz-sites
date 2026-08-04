@@ -137,7 +137,7 @@ export default function GroupsClient({ displayName, initialSelected }: Props) {
                       {group.focusAreas.map((focus) => (
                         <span
                           key={focus}
-                          className="rounded-full border border-[rgba(245,168,0,0.28)] bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]"
+                          className="rounded-full border border-[rgba(47,111,104,0.28)] bg-[var(--zcash-gold-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--zcash-gold-deep)]"
                         >
                           {focus}
                         </span>
