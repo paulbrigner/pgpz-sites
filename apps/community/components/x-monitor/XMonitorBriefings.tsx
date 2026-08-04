@@ -443,7 +443,7 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                 </span>
               </summary>
 
-              <div className="border-t border-[rgba(245,168,0,0.22)] bg-white/70 px-5 py-6 sm:px-6">
+              <div className="border-t border-[rgba(71,85,105,0.22)] bg-white/70 px-5 py-6 sm:px-6">
                 {briefing.stale ? (
                   <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -455,7 +455,7 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                 ) : null}
 
                 {briefing.key_points.length > 0 ? (
-                  <div className="mb-6 rounded-2xl border border-[rgba(245,168,0,0.26)] bg-[var(--brand-ice)] p-5">
+                  <div className="mb-6 rounded-2xl border border-[rgba(71,85,105,0.26)] bg-[var(--brand-ice)] p-5">
                     <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--brand-ink)]">
                       <MessageSquareText className="h-4 w-4 text-[var(--brand-denim)]" aria-hidden="true" />
                       Key points
@@ -529,7 +529,7 @@ export function XMonitorBriefings({ briefings }: { briefings: CuratedBriefing[] 
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded-xl border bg-white p-4 transition hover:border-[rgba(245,168,0,0.5)]"
+                            className="rounded-xl border bg-white p-4 transition hover:border-[rgba(71,85,105,0.5)]"
                           >
                             {card}
                           </Link>

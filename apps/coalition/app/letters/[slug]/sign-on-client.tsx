@@ -445,7 +445,7 @@ export default function LetterSignOnClient({
                     signatory.
                   </label>
                 ) : null}
-                <label className="flex items-start gap-3 rounded-xl border border-[rgba(245,168,0,0.35)] bg-[#fffaf0] p-4 text-sm leading-6 text-slate-700">
+                <label className="flex items-start gap-3 rounded-xl border border-[rgba(47,111,104,0.35)] bg-[#fffaf0] p-4 text-sm leading-6 text-slate-700">
                   <input
                     type="checkbox"
                     checked={consent}

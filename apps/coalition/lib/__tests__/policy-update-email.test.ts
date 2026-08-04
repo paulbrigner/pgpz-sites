@@ -190,7 +190,7 @@ describe("buildPolicyUpdateEmail", () => {
     );
 
     expect(built.html.match(/border-top:1\.5pt solid #F79646/g)).toHaveLength(1);
-    expect(built.html).not.toContain("border-top:1px solid rgba(245,168,0,0.34)");
+    expect(built.html).not.toContain("border-top:1px solid rgba(47,111,104,0.34)");
   });
 
   it("uses authored Word dimensions for DOCX images instead of the compact pixel heuristic", () => {

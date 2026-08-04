@@ -187,7 +187,7 @@
       },
       {
         "path": "components/admin/NewsletterMailer.tsx",
-        "sha256": "e866111428a85e90882831b743fb5e675563b4937ac57d3a009dab8eaea23faa"
+        "sha256": "ea756dbe1d340ffd0f8c63773dbf8513a642dfb236ab8a58d54da19d62672cdf"
       },
       {
         "path": "components/admin/SignupNotificationsPanel.tsx",
@@ -211,7 +211,7 @@
       },
       {
         "path": "components/ui/button.tsx",
-        "sha256": "a091a3fac5ec946a7850fefed12ef538ea700f530d6ade16f0c2a1c0a50f713d"
+        "sha256": "527b152ccacbf0507455e68065a38f461e0b6fffe52e3b831d85bade2181c712"
       },
       {
         "path": "components/ui/drawer.tsx",
@@ -223,7 +223,7 @@
       },
       {
         "path": "components/ui/select.tsx",
-        "sha256": "e16beac07758ff19a47b8b8ac9fc9cf1ae1b23327686c3e1b0e6f227f8272bb9"
+        "sha256": "44d9ab0cf1497b63557720f70254b9abfad7741b0435a2dba6f76a0ce4898aad"
       },
       {
         "path": "lib/__tests__/admin-member-preview.test.ts",
@@ -595,7 +595,7 @@
       },
       {
         "path": "components/admin/PublicFileLibraryPanel.tsx",
-        "sha256": "447ed35d5753d1fa2964e945f99db6983ff92b8d3e267829703de2cd601add32"
+        "sha256": "65649f0bdc07ce6d6d0266f53b26b1f91f9fc4184e6c739fe9f7c78c2e772ee0"
       },
       {
         "path": "lib/__tests__/admin-public-files.test.ts",

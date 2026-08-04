@@ -18,7 +18,7 @@ export function HomeShellSkeleton() {
                 <div className="h-10 w-32 rounded-lg border border-white/30 bg-white/20" />
               </div>
             </div>
-            <div className="mx-auto flex-shrink-0 rounded-[1.9rem] border border-[rgba(245,168,0,0.28)] bg-white/10 p-[6px] shadow-[0_28px_48px_-28px_rgba(30,30,30,0.42)] backdrop-blur-lg md:mx-0 md:self-center">
+            <div className="mx-auto flex-shrink-0 rounded-[1.9rem] border border-[rgba(71,85,105,0.28)] bg-white/10 p-[6px] shadow-[0_28px_48px_-28px_rgba(30,30,30,0.42)] backdrop-blur-lg md:mx-0 md:self-center">
               <div className="relative h-28 w-28 overflow-hidden rounded-[1.6rem] bg-white/20 md:h-40 md:w-40" />
             </div>
           </div>

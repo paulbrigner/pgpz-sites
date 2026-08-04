@@ -100,7 +100,7 @@ export function CommunityPersonalHome({
         eyebrow="Your Community home"
         title={`Welcome back, ${displayName}.`}
         description="Start with the most useful current policy context, then choose where you want to participate."
-        className="community-personal-home__header border-[rgba(245,168,0,0.34)] text-white shadow-[0_28px_60px_-36px_rgba(30,30,30,0.65)]"
+        className="community-personal-home__header border-[rgba(71,85,105,0.34)] text-white shadow-[0_28px_60px_-36px_rgba(30,30,30,0.65)]"
         status={(
           <div className="inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-semibold text-white">
             <BadgeCheck className="h-4 w-4 text-[var(--zcash-gold-soft)]" aria-hidden="true" />
@@ -149,7 +149,7 @@ export function CommunityPersonalHome({
               <div className="grid gap-5 sm:grid-cols-[9.5rem_minmax(0,1fr)] sm:items-center">
                 <Link
                   href={latestUpdate.portalPath}
-                  className="block overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] bg-[var(--brand-ice)]"
+                  className="block overflow-hidden rounded-2xl border border-[rgba(71,85,105,0.28)] bg-[var(--brand-ice)]"
                   aria-label={`Read ${latestUpdate.title}`}
                 >
                   <Image
@@ -208,7 +208,7 @@ export function CommunityPersonalHome({
                     eyebrow={`${update.categoryLabel} · ${formatPublishedDate(update.publishedAt)}`}
                     title={update.shortTitle}
                     description={update.summary}
-                    className="border-[rgba(245,168,0,0.24)] text-[var(--brand-ink)] hover:border-[rgba(245,168,0,0.62)]"
+                    className="border-[rgba(71,85,105,0.24)] text-[var(--brand-ink)] hover:border-[rgba(71,85,105,0.62)]"
                     leading={(
                       <span className={iconFrame}>
                         <FileText className="h-5 w-5" aria-hidden="true" />
@@ -243,7 +243,7 @@ export function CommunityPersonalHome({
                   eyebrow={eyebrow}
                   title={title}
                   description={description}
-                  className="border-[rgba(245,168,0,0.24)] text-[var(--brand-ink)] hover:border-[rgba(245,168,0,0.62)]"
+                  className="border-[rgba(71,85,105,0.24)] text-[var(--brand-ink)] hover:border-[rgba(71,85,105,0.62)]"
                   leading={(
                     <span className={iconFrame}>
                       <Icon className="h-5 w-5" aria-hidden="true" />
@@ -267,7 +267,7 @@ export function CommunityPersonalHome({
                 alt="QR code to join the PGPZ Community Signal group"
                 width={112}
                 height={112}
-                className="h-28 w-28 shrink-0 rounded-xl border border-[rgba(245,168,0,0.28)] bg-white p-2"
+                className="h-28 w-28 shrink-0 rounded-xl border border-[rgba(71,85,105,0.28)] bg-white p-2"
               />
               <div>
                 <div className="flex items-center gap-3">

@@ -506,7 +506,7 @@ function EmailSignIn({
             </>
           ) : null}
 
-          <div className="rounded-2xl border border-[rgba(245,168,0,0.3)] bg-[rgba(255,230,163,0.22)] p-3">
+          <div className="rounded-2xl border border-[rgba(47,111,104,0.3)] bg-[rgba(255,230,163,0.22)] p-3">
             <SecureLinkSubmitButton
               type="submit"
               disabled={submitting || (isSignup && !legalAccepted)}

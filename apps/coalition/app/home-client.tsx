@@ -453,7 +453,7 @@ export default function HomeClient() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-6 rounded-lg border border-[rgba(245,168,0,0.58)] bg-white/90 p-5 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
+                <div className="mt-6 rounded-lg border border-[rgba(47,111,104,0.58)] bg-white/90 p-5 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-2">
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-denim)]">
@@ -547,7 +547,7 @@ export default function HomeClient() {
                     <Link
                       key={group.id}
                       href={policyInterestGroupPath(group.id)}
-                      className="rounded-lg border bg-white p-4 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_18px_34px_-28px_rgba(30,30,30,0.4)]"
+                      className="rounded-lg border bg-white p-4 transition hover:border-[rgba(47,111,104,0.55)] hover:shadow-[0_18px_34px_-28px_rgba(30,30,30,0.4)]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="text-sm font-semibold text-[var(--brand-ink)]">{group.label}</h3>
@@ -594,7 +594,7 @@ export default function HomeClient() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-6 inline-block rounded-2xl border border-[rgba(245,168,0,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(16,40,39,0.48)]">
+                <div className="mt-6 inline-block rounded-2xl border border-[rgba(47,111,104,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(16,40,39,0.48)]">
                   <Image
                     src="/coalition-signal-qr.png"
                     alt="QR code to join the PGPZ Coalition Signal group"
@@ -715,7 +715,7 @@ export default function HomeClient() {
               {isMember ? (
                 <ResourceSubmissionForm showSupportingLinks />
               ) : (
-                <div className="mt-5 rounded-lg border border-[rgba(245,168,0,0.3)] bg-white/80 p-4 text-sm leading-6 text-slate-600">
+                <div className="mt-5 rounded-lg border border-[rgba(47,111,104,0.3)] bg-white/80 p-4 text-sm leading-6 text-slate-600">
                   Resource submissions are available after coalition access is approved.
                 </div>
               )}

@@ -940,7 +940,7 @@ export function NewsletterMailer() {
                   className={cn(
                     "rounded-lg border px-3 py-3 text-left text-sm transition",
                     audienceMode === "selected_members"
-                      ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                      ? "border-[rgba(var(--program-accent-rgb),0.62)] bg-white shadow-sm"
                       : "border-slate-200 bg-white/60 hover:bg-white",
                   )}
                 >
@@ -962,7 +962,7 @@ export function NewsletterMailer() {
                   className={cn(
                     "rounded-lg border px-3 py-3 text-left text-sm transition",
                     audienceMode === "all_active_members"
-                      ? "border-[rgba(245,168,0,0.62)] bg-white shadow-sm"
+                      ? "border-[rgba(var(--program-accent-rgb),0.62)] bg-white shadow-sm"
                       : "border-slate-200 bg-white/60 hover:bg-white",
                   )}
                 >
@@ -980,7 +980,7 @@ export function NewsletterMailer() {
                 className={cn(
                   "mt-4 flex items-start gap-3 rounded-lg border bg-white p-3 text-sm leading-6",
                   draftSend
-                    ? "border-[rgba(245,168,0,0.62)] text-[var(--brand-ink)]"
+                    ? "border-[rgba(var(--program-accent-rgb),0.62)] text-[var(--brand-ink)]"
                     : "border-slate-200 text-slate-600",
                   audienceMode !== "selected_members" && "opacity-60",
                 )}
@@ -1067,7 +1067,7 @@ export function NewsletterMailer() {
               ) : null}
             </div>
 
-            <label className="flex items-start gap-3 rounded-xl border border-[rgba(245,168,0,0.32)] bg-[var(--brand-ice)] p-4 text-sm leading-6 text-slate-700">
+            <label className="flex items-start gap-3 rounded-xl border border-[rgba(var(--program-accent-rgb),0.32)] bg-[var(--brand-ice)] p-4 text-sm leading-6 text-slate-700">
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4"
@@ -1147,7 +1147,7 @@ export function NewsletterMailer() {
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                       sendFilter === value
-                        ? "border-[rgba(245,168,0,0.62)] bg-[var(--brand-ice)] text-[var(--brand-ink)]"
+                        ? "border-[rgba(var(--program-accent-rgb),0.62)] bg-[var(--brand-ice)] text-[var(--brand-ink)]"
                         : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                     )}
                   >

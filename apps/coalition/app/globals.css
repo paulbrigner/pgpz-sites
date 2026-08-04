@@ -2,31 +2,48 @@
 @source "../../../packages/ui/src";
 
 :root {
+  --zcash-yellow: #F4B728;
   --zcash-gold: #F5A800;
   --zcash-gold-soft: #FFE6A3;
-  --zcash-gold-deep: #8A5A00;
+  --zcash-gold-deep: #475569;
+  --brand-evergreen: #0D1F20;
   --brand-ink: #102827;
   --brand-coal: #0D1F20;
+  --brand-slate: #475569;
+  --brand-slate-tint: #E6EAF0;
+  --brand-paper: #F6FAF2;
   --brand-denim: #2F6F68;
   --brand-navy: #132D36;
-  --brand-teal: #2F7D70;
+  --brand-teal: #2F6F68;
   --brand-cloud: #E8F3EC;
   --brand-ice: #F6FAF2;
-  --hero-sheen: linear-gradient(125deg, #0D1F20 0%, #143A3D 48%, #2F6F68 100%);
+  --program-accent: #2F6F68;
+  --program-accent-rgb: 47, 111, 104;
+  --hero-sheen: linear-gradient(128deg, #0D1F20 0%, #143A3D 54%, #2F6F68 100%);
 }
 
 @layer base {
   html {
     scroll-behavior: smooth;
   }
+
+  body {
+    background: var(--brand-paper);
+    color: var(--brand-ink);
+  }
+
+  ::selection {
+    background: rgba(244, 183, 40, 0.34);
+    color: var(--brand-evergreen);
+  }
 }
 
 @layer components {
   .section-eyebrow {
-    font-size: 0.75rem;
-    letter-spacing: 0.32em;
+    font-size: 0.72rem;
+    letter-spacing: 0.26em;
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .coalition-hero {
@@ -35,19 +52,44 @@
     border-radius: 1.75rem;
     background: var(--hero-sheen);
     color: #ffffff;
-    box-shadow: 0 30px 60px -32px rgba(30, 30, 30, 0.58);
-    border: 1px solid rgba(245, 168, 0, 0.26);
+    box-shadow: 0 32px 64px -36px rgba(13, 31, 32, 0.66);
+    border: 1px solid rgba(var(--program-accent-rgb), 0.58);
+  }
+
+  .coalition-hero::before,
+  .coalition-hero::after {
+    position: absolute;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    content: "";
+    pointer-events: none;
+  }
+
+  .coalition-hero::before {
+    right: -8rem;
+    top: -12rem;
+    width: 25rem;
+    height: 25rem;
+    box-shadow: 0 0 0 3.5rem rgba(255, 255, 255, 0.025), 0 0 0 7rem rgba(255, 255, 255, 0.018);
+  }
+
+  .coalition-hero::after {
+    bottom: -6rem;
+    left: -3rem;
+    width: 11rem;
+    height: 11rem;
   }
 
   .coalition-hero__frame {
     position: relative;
+    z-index: 1;
     width: 100%;
     border-radius: 1.65rem;
-    border: 1px solid rgba(245, 168, 0, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     padding: clamp(2.4rem, 6.5vw, 3.8rem) clamp(1.8rem, 6vw, 3.6rem);
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 50%, rgba(245, 168, 0, 0.16));
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025) 58%, rgba(var(--program-accent-rgb), 0.2));
     backdrop-filter: blur(10px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 22px 40px -26px rgba(30, 30, 30, 0.56);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 22px 40px -28px rgba(13, 31, 32, 0.72);
   }
 
   .coalition-hero__content {
@@ -58,24 +100,24 @@
 
   .glass-surface {
     border-radius: 1.5rem;
-    border: 1px solid rgba(245, 168, 0, 0.28);
-    background: linear-gradient(135deg, rgba(232, 243, 236, 0.7), rgba(255, 255, 255, 0.9) 54%, rgba(255, 230, 163, 0.28));
-    box-shadow: 0 26px 46px -30px rgba(16, 40, 39, 0.38);
+    border: 1px solid rgba(var(--program-accent-rgb), 0.23);
+    background: linear-gradient(138deg, rgba(232, 243, 236, 0.68), rgba(255, 255, 255, 0.94) 58%, rgba(246, 250, 242, 0.9));
+    box-shadow: 0 26px 46px -32px rgba(13, 31, 32, 0.38);
     backdrop-filter: blur(18px);
   }
 
   .glass-item {
     border-radius: 1.1rem;
-    border: 1px solid rgba(245, 168, 0, 0.28);
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.94), rgba(232, 243, 236, 0.54));
-    box-shadow: 0 20px 32px -24px rgba(16, 40, 39, 0.32);
+    border: 1px solid rgba(var(--program-accent-rgb), 0.22);
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.96), rgba(232, 243, 236, 0.58));
+    box-shadow: 0 20px 32px -25px rgba(13, 31, 32, 0.32);
     backdrop-filter: blur(16px);
   }
 
   .muted-card {
     border-radius: 1.1rem;
-    border: 1px solid rgba(245, 168, 0, 0.22);
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 20px 36px -26px rgba(16, 40, 39, 0.2);
+    border: 1px solid rgba(var(--program-accent-rgb), 0.2);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 20px 36px -28px rgba(13, 31, 32, 0.24);
   }
 }

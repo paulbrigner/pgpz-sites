@@ -36,15 +36,15 @@ export function XMonitorSectionNav({ active }: { active: XMonitorSection }) {
               className={cn(
                 "flex items-center gap-3 rounded-2xl border px-4 py-3 transition",
                 selected
-                  ? "border-[rgba(245,168,0,0.62)] bg-[var(--brand-ink)] text-white shadow-sm"
-                  : "border-transparent bg-white/65 text-[var(--brand-ink)] hover:border-[rgba(245,168,0,0.4)] hover:bg-white",
+                  ? "border-[rgba(71,85,105,0.62)] bg-[var(--brand-ink)] text-white shadow-sm"
+                  : "border-transparent bg-white/65 text-[var(--brand-ink)] hover:border-[rgba(71,85,105,0.4)] hover:bg-white",
               )}
             >
               <span
                 className={cn(
                   "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
                   selected
-                    ? "bg-[rgba(245,168,0,0.18)] text-[var(--zcash-gold)]"
+                    ? "bg-[rgba(71,85,105,0.18)] text-[var(--zcash-gold)]"
                     : "bg-[var(--brand-ice)] text-[var(--brand-denim)]",
                 )}
               >

@@ -106,7 +106,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
                 className={cn(
                   "flex min-h-24 items-start gap-3 rounded-xl border px-4 py-3 text-left transition",
                   active
-                    ? "border-[rgba(245,168,0,0.62)] bg-[var(--brand-ice)] shadow-sm"
+                    ? "border-[rgba(47,111,104,0.62)] bg-[var(--brand-ice)] shadow-sm"
                     : "border-transparent bg-white/40 hover:border-slate-200 hover:bg-white",
                 )}
                 aria-pressed={active}

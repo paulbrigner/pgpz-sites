@@ -74,7 +74,7 @@ export default function ResourceSubmissionForm({
             maxLength={140}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="h-10 w-full rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
+            className="h-10 w-full rounded-md border border-[rgba(47,111,104,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
             placeholder="Policy explainer, meeting note, campaign idea"
           />
         </label>
@@ -85,7 +85,7 @@ export default function ResourceSubmissionForm({
             maxLength={300}
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            className="h-10 w-full rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
+            className="h-10 w-full rounded-md border border-[rgba(47,111,104,0.28)] bg-white px-3 text-sm text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
             placeholder="https://"
           />
         </label>
@@ -99,7 +99,7 @@ export default function ResourceSubmissionForm({
           rows={5}
           value={details}
           onChange={(event) => setDetails(event.target.value)}
-          className="w-full resize-y rounded-md border border-[rgba(245,168,0,0.28)] bg-white px-3 py-2 text-sm leading-6 text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
+          className="w-full resize-y rounded-md border border-[rgba(47,111,104,0.28)] bg-white px-3 py-2 text-sm leading-6 text-[var(--brand-ink)] outline-none transition focus:border-[var(--brand-denim)] focus:ring-2 focus:ring-[rgba(47,111,104,0.18)]"
           placeholder="Share context, urgency, suggested use, or who should follow up."
         />
       </label>

@@ -76,7 +76,7 @@ export default async function UpdatesPage() {
         <section className="glass-surface grid gap-5 p-6 lg:grid-cols-[0.42fr_1fr]">
           <Link
             href={latest.portalPath}
-            className="relative block min-h-[18rem] overflow-hidden rounded-2xl border border-[rgba(245,168,0,0.28)] bg-white"
+            className="relative block min-h-[18rem] overflow-hidden rounded-2xl border border-[rgba(47,111,104,0.28)] bg-white"
           >
             <Image
               src={latest.coverImage}
@@ -130,7 +130,7 @@ export default async function UpdatesPage() {
                 <Link
                   key={update.slug}
                   href={update.portalPath}
-                  className="group block rounded-xl border bg-white/85 p-4 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_18px_34px_-28px_rgba(30,30,30,0.4)]"
+                  className="group block rounded-xl border bg-white/85 p-4 transition hover:border-[rgba(47,111,104,0.55)] hover:shadow-[0_18px_34px_-28px_rgba(30,30,30,0.4)]"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>

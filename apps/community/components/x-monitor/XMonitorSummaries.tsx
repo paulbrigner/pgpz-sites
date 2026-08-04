@@ -50,7 +50,7 @@ export function XMonitorSummaries({ summaries }: { summaries: WindowSummary[] })
             key={summary.summary_key}
             name="x-monitor-summary"
           >
-            <summary className="cursor-pointer list-none p-5 outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[rgba(245,168,0,0.2)] [&::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none p-5 outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-[rgba(71,85,105,0.2)] [&::-webkit-details-marker]:hidden">
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span className="rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--zcash-gold)]">
                   {labels[summary.window_type] || summary.window_type}

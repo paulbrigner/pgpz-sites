@@ -281,7 +281,7 @@ const renderImageHtml = ({
         : 640;
   const img = `<img src="${escapeHtml(imageSrc)}" width="${Math.min(width, maxWidth)}"${height ? ` height="${height}"` : ""} alt="${escapeHtml(image.alt)}" style="display:block;width:100%;max-width:${maxWidth}px;height:auto;border:1px solid ${colors.line};border-radius:12px;background:#ffffff;" />`;
 
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:14px 0 18px;border:1px solid rgba(245,168,0,0.28);border-radius:16px;background:${isSocial ? "#ffffff" : "#FFFDF5"};">
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:14px 0 18px;border:1px solid rgba(47,111,104,0.28);border-radius:16px;background:${isSocial ? "#ffffff" : "#F6FAF2"};">
     <tr>
       <td align="center" style="padding:12px;">
         ${trackedImageHref ? `<a href="${escapeHtml(trackedImageHref)}" style="display:inline-block;text-decoration:none;">${img}</a>` : img}
@@ -369,7 +369,7 @@ const renderSectionHtml = (
 
   return `<tr>
               <td style="padding:0 30px 22px;">
-                <div style="${showTopBorder ? (useSourceDividers ? "border-top:1.5pt solid #F79646;" : "border-top:1px solid rgba(245,168,0,0.34);") : ""}padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#FFFDF5;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
+                <div style="${showTopBorder ? (useSourceDividers ? "border-top:1.5pt solid #F79646;" : "border-top:1px solid rgba(47,111,104,0.34);") : ""}padding-top:22px;${isSocial ? `border-left:4px solid ${colors.gold};background:#F6FAF2;padding-left:16px;padding-right:16px;padding-bottom:4px;` : ""}">
                   ${renderSectionHeading(section, baseUrl, tracking)}
                   ${isSocial ? imagesHtml : ""}
                   ${renderParagraphs(section.body, section.links, baseUrl, tracking, section.bodyRuns)}
@@ -442,7 +442,7 @@ export function buildPolicyUpdateEmail(
               <td style="padding:28px 30px 8px;">
                 <p style="margin:0 0 14px;color:${colors.slate};font-size:15px;line-height:1.68;">Hi ${escapeHtml(name)},</p>
                 <p style="margin:0 0 18px;color:${colors.slate};font-size:15px;line-height:1.68;">${escapeHtml(intro)}</p>
-                <div style="margin:22px 0;padding:18px;border:1px solid ${colors.line};border-radius:14px;background:#FFFDF5;">
+                <div style="margin:22px 0;padding:18px;border:1px solid ${colors.line};border-radius:14px;background:#F6FAF2;">
                   <div style="font-size:12px;letter-spacing:0.2em;text-transform:uppercase;font-weight:700;color:${colors.goldDeep};">Key takeaways</div>
                   <div style="margin-top:12px;">${renderBullets(update.keyTakeaways)}</div>
                 </div>
@@ -470,7 +470,7 @@ export function buildPolicyUpdateEmail(
               </td>
             </tr>
             <tr>
-              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
+              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#F6FAF2;">
                 ${footerHtml}
               </td>
             </tr>

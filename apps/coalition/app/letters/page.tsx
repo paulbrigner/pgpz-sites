@@ -80,7 +80,7 @@ export default async function LettersPage() {
             <Link
               key={campaign.id}
               href={`/letters/${campaign.slug}`}
-              className="glass-surface group block p-6 transition hover:-translate-y-0.5 hover:border-[rgba(245,168,0,0.52)] hover:shadow-lg"
+              className="glass-surface group block p-6 transition hover:-translate-y-0.5 hover:border-[rgba(47,111,104,0.52)] hover:shadow-lg"
             >
               <div className="flex items-start justify-between gap-4">
                 <span className="rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--zcash-gold)]">

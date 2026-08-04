@@ -50,6 +50,17 @@ describe("community main navigation", () => {
 
   afterEach(cleanup);
 
+  it("links the approved composite mark to the official Zcash website", () => {
+    render(<MainNav />);
+
+    expect(
+      screen.getByRole("link", {
+        name: "Pretty Good Policy Community logo; visit the official Zcash website",
+      }),
+    ).toHaveAttribute("href", "https://z.cash/");
+    expect(screen.getByAltText("Pretty Good Policy Community")).toBeInTheDocument();
+  });
+
   it("highlights a section in the mobile menu on its nested routes", async () => {
     mocks.pathname = "/updates/weekly-policy-memo";
     const user = userEvent.setup();

@@ -61,9 +61,9 @@ export function CommunityHero({
       <div className="community-hero__frame community-hero__frame--with-report">
         <div className="community-hero__content max-w-3xl space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="section-eyebrow text-white/70">PGPZ COMMUNITY</p>
+            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY · COMMUNITY</p>
             {authenticated ? (
-              <span className="rounded-full border border-[rgba(245,168,0,0.45)] bg-[rgba(245,168,0,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
+              <span className="rounded-full border border-[rgba(71,85,105,0.45)] bg-[rgba(71,85,105,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
                 Early beta
               </span>
             ) : null}
@@ -72,8 +72,8 @@ export function CommunityHero({
             A member home for Zcash policy engagement.
           </h1>
           <p className="max-w-2xl text-base leading-7 text-white/78">
-            Follow PGPZ updates, access member resources, and help coordinate
-            privacy-focused policy work for Zcash as PGP* for Zcash takes shape.
+            Follow Pretty Good Policy updates, access member resources, and help coordinate
+            clear, privacy-focused policy work across the Zcash ecosystem.
           </p>
           {!authenticated ? (
             <div className="flex flex-wrap gap-3">
@@ -89,7 +89,7 @@ export function CommunityHero({
               </Button>
               <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
                 <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                  Visit PGPZ
+                  Visit Pretty Good Policy
                   <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
@@ -210,7 +210,7 @@ export function CommunityMemberResources({
             </div>
           </div>
         </div>
-        <div className="justify-self-start rounded-2xl border border-[rgba(245,168,0,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(30,30,30,0.48)] lg:justify-self-end">
+        <div className="justify-self-start rounded-2xl border border-[rgba(71,85,105,0.34)] bg-white p-3 shadow-[0_18px_36px_-28px_rgba(30,30,30,0.48)] lg:justify-self-end">
           <Image
             src="/community-signal-qr.png"
             alt="QR code to join the PGPZ Community Signal group"
@@ -245,7 +245,7 @@ export function CommunityMemberResources({
             <Link
               key={resource.href}
               href={resource.href}
-              className="group rounded-2xl border bg-white/85 p-5 transition hover:border-[rgba(245,168,0,0.55)] hover:shadow-[0_20px_36px_-28px_rgba(30,30,30,0.4)]"
+              className="group rounded-2xl border bg-white/85 p-5 transition hover:border-[rgba(71,85,105,0.55)] hover:shadow-[0_20px_36px_-28px_rgba(30,30,30,0.4)]"
             >
               <div className="mb-3 inline-flex rounded-full bg-[var(--brand-ink)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold)]">
                 {resource.category}
@@ -267,25 +267,25 @@ export function CommunityMemberResources({
 export function CommunityPillars({ resources }: { resources: CommunityMemberResource[] }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">The three pillars of PGPZ</h2>
+      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">The three pillars of Pretty Good Policy</h2>
       <div className="grid gap-4 lg:grid-cols-3">
         {[
           {
             eyebrow: "FOCUSED CONVENINGS",
             title: "Bringing policy conversations into focus",
-            body: "PGPZ will continue the PGP* policy convening series in a more Zcash-focused format, bringing policymakers together with experts on privacy-preserving digital cash, practical compliance, civil liberties, and public-interest technology.",
+            body: "Pretty Good Policy continues focused policy convenings that bring policymakers together with experts on privacy-preserving digital cash, practical compliance, civil liberties, and public-interest technology.",
             note: "The Cypherpunk Policy Dinner is one example of this pillar in action.",
           },
           {
             eyebrow: "MEMBER RESOURCES",
             title: "A shared home for Zcash policy work",
-            body: "This community site will grow into a place for updates, resource links, member notes, event materials, and practical tools for people supporting Zcash policy engagement.",
+            body: "The Pretty Good Policy Community is a shared place for updates, resource links, member notes, event materials, and practical tools for people supporting Zcash policy engagement.",
             resourceLinks: resources,
           },
           {
             eyebrow: "PGPZ COALITION",
             title: "Coordinated policy engagement",
-            body: "PGPZ will also include a smaller, action-oriented coalition of policy professionals and active advocates focused on policymaker education, advocacy strategy, and practical coordination around Zcash.",
+            body: "The PGPZ Coalition brings policy professionals and active advocates together for policymaker education, advocacy strategy, and practical coordination around Zcash.",
           },
         ].map((pillar) => (
           <article key={pillar.eyebrow} className="muted-card flex min-w-0 flex-col p-5">
@@ -293,7 +293,7 @@ export function CommunityPillars({ resources }: { resources: CommunityMemberReso
             <h3 className="mt-3 text-lg font-semibold text-[var(--brand-ink)]">{pillar.title}</h3>
             <p className="mt-3 text-sm leading-6 text-slate-600">{pillar.body}</p>
             {pillar.resourceLinks ? (
-              <div className="mt-5 space-y-3 border-t border-[rgba(245,168,0,0.24)] pt-4">
+              <div className="mt-5 space-y-3 border-t border-[rgba(71,85,105,0.24)] pt-4">
                 {pillar.resourceLinks.map((resource) => (
                   <Link
                     key={resource.href}
@@ -314,7 +314,7 @@ export function CommunityPillars({ resources }: { resources: CommunityMemberReso
               </div>
             ) : null}
             {pillar.note ? (
-              <p className="mt-5 border-t border-[rgba(245,168,0,0.24)] pt-4 text-xs font-medium leading-5 text-[var(--brand-denim)]">
+              <p className="mt-5 border-t border-[rgba(71,85,105,0.24)] pt-4 text-xs font-medium leading-5 text-[var(--brand-denim)]">
                 {pillar.note}
               </p>
             ) : null}

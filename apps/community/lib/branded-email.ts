@@ -1,15 +1,15 @@
 import { SITE_URL } from "@/lib/config";
 
 export const brandedEmailColors = {
-  ink: "#1E1E1E",
-  coal: "#17130A",
+  ink: "#102827",
+  coal: "#0D1F20",
   gold: "#F5A800",
   goldSoft: "#FFE6A3",
-  goldDeep: "#8A5A00",
-  cloud: "#FFF9EA",
+  goldDeep: "#475569",
+  cloud: "#F6FAF2",
   slate: "#475569",
-  line: "#E2D3A7",
-  teal: "#1F6F68",
+  line: "#E6EAF0",
+  teal: "#2F6F68",
 };
 
 export const escapeHtml = (value: string) =>
@@ -77,7 +77,7 @@ export function renderForwardedEmailCommunityCta({
   const qrUrl = `${url}/community-join-qr.png`;
   const colors = brandedEmailColors;
 
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid ${colors.line};border-radius:16px;background:#FFFDF5;overflow:hidden;">
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid ${colors.line};border-radius:16px;background:#F6FAF2;overflow:hidden;">
     <tr>
       <td style="padding:18px 18px 18px 20px;vertical-align:middle;">
         <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;font-weight:800;color:${colors.goldDeep};">Join the Community</div>
@@ -146,7 +146,7 @@ export function renderBrandedEmailShell({
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#ffffff;border:1px solid ${colors.line};border-radius:18px;overflow:hidden;box-shadow:0 22px 48px rgba(30,30,30,0.12);">
             <tr>
-              <td style="background:linear-gradient(135deg,${colors.coal},#2A2111 60%,${colors.goldDeep});padding:28px 30px;color:#ffffff;">
+              <td style="background:linear-gradient(135deg,${colors.coal},#163130 60%,${colors.goldDeep});padding:28px 30px;color:#ffffff;">
                 <div style="font-size:12px;letter-spacing:0.26em;text-transform:uppercase;font-weight:700;color:${colors.goldSoft};">${escapeHtml(eyebrow)}</div>
                 <h1 style="margin:12px 0 0;font-size:30px;line-height:1.18;color:#ffffff;">${escapeHtml(title)}</h1>
                 ${
@@ -162,7 +162,7 @@ export function renderBrandedEmailShell({
               </td>
             </tr>
             <tr>
-              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
+              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#F6FAF2;">
                 ${footerHtml}
               </td>
             </tr>

@@ -5,11 +5,11 @@ export const brandedEmailColors = {
   coal: "#0D1F20",
   gold: "#F5A800",
   goldSoft: "#FFE6A3",
-  goldDeep: "#8A5A00",
+  goldDeep: "#2F6F68",
   cloud: "#F6FAF2",
   slate: "#475569",
-  line: "#CFE0D2",
-  teal: "#2F7D70",
+  line: "#E6EAF0",
+  teal: "#2F6F68",
   denim: "#2F6F68",
 };
 
@@ -78,7 +78,7 @@ export function renderForwardedEmailCoalitionCta({
   const qrUrl = `${url}/coalition-join-qr.png`;
   const colors = brandedEmailColors;
 
-  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid ${colors.line};border-radius:16px;background:#FFFDF5;overflow:hidden;">
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid ${colors.line};border-radius:16px;background:#F6FAF2;overflow:hidden;">
     <tr>
       <td style="padding:18px 18px 18px 20px;vertical-align:middle;">
         <div style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;font-weight:800;color:${colors.denim};">Join the Coalition</div>
@@ -163,7 +163,7 @@ export function renderBrandedEmailShell({
               </td>
             </tr>
             <tr>
-              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
+              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#F6FAF2;">
                 ${footerHtml}
               </td>
             </tr>

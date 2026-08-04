@@ -122,7 +122,7 @@ export function buildNewsletterEmail(
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#ffffff;border:1px solid ${colors.line};border-radius:18px;overflow:hidden;box-shadow:0 22px 48px rgba(30,30,30,0.12);">
             <tr>
-              <td style="background:linear-gradient(135deg,${colors.coal},#2A2111 60%,${colors.goldDeep});padding:28px 30px;color:#ffffff;">
+              <td style="background:linear-gradient(135deg,${colors.coal},#163130 60%,${colors.goldDeep});padding:28px 30px;color:#ffffff;">
                 <div style="font-size:12px;letter-spacing:0.26em;text-transform:uppercase;font-weight:700;color:${colors.goldSoft};">PGPZ Community Newsletter</div>
                 <h1 style="margin:12px 0 0;font-size:30px;line-height:1.18;color:#ffffff;">${escapeHtml(subject)}</h1>
               </td>
@@ -135,7 +135,7 @@ export function buildNewsletterEmail(
               </td>
             </tr>
             <tr>
-              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#FFFDF5;">
+              <td style="padding:24px 30px 30px;border-top:1px solid ${colors.line};background:#F6FAF2;">
                 ${footerHtml}
               </td>
             </tr>

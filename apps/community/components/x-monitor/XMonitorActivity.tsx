@@ -101,7 +101,7 @@ export function XMonitorActivity({
           ["Unique accounts", totals.unique_handle_count],
           ["Discovery posts", totals.discovery_count],
         ].map(([label, value]) => (
-          <div className="rounded-2xl border border-[rgba(245,168,0,0.2)] bg-white/80 p-4" key={label}>
+          <div className="rounded-2xl border border-[rgba(71,85,105,0.2)] bg-white/80 p-4" key={label}>
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">{label}</p>
             <p className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">{Number(value).toLocaleString()}</p>
           </div>

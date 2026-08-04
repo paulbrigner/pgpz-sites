@@ -468,7 +468,7 @@ export default function HomeClient({
 
               {!isMember ? (
                 <div className="mt-6 space-y-5">
-                  <div className="rounded-lg border border-[rgba(245,168,0,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
+                  <div className="rounded-lg border border-[rgba(71,85,105,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
                         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-denim)]">
@@ -494,7 +494,7 @@ export default function HomeClient({
                     </div>
 
                     {challenge ? (
-                      <div className="mt-4 space-y-4 border-t border-[rgba(245,168,0,0.3)] pt-4">
+                      <div className="mt-4 space-y-4 border-t border-[rgba(71,85,105,0.3)] pt-4">
                         <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
                           {[
                             ["1", "Post the text publicly on X."],

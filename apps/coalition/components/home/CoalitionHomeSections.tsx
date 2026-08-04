@@ -17,7 +17,7 @@ const policyPriorities = [
     number: "01",
     icon: Landmark,
     title: "Primary policy contact",
-    body: "Establish PGPZ as the clear home for policymakers, regulators, and industry stakeholders seeking to learn about Zcash.",
+    body: "Establish Pretty Good Policy as a clear, independent resource for policymakers, regulators, and industry stakeholders seeking to learn about Zcash.",
   },
   {
     number: "02",
@@ -51,9 +51,9 @@ export function CoalitionHero({ authenticated }: { authenticated: boolean }) {
       <div className="coalition-hero__frame">
         <div className="coalition-hero__content max-w-3xl space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="section-eyebrow text-white/70">PGPZ COALITION</p>
+            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY · COALITION</p>
             {authenticated ? (
-              <span className="rounded-full border border-[rgba(245,168,0,0.45)] bg-[rgba(245,168,0,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
+              <span className="rounded-full border border-[rgba(47,111,104,0.45)] bg-[rgba(47,111,104,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
                 Partner workspace
               </span>
             ) : null}
@@ -62,7 +62,7 @@ export function CoalitionHero({ authenticated }: { authenticated: boolean }) {
             A policy coordination home for Zcash ecosystem partners.
           </h1>
           <p className="max-w-2xl text-base leading-7 text-white/78">
-            Join us in sharing resources, aligning messaging, and organizing coalition campaigns that help advance Zcash-focused policy in Washington, DC.
+            Share evidence, align messaging, and coordinate practical campaigns that advance privacy-preserving policy for the Zcash ecosystem in Washington and beyond.
           </p>
           {!authenticated ? (
             <div className="flex flex-wrap gap-3">
@@ -78,7 +78,7 @@ export function CoalitionHero({ authenticated }: { authenticated: boolean }) {
               </Button>
               <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
                 <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                  Visit PGPZ
+                  Visit Pretty Good Policy
                   <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
@@ -102,7 +102,7 @@ export function CoalitionPolicyPriorities() {
           These priorities connect public education, advocacy, civil liberties, policy response, and developer protection.
         </p>
       </div>
-      <div className="overflow-hidden rounded-xl border border-[rgba(245,168,0,0.24)] bg-[linear-gradient(135deg,var(--brand-ink),#163E3C_58%,#2F6F68)] p-5 text-white shadow-[0_26px_48px_-32px_rgba(16,40,39,0.56)] md:p-6">
+      <div className="overflow-hidden rounded-xl border border-[rgba(47,111,104,0.24)] bg-[linear-gradient(135deg,var(--brand-ink),#163E3C_58%,#2F6F68)] p-5 text-white shadow-[0_26px_48px_-32px_rgba(16,40,39,0.56)] md:p-6">
         <div className="grid gap-4 lg:grid-cols-[1fr_14rem_1fr] lg:items-center">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
             {policyPriorities.slice(0, 2).map((priority) => {
@@ -124,8 +124,8 @@ export function CoalitionPolicyPriorities() {
 
           <div className="relative flex min-h-48 items-center justify-center py-4">
             <div className="absolute h-48 w-48 rounded-full border border-white/12" aria-hidden="true" />
-            <div className="absolute h-36 w-36 rounded-full border border-[rgba(245,168,0,0.32)]" aria-hidden="true" />
-            <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full border border-[rgba(245,168,0,0.64)] bg-[rgba(255,255,255,0.12)] text-center shadow-[0_20px_34px_-24px_rgba(0,0,0,0.58)]">
+            <div className="absolute h-36 w-36 rounded-full border border-[rgba(47,111,104,0.32)]" aria-hidden="true" />
+            <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full border border-[rgba(47,111,104,0.64)] bg-[rgba(255,255,255,0.12)] text-center shadow-[0_20px_34px_-24px_rgba(0,0,0,0.58)]">
               <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--zcash-gold-soft)]">PGPZ</span>
               <span className="mt-1 text-sm font-semibold leading-5 text-white">Policy Engine</span>
             </div>
@@ -153,7 +153,7 @@ export function CoalitionPolicyPriorities() {
         {policyPriorities.slice(4).map((priority) => {
           const Icon = priority.icon;
           return (
-            <article key={priority.number} className="mt-4 rounded-lg border border-[rgba(245,168,0,0.32)] bg-[rgba(245,168,0,0.1)] p-4 lg:mx-auto lg:max-w-3xl">
+            <article key={priority.number} className="mt-4 rounded-lg border border-[rgba(47,111,104,0.32)] bg-[rgba(47,111,104,0.1)] p-4 lg:mx-auto lg:max-w-3xl">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 <div className="flex items-center gap-3 sm:min-w-52">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--zcash-gold)] text-xs font-bold text-[var(--brand-ink)]">
@@ -200,7 +200,7 @@ export function CoalitionWorkstreams() {
           const Icon = workstream.icon;
           return (
             <article key={workstream.eyebrow} className="muted-card flex flex-col p-5">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(245,168,0,0.16)] text-[var(--brand-denim)]">
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-[rgba(47,111,104,0.16)] text-[var(--brand-denim)]">
                 <Icon className="h-5 w-5" aria-hidden="true" />
               </div>
               <p className="section-eyebrow text-[var(--brand-denim)]">{workstream.eyebrow}</p>
