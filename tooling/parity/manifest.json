@@ -150,10 +150,6 @@
         "sha256": "7791c63bc53e98a8d538767f6ee70707a14cedb029c8764bccc33c94a6b08b4c"
       },
       {
-        "path": "app/favicon.ico",
-        "sha256": "3d06c84fe55722fb446e0dfd86d3189aac8e264993820bed02a40e92c722f85e"
-      },
-      {
         "path": "app/loading.tsx",
         "sha256": "05ad55796b1436248d474a22a93e2177370dbb6a48f4c871b054d25481d6dfef"
       },
@@ -629,9 +625,12 @@
       "README.md",
       "amplify.yml",
       "app/admin/layout.tsx",
+      "app/apple-icon.png",
       "app/api/email/click/[trackingId]/route.ts",
       "app/api/email/unsubscribe/[trackingId]/route.ts",
+      "app/favicon.ico",
       "app/globals.css",
+      "app/icon.svg",
       "app/layout.tsx",
       "app/privacy/page.tsx",
       "app/settings/profile/layout.tsx",
