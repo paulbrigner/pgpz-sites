@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   signOut: vi.fn(),
   setViewAsMember: vi.fn(),
+  actualIsAdmin: false,
+  effectiveIsAdmin: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -30,8 +32,8 @@ vi.mock("@/lib/use-app-session", () => ({
 
 vi.mock("@/components/admin/AdminViewMode", () => ({
   useAdminViewMode: () => ({
-    actualIsAdmin: false,
-    effectiveIsAdmin: false,
+    actualIsAdmin: mocks.actualIsAdmin,
+    effectiveIsAdmin: mocks.effectiveIsAdmin,
     viewAsMember: false,
     setViewAsMember: mocks.setViewAsMember,
   }),
@@ -40,6 +42,8 @@ vi.mock("@/components/admin/AdminViewMode", () => ({
 describe("coalition main navigation", () => {
   beforeEach(() => {
     mocks.pathname = "/";
+    mocks.actualIsAdmin = false;
+    mocks.effectiveIsAdmin = false;
     vi.clearAllMocks();
   });
 
@@ -54,6 +58,20 @@ describe("coalition main navigation", () => {
       }),
     ).toHaveAttribute("href", "https://z.cash/");
     expect(screen.getByAltText("Pretty Good Policy for Zcash Coalition")).toBeInTheDocument();
+  });
+
+  it("keeps the member menu at lg but reserves the wider breakpoint for administrators", () => {
+    const { rerender } = render(<MainNav />);
+
+    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toHaveClass("lg:flex");
+    expect(screen.getByRole("button", { name: "Open navigation menu" }).parentElement).toHaveClass("lg:hidden");
+
+    mocks.actualIsAdmin = true;
+    mocks.effectiveIsAdmin = true;
+    rerender(<MainNav />);
+
+    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toHaveClass("2xl:flex");
+    expect(screen.getByRole("button", { name: "Open navigation menu" }).parentElement).toHaveClass("2xl:hidden");
   });
 
   it("highlights a section in the mobile menu on its nested routes", async () => {

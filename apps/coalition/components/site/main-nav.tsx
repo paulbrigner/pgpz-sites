@@ -73,6 +73,10 @@ export function MainNav() {
     router.push("/");
   };
   const mobileMenuId = "main-nav-mobile-menu";
+  const desktopNavigationClasses = actualIsAdmin
+    ? "hidden items-center gap-2 2xl:flex"
+    : "hidden items-center gap-2 lg:flex";
+  const mobileNavigationClasses = actualIsAdmin ? "2xl:hidden" : "lg:hidden";
   const mobileToggleClasses =
     "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(47,111,104,0.34)] bg-[rgba(47,111,104,0.12)] text-white transition hover:border-[rgba(47,111,104,0.55)] hover:bg-[rgba(47,111,104,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)]";
   const mobileMenuItemClasses =
@@ -128,7 +132,12 @@ export function MainNav() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[rgba(13,31,32,0.96)] text-white shadow-[0_22px_48px_-32px_rgba(13,31,32,0.82)] backdrop-blur-md">
-      <div className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between px-5">
+      <div
+        className={cn(
+          "mx-auto flex h-20 w-full items-center justify-between px-5",
+          actualIsAdmin ? "max-w-[96rem]" : "max-w-6xl",
+        )}
+      >
         <a
           href="https://z.cash/"
           target="_blank"
@@ -147,7 +156,7 @@ export function MainNav() {
             unoptimized
           />
         </a>
-        <NavigationMenu className="hidden items-center gap-2 lg:flex">
+        <NavigationMenu aria-label="Primary navigation" className={desktopNavigationClasses}>
           <NavigationMenuList className="space-x-2">
             <NavigationMenuItem>
               <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/") && currentMenuItemClasses)} asChild>
@@ -276,7 +285,7 @@ export function MainNav() {
             ) : null}
           </NavigationMenuList>
         </NavigationMenu>
-        <div className="relative flex items-center lg:hidden">
+        <div className={cn("relative flex items-center", mobileNavigationClasses)}>
           <button
             type="button"
             className={mobileToggleClasses}
