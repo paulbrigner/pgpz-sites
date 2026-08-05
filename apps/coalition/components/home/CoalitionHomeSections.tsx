@@ -1,10 +1,10 @@
 import Link from "next/link";
 import {
   Code2,
-  ExternalLink,
   FileText,
   Globe2,
   Landmark,
+  LogIn,
   Mail,
   Megaphone,
   Scale,
@@ -17,7 +17,7 @@ const policyPriorities = [
     number: "01",
     icon: Landmark,
     title: "Primary policy contact",
-    body: "Establish Pretty Good Policy as a clear, independent resource for policymakers, regulators, and industry stakeholders seeking to learn about Zcash.",
+    body: "Establish Pretty Good Policy for Zcash as a clear, independent resource for policymakers, regulators, and industry stakeholders seeking to learn about Zcash.",
   },
   {
     number: "02",
@@ -51,7 +51,7 @@ export function CoalitionHero({ authenticated }: { authenticated: boolean }) {
       <div className="coalition-hero__frame">
         <div className="coalition-hero__content max-w-3xl space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY · COALITION</p>
+            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY FOR ZCASH · COALITION</p>
             {authenticated ? (
               <span className="rounded-full border border-[rgba(47,111,104,0.45)] bg-[rgba(47,111,104,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
                 Partner workspace
@@ -77,9 +77,9 @@ export function CoalitionHero({ authenticated }: { authenticated: boolean }) {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
-                <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                  Visit Pretty Good Policy
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                <Link href="/signin">
+                  Member sign in
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
             </div>

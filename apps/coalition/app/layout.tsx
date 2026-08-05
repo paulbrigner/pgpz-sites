@@ -9,8 +9,8 @@ import { Suspense } from "react";
 import { COMMUNITY_GUIDELINES_PATH, PRIVACY_PATH, TERMS_PATH } from "@/lib/legal-config";
 
 export const metadata = {
-  title: "PGPZ Coalition | Pretty Good Policy",
-  description: "The Pretty Good Policy partner workspace for policy resources, messaging, and coalition campaigns.",
+  title: "PGPZ Coalition | Pretty Good Policy for Zcash",
+  description: "The Pretty Good Policy for Zcash partner workspace for policy resources, messaging, and coalition campaigns.",
 };
 
 const inter = Inter({
@@ -42,13 +42,13 @@ export default function RootLayout({
                   href="https://z.cash/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="Pretty Good Policy Coalition logo; visit the official Zcash website"
+                  aria-label="Pretty Good Policy for Zcash Coalition logo; visit the official Zcash website"
                   title="Visit the official Zcash website"
                   className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--brand-paper)]"
                 >
                   <Image
                     src="/brand/pgpz-coalition-on-light.svg"
-                    alt="Pretty Good Policy Coalition"
+                    alt="Pretty Good Policy for Zcash Coalition"
                     width={1578}
                     height={750}
                     className="h-20 w-auto"
@@ -56,7 +56,7 @@ export default function RootLayout({
                   />
                 </a>
                 <p className="max-w-2xl text-xs leading-5 text-slate-600">
-                  Pretty Good Policy (PGPZ) is independent and is not an official Zcash or Zcash
+                  Pretty Good Policy for Zcash (PGPZ) is independent and is not an official Zcash or Zcash
                   Foundation website, service, or product. It is not affiliated with or endorsed by
                   the Zcash Foundation.
                 </p>

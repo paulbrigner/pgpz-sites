@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Activity, BookOpenText, ExternalLink, FileText, Mail, MessageCircle } from "lucide-react";
+import { Activity, BookOpenText, ExternalLink, FileText, LogIn, Mail, MessageCircle } from "lucide-react";
 import { ReferralInviteCard } from "@/components/referrals/ReferralInviteCard";
 import { Button } from "@/components/ui/button";
 
@@ -61,7 +61,7 @@ export function CommunityHero({
       <div className="community-hero__frame community-hero__frame--with-report">
         <div className="community-hero__content max-w-3xl space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY · COMMUNITY</p>
+            <p className="section-eyebrow text-white/70">PRETTY GOOD POLICY FOR ZCASH · COMMUNITY</p>
             {authenticated ? (
               <span className="rounded-full border border-[rgba(71,85,105,0.45)] bg-[rgba(71,85,105,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--zcash-gold-soft)]">
                 Early beta
@@ -72,7 +72,7 @@ export function CommunityHero({
             A member home for Zcash policy engagement.
           </h1>
           <p className="max-w-2xl text-base leading-7 text-white/78">
-            Follow Pretty Good Policy updates, access member resources, and help coordinate
+            Follow Pretty Good Policy for Zcash updates, access member resources, and help coordinate
             clear, privacy-focused policy work across the Zcash ecosystem.
           </p>
           {!authenticated ? (
@@ -88,9 +88,9 @@ export function CommunityHero({
                 </Link>
               </Button>
               <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10" asChild>
-                <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                  Visit Pretty Good Policy
-                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                <Link href="/signin">
+                  Member sign in
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
             </div>
@@ -267,19 +267,19 @@ export function CommunityMemberResources({
 export function CommunityPillars({ resources }: { resources: CommunityMemberResource[] }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">The three pillars of Pretty Good Policy</h2>
+      <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">The three pillars of Pretty Good Policy for Zcash</h2>
       <div className="grid gap-4 lg:grid-cols-3">
         {[
           {
             eyebrow: "FOCUSED CONVENINGS",
             title: "Bringing policy conversations into focus",
-            body: "Pretty Good Policy continues focused policy convenings that bring policymakers together with experts on privacy-preserving digital cash, practical compliance, civil liberties, and public-interest technology.",
+            body: "Pretty Good Policy for Zcash continues focused policy convenings that bring policymakers together with experts on privacy-preserving digital cash, practical compliance, civil liberties, and public-interest technology.",
             note: "The Cypherpunk Policy Dinner is one example of this pillar in action.",
           },
           {
             eyebrow: "MEMBER RESOURCES",
             title: "A shared home for Zcash policy work",
-            body: "The Pretty Good Policy Community is a shared place for updates, resource links, member notes, event materials, and practical tools for people supporting Zcash policy engagement.",
+            body: "The Pretty Good Policy for Zcash Community is a shared place for updates, resource links, member notes, event materials, and practical tools for people supporting Zcash policy engagement.",
             resourceLinks: resources,
           },
           {
