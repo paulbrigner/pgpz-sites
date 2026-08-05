@@ -22,7 +22,7 @@ I’m writing to extend a special invitation for you to join the PGPZ Coalition 
 
 You have been selected for this invitation because of your involvement in crypto policy and your interest in the long-term success of the Zcash ecosystem. As policymakers continue to make decisions that will shape the future of privacy-preserving digital cash, Zcash needs credible, coordinated, and practical policy engagement from people who understand both the technology and the policy environment.
 
-PGPZ — Pretty Good Policy — builds on the prior PGP* (Pretty Good Policy) for Crypto initiative. This next phase will be very different from the earlier iteration. Rather than serving as a broad crypto policy convening, PGPZ will be more focused, more action-oriented, and centered on Zcash-impacting policy developments, policymaker education, advocacy strategy, and practical coordination.
+PGPZ — Pretty Good Policy for Zcash — builds on the prior PGP* (Pretty Good Policy for Crypto) initiative. This next phase will be very different from the earlier iteration. Rather than serving as a broad crypto policy convening, PGPZ will be more focused, more action-oriented, and centered on Zcash-impacting policy developments, policymaker education, advocacy strategy, and practical coordination.
 
 As part of this launch, I would also like to invite you to the first PGPZ Coalition Launch Breakfast — our inaugural “Pretty Good Pancake” breakfast for the coalition.
 

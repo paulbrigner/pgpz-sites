@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { CommunityPillars } from "./CommunityHomeSections";
+import { CommunityHero, CommunityPillars } from "./CommunityHomeSections";
 
 afterEach(cleanup);
 
@@ -30,5 +30,40 @@ describe("CommunityPillars", () => {
         "min-w-0",
       );
     }
+  });
+});
+
+describe("CommunityHero", () => {
+  it("uses the full organization name and routes existing members to sign in", () => {
+    const feature = {
+      title: "Weekly policy memo",
+      href: "/updates/weekly-policy-memo",
+      caption: "Weekly policy memo",
+      imageSrc: "/brand/pgpz-community-on-light.svg",
+      imageAlt: "Weekly policy memo cover",
+      imageFit: "contain",
+    };
+
+    render(
+      <CommunityHero
+        authenticated={false}
+        signupHref="/signin?reason=signup"
+        feature={feature}
+        features={[feature]}
+        activeIndex={0}
+      />,
+    );
+
+    expect(screen.getByText("PRETTY GOOD POLICY FOR ZCASH · COMMUNITY")).toBeInTheDocument();
+    expect(screen.getByText(/Follow Pretty Good Policy for Zcash updates/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Join with email" })).toHaveAttribute(
+      "href",
+      "/signin?reason=signup",
+    );
+    expect(screen.getByRole("link", { name: "Member sign in" })).toHaveAttribute(
+      "href",
+      "/signin",
+    );
+    expect(screen.queryByRole("link", { name: /^Visit / })).not.toBeInTheDocument();
   });
 });

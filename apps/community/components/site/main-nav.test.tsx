@@ -55,10 +55,10 @@ describe("community main navigation", () => {
 
     expect(
       screen.getByRole("link", {
-        name: "Pretty Good Policy Community logo; visit the official Zcash website",
+        name: "Pretty Good Policy for Zcash Community logo; visit the official Zcash website",
       }),
     ).toHaveAttribute("href", "https://z.cash/");
-    expect(screen.getByAltText("Pretty Good Policy Community")).toBeInTheDocument();
+    expect(screen.getByAltText("Pretty Good Policy for Zcash Community")).toBeInTheDocument();
   });
 
   it("highlights a section in the mobile menu on its nested routes", async () => {

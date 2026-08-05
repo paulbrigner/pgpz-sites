@@ -75,7 +75,7 @@ describe("system email builders", () => {
     expect(built.html).toContain("PGPZ Coalition Launch Breakfast");
     expect(built.html).toContain("RSVP for the PGPZ Coalition Launch Breakfast");
     expect(built.html).toContain("Hi Paul,");
-    expect(built.text).toContain("PGPZ — Pretty Good Policy");
+    expect(built.text).toContain("PGPZ — Pretty Good Policy for Zcash");
     expect(built.text).toContain("https://coalition.pgpz.org/api/invitations/activate?token=abc");
   });
 

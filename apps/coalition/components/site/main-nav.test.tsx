@@ -50,10 +50,10 @@ describe("coalition main navigation", () => {
 
     expect(
       screen.getByRole("link", {
-        name: "Pretty Good Policy Coalition logo; visit the official Zcash website",
+        name: "Pretty Good Policy for Zcash Coalition logo; visit the official Zcash website",
       }),
     ).toHaveAttribute("href", "https://z.cash/");
-    expect(screen.getByAltText("Pretty Good Policy Coalition")).toBeInTheDocument();
+    expect(screen.getByAltText("Pretty Good Policy for Zcash Coalition")).toBeInTheDocument();
   });
 
   it("highlights a section in the mobile menu on its nested routes", async () => {

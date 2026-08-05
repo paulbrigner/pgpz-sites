@@ -136,13 +136,13 @@ export function MainNav() {
           href="https://z.cash/"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Pretty Good Policy Community logo; visit the official Zcash website"
+          aria-label="Pretty Good Policy for Zcash Community logo; visit the official Zcash website"
           title="Visit the official Zcash website"
           className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--brand-evergreen)]"
         >
           <Image
             src="/brand/pgpz-community-on-dark.svg"
-            alt="Pretty Good Policy Community"
+            alt="Pretty Good Policy for Zcash Community"
             width={1578}
             height={750}
             className="h-12 w-auto sm:h-14"
