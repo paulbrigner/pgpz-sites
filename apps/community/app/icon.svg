@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">PGPZ Community favicon with Zcash roundel</title>
+  <desc id="desc">Dominant PGP letterform on Evergreen with the unmodified official Zcash brandmark in the lower-right.</desc>
+  <metadata>{"identity":"Pretty Good Policy","program":"Community","packageVersion":"draft-v4","sourceGeometry":"PGP paths from pgpz-primary-on-dark.svg","officialZcashLogoIncluded":true,"officialZcashLogoModified":false,"brandmarkSource":"https://z.cash/wp-content/uploads/2023/11/Brandmark-Yellow.svg","foundationAffiliationOrEndorsement":false}</metadata>
+  <rect width="512" height="512" rx="96" fill="#0D1F20"/>
+  <g transform="matrix(0.49 0 0 0.49 -43 28)">
+    <path d="M96 0V1490H706Q878 1490 1004.0 1428.5Q1130 1367 1198.5 1254.0Q1267 1141 1267 986Q1267 832 1198.0 719.0Q1129 606 1002.5 544.0Q876 482 704 482H300V781H681Q753 781 805.5 806.0Q858 831 887.0 877.5Q916 924 916 986Q916 1050 887.0 1095.5Q858 1141 805.5 1166.5Q753 1192 681 1192H456V0Z" fill="#FFFFFF" transform="translate(115.000 465.000) scale(0.24161074 -0.24161074)"/>
+    <path d="M772 -24Q556 -24 394.0 71.0Q232 166 142.0 339.0Q52 512 52 744Q52 987 146.0 1159.5Q240 1332 402.0 1423.0Q564 1514 766 1514Q898 1514 1014.0 1476.0Q1130 1438 1220.0 1367.5Q1310 1297 1366.5 1200.0Q1423 1103 1435 984H1069Q1059 1034 1035.0 1074.0Q1011 1114 974.0 1142.0Q937 1170 888.0 1185.0Q839 1200 779 1200Q663 1200 581.5 1145.5Q500 1091 457.0 989.5Q414 888 414 744Q414 601 457.5 499.5Q501 398 583.5 344.0Q666 290 783 290Q879 290 949.0 323.0Q1019 356 1056.5 415.5Q1094 475 1094 554L1174 547H796V811H1446V609Q1446 420 1360.5 277.5Q1275 135 1123.5 55.5Q972 -24 772 -24Z" fill="#FFFFFF" transform="translate(438.268 465.000) scale(0.24161074 -0.24161074)"/>
+    <path d="M96 0V1490H706Q878 1490 1004.0 1428.5Q1130 1367 1198.5 1254.0Q1267 1141 1267 986Q1267 832 1198.0 719.0Q1129 606 1002.5 544.0Q876 482 704 482H300V781H681Q753 781 805.5 806.0Q858 831 887.0 877.5Q916 924 916 986Q916 1050 887.0 1095.5Q858 1141 805.5 1166.5Q753 1192 681 1192H456V0Z" fill="#FFFFFF" transform="translate(810.342 465.000) scale(0.24161074 -0.24161074)"/>
+  </g>
+  <!-- Unmodified official Zcash brandmark; source: https://z.cash/wp-content/uploads/2023/11/Brandmark-Yellow.svg -->
+  <g transform="translate(280 288)"><g transform="scale(0.370370370)"><g transform="translate(-270 -270)"><path d="m270,540c0-148.9,121.1-270,270-270s270,121.1,270,270-121.1,270-270,270-270-121.1-270-270Zm366.31-125.3v41.09l-114.28,155h114.28v54.5h-73.67v45.16h-45.28v-45.16h-73.67v-41.09l114.16-155h-114.16v-54.5h73.67v-45.28h45.28v45.28h73.67Z" fill="#f4b728" fill-rule="evenodd"/></g></g></g>
+</svg>
