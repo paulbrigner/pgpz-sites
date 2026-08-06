@@ -138,12 +138,10 @@ export function MainNav() {
           actualIsAdmin ? "max-w-[96rem]" : authenticated ? "max-w-6xl" : "max-w-[86rem]",
         )}
       >
-        <a
-          href="https://z.cash/"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Pretty Good Policy for Zcash Coalition logo; visit the official Zcash website"
-          title="Visit the official Zcash website"
+        <Link
+          href="/"
+          aria-label="Pretty Good Policy for Zcash Coalition home"
+          title="Go to the Coalition home page"
           className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--brand-evergreen)]"
         >
           <Image
@@ -155,7 +153,7 @@ export function MainNav() {
             priority
             unoptimized
           />
-        </a>
+        </Link>
         <NavigationMenu aria-label="Primary navigation" className={desktopNavigationClasses}>
           <NavigationMenuList className="space-x-2">
             <NavigationMenuItem>

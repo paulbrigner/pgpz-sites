@@ -49,14 +49,14 @@ describe("coalition main navigation", () => {
 
   afterEach(cleanup);
 
-  it("links the approved composite mark to the official Zcash website", () => {
+  it("links the approved composite mark to the Coalition home page", () => {
     render(<MainNav />);
 
     expect(
       screen.getByRole("link", {
-        name: "Pretty Good Policy for Zcash Coalition logo; visit the official Zcash website",
+        name: "Pretty Good Policy for Zcash Coalition home",
       }),
-    ).toHaveAttribute("href", "https://z.cash/");
+    ).toHaveAttribute("href", "/");
     expect(screen.getByAltText("Pretty Good Policy for Zcash Coalition")).toBeInTheDocument();
   });
 

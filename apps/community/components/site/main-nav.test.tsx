@@ -54,14 +54,14 @@ describe("community main navigation", () => {
 
   afterEach(cleanup);
 
-  it("links the approved composite mark to the official Zcash website", () => {
+  it("links the approved composite mark to the Community home page", () => {
     render(<MainNav />);
 
     expect(
       screen.getByRole("link", {
-        name: "Pretty Good Policy for Zcash Community logo; visit the official Zcash website",
+        name: "Pretty Good Policy for Zcash Community home",
       }),
-    ).toHaveAttribute("href", "https://z.cash/");
+    ).toHaveAttribute("href", "/");
     expect(screen.getByAltText("Pretty Good Policy for Zcash Community")).toBeInTheDocument();
   });
 
