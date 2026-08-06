@@ -15,60 +15,89 @@
  *   --name <name>          Display name (defaults to the email's local part)
  *   --password <secret>    Set a specific password (minimum 12 characters)
  *   --show-password        Print the password used (required for generated ones)
- *   --keep-sessions        Do not revoke the director's existing sessions on
+ *   --keep-sessions        Do not revoke the account's existing sessions on
  *                          rotation (revoked by default so the old password
  *                          and old cookies both stop working)
  *   --dry-run              Report the planned changes and session impact
- *                          without writing anything
+ *                          without writing or deleting anything
  *
  * Security notes:
  *   - Without --password a random 24-character password is generated and
  *     printed exactly once; deliver it over a private channel.
- *   - If BOARD_MEMBER_EMAILS or BOARD_EXECUTIVE_DIRECTOR_EMAILS is set in the
- *     environment, the script refuses to provision emails outside those
- *     allowlists (directors must be on the Board roster, the Executive
- *     Director on the staff roster).
+ *   - If a roster allowlist is set in the environment, the script refuses to
+ *     provision emails outside those allowlists (directors on the Board
+ *     roster, staff on the ED or Legal Counsel staff roster).
  *   - Rerunning the script for the same email rotates the password hash and,
- *     by default, revokes every stored session for that director, so both the
- *     old password and existing session cookies stop working immediately.
+ *     by default, revokes every stored session, so both the old password and
+ *     existing session cookies stop working immediately.
  *   - New identities are written transactionally (user + credential account
  *     in one TransactWriteItems), so a failure cannot leave a half-created
  *     account. Session revocation aborts with a non-zero exit if any deletion
  *     fails, so partial recovery is never silent.
  */
 import { randomBytes, randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
 import { hashPassword } from "better-auth/crypto";
 
 const REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
-const TABLE_NAME = process.env.NEXTAUTH_TABLE || "PGPZBoardNextAuth";
-const ALLOWLIST = new Set(
-  (process.env.BOARD_MEMBER_EMAILS || "")
-    .split(/[\s,]+/)
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean),
-);
-const EXECUTIVE_DIRECTOR_ALLOWLIST = new Set(
-  (process.env.BOARD_EXECUTIVE_DIRECTOR_EMAILS || "")
-    .split(/[\s,]+/)
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean),
-);
 
 const USER_TYPE = "BETTER_AUTH#better_auth_users";
 const ACCOUNT_TYPE = "BETTER_AUTH#better_auth_accounts";
 const SESSION_TYPE = "BETTER_AUTH#better_auth_sessions";
 
-const documentClient = DynamoDBDocument.from(new DynamoDBClient({ region: REGION }));
+/**
+ * The minimal DynamoDB surface the provisioner uses. The real
+ * DynamoDBDocument client satisfies this structurally, and tests inject a
+ * recording fake so `--dry-run` can be asserted to be mutation-free.
+ */
+export type ProvisionDocumentClient = {
+  query: (params: any) => Promise<any>;
+  put: (params: any) => Promise<any>;
+  delete: (params: any) => Promise<any>;
+  transactWrite: (params: any) => Promise<any>;
+};
+
+/** The subset of a DynamoDB query response the provisioner reads. */
+type ProvisionQueryResult = {
+  Items?: Array<Record<string, unknown>>;
+  LastEvaluatedKey?: Record<string, unknown>;
+};
+
+export type ProvisionOutcome = {
+  action: "created" | "rotated";
+  email: string;
+  name: string;
+  dryRun: boolean;
+  /** Whether existing sessions were kept (no revocation on this run). */
+  keepSessions: boolean;
+  /** Number of sessions that will be (dry-run) or were (live) revoked. */
+  sessionCount: number;
+  password: string;
+  showPassword: boolean;
+};
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-async function findUserByEmail(email: string) {
-  const result = await documentClient.query({
-    TableName: TABLE_NAME,
+function parseAllowlist(value: string | undefined): Set<string> {
+  return new Set(
+    (value || "")
+      .split(/[\s,]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+async function findUserByEmail(
+  client: ProvisionDocumentClient,
+  tableName: string,
+  email: string,
+) {
+  const result: ProvisionQueryResult = await client.query({
+    TableName: tableName,
     IndexName: "GSI1",
     KeyConditionExpression: "#pk = :pk",
     ExpressionAttributeNames: { "#pk": "GSI1PK" },
@@ -78,9 +107,13 @@ async function findUserByEmail(email: string) {
   return (result.Items || []).find((item) => item.email === email) || null;
 }
 
-async function findAccountForUser(userId: string) {
-  const result = await documentClient.query({
-    TableName: TABLE_NAME,
+async function findAccountForUser(
+  client: ProvisionDocumentClient,
+  tableName: string,
+  userId: string,
+) {
+  const result: ProvisionQueryResult = await client.query({
+    TableName: tableName,
     IndexName: "GSI2",
     KeyConditionExpression: "#pk = :pk",
     ExpressionAttributeNames: { "#pk": "GSI2PK" },
@@ -90,19 +123,16 @@ async function findAccountForUser(userId: string) {
   return (result.Items || []).find((item) => item.providerId === "credential") || null;
 }
 
-/**
- * Deletes every stored session record for a user. Rotating a password must
- * not leave existing session cookies usable, so successful rotation revokes
- * sessions by default (opt out with --keep-sessions). Any deletion failure
- * aborts with a non-zero exit so partial revocation is never silent.
- */
-async function revokeUserSessions(userId: string): Promise<number> {
+async function queryUserSessions(
+  client: ProvisionDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<Array<{ pk: unknown; sk: unknown }>> {
   const sessions: Array<{ pk: unknown; sk: unknown }> = [];
   let lastEvaluatedKey: Record<string, unknown> | undefined;
-
   do {
-    const result = await documentClient.query({
-      TableName: TABLE_NAME,
+    const result: ProvisionQueryResult = await client.query({
+      TableName: tableName,
       IndexName: "GSI2",
       KeyConditionExpression: "#pk = :pk",
       ExpressionAttributeNames: { "#pk": "GSI2PK" },
@@ -114,12 +144,33 @@ async function revokeUserSessions(userId: string): Promise<number> {
     );
     lastEvaluatedKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastEvaluatedKey);
+  return sessions;
+}
 
-  if (sessions.length === 0) return 0;
+/** Read-only: counts a user's sessions without deleting anything. */
+async function countUserSessions(
+  client: ProvisionDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<number> {
+  return (await queryUserSessions(client, tableName, userId)).length;
+}
 
+/**
+ * Deletes every stored session record for a user. Rotating a password must
+ * not leave existing session cookies usable, so successful rotation revokes
+ * sessions by default (opt out with --keep-sessions). Any deletion failure
+ * aborts so partial revocation is never silent.
+ */
+async function revokeUserSessions(
+  client: ProvisionDocumentClient,
+  tableName: string,
+  userId: string,
+): Promise<number> {
+  const sessions = await queryUserSessions(client, tableName, userId);
   for (const session of sessions) {
-    await documentClient.delete({
-      TableName: TABLE_NAME,
+    await client.delete({
+      TableName: tableName,
       Key: { pk: session.pk, sk: session.sk },
     });
   }
@@ -186,55 +237,82 @@ function parseArgs(argv: string[]) {
   return { positional, options };
 }
 
-async function main() {
-  const { positional, options } = parseArgs(process.argv.slice(2));
+/**
+ * Core provisioner, decoupled from the CLI and AWS client so tests can inject
+ * a recording fake and prove that `--dry-run` never mutates storage.
+ *
+ * Reads only ever run before the dry-run branch. All writes and session
+ * deletions are gated behind `dryRun === false`.
+ */
+export async function provisionBoardMember(params: {
+  args: string[];
+  env?: Record<string, string | undefined>;
+  client: ProvisionDocumentClient;
+}): Promise<ProvisionOutcome> {
+  const env = params.env ?? {};
+  const client = params.client;
+  const tableName = env.NEXTAUTH_TABLE?.trim() || "PGPZBoardNextAuth";
+
+  const allowlist = parseAllowlist(env.BOARD_MEMBER_EMAILS);
+  const executiveDirectorAllowlist = parseAllowlist(env.BOARD_EXECUTIVE_DIRECTOR_EMAILS);
+  const legalCounselAllowlist = parseAllowlist(env.BOARD_LEGAL_COUNSEL_EMAILS);
+
+  const { positional, options } = parseArgs(params.args);
   const email = normalizeEmail(positional[0] || "");
   if (!email.includes("@")) {
-    console.error("Usage: npx tsx scripts/provision-board-member.ts <email> [--name NAME] [--password SECRET] [--show-password] [--keep-sessions] [--dry-run]");
-    process.exit(1);
+    throw new Error("Usage: npx tsx scripts/provision-board-member.ts <email> [--name NAME] [--password SECRET] [--show-password] [--keep-sessions] [--dry-run]");
   }
 
+  const onAnyAllowlist = allowlist.size + executiveDirectorAllowlist.size + legalCounselAllowlist.size > 0;
   if (
-    (ALLOWLIST.size > 0 || EXECUTIVE_DIRECTOR_ALLOWLIST.size > 0) &&
-    !ALLOWLIST.has(email) &&
-    !EXECUTIVE_DIRECTOR_ALLOWLIST.has(email)
+    onAnyAllowlist &&
+    !allowlist.has(email) &&
+    !executiveDirectorAllowlist.has(email) &&
+    !legalCounselAllowlist.has(email)
   ) {
-    console.error(
-      `Refusing to provision ${email}: the email is not on the BOARD_MEMBER_EMAILS or BOARD_EXECUTIVE_DIRECTOR_EMAILS allowlist.`,
+    throw new Error(
+      `Refusing to provision ${email}: the email is not on the BOARD_MEMBER_EMAILS, BOARD_EXECUTIVE_DIRECTOR_EMAILS, or BOARD_LEGAL_COUNSEL_EMAILS allowlist.`,
     );
-    process.exit(1);
   }
 
   const name = (options.get("name") || email.split("@")[0] || email).trim();
   const explicitPassword = options.get("password");
   if (explicitPassword === "true") {
-    console.error("--password requires a value.");
-    process.exit(1);
+    throw new Error("--password requires a value.");
   }
   const password = explicitPassword || randomBytes(18).toString("base64url");
   if (password.length < 12) {
-    console.error("Password must be at least 12 characters long.");
-    process.exit(1);
+    throw new Error("Password must be at least 12 characters long.");
   }
   const showPassword = explicitPassword !== undefined || options.get("show-password") === "true";
   const keepSessions = options.get("keep-sessions") === "true";
   const dryRun = options.get("dry-run") === "true";
 
-  const existingUser = await findUserByEmail(email);
+  const existingUser = await findUserByEmail(client, tableName, email);
   const action: "created" | "rotated" = existingUser?.id ? "rotated" : "created";
   const userId = existingUser?.id ? String(existingUser.id) : randomUUID();
-  const existingAccount = await findAccountForUser(userId);
+  const existingAccount = await findAccountForUser(client, tableName, userId);
   const previousVersion =
     existingAccount && Number.isInteger(existingAccount.adapterVersion)
       ? Number(existingAccount.adapterVersion)
       : 0;
-  const sessionCount = keepSessions ? 0 : await revokeUserSessions(userId);
 
-  console.log(`[board] plan: ${action} account for ${email} (name: ${name}) in ${TABLE_NAME}.`);
-  console.log(`[board] plan: will ${keepSessions ? "keep" : `revoke ${sessionCount} session${sessionCount === 1 ? "" : "s"}`} for ${userId}.`);
+  // Read-only plan-time session count. Never deletes, even in dry-run mode.
+  const plannedSessionCount = keepSessions
+    ? 0
+    : await countUserSessions(client, tableName, userId);
+
   if (dryRun) {
-    console.log("[board] dry-run: no writes performed.");
-    return;
+    return {
+      action,
+      email,
+      name,
+      dryRun: true,
+      keepSessions,
+      sessionCount: plannedSessionCount,
+      password,
+      showPassword,
+    };
   }
 
   const passwordHash = await hashPassword(password);
@@ -242,36 +320,79 @@ async function main() {
   if (action === "created") {
     // User and credential account land atomically so a failure can never
     // leave a user without the means to sign in (or vice versa).
-    await documentClient.transactWrite({
+    await client.transactWrite({
       TransactItems: [
-        { Put: { TableName: TABLE_NAME, Item: userRecord(userId, email, name) } },
-        { Put: { TableName: TABLE_NAME, Item: accountRecord(userId, passwordHash, 0) } },
+        { Put: { TableName: tableName, Item: userRecord(userId, email, name) } },
+        { Put: { TableName: tableName, Item: accountRecord(userId, passwordHash, 0) } },
       ],
     });
   } else {
-    await documentClient.put({
-      TableName: TABLE_NAME,
+    await client.put({
+      TableName: tableName,
       Item: accountRecord(userId, passwordHash, previousVersion),
     });
   }
 
-  console.log(`[board] ${action} account for ${email} (name: ${name}) in ${TABLE_NAME}.`);
-  if (action === "rotated") {
-    if (keepSessions) {
-      console.log("[board] WARNING: existing sessions were kept; the old password alone is invalidated.");
-    } else {
-      console.log(`[board] Revoked ${sessionCount} existing session${sessionCount === 1 ? "" : "s"}; all devices must sign in again.`);
+  const sessionCount = keepSessions ? 0 : await revokeUserSessions(client, tableName, userId);
+  return {
+    action,
+    email,
+    name,
+    dryRun: false,
+    keepSessions,
+    sessionCount,
+    password,
+    showPassword,
+  };
+}
+
+async function main() {
+  const client: ProvisionDocumentClient = DynamoDBDocument.from(
+    new DynamoDBClient({ region: REGION }),
+  );
+  try {
+    const outcome = await provisionBoardMember({
+      args: process.argv.slice(2),
+      env: process.env,
+      client,
+    });
+
+    console.log(`[board] plan: ${outcome.action} account for ${outcome.email} (name: ${outcome.name}) in ${process.env.NEXTAUTH_TABLE?.trim() || "PGPZBoardNextAuth"}.`);
+    console.log(
+      `[board] plan: will ${outcome.keepSessions ? "keep" : `revoke ${outcome.sessionCount} session${outcome.sessionCount === 1 ? "" : "s"}`} for ${outcome.email}.`,
+    );
+    if (outcome.dryRun) {
+      console.log("[board] dry-run: no writes performed.");
+      return;
     }
-  }
-  if (showPassword) {
-    console.log(`[board] Password: ${password}`);
-    console.log("[board] Deliver it privately and tell the director to change it if the portal gains that feature.");
-  } else {
-    console.log("[board] A password was generated but not printed. Rerun with --show-password to recover it.");
+
+    console.log(`[board] ${outcome.action} account for ${outcome.email} (name: ${outcome.name}).`);
+    if (outcome.action === "rotated") {
+      if (outcome.keepSessions) {
+        console.log("[board] WARNING: existing sessions were kept; the old password alone is invalidated.");
+      } else {
+        console.log(`[board] Revoked ${outcome.sessionCount} existing session${outcome.sessionCount === 1 ? "" : "s"}; all devices must sign in again.`);
+      }
+    }
+    if (outcome.showPassword) {
+      console.log(`[board] Password: ${outcome.password}`);
+      console.log("[board] Deliver it privately and tell the user to change it if the portal gains that feature.");
+    } else {
+      console.log("[board] A password was generated but not printed. Rerun with --show-password to recover it.");
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+// Run only when executed directly (e.g. `npx tsx scripts/provision-board-member.ts`),
+// not when imported by tests.
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}

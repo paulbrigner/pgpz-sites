@@ -15,8 +15,11 @@ server-only `/admin` surface; no browser-based account mutation API is exposed.
 Staff access is separate: the Executive Director (staff, not a director) is
 granted portal access and administrator privileges through
 `BOARD_EXECUTIVE_DIRECTOR_EMAILS`, which must be disjoint from
-`BOARD_MEMBER_EMAILS`. The dashboard shows their distinctive "Executive
-Director" role instead of a director badge.
+`BOARD_MEMBER_EMAILS`. Legal Counsel is a second staff role via
+`BOARD_LEGAL_COUNSEL_EMAILS` with the same admin-equivalent capabilities
+(document management, audit review), pairwise disjoint from both the Board and
+Executive Director rosters. The dashboard shows each staff role's distinctive
+badge ("Executive Director" / "Legal Counsel") instead of a director badge.
 
 ## Local development
 
@@ -49,9 +52,9 @@ The script generates a random 24-character password, prints it once, and asks
 you to deliver it privately. Rerunning it for the same email rotates the
 password hash **and revokes the director's existing sessions by default**
 (`--keep-sessions` keeps them; `--dry-run` previews the plan and revocation
-count). It refuses to provision email addresses that are not on
-`BOARD_MEMBER_EMAILS` (or `BOARD_EXECUTIVE_DIRECTOR_EMAILS` for staff) when
-those variables are set.
+count **without mutating anything**). It refuses to provision email addresses
+that are not on `BOARD_MEMBER_EMAILS` (or `BOARD_EXECUTIVE_DIRECTOR_EMAILS`
+/ `BOARD_LEGAL_COUNSEL_EMAILS` for staff) when those variables are set.
 
 ## Environment
 
