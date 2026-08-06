@@ -118,6 +118,7 @@ function isTransactionCanceled(error: unknown): boolean {
 export function createBoardAuditLedger(client: LedgerDocumentClient = documentClient): AuditLedger & {
   list(options?: { afterSequence?: number; limit?: number }): Promise<AuditChainEntry[]>;
   verify(): Promise<{ ok: boolean; entryCount: number; issues: readonly string[] }>;
+  buildAppendItems(input: AppendInput): Promise<{ TransactItems: unknown[]; entry: AuditChainEntry }>;
 } {
   const tableName = BOARD_AUDIT_TABLE;
 
@@ -135,70 +136,58 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
     };
   }
 
+  async function composeAppend(input: AppendInput) {
+    const previous = await readHead();
+    const entry = buildChainEntry(input, previous, sha256);
+    const markerKey = idempotencySk(input.idempotencyKey);
+    const item = entryToItem(entry);
+    const conditionNames = { "#pk": "pk", "#sk": "sk" };
+    const headCondition = previous
+      ? "#pk = :headPk AND #eventHash = :expectedHash"
+      : "#pk = :headPk AND attribute_not_exists(#eventHash)";
+    const expirySk = entrySk(entry.sequence, entry.eventId);
+    const TransactItems = [
+      {
+        Put: {
+          TableName: tableName,
+          Item: item,
+          ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
+          ExpressionAttributeNames: conditionNames,
+        },
+      },
+      {
+        Put: {
+          TableName: tableName,
+          Item: { ...item, pk: PK, sk: markerKey, type: "AUDIT_ENTRY" },
+          ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
+          ExpressionAttributeNames: conditionNames,
+        },
+      },
+      {
+        Put: {
+          TableName: tableName,
+          Item: { pk: PK, sk: HEAD_SK, type: "AUDIT_HEAD", eventId: entry.eventId, sequence: entry.sequence, eventHash: entry.eventHash },
+          ConditionExpression: headCondition,
+          ExpressionAttributeNames: { "#pk": "pk", "#eventHash": "eventHash" },
+          ExpressionAttributeValues: { ":headPk": PK, ":expectedHash": previous ? previous.eventHash : "" },
+        },
+      },
+    ];
+    return { TransactItems, entry, markerKey, expirySk };
+  }
+
   async function append(input: AppendInput): Promise<AuditChainEntry> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const previous = await readHead();
-      const entry = buildChainEntry(input, previous, sha256);
-      const markerKey = idempotencySk(input.idempotencyKey);
-
+      const composed = await composeAppend(input);
       try {
-        const item = entryToItem(entry);
-        const conditionNames = { "#pk": "pk", "#sk": "sk" };
-
-        // Head-condition selectors must be literal per branch.
-        const headCondition = previous
-          ? "#pk = :headPk AND #eventHash = :expectedHash"
-          : "#pk = :headPk AND attribute_not_exists(#eventHash)";
-
-        await client.transactWrite({
-          TransactItems: [
-            {
-              Put: {
-                TableName: tableName,
-                Item: item,
-                ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
-                ExpressionAttributeNames: conditionNames,
-              },
-            },
-            {
-              Put: {
-                TableName: tableName,
-                Item: { ...item, pk: PK, sk: markerKey, type: "AUDIT_ENTRY" },
-                ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
-                ExpressionAttributeNames: conditionNames,
-              },
-            },
-            {
-              Put: {
-                TableName: tableName,
-                Item: {
-                  pk: PK,
-                  sk: HEAD_SK,
-                  type: "AUDIT_HEAD",
-                  eventId: entry.eventId,
-                  sequence: entry.sequence,
-                  eventHash: entry.eventHash,
-                },
-                ConditionExpression: headCondition,
-                ExpressionAttributeNames: {
-                  "#pk": "pk",
-                  "#eventHash": "eventHash",
-                },
-                ExpressionAttributeValues: {
-                  ":headPk": PK,
-                  ":expectedHash": previous ? previous.eventHash : "",
-                },
-              },
-            },
-          ],
-        });
-        return entry;
+        await client.transactWrite({ TransactItems: composed.TransactItems });
+        return composed.entry;
       } catch (error) {
         if (!isTransactionCanceled(error)) throw error;
         // If this idempotencyKey already committed, return the stored event.
         const existing = await client.get({
           TableName: tableName,
-          Key: { pk: PK, sk: markerKey },
+          Key: { pk: PK, sk: composed.markerKey },
         });
         const recovered = itemToEntry(existing?.Item as AuditItem | undefined);
         if (recovered) return recovered;
@@ -242,6 +231,11 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
     },
     async append(input) {
       return append(input);
+    },
+    // Composable audit transaction for merging into a document+audit write.
+    async buildAppendItems(input: AppendInput) {
+      const composed = await composeAppend(input);
+      return { TransactItems: composed.TransactItems, entry: composed.entry };
     },
     async list(options) {
       return listAll(options);

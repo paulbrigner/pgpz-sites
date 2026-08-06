@@ -47,7 +47,7 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, "api", "admin", "audit", "route.ts"))).toBe(true);
   });
 
-  it("exposes only the Better Auth and authenticated admin audit API routes", () => {
+  it("exposes only the Better Auth, admin audit, and document vault API routes", () => {
     const routes = findRouteHandlers(apiRoot).map((route) =>
       path.relative(appRoot, route).split(path.sep).join("/"),
     );
@@ -55,6 +55,8 @@ describe("private board feature surface", () => {
     expect(routes.sort()).toEqual([
       "api/admin/audit/route.ts",
       "api/better-auth/[...all]/route.ts",
+      "api/documents/[id]/download/route.ts",
+      "api/documents/route.ts",
     ].sort());
   });
 
