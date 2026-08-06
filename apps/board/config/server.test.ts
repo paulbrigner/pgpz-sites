@@ -14,6 +14,7 @@ const BOARD_ENV = {
   BETTER_AUTH_SECRET: "board-test-secret-at-least-32-characters",
   BOARD_MEMBER_EMAILS: "ada@example.org, Grace@Example.org",
   BOARD_ADMIN_EMAILS: "ada@example.org",
+  BOARD_EXECUTIVE_DIRECTOR_EMAILS: "executive@example.org",
 } satisfies Record<string, string>;
 
 describe("board server-only configuration", () => {
@@ -68,6 +69,29 @@ describe("board server-only configuration", () => {
         BOARD_ADMIN_EMAILS: "outsider@example.org",
       }),
     ).toThrow(/subset/);
+  });
+
+  it("resolves the executive director as an active administrator outside the Board roster", async () => {
+    const adapter = createBoardServerConfig(BOARD_ENV).membership.adapter;
+    await expect(
+      resolveActiveMembership(adapter, { email: " EXECUTIVE@example.org " }),
+    ).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "executive-director", isAdmin: true },
+    });
+    await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "admin", isAdmin: true },
+    });
+  });
+
+  it("rejects an executive director who overlaps the Board roster", () => {
+    expect(() =>
+      createBoardServerConfig({
+        ...BOARD_ENV,
+        BOARD_EXECUTIVE_DIRECTOR_EMAILS: "ada@example.org",
+      }),
+    ).toThrow(/must not overlap/);
   });
 
   it("locks every account out when the allowlist is empty or missing", async () => {

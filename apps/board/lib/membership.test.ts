@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createBoardMembershipAdapter,
   parseBoardAdminEmails,
+  parseBoardExecutiveDirectorEmails,
   parseBoardMemberEmails,
 } from "./membership";
 
@@ -24,6 +25,14 @@ describe("board membership allowlist", () => {
     expect(parseBoardAdminEmails("ADA@EXAMPLE.ORG")).toEqual(
       new Set(["ada@example.org"]),
     );
+  });
+
+  it("parses the executive director allowlist with the same normalization", () => {
+    expect(parseBoardExecutiveDirectorEmails("  Div@PGPZ.org \n grace@example.org")).toEqual(
+      new Set(["div@pgpz.org", "grace@example.org"]),
+    );
+    expect(parseBoardExecutiveDirectorEmails("")).toEqual(new Set());
+    expect(parseBoardExecutiveDirectorEmails(undefined)).toEqual(new Set());
   });
 
   it("matches subjects by normalized email", async () => {
@@ -52,5 +61,55 @@ describe("board membership allowlist", () => {
         BOARD_ADMIN_EMAILS: "outsider@pgpz.org",
       }),
     ).toThrow(/subset/);
+  });
+
+  it("resolves the executive director as an active administrator with a unique role", async () => {
+    const adapter = createBoardMembershipAdapter({
+      BOARD_MEMBER_EMAILS: "director@pgpz.org",
+      BOARD_ADMIN_EMAILS: "director@pgpz.org",
+      BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@pgpz.org",
+    });
+
+    await expect(adapter.resolve({ email: "  DIV@pgpz.org " })).resolves.toMatchObject({
+      active: true,
+      attributes: {
+        source: "executive-director",
+        role: "executive-director",
+        isAdmin: true,
+      },
+    });
+    // The Executive Director is not a Board member; ordinary roster
+    // resolution is unchanged for directors.
+    await expect(adapter.resolve({ email: "director@pgpz.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "admin", isAdmin: true },
+    });
+    expect((await adapter.resolve({ email: "other@pgpz.org" })).active).toBe(false);
+  });
+
+  it("grants the executive director access without any member roster configured", async () => {
+    const adapter = createBoardMembershipAdapter({
+      BOARD_MEMBER_EMAILS: "",
+      BOARD_ADMIN_EMAILS: "",
+      BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@pgpz.org",
+    });
+
+    await expect(adapter.resolve({ email: "div@pgpz.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "executive-director", isAdmin: true },
+    });
+    await expect(adapter.resolve({ email: "anyone@pgpz.org" })).resolves.toMatchObject({
+      active: false,
+    });
+  });
+
+  it("rejects an executive director who is also on the Board roster", () => {
+    expect(() =>
+      createBoardMembershipAdapter({
+        BOARD_MEMBER_EMAILS: "div@pgpz.org",
+        BOARD_ADMIN_EMAILS: "",
+        BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@pgpz.org",
+      }),
+    ).toThrow(/must not overlap/);
   });
 });

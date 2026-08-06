@@ -10,9 +10,12 @@ import { boardMembershipAdapter } from "@/config/server";
 import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 
+export type BoardRole = "member" | "admin" | "executive-director";
+
 export type BoardMember = Readonly<{
   name: string;
   email: string;
+  role: BoardRole;
   isAdmin: boolean;
 }>;
 
@@ -65,11 +68,17 @@ export async function resolveBoardMemberState(
     typeof user.name === "string" && user.name.trim()
       ? user.name.trim()
       : "Board member";
+  const role: BoardRole =
+    membership.attributes?.role === "admin" ||
+    membership.attributes?.role === "executive-director"
+      ? membership.attributes.role
+      : "member";
   return {
     status: "member",
     member: {
       name,
       email,
+      role,
       isAdmin: membership.attributes?.isAdmin === true,
     },
   };

@@ -13,11 +13,11 @@ export const boardSiteConfig = defineSiteConfig({
     alt: "PGPZ Board mark",
   },
   colors: {
-    primary: "#355C70",
-    secondary: "#6C5B7B",
-    accent: "#F2C14E",
-    background: "#F6F7F2",
-    foreground: "#17242B",
+    primary: "#0D1F20",
+    secondary: "#475569",
+    accent: "#F5A800",
+    background: "#F6FAF2",
+    foreground: "#102827",
   },
   navigation: [
     { label: "Home", href: "/" },
