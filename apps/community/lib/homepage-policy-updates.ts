@@ -43,7 +43,12 @@ export async function loadFeaturedPolicyUpdates() {
       .map(featuredPolicyUpdate);
     if (featured.length) return featured;
   } catch (error) {
-    console.error("Unable to load published policy updates for the Community homepage", error);
+    const message = "Unable to load published policy updates for the Community homepage";
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`${message}; using the local fallback.`, error);
+    } else {
+      console.error(message, error);
+    }
   }
   return staticFeaturedPolicyUpdates();
 }

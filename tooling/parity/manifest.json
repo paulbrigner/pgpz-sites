@@ -426,6 +426,10 @@
         "sha256": "5b0bc4c78be977cd81f947fb5563aaa7cc6d451e6f1c53a3260b7656a7144d20"
       },
       {
+        "path": "public/brand/pgpz-circle-motif-on-light.svg",
+        "sha256": "a82c0278a387166381f4a357a1fbd2fc4ca5ffa0d6bb7c9bc8b846678134c17c"
+      },
+      {
         "path": "public/logo.png",
         "sha256": "5a0a2d607069cd0c0d41a1aaa4221797616ffaf97a09a1e1cea0f9eb14cab0b7"
       },
