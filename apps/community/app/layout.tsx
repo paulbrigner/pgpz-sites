@@ -38,12 +38,10 @@ export default function RootLayout({
           <footer className="border-t border-[rgba(71,85,105,0.22)] bg-[var(--brand-paper)] px-5 py-10 text-sm text-slate-600">
             <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div className="space-y-4">
-                <a
-                  href="https://z.cash/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Pretty Good Policy for Zcash Community logo; visit the official Zcash website"
-                  title="Visit the official Zcash website"
+                <Link
+                  href="/"
+                  aria-label="Pretty Good Policy for Zcash Community home"
+                  title="Go to the Community home page"
                   className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--zcash-gold)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--brand-paper)]"
                 >
                   <Image
@@ -54,7 +52,7 @@ export default function RootLayout({
                     className="h-20 w-auto"
                     unoptimized
                   />
-                </a>
+                </Link>
                 <p className="max-w-2xl text-xs leading-5 text-slate-600">
                   Pretty Good Policy for Zcash (PGPZ) is independent and is not an official Zcash or Zcash
                   Foundation website, service, or product. It is not affiliated with or endorsed by
