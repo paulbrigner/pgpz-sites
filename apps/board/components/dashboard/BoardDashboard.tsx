@@ -63,6 +63,13 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
               Open administration
             </Link>
           ) : null}
+          <Link
+            href="/documents"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            Document library
+          </Link>
         </section>
       </Container>
 

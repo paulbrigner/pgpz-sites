@@ -145,6 +145,11 @@ export function buildBoardBackendTemplate() {
         MaxValue: 7,
         Description: "Days before an unreconciled staging object is lifecycle-expired.",
       },
+      BoardSiteOrigin: {
+        Type: "String",
+        Default: "https://board.pgpz.org",
+        Description: "Exact origin allowed to PUT directly to the upload staging bucket.",
+      },
     },
     Resources: {
       BoardAuthTable: {
@@ -334,6 +339,19 @@ export function buildBoardBackendTemplate() {
                 Status: "Enabled",
                 Prefix: "staging/",
                 ExpirationInDays: { Ref: "BoardStagingExpirationDays" },
+              },
+            ],
+          },
+          // Exact-origin CORS so the Board app can PUT directly to staging.
+          CorsConfiguration: {
+            CorsRules: [
+              {
+                Id: "BoardDirectUpload",
+                AllowedOrigins: [{ Ref: "BoardSiteOrigin" }],
+                AllowedMethods: ["PUT", "POST"],
+                AllowedHeaders: ["*"],
+                ExposeHeaders: ["ETag"],
+                MaxAgeSeconds: 3000,
               },
             ],
           },

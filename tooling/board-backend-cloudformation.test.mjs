@@ -158,6 +158,14 @@ test("splits storage into staging, retained, and WORM archive boundaries", () =>
   assert.equal(archive.VersioningConfiguration.Status, "Enabled");
 });
 
+test("allows exact-origin direct upload to staging via CORS", () => {
+  const resources = buildBoardBackendTemplate().Resources;
+  const cors = resources.BoardStagingBucket.Properties.CorsConfiguration.CorsRules[0];
+  assert.deepEqual(cors.AllowedOrigins, [{ Ref: "BoardSiteOrigin" }]);
+  assert.deepEqual(cors.AllowedMethods, ["PUT", "POST"]);
+  assert.equal(buildBoardBackendTemplate().Parameters.BoardSiteOrigin.Default, "https://board.pgpz.org");
+});
+
 test("isolates the audit archive behind a separately permissioned archiver", () => {
   const resources = buildBoardBackendTemplate().Resources;
   const archiver = resources.BoardAuditArchiverRole.Properties;
