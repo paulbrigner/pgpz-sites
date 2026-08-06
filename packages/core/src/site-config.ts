@@ -23,6 +23,7 @@ export const SITE_FEATURES = [
   "zecShelf",
   "publicFiles",
   "letterSignons",
+  "documentVault",
 ] as const;
 
 export type SiteFeature = (typeof SITE_FEATURES)[number];
@@ -112,6 +113,7 @@ function parseFeatures(value: unknown, issues: string[]): FeatureSwitches {
       zecShelf: false,
       publicFiles: false,
       letterSignons: false,
+      documentVault: false,
     };
   }
   rejectUnknownKeys(value, SITE_FEATURES, "site.features", issues);
