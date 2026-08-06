@@ -16,6 +16,7 @@ import {
   type CommunityMemberResource,
 } from "@/components/home/CommunityHomeSections";
 import { CommunityPersonalHome } from "@/components/home/CommunityPersonalHome";
+import { CommunityPublicHome } from "@/components/home/CommunityPublicHome";
 import { isFeatureEnabled } from "@/config/features";
 import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from "@/lib/referral-code";
 import { useAppSession } from "@/lib/use-app-session";
@@ -370,6 +371,15 @@ export default function HomeClient({
     return <HomeShellSkeleton />;
   }
 
+  if (!authenticated) {
+    return (
+      <CommunityPublicHome
+        signupHref={signupHref}
+        featuredPolicyUpdates={featuredPolicyUpdates}
+      />
+    );
+  }
+
   const heroFeature = heroFeatureSlides[heroFeatureIndex] || heroFeatureSlides[0];
   if (!heroFeature) return <HomeShellSkeleton />;
 
@@ -415,24 +425,7 @@ export default function HomeClient({
         </Alert>
       ) : null}
 
-      {!authenticated ? (
-        <section className="grid gap-4 md:grid-cols-3">
-          {[
-            ["1", "Join the community", "Use email to create your PGPZ community profile."],
-            ["2", "Follow the project", "Keep up with announcements, resources, and early member notes."],
-            ["3", "Return as things open", "This will become the member home for coordination and access."],
-          ].map(([step, title, body]) => (
-            <div key={step} className="muted-card p-5">
-              <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-ink)] text-sm font-semibold text-[var(--zcash-gold)]">
-                {step}
-              </div>
-              <h2 className="text-lg font-semibold text-[var(--brand-ink)]">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-            </div>
-          ))}
-        </section>
-      ) : (
-        <>
+      <>
           {isMember && personalHomeEnabled ? (
             <CommunityPersonalHome
               displayName={displayName}
@@ -619,8 +612,7 @@ export default function HomeClient({
             <CommunityPillars resources={memberResources} />
           ) : null}
 
-        </>
-      )}
+      </>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { HomeShellSkeleton } from "@/components/home/Skeletons";
 import {
   CoalitionHero,
+  CoalitionPublicHome,
   CoalitionPolicyPriorities,
   CoalitionWorkstreams,
 } from "@/components/home/CoalitionHomeSections";
@@ -315,6 +316,14 @@ export default function HomeClient() {
     return <HomeShellSkeleton />;
   }
 
+  if (!authenticated) {
+    return (
+      <div className="mx-auto w-full max-w-[86rem] px-5 sm:px-7 lg:px-8">
+        <CoalitionPublicHome />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5">
       {!showOnboardingFirst ? (
@@ -351,25 +360,7 @@ export default function HomeClient() {
         </Alert>
       ) : null}
 
-      {!authenticated ? (
-        <section className="grid gap-4 md:grid-cols-3">
-          {[
-            ["1", "Request partner access", "Create a profile with the email you use for Zcash ecosystem policy work."],
-            ["2", "Manual review", "A PGPZ admin reviews coalition fit so the workspace remains focused and trusted."],
-            ["3", "Coordinate campaigns", "Approved members can return to share resources, messaging, and campaign materials."],
-          ].map(([step, title, body]) => (
-            <div key={step} className="muted-card p-5">
-              <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-ink)] text-sm font-semibold text-[var(--zcash-gold)]">
-                {step}
-              </div>
-              <h2 className="text-lg font-semibold text-[var(--brand-ink)]">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-            </div>
-          ))}
-        </section>
-      ) : (
-        <>
-          <section className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
+      <section className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
             <div className="glass-surface p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
@@ -721,8 +712,6 @@ export default function HomeClient() {
               )}
             </article>
           </section>
-        </>
-      )}
     </div>
   );
 }

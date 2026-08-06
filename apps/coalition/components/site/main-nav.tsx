@@ -109,7 +109,7 @@ export function MainNav() {
         ...(actualIsAdmin && !viewAsMember
           ? [{ key: "member-view", label: "View as member", action: enterMemberView }]
           : []),
-        { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
+        { key: "pgpz", label: "About", href: "https://pgpz.org", external: true },
         {
           key: "logout",
           label: "Log out",
@@ -127,7 +127,7 @@ export function MainNav() {
         { key: "home", label: "Home", href: "/" },
         { key: "join", label: "Request Access", href: joinHref },
         { key: "signin", label: "Sign in", href: signInHref },
-        { key: "pgpz", label: "PGPZ", href: "https://pgpz.org", external: true },
+        { key: "pgpz", label: "About", href: "https://pgpz.org", external: true },
       ];
 
   return (
@@ -135,7 +135,7 @@ export function MainNav() {
       <div
         className={cn(
           "mx-auto flex h-20 w-full items-center justify-between px-5",
-          actualIsAdmin ? "max-w-[96rem]" : "max-w-6xl",
+          actualIsAdmin ? "max-w-[96rem]" : authenticated ? "max-w-6xl" : "max-w-[86rem]",
         )}
       >
         <a
@@ -272,8 +272,13 @@ export function MainNav() {
 
             <NavigationMenuItem className="pl-3">
               <NavigationMenuLink className={externalLinkClasses} asChild>
-                <Link href="https://pgpz.org" target="_blank" rel="noopener noreferrer">
-                  PGPZ
+                <Link
+                  href="https://pgpz.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="About Pretty Good Policy for Zcash"
+                >
+                  About
                 </Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
