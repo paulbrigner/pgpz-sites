@@ -24,19 +24,51 @@ export function parseBoardAdminEmails(value: string | undefined): ReadonlySet<st
 }
 
 /**
+ * Parses the BOARD_EXECUTIVE_DIRECTOR_EMAILS allowlist. Executive directors
+ * are staff — not directors — so this roster must stay disjoint from the
+ * Board roster while still granting portal access and administrator
+ * privileges.
+ */
+export function parseBoardExecutiveDirectorEmails(
+  value: string | undefined,
+): ReadonlySet<string> {
+  return parseBoardMemberEmails(value);
+}
+
+/**
  * Membership is decided outside the application by the BOARD_MEMBER_EMAILS
  * allowlist. An empty allowlist resolves every subject as inactive, so an
  * unset variable locks the portal closed instead of opening it.
+ *
+ * The Executive Director is a distinct, non-director staff role: emails on
+ * BOARD_EXECUTIVE_DIRECTOR_EMAILS gain portal access and administrator
+ * privileges without joining the Board roster, and configuration fails fast
+ * if the two rosters overlap.
  */
 export function createBoardMembershipAdapter(
   env: Readonly<Record<string, string | undefined>>,
 ): MembershipAdapter {
   const allowlist = parseBoardMemberEmails(env.BOARD_MEMBER_EMAILS);
   const adminAllowlist = parseBoardAdminEmails(env.BOARD_ADMIN_EMAILS);
+  const executiveDirectorAllowlist = parseBoardExecutiveDirectorEmails(
+    env.BOARD_EXECUTIVE_DIRECTOR_EMAILS,
+  );
   const orphanedAdmins = [...adminAllowlist].filter((email) => !allowlist.has(email));
   if (orphanedAdmins.length > 0) {
     throw new Error(
       `BOARD_ADMIN_EMAILS must be a subset of BOARD_MEMBER_EMAILS: ${orphanedAdmins.join(", ")}`,
+    );
+  }
+
+  // The Executive Director holds a unique staff role and is never a director.
+  // Reject an overlapping configuration instead of silently granting a dual
+  // role that the UI cannot represent.
+  const overlappingExecutiveDirectors = [...executiveDirectorAllowlist].filter((email) =>
+    allowlist.has(email),
+  );
+  if (overlappingExecutiveDirectors.length > 0) {
+    throw new Error(
+      `BOARD_EXECUTIVE_DIRECTOR_EMAILS must not overlap BOARD_MEMBER_EMAILS: ${overlappingExecutiveDirectors.join(", ")}`,
     );
   }
 
@@ -45,6 +77,21 @@ export function createBoardMembershipAdapter(
     async resolve(subject: MembershipSubject) {
       const email = normalizeBoardEmail(subject.email);
       const active = allowlist.size > 0 && allowlist.has(email);
+      const isExecutiveDirector =
+        executiveDirectorAllowlist.size > 0 && executiveDirectorAllowlist.has(email);
+
+      if (isExecutiveDirector) {
+        return {
+          active: true,
+          reason: "Email is on the current PGPZ executive director roster.",
+          attributes: {
+            source: "executive-director",
+            role: "executive-director",
+            isAdmin: true,
+          },
+        };
+      }
+
       const isAdmin = active && adminAllowlist.has(email);
       return {
         active,

@@ -19,6 +19,6 @@ export const boardMetadata: Metadata = {
 };
 
 export const boardViewport: Viewport = {
-  themeColor: "#F6F7F2",
+  themeColor: "#F6FAF2",
   colorScheme: "light",
 };

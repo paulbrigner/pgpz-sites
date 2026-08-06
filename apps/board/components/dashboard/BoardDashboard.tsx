@@ -32,8 +32,12 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
       <Container className="pb-16 pt-10 sm:pt-14">
         <section>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="accent">Board of Directors</Badge>
-            {member.isAdmin ? <Badge>Board administrator</Badge> : null}
+            {member.role === "executive-director" ? (
+              <Badge tone="accent">Executive Director</Badge>
+            ) : (
+              <Badge tone="accent">Board of Directors</Badge>
+            )}
+            {member.isAdmin && member.role !== "executive-director" ? <Badge>Board administrator</Badge> : null}
             <Badge>Private</Badge>
           </div>
           <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">
@@ -87,7 +91,7 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
       </section>
 
       <Container className="py-16 sm:py-20">
-        <Surface tone="dark" className="overflow-hidden p-8 sm:p-12">
+        <section className="board-hero overflow-hidden p-8 sm:p-12">
           <div className="relative z-10 max-w-3xl">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-[var(--accent)]">
               <LockKeyhole className="h-5 w-5" aria-hidden="true" />
@@ -96,12 +100,14 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
               Access stays limited to the current board roster.
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-white/68">
-              Sign-up is disabled, every page requires authentication, the roster is enforced from
+              Sign-up is disabled, every page requires authentication, the director roster is enforced from
               <code className="mx-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs">BOARD_MEMBER_EMAILS</code>,
+              staff access is scoped separately by
+              <code className="mx-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs">BOARD_EXECUTIVE_DIRECTOR_EMAILS</code>,
               and the site refuses search indexing at every layer.
             </p>
           </div>
-        </Surface>
+        </section>
       </Container>
     </>
   );

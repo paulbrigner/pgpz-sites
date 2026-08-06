@@ -24,8 +24,10 @@
  * Security notes:
  *   - Without --password a random 24-character password is generated and
  *     printed exactly once; deliver it over a private channel.
- *   - If BOARD_MEMBER_EMAILS is set in the environment, the script refuses to
- *     provision emails outside that allowlist.
+ *   - If BOARD_MEMBER_EMAILS or BOARD_EXECUTIVE_DIRECTOR_EMAILS is set in the
+ *     environment, the script refuses to provision emails outside those
+ *     allowlists (directors must be on the Board roster, the Executive
+ *     Director on the staff roster).
  *   - Rerunning the script for the same email rotates the password hash and,
  *     by default, revokes every stored session for that director, so both the
  *     old password and existing session cookies stop working immediately.
@@ -43,6 +45,12 @@ const REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
 const TABLE_NAME = process.env.NEXTAUTH_TABLE || "PGPZBoardNextAuth";
 const ALLOWLIST = new Set(
   (process.env.BOARD_MEMBER_EMAILS || "")
+    .split(/[\s,]+/)
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
+const EXECUTIVE_DIRECTOR_ALLOWLIST = new Set(
+  (process.env.BOARD_EXECUTIVE_DIRECTOR_EMAILS || "")
     .split(/[\s,]+/)
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
@@ -186,8 +194,14 @@ async function main() {
     process.exit(1);
   }
 
-  if (ALLOWLIST.size > 0 && !ALLOWLIST.has(email)) {
-    console.error(`Refusing to provision ${email}: the email is not on the BOARD_MEMBER_EMAILS allowlist.`);
+  if (
+    (ALLOWLIST.size > 0 || EXECUTIVE_DIRECTOR_ALLOWLIST.size > 0) &&
+    !ALLOWLIST.has(email) &&
+    !EXECUTIVE_DIRECTOR_ALLOWLIST.has(email)
+  ) {
+    console.error(
+      `Refusing to provision ${email}: the email is not on the BOARD_MEMBER_EMAILS or BOARD_EXECUTIVE_DIRECTOR_EMAILS allowlist.`,
+    );
     process.exit(1);
   }
 

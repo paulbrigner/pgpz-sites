@@ -13,6 +13,13 @@ const rosterAdapter = () =>
     BOARD_ADMIN_EMAILS: "ada@example.org",
   });
 
+const staffRosterAdapter = () =>
+  createBoardMembershipAdapter({
+    BOARD_MEMBER_EMAILS: "ada@example.org, grace@example.org",
+    BOARD_ADMIN_EMAILS: "ada@example.org",
+    BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@example.org",
+  });
+
 const noSession: BoardSessionResolver = async () => null;
 
 const sessionFor = (email: string, name?: string | null): BoardSessionResolver =>
@@ -45,7 +52,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Ada", email: "grace@example.org", isAdmin: false },
+      member: { name: "Ada", email: "grace@example.org", role: "member", isAdmin: false },
     });
 
     await expect(
@@ -55,7 +62,36 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Board member", email: "ada@example.org", isAdmin: true },
+      member: { name: "Board member", email: "ada@example.org", role: "admin", isAdmin: true },
+    });
+  });
+
+  it("classifies the executive director as an administrator with the staff role", async () => {
+    await expect(
+      resolveBoardMemberState(requestHeaders, {
+        resolveSession: sessionFor("Div@Example.org", "Div"),
+        membershipAdapter: staffRosterAdapter(),
+      }),
+    ).resolves.toEqual({
+      status: "member",
+      member: {
+        name: "Div",
+        email: "div@example.org",
+        role: "executive-director",
+        isAdmin: true,
+      },
+    });
+
+    // The Executive Director is not on the Board roster, so directors'
+    // resolution is unchanged.
+    await expect(
+      resolveBoardMemberState(requestHeaders, {
+        resolveSession: sessionFor("ada@example.org"),
+        membershipAdapter: staffRosterAdapter(),
+      }),
+    ).resolves.toEqual({
+      status: "member",
+      member: { name: "Ada", email: "ada@example.org", role: "admin", isAdmin: true },
     });
   });
 

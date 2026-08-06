@@ -12,7 +12,7 @@ export async function SiteHeader() {
   const signedIn = Boolean(getSessionCookie(new Headers({ cookie: cookieStore.toString() })));
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[rgba(246,247,242,0.88)] backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[rgba(246,250,242,0.9)] backdrop-blur-xl">
       <Container className="flex min-h-16 items-center justify-between gap-5 py-2">
         <Link
           href="/"

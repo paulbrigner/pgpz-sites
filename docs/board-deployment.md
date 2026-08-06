@@ -86,12 +86,14 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
 | `BOARD_ADMIN_EMAILS` | yes | administrator allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` |
+| `BOARD_EXECUTIVE_DIRECTOR_EMAILS` | no | staff allowlist: the Executive Director gains portal access and administrator privileges **without** joining the Board roster; must be disjoint from `BOARD_MEMBER_EMAILS` |
 | `EMAIL_FROM` | no | unused until email delivery is added |
 
 `tooling/write-amplify-env.mjs board` fails the build if any required variable
 is missing. Both roster variables are intentionally required. An unset member
-allowlist locks every account out, and an administrator outside the member
-roster fails configuration instead of gaining access.
+allowlist locks every account out, an administrator outside the member roster
+fails configuration instead of gaining access, and an Executive Director who
+overlaps the member roster fails configuration instead of holding a dual role.
 
 ## 4. Provisioning directors
 
@@ -116,8 +118,9 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 - `--dry-run` reports the planned action, account id, and session-revocation
   count without writing anything.
 - Refuses emails not on `BOARD_MEMBER_EMAILS` when that variable is set in the
-  shell — always set it to the same value as the Amplify allowlist to prevent
-  provisioning mistakes.
+  shell; the Executive Director's address is accepted when it is on
+  `BOARD_EXECUTIVE_DIRECTOR_EMAILS`. Always set the variables to the same
+  values as the Amplify allowlists to prevent provisioning mistakes.
 - Records are written in the exact `BETTER_AUTH#...` shape the
   `@pgpz/auth-dynamodb` adapter reads, with Better Auth's own scrypt hash
   (`better-auth/crypto`), so sign-in works through the normal flow.
@@ -125,6 +128,9 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 Administrator authorization is environment-managed rather than stored in the
 user record. Add an existing roster email to `BOARD_ADMIN_EMAILS` and redeploy;
 the server derives `isAdmin` only after confirming active Board membership.
+To grant administrator access without Board membership, add the address to
+`BOARD_EXECUTIVE_DIRECTOR_EMAILS` instead; that roster is checked first and
+carries its own active membership and administrator grant.
 
 ## 5. Removing a director
 
@@ -148,6 +154,9 @@ the server derives `isAdmin` only after confirming active Board membership.
 - Signing in with a roster email + provisioned password reaches the dashboard.
 - An email present in both roster variables sees the Board administrator badge
   and can reach `/admin`; ordinary directors receive a concealed 404 there.
+- An email on `BOARD_EXECUTIVE_DIRECTOR_EMAILS` signs in, sees the
+  "Executive Director" badge (not a director badge), and can reach `/admin`
+  without appearing on the Board roster.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
 - Rotating a director's password signs their other devices out (sessions
   revoked), and `--dry-run` reports the revocation count first.

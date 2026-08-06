@@ -161,6 +161,7 @@ const applications = {
       "AWS_REGION",
       "BOARD_MEMBER_EMAILS",
       "BOARD_ADMIN_EMAILS",
+      "BOARD_EXECUTIVE_DIRECTOR_EMAILS",
       "EMAIL_FROM",
     ],
   },
