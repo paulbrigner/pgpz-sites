@@ -9,6 +9,7 @@ import {
 import { boardMembershipAdapter } from "@/config/server";
 import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
+import { auditBestEffort, authenticatedActor } from "@/lib/audit";
 
 export type BoardRole = "member" | "admin" | "executive-director" | "legal-counsel";
 
@@ -123,6 +124,19 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
  */
 export async function requireBoardAdmin(callbackPath = "/admin"): Promise<BoardMember> {
   const member = await requireBoardMember(callbackPath);
-  if (!member?.isAdmin) notFound();
+  if (!member?.isAdmin) {
+    if (member) {
+      // Best-effort authorization-denial audit on the privileged route.
+      await auditBestEffort({
+        category: "authorization",
+        action: "route_denied",
+        outcome: "denied",
+        reason: "admin_required",
+        actor: authenticatedActor(member),
+        target: { type: "route", id: callbackPath, version: null },
+      });
+    }
+    notFound();
+  }
   return member;
 }

@@ -8,3 +8,12 @@ export const BETTER_AUTH_TRUSTED_ORIGINS = process.env.BETTER_AUTH_TRUSTED_ORIGI
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || BOARD_CANONICAL_URL).trim();
 
 export const BOARD_BASE_PATH = "/api/better-auth";
+
+// Governance infrastructure (emitted by the PgpzBoardBackend stack outputs).
+// The vault and audit ledger are fail-closed / no-ops while these are unset.
+export const BOARD_DOCUMENTS_TABLE = (process.env.BOARD_DOCUMENTS_TABLE || "PGPZBoardDocuments").trim();
+export const BOARD_AUDIT_TABLE = (process.env.BOARD_AUDIT_TABLE || "PGPZBoardAuditLog").trim();
+export const BOARD_DOCUMENTS_STAGING_BUCKET = (process.env.BOARD_DOCUMENTS_STAGING_BUCKET || "").trim();
+export const BOARD_DOCUMENTS_RETAINED_BUCKET = (process.env.BOARD_DOCUMENTS_RETAINED_BUCKET || "").trim();
+export const BOARD_AUDIT_ARCHIVE_BUCKET = (process.env.BOARD_AUDIT_ARCHIVE_BUCKET || "").trim();
+export const BOARD_KMS_KEY_ID = (process.env.BOARD_KMS_KEY_ID || "").trim();
