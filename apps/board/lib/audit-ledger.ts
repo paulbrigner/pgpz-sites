@@ -169,7 +169,10 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
           Item: { pk: PK, sk: HEAD_SK, type: "AUDIT_HEAD", eventId: entry.eventId, sequence: entry.sequence, eventHash: entry.eventHash },
           ConditionExpression: headCondition,
           ExpressionAttributeNames: { "#pk": "pk", "#eventHash": "eventHash" },
-          ExpressionAttributeValues: { ":headPk": PK, ":expectedHash": previous ? previous.eventHash : "" },
+          ExpressionAttributeValues: {
+            ":headPk": PK,
+            ...(previous ? { ":expectedHash": previous.eventHash } : {}),
+          },
         },
       },
     ];
