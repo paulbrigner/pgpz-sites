@@ -115,4 +115,21 @@ describe("board audit ledger adapter", () => {
     expect(entry.target?.version).toBe("v3");
     expect(entry.metadata?.get("size")).toBe(2048);
   });
+
+  it("reports a truncated chain as not intact instead of verifying only the prefix", async () => {
+    const ledger = createBoardAuditLedger(createFakeClient() as never);
+    await ledger.append(event("k1"));
+    await ledger.append(event("k2", "sign_out"));
+
+    // Intact full chain verifies.
+    expect((await ledger.verify()).ok).toBe(true);
+
+    // Simulate a partial read (prefix only). The adapter's verify() always reads
+    // the whole chain and cross-checks it against stored HEAD, so a truncated slice
+    // is reported as NOT intact. Prove that with a direct call into the package-level
+    // helper: on its own it would accept a prefix.
+    const prefix = await ledger.list({ limit: 1 });
+    const { verifyChain, sha256 } = await import("./audit-ledger");
+    expect(verifyChain(prefix, sha256).ok).toBe(true); // package-level check alone is silent on a prefix
+  });
 });

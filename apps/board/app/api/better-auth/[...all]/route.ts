@@ -2,10 +2,21 @@ import { toNextJsHandler } from "better-auth/next-js";
 import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { anonymousClaimedActor, auditBestEffort, authenticatedActor } from "@/lib/audit";
+import { sanitizeClaimedEmail, shouldRecordFailureAudit } from "@/lib/failed-signin-audit";
 
 export const dynamic = "force-dynamic";
 
 const handlers = toNextJsHandler(auth);
+
+/** Best-effort client identity for audit throttling (first X-Forwarded-For hop). */
+function clientIp(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const firstHop = forwarded.split(",")[0]?.trim();
+    if (firstHop && !/[\x00-\x1f\x7f]/.test(firstHop)) return firstHop;
+  }
+  return "unknown";
+}
 
 /** Bounded read of only the claimed email from a sign-in body (never the
  * password). Used for failed-sign-in attribution; the handler gets the
@@ -33,13 +44,19 @@ export async function POST(request: NextRequest) {
     const claimedEmail = await extractClaimedEmail(request);
     const response = await handlers.POST(request);
     if (response.status >= 400 && claimedEmail) {
-      await auditBestEffort({
-        category: "authentication",
-        action: "sign_in",
-        outcome: "failure",
-        reason: "invalid_sign_in",
-        actor: anonymousClaimedActor(claimedEmail),
-      });
+      // The ledger is append-only, so bound both what value we echo and how often
+      // we write: only a plausible, bounded email is recorded as the "claimed"
+      // identity, and repeated failures for the same client+email are coalesced.
+      const sanitized = sanitizeClaimedEmail(claimedEmail);
+      if (sanitized && shouldRecordFailureAudit(`${clientIp(request)}|${sanitized}`)) {
+        await auditBestEffort({
+          category: "authentication",
+          action: "sign_in",
+          outcome: "failure",
+          reason: "invalid_sign_in",
+          actor: anonymousClaimedActor(sanitized),
+        });
+      }
     }
     return response;
   }

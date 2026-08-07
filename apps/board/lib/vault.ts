@@ -11,7 +11,7 @@ import {
   validateDocumentMetadata,
 } from "@pgpz/document-vault";
 import type { BoardMember } from "@/lib/session";
-import { boardDocumentObjectStore, computeSha256, newDocumentId } from "@/lib/object-store";
+import { boardDocumentObjectStore, computeSha256, isBoardStagingKey, newDocumentId } from "@/lib/object-store";
 import { createBoardDocumentRepository } from "@/lib/documents-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
 
@@ -38,6 +38,19 @@ function assertDocumentManager(member: BoardMember): void {
   if (!member.isAdmin) throw new VaultAuthorizationError();
 }
 
+/**
+ * The vault only promotes objects that live under the server-issued board
+ * staging namespace. Accepting an arbitrary caller-supplied key would let a
+ * manager repoint create/addVersion at content they never staged (staged-object
+ * substitution). We enforce the strict `board/staging/<uuid>` shape here, and
+ * again as defense-in-depth inside the object store.
+ */
+function assertStagedKeyOwned(stagedKey: string): void {
+  if (!isBoardStagingKey(stagedKey)) {
+    throw new VaultValidationError("staging-key", "Upload staging key is invalid or expired.");
+  }
+}
+
 function newVersionId() {
   return `${Date.now().toString(36)}-${randomUUID().slice(0, 12)}`;
 }
@@ -55,6 +68,7 @@ export async function createDocument(input: {
 
   const metadataIssues = validateDocumentMetadata({ title: input.title, description: input.description, category: input.category });
   if (metadataIssues.length > 0) throw new VaultValidationError("metadata", `Invalid document metadata: ${metadataIssues.join(", ")}`);
+  assertStagedKeyOwned(input.stagedKey);
   const { title, description, category } = normalizeDocumentMetadata({ title: input.title, description: input.description, category: input.category });
 
   // Validate + promote the staged object to an immutable retained key.
@@ -119,6 +133,7 @@ export async function addVersion(input: {
   assertDocumentManager(input.member);
   const existing = await boardDocumentRepository.getDocument(input.documentId);
   if (!existing) throw new VaultValidationError("not-found", "Document not found.");
+  assertStagedKeyOwned(input.stagedKey);
 
   const staged = await boardDocumentObjectStore.readStaged(input.stagedKey);
   const classified = classifyUploadedObject({ byteLength: staged.metadata.byteLength, mimeType: staged.metadata.mimeType, originalFileName: input.fileName });

@@ -14,6 +14,34 @@ import { BOARD_DOCUMENTS_STAGING_BUCKET, BOARD_DOCUMENTS_RETAINED_BUCKET } from 
 
 export { buildObjectKey, buildStagingKey } from "@pgpz/document-vault";
 
+/**
+ * A board staging key is strictly `<board>/staging/<uuid>`, issued by the
+ * server in `prepareUpload`. Any other shape — a retained `objects/` path,
+ * another actor's prefix, a free-form string, or an extra segment — must never
+ * be promoted into the vault. This regex is the boundary that stops staged-object
+ * substitution (a manager repointing create/addVersion at content they did not
+ * stage). The prefix literal mirrors `BOARD_DOCUMENT_PREFIX` in lib/vault.ts.
+ */
+const STAGING_PREFIX = "board";
+const BOARD_STAGING_KEY_RE =
+  /^[0-9A-Za-z_-]+\/staging\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** True only for a well-formed, single-segment-prefix staging key ending in a UUID. */
+export function isBoardStagingKey(candidate: string): boolean {
+  if (typeof candidate !== "string") return false;
+  const match = BOARD_STAGING_KEY_RE.exec(candidate);
+  if (!match) return false;
+  // The prefix must be exactly the board staging namespace (`board/staging/`),
+  // not some other `*/staging/<uuid>` key that happens to share the shape.
+  return candidate.startsWith(`${STAGING_PREFIX}/staging/`);
+}
+
+function assertValidStagingKey(stagingKey: string): void {
+  if (!isBoardStagingKey(stagingKey)) {
+    throw new Error(`Refusing to operate on invalid staging key (must match ${STAGING_PREFIX}/staging/<uuid>).`);
+  }
+}
+
 const metadataOf = (r: { ContentLength?: number; ContentType?: string; Metadata?: Record<string, string> }): ObjectMetadata => ({
   byteLength: Number(r.ContentLength) || 0,
   mimeType: r.ContentType ?? "application/octet-stream",
@@ -44,6 +72,7 @@ export const boardDocumentObjectStore: ObjectStore & {
     if (!BOARD_DOCUMENTS_STAGING_BUCKET || !BOARD_DOCUMENTS_RETAINED_BUCKET) {
       throw new Error("Board document storage is not configured.");
     }
+    assertValidStagingKey(stagingKey);
     const staged = await s3Client.send(
       new HeadObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
     );
@@ -64,6 +93,7 @@ export const boardDocumentObjectStore: ObjectStore & {
 
   async deleteStaging(stagingKey) {
     if (!BOARD_DOCUMENTS_STAGING_BUCKET) return;
+    assertValidStagingKey(stagingKey);
     await s3Client.send(
       new DeleteObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
     );
@@ -71,6 +101,7 @@ export const boardDocumentObjectStore: ObjectStore & {
 
   async readStaged(stagingKey) {
     if (!BOARD_DOCUMENTS_STAGING_BUCKET) throw new Error("Board document storage is not configured.");
+    assertValidStagingKey(stagingKey);
     const result = await s3Client.send(
       new GetObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
     );

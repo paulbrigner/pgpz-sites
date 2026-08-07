@@ -241,10 +241,33 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
       return listAll(options);
     },
     async verify() {
+      const head = await readHead();
       const entries = await listAll();
-      // Verify against each recorded eventHash (no rehashing needed for the
-      // stored order/links; recompute to detect tampering).
-      return verifyChain(entries, sha256);
+
+      // A ledger with no HEAD and no entries is trivially intact (nothing written yet).
+      if (!head) {
+        return entries.length === 0
+          ? { ok: true, entryCount: 0, issues: [] }
+          : { ok: false, entryCount: entries.length, issues: ["Ledger has entries but no stored HEAD."] };
+      }
+
+      const result = verifyChain(entries, sha256);
+      const issues = [...result.issues];
+      let ok = result.ok;
+
+      // `verifyChain` only checks the internal consistency of whatever slice it is
+      // given — a truncated prefix would still report intact. Cross-check that the
+      // full list actually reaches the recorded HEAD so any caller accidentally
+      // verifying a partial chain (or tampering with the tail) is detected.
+      const last = entries[entries.length - 1];
+      if (!last || last.sequence !== head.sequence || last.eventHash !== head.eventHash || last.eventId !== head.eventId) {
+        ok = false;
+        issues.push(
+          `Verified chain does not reach stored HEAD: ends at sequence ${String(last?.sequence ?? "(none)")} (${last?.eventHash ?? "no hash"}), expected HEAD sequence ${head.sequence}.`,
+        );
+      }
+
+      return { ok, entryCount: entries.length, issues };
     },
   };
 }
