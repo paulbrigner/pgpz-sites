@@ -78,6 +78,18 @@ test("deployment is a dry run by default and apply is explicitly gated", () => {
   const dryRun = buildCliPlan(parsed);
   assert.equal(dryRun.mode, "dry-run");
   assert.equal(dryRun.terminationProtection, true);
+  assert.deepEqual(dryRun.parameters, { objectLockMode: "GOVERNANCE", retentionDays: 90 });
+
+  const compliance = buildCliPlan(parseArguments([
+    "--account-id", "123456789012",
+    "--object-lock-mode", "COMPLIANCE",
+    "--retention-days", "365",
+  ]));
+  assert.deepEqual(compliance.parameters, { objectLockMode: "COMPLIANCE", retentionDays: 365 });
+  assert.throws(
+    () => buildCliPlan(parseArguments(["--account-id", "123456789012", "--retention-days", "0"])),
+    /positive integer/,
+  );
 
   assert.throws(
     () => buildCliPlan({
@@ -109,7 +121,7 @@ test("provisions dedicated governance and audit tables with retention protection
   const audit = resources.BoardAuditLogTable;
   assert.equal(audit.Properties.TableName, "PGPZBoardAuditLog");
   assert.equal(audit.Properties.DeletionProtectionEnabled, true);
-  assert.deepEqual(audit.Properties.StreamSpecification, { StreamEnabled: true, StreamViewType: "NEW_AND_OLD_IMAGES" });
+  assert.deepEqual(audit.Properties.StreamSpecification, { StreamViewType: "NEW_AND_OLD_IMAGES" });
   assert.equal(audit.Properties.TimeToLiveSpecification, undefined);
 });
 
@@ -134,7 +146,7 @@ test("splits storage into staging, retained, and WORM archive boundaries", () =>
   const resources = buildBoardBackendTemplate().Resources;
   const retained = resources.BoardRetainedBucket.Properties;
   assert.equal(retained.VersioningConfiguration.Status, "Enabled");
-  assert.equal(retained.ObjectLockEnabledForBucket, true);
+  assert.equal(retained.ObjectLockEnabled, true);
   assert.deepEqual(retained.ObjectLockConfiguration.Rule.DefaultRetention, {
     Mode: { Ref: "BoardObjectLockMode" },
     Days: { Ref: "BoardRetentionDays" },
@@ -142,19 +154,23 @@ test("splits storage into staging, retained, and WORM archive boundaries", () =>
   assert.deepEqual(retained.PublicAccessBlockConfiguration, {
     BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true,
   });
-  retained.BucketPolicy.Statement.forEach((statement) => {
+  resources.BoardRetainedBucketPolicy.Properties.PolicyDocument.Statement.forEach((statement) => {
     assert.deepEqual(statement.Effect, "Deny");
     assert.deepEqual(statement.Condition, { Bool: { "aws:SecureTransport": "false" } });
   });
+  assert.match(
+    JSON.stringify(resources.BoardRetainedBucketPolicy.Properties.PolicyDocument),
+    /\$\{BoardRetainedBucket\}/,
+  );
   assert.equal(retained.OwnershipControls.Rules[0].ObjectOwnership, "BucketOwnerEnforced");
 
   const staging = resources.BoardStagingBucket.Properties;
-  assert.equal(staging.VersioningConfiguration.Status, "Disabled");
-  assert.equal(staging.LifecycleConfiguration.Rules[0].Prefix, "staging/");
+  assert.equal(staging.VersioningConfiguration, undefined);
+  assert.equal(staging.LifecycleConfiguration.Rules[0].Prefix, "board/staging/");
   assert.deepEqual(staging.LifecycleConfiguration.Rules[0].ExpirationInDays, { Ref: "BoardStagingExpirationDays" });
 
   const archive = resources.BoardAuditArchiveBucket.Properties;
-  assert.equal(archive.ObjectLockEnabledForBucket, true);
+  assert.equal(archive.ObjectLockEnabled, true);
   assert.equal(archive.VersioningConfiguration.Status, "Enabled");
 });
 
@@ -175,8 +191,16 @@ test("isolates the audit archive behind a separately permissioned archiver", () 
   const streamStatement = archiver.Policies[0].PolicyDocument.Statement[0];
   assert.deepEqual(streamStatement.Resource, { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] });
   const archiveStatement = archiver.Policies[1].PolicyDocument.Statement[0];
-  assert.deepEqual(archiveStatement.Action, ["s3:PutObject", "s3:GetObject", "s3:PutObjectLegalHold"]);
+  assert.equal(archiveStatement.Action, "s3:PutObject");
   assert.match(JSON.stringify(archiveStatement.Resource), /BoardAuditArchiveBucket/);
+  const fn = resources.BoardAuditArchiverFunction.Properties;
+  assert.equal(fn.Role["Fn::GetAtt"][0], "BoardAuditArchiverRole");
+  assert.equal(fn.Environment.Variables.ARCHIVE_BUCKET.Ref, "BoardAuditArchiveBucket");
+  assert.match(fn.Code.ZipFile, /PutObjectCommand|batchItemFailures/);
+  const source = resources.BoardAuditArchiverEventSource.Properties;
+  assert.deepEqual(source.EventSourceArn, { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] });
+  assert.equal(source.StartingPosition, "TRIM_HORIZON");
+  assert.deepEqual(source.FunctionResponseTypes, ["ReportBatchItemFailures"]);
 });
 
 test("keeps the web compute role append-only on audit and delete-proof on retained documents", () => {
@@ -185,7 +209,7 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   const statements = role.Policies[1].PolicyDocument.Statement;
 
   const audit = statements.find((statement) => statement.Sid === "AuditAppendOnly");
-  assert.deepEqual(audit.Action, ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]);
+  assert.deepEqual(audit.Action, ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:TransactWriteItems"]);
 
   const documents = statements.find((statement) => statement.Sid === "DocumentsReadWriteNoDelete");
   assert.ok(!documents.Action.includes("dynamodb:DeleteItem"));
@@ -197,7 +221,7 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   const retained = statements.find((statement) => statement.Sid === "RetainedPutGetNoDelete");
   assert.ok(!retained.Action.includes("s3:DeleteObject"));
   assert.ok(retained.Action.includes("s3:PutObject"));
-  assert.deepEqual(retained.Resource, { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardRetainedBucket}/objects/*" });
+  assert.deepEqual(retained.Resource, { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardRetainedBucket}/board/objects/*" });
 
   const deny = statements.find((statement) => statement.Sid === "NeverDeleteRetainedObjectLock");
   assert.deepEqual(deny.Effect, "Deny");
