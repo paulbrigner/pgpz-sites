@@ -47,6 +47,9 @@ function createFakeClient() {
         } else {
           ok = !existing;
         }
+        if (ok && condition.includes("#pk = :headPk")) {
+          ok = Boolean(existing && existing.pk === put.ExpressionAttributeValues?.[":headPk"]);
+        }
         if (!ok) throw { name: "TransactionCanceledException" };
         writes.push({ key, item: { ...item } });
       }

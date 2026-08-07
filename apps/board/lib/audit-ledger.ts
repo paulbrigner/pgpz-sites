@@ -144,7 +144,7 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
     const conditionNames = { "#pk": "pk", "#sk": "sk" };
     const headCondition = previous
       ? "#pk = :headPk AND #eventHash = :expectedHash"
-      : "#pk = :headPk AND attribute_not_exists(#eventHash)";
+      : "attribute_not_exists(#pk) AND attribute_not_exists(#sk)";
     const expirySk = entrySk(entry.sequence, entry.eventId);
     const TransactItems = [
       {
@@ -168,11 +168,12 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
           TableName: tableName,
           Item: { pk: PK, sk: HEAD_SK, type: "AUDIT_HEAD", eventId: entry.eventId, sequence: entry.sequence, eventHash: entry.eventHash },
           ConditionExpression: headCondition,
-          ExpressionAttributeNames: { "#pk": "pk", "#eventHash": "eventHash" },
-          ExpressionAttributeValues: {
-            ":headPk": PK,
-            ...(previous ? { ":expectedHash": previous.eventHash } : {}),
-          },
+          ExpressionAttributeNames: previous
+            ? { "#pk": "pk", "#eventHash": "eventHash" }
+            : conditionNames,
+          ...(previous
+            ? { ExpressionAttributeValues: { ":headPk": PK, ":expectedHash": previous.eventHash } }
+            : {}),
         },
       },
     ];
