@@ -34,13 +34,13 @@ export const BOARD_AUDIT_ACTIONS = Object.freeze([
   "dynamodb:GetItem",
   "dynamodb:PutItem",
   "dynamodb:Query",
+  "dynamodb:TransactWriteItems",
 ]);
 
 /** Web compute S3 on retained objects: never delete. */
 export const BOARD_RETAINED_S3_ACTIONS = Object.freeze([
   "s3:PutObject",
   "s3:GetObject",
-  "s3:HeadObject",
 ]);
 
 function amplifyTrustPolicy() {
@@ -70,6 +70,7 @@ const confidentialTags = Object.freeze([
 
 /** TLS-only guard policy applied to every Board bucket. */
 function tlsOnlyBucketPolicy(bucket, readWrite = ["s3:*"]) {
+  const bucketSubstitution = `\${${bucket}}`;
   return {
     Version: "2012-10-17",
     Statement: [
@@ -79,8 +80,8 @@ function tlsOnlyBucketPolicy(bucket, readWrite = ["s3:*"]) {
         Principal: "*",
         Action: readWrite,
         Resource: [
-          { "Fn::Sub": `arn:${"${AWS::Partition}"}:s3:::${bucket}` },
-          { "Fn::Sub": `arn:${"${AWS::Partition}"}:s3:::${bucket}/*` },
+          { "Fn::Sub": `arn:${"${AWS::Partition}"}:s3:::${bucketSubstitution}` },
+          { "Fn::Sub": `arn:${"${AWS::Partition}"}:s3:::${bucketSubstitution}/*` },
         ],
         Condition: { Bool: { "aws:SecureTransport": "false" } },
       },
@@ -267,7 +268,7 @@ export function buildBoardBackendTemplate() {
           PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
           DeletionProtectionEnabled: true,
           SSESpecification: { SSEEnabled: true, SSEType: "KMS", KMSMasterKeyId: { Ref: "BoardKmsKey" } },
-          StreamSpecification: { StreamEnabled: true, StreamViewType: "NEW_AND_OLD_IMAGES" },
+          StreamSpecification: { StreamViewType: "NEW_AND_OLD_IMAGES" },
           Tags: confidentialTags,
         },
       },
@@ -308,13 +309,6 @@ export function buildBoardBackendTemplate() {
                 Resource: "*",
                 Condition: { StringEquals: { "aws:SourceAccount": { Ref: "AWS::AccountId" } } },
               },
-              {
-                Sid: "AllowAuditArchiver",
-                Effect: "Allow",
-                Principal: { AWS: { "Fn::GetAtt": ["BoardAuditArchiverRole", "Arn"] } },
-                Action: ["kms:GenerateDataKey", "kms:Encrypt", "kms:Decrypt"],
-                Resource: "*",
-              },
             ],
           },
           KeySpec: "SYMMETRIC_DEFAULT",
@@ -329,7 +323,6 @@ export function buildBoardBackendTemplate() {
         UpdateReplacePolicy: "Retain",
         Properties: {
           ...kmsEncryption("BoardKmsKey"),
-          VersioningConfiguration: { Status: "Disabled" },
           PublicAccessBlockConfiguration: publicAccessBlock,
           ...bucketOwnerEnforced,
           LifecycleConfiguration: {
@@ -337,7 +330,7 @@ export function buildBoardBackendTemplate() {
               {
                 Id: "ExpireStaging",
                 Status: "Enabled",
-                Prefix: "staging/",
+                Prefix: "board/staging/",
                 ExpirationInDays: { Ref: "BoardStagingExpirationDays" },
               },
             ],
@@ -350,13 +343,19 @@ export function buildBoardBackendTemplate() {
                 AllowedOrigins: [{ Ref: "BoardSiteOrigin" }],
                 AllowedMethods: ["PUT", "POST"],
                 AllowedHeaders: ["*"],
-                ExposeHeaders: ["ETag"],
-                MaxAgeSeconds: 3000,
+                ExposedHeaders: ["ETag"],
+                MaxAge: 3000,
               },
             ],
           },
-          BucketPolicy: tlsOnlyBucketPolicy("BoardStagingBucket"),
           Tags: resourceTags,
+        },
+      },
+      BoardStagingBucketPolicy: {
+        Type: "AWS::S3::BucketPolicy",
+        Properties: {
+          Bucket: { Ref: "BoardStagingBucket" },
+          PolicyDocument: tlsOnlyBucketPolicy("BoardStagingBucket"),
         },
       },
 
@@ -368,12 +367,18 @@ export function buildBoardBackendTemplate() {
         Properties: {
           ...kmsEncryption("BoardKmsKey"),
           VersioningConfiguration: { Status: "Enabled" },
-          ObjectLockEnabledForBucket: true,
+          ObjectLockEnabled: true,
           ObjectLockConfiguration: objectLockDefault("BoardObjectLockMode", "BoardRetentionDays"),
           PublicAccessBlockConfiguration: publicAccessBlock,
           ...bucketOwnerEnforced,
-          BucketPolicy: tlsOnlyBucketPolicy("BoardRetainedBucket"),
           Tags: confidentialTags,
+        },
+      },
+      BoardRetainedBucketPolicy: {
+        Type: "AWS::S3::BucketPolicy",
+        Properties: {
+          Bucket: { Ref: "BoardRetainedBucket" },
+          PolicyDocument: tlsOnlyBucketPolicy("BoardRetainedBucket"),
         },
       },
 
@@ -385,12 +390,18 @@ export function buildBoardBackendTemplate() {
         Properties: {
           ...kmsEncryption("BoardKmsKey"),
           VersioningConfiguration: { Status: "Enabled" },
-          ObjectLockEnabledForBucket: true,
+          ObjectLockEnabled: true,
           ObjectLockConfiguration: objectLockDefault("BoardObjectLockMode", "BoardRetentionDays"),
           PublicAccessBlockConfiguration: publicAccessBlock,
           ...bucketOwnerEnforced,
-          BucketPolicy: tlsOnlyBucketPolicy("BoardAuditArchiveBucket"),
           Tags: confidentialTags,
+        },
+      },
+      BoardAuditArchiveBucketPolicy: {
+        Type: "AWS::S3::BucketPolicy",
+        Properties: {
+          Bucket: { Ref: "BoardAuditArchiveBucket" },
+          PolicyDocument: tlsOnlyBucketPolicy("BoardAuditArchiveBucket"),
         },
       },
 
@@ -423,6 +434,12 @@ export function buildBoardBackendTemplate() {
                     Action: ["dynamodb:GetRecords", "dynamodb:GetShardIterator", "dynamodb:DescribeStream"],
                     Resource: { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] },
                   },
+                  {
+                    Sid: "DiscoverAuditStream",
+                    Effect: "Allow",
+                    Action: "dynamodb:ListStreams",
+                    Resource: "*",
+                  },
                 ],
               },
             },
@@ -434,11 +451,8 @@ export function buildBoardBackendTemplate() {
                   {
                     Sid: "ArchiveWriteOnly",
                     Effect: "Allow",
-                    Action: ["s3:PutObject", "s3:GetObject", "s3:PutObjectLegalHold"],
-                    Resource: [
-                      { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardAuditArchiveBucket}" },
-                      { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardAuditArchiveBucket}/*" },
-                    ],
+                    Action: "s3:PutObject",
+                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardAuditArchiveBucket}/events/*" },
                   },
                 ],
               },
@@ -457,8 +471,102 @@ export function buildBoardBackendTemplate() {
                 ],
               },
             },
+            {
+              PolicyName: "WriteAuditArchiverLogs",
+              PolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Sid: "WriteDedicatedLogGroup",
+                    Effect: "Allow",
+                    Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+                    Resource: { "Fn::Sub": "${BoardAuditArchiverLogGroup.Arn}:*" },
+                  },
+                ],
+              },
+            },
           ],
           Tags: confidentialTags,
+        },
+      },
+
+      BoardAuditArchiverLogGroup: {
+        Type: "AWS::Logs::LogGroup",
+        DeletionPolicy: "Retain",
+        UpdateReplacePolicy: "Retain",
+        Properties: {
+          LogGroupName: "/aws/lambda/PgpzBoardAuditArchiver",
+          RetentionInDays: 365,
+          Tags: confidentialTags,
+        },
+      },
+
+      BoardAuditArchiverFunction: {
+        Type: "AWS::Lambda::Function",
+        DependsOn: ["BoardAuditArchiverLogGroup"],
+        Properties: {
+          FunctionName: "PgpzBoardAuditArchiver",
+          Description: "Copies every Board audit-ledger stream record into the independently permissioned WORM archive",
+          Runtime: "nodejs22.x",
+          Handler: "index.handler",
+          Role: { "Fn::GetAtt": ["BoardAuditArchiverRole", "Arn"] },
+          Timeout: 30,
+          MemorySize: 256,
+          Environment: {
+            Variables: {
+              ARCHIVE_BUCKET: { Ref: "BoardAuditArchiveBucket" },
+            },
+          },
+          Code: {
+            ZipFile: [
+              'const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");',
+              "const s3 = new S3Client({});",
+              "exports.handler = async (event) => {",
+              "  const failures = [];",
+              "  for (const record of event.Records || []) {",
+              "    try {",
+              "      const occurred = record.dynamodb?.ApproximateCreationDateTime || 0;",
+              "      const date = new Date(occurred * 1000).toISOString().slice(0, 10);",
+              "      const eventId = String(record.eventID || '').replace(/[^A-Za-z0-9_-]/g, '_');",
+              "      if (!eventId) throw new Error('DynamoDB stream record is missing eventID');",
+              "      const body = JSON.stringify({",
+              "        archiveSchemaVersion: 1,",
+              "        archivedAt: new Date().toISOString(),",
+              "        eventID: record.eventID,",
+              "        eventName: record.eventName,",
+              "        eventSourceARN: record.eventSourceARN,",
+              "        awsRegion: record.awsRegion,",
+              "        dynamodb: record.dynamodb,",
+              "      });",
+              "      await s3.send(new PutObjectCommand({",
+              "        Bucket: process.env.ARCHIVE_BUCKET,",
+              "        Key: `events/${date}/${eventId}.json`,",
+              "        Body: body,",
+              "        ContentType: 'application/json',",
+              "      }));",
+              "    } catch (error) {",
+              "      console.error('Unable to archive Board audit record', { eventID: record.eventID, error });",
+              "      failures.push({ itemIdentifier: record.eventID });",
+              "    }",
+              "  }",
+              "  return { batchItemFailures: failures };",
+              "};",
+            ].join("\n"),
+          },
+          Tags: confidentialTags,
+        },
+      },
+
+      BoardAuditArchiverEventSource: {
+        Type: "AWS::Lambda::EventSourceMapping",
+        Properties: {
+          EventSourceArn: { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] },
+          FunctionName: { Ref: "BoardAuditArchiverFunction" },
+          StartingPosition: "TRIM_HORIZON",
+          BatchSize: 100,
+          BisectBatchOnFunctionError: true,
+          FunctionResponseTypes: ["ReportBatchItemFailures"],
+          Enabled: true,
         },
       },
 
@@ -512,14 +620,14 @@ export function buildBoardBackendTemplate() {
                   {
                     Sid: "StagingPutGetDelete",
                     Effect: "Allow",
-                    Action: ["s3:PutObject", "s3:GetObject", "s3:HeadObject", "s3:DeleteObject"],
-                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardStagingBucket}/staging/*" },
+                    Action: ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardStagingBucket}/board/staging/*" },
                   },
                   {
                     Sid: "RetainedPutGetNoDelete",
                     Effect: "Allow",
                     Action: [...BOARD_RETAINED_S3_ACTIONS],
-                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardRetainedBucket}/objects/*" },
+                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardRetainedBucket}/board/objects/*" },
                   },
                   {
                     Sid: "UseBoardKms",

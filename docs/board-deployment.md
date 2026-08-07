@@ -217,5 +217,11 @@ constants — it lives in the CloudFormation parameters and the deployment recor
 The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`,
 `BOARD_DOCUMENTS_STAGING_BUCKET`, `BOARD_DOCUMENTS_RETAINED_BUCKET`,
 `BOARD_AUDIT_ARCHIVE_BUCKET`, and `BOARD_KMS_KEY_ID`. `write-amplify-env.mjs
-board` materializes them; the vault and ledger are fail-closed while unset.
+board` materializes them; the build now rejects a deployment when any of these
+bindings is absent.
 
+The stack also provisions `PgpzBoardAuditArchiver`, a separately permissioned
+Lambda subscribed to the audit-table stream. It copies every stream record to
+the Object-Locked archive under `events/<date>/<event-id>.json`; partial batch
+failures are retried by the DynamoDB event-source mapping. The Amplify compute
+role cannot read from or write to this archive.
