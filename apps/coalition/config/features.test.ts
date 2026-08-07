@@ -14,6 +14,7 @@ describe("Coalition feature registration", () => {
       zecShelf: false,
       publicFiles: true,
       letterSignons: true,
+      documentVault: false,
     });
     expect(isFeatureEnabled("publicFiles")).toBe(true);
     expect(isFeatureEnabled("letterSignons")).toBe(true);
