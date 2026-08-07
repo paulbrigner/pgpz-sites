@@ -1,6 +1,7 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { ShieldCheck } from "lucide-react";
-import { requireBoardAdmin } from "@/lib/session";
+import { FolderOpen, ScrollText, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { requireBoardAdmin, canManageBoardDocuments, canReviewBoardAudit } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,24 @@ export default async function BoardAdminPage() {
         <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
           The administrator boundary is enforced server-side. Director roster changes and credential provisioning remain guarded operational tasks; no browser-based account mutation API is exposed.
         </p>
+        {canManageBoardDocuments(admin) ? (
+          <Link
+            href="/admin/documents"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <FolderOpen className="h-4 w-4" aria-hidden="true" />
+            Manage documents
+          </Link>
+        ) : null}
+        {canReviewBoardAudit(admin) ? (
+          <Link
+            href="/admin/audit"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <ScrollText className="h-4 w-4" aria-hidden="true" />
+            Review audit ledger
+          </Link>
+        ) : null}
       </Surface>
     </Container>
   );

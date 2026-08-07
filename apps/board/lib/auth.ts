@@ -7,6 +7,7 @@ import {
   createBetterAuthDynamoDBRateLimitStorage,
 } from "@pgpz/auth-dynamodb";
 import { resolveSigningSecret } from "@pgpz/core";
+import { resolveActiveMembership } from "@pgpz/core/server";
 import {
   BETTER_AUTH_SECRET,
   BETTER_AUTH_TRUSTED_ORIGINS,
@@ -15,6 +16,8 @@ import {
   SITE_URL,
 } from "@/lib/config";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { boardMembershipAdapter } from "@/config/server";
+import { auditBestEffort, authenticatedActor } from "@/lib/audit";
 
 const database = createBetterAuthDynamoDBAdapter({
   documentClient,
@@ -83,5 +86,37 @@ export const auth = betterAuth({
   rateLimit: {
     enabled: true,
     customStorage: rateLimitStorage,
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session, context) => {
+          const userId = typeof session.userId === "string" ? session.userId : "";
+          if (!userId || !context) return;
+          const user = await context.context.internalAdapter
+            .findUserById(userId)
+            .catch(() => null);
+          const email =
+            typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
+          if (!email) return;
+          const membership = await resolveActiveMembership(boardMembershipAdapter, {
+            email,
+          }).catch(() => null);
+          const role =
+            typeof membership?.attributes?.role === "string"
+              ? membership.attributes.role
+              : "member";
+          const isAdmin = membership?.attributes?.isAdmin === true;
+          // Best-effort: audit failures must never break an otherwise
+          // successful sign-in or leave a half-open session.
+          await auditBestEffort({
+            category: "authentication",
+            action: "sign_in",
+            outcome: "success",
+            actor: authenticatedActor({ id: userId, email, role, isAdmin }),
+          });
+        },
+      },
+    },
   },
 });

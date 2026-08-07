@@ -36,14 +36,26 @@ export function parseBoardExecutiveDirectorEmails(
 }
 
 /**
+ * Parses the BOARD_LEGAL_COUNSEL_EMAILS allowlist. Legal counsel is a staff
+ * role (like the Executive Director) with admin-equivalent privileges: it
+ * must stay pairwise disjoint from the Board and Executive Director rosters
+ * while still granting portal access and the named governance capabilities.
+ */
+export function parseBoardLegalCounselEmails(
+  value: string | undefined,
+): ReadonlySet<string> {
+  return parseBoardMemberEmails(value);
+}
+
+/**
  * Membership is decided outside the application by the BOARD_MEMBER_EMAILS
  * allowlist. An empty allowlist resolves every subject as inactive, so an
  * unset variable locks the portal closed instead of opening it.
  *
- * The Executive Director is a distinct, non-director staff role: emails on
- * BOARD_EXECUTIVE_DIRECTOR_EMAILS gain portal access and administrator
+ * The Executive Director and Legal Counsel are distinct, non-director staff
+ * roles: emails on their allowlists gain portal access and administrator
  * privileges without joining the Board roster, and configuration fails fast
- * if the two rosters overlap.
+ * if any of the three rosters overlap.
  */
 export function createBoardMembershipAdapter(
   env: Readonly<Record<string, string | undefined>>,
@@ -53,6 +65,9 @@ export function createBoardMembershipAdapter(
   const executiveDirectorAllowlist = parseBoardExecutiveDirectorEmails(
     env.BOARD_EXECUTIVE_DIRECTOR_EMAILS,
   );
+  const legalCounselAllowlist = parseBoardLegalCounselEmails(
+    env.BOARD_LEGAL_COUNSEL_EMAILS,
+  );
   const orphanedAdmins = [...adminAllowlist].filter((email) => !allowlist.has(email));
   if (orphanedAdmins.length > 0) {
     throw new Error(
@@ -60,15 +75,32 @@ export function createBoardMembershipAdapter(
     );
   }
 
-  // The Executive Director holds a unique staff role and is never a director.
-  // Reject an overlapping configuration instead of silently granting a dual
-  // role that the UI cannot represent.
+  // Each staff role (Executive Director, Legal Counsel) is exclusive: never a
+  // director and never both staff roles at once. Reject overlapping
+  // configurations instead of silently granting a dual role that the UI
+  // cannot represent.
   const overlappingExecutiveDirectors = [...executiveDirectorAllowlist].filter((email) =>
     allowlist.has(email),
   );
   if (overlappingExecutiveDirectors.length > 0) {
     throw new Error(
       `BOARD_EXECUTIVE_DIRECTOR_EMAILS must not overlap BOARD_MEMBER_EMAILS: ${overlappingExecutiveDirectors.join(", ")}`,
+    );
+  }
+  const overlappingCounselWithBoard = [...legalCounselAllowlist].filter((email) =>
+    allowlist.has(email),
+  );
+  if (overlappingCounselWithBoard.length > 0) {
+    throw new Error(
+      `BOARD_LEGAL_COUNSEL_EMAILS must not overlap BOARD_MEMBER_EMAILS: ${overlappingCounselWithBoard.join(", ")}`,
+    );
+  }
+  const overlappingCounselWithEd = [...legalCounselAllowlist].filter((email) =>
+    executiveDirectorAllowlist.has(email),
+  );
+  if (overlappingCounselWithEd.length > 0) {
+    throw new Error(
+      `BOARD_LEGAL_COUNSEL_EMAILS must not overlap BOARD_EXECUTIVE_DIRECTOR_EMAILS: ${overlappingCounselWithEd.join(", ")}`,
     );
   }
 
@@ -79,6 +111,8 @@ export function createBoardMembershipAdapter(
       const active = allowlist.size > 0 && allowlist.has(email);
       const isExecutiveDirector =
         executiveDirectorAllowlist.size > 0 && executiveDirectorAllowlist.has(email);
+      const isLegalCounsel =
+        legalCounselAllowlist.size > 0 && legalCounselAllowlist.has(email);
 
       if (isExecutiveDirector) {
         return {
@@ -87,6 +121,18 @@ export function createBoardMembershipAdapter(
           attributes: {
             source: "executive-director",
             role: "executive-director",
+            isAdmin: true,
+          },
+        };
+      }
+
+      if (isLegalCounsel) {
+        return {
+          active: true,
+          reason: "Email is on the current PGPZ legal counsel roster.",
+          attributes: {
+            source: "legal-counsel",
+            role: "legal-counsel",
             isAdmin: true,
           },
         };

@@ -22,7 +22,7 @@ describe("board site configuration", () => {
     ]);
   });
 
-  it("keeps every shared production feature off", () => {
+  it("keeps every shared production feature off except the private document vault", () => {
     expect(boardSiteConfig.features).toEqual({
       personalHome: false,
       updates: false,
@@ -31,6 +31,7 @@ describe("board site configuration", () => {
       zecShelf: false,
       publicFiles: false,
       letterSignons: false,
+      documentVault: true,
     });
   });
 });

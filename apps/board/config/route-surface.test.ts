@@ -43,15 +43,21 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, "signin"))).toBe(true);
     expect(existsSync(path.join(appRoot, "signup"))).toBe(false);
     expect(existsSync(path.join(appRoot, "(portal)", "admin", "page.tsx"))).toBe(true);
-    expect(existsSync(path.join(appRoot, "api", "admin"))).toBe(false);
+    expect(existsSync(path.join(appRoot, "(portal)", "admin", "audit", "page.tsx"))).toBe(true);
+    expect(existsSync(path.join(appRoot, "api", "admin", "audit", "route.ts"))).toBe(true);
   });
 
-  it("exposes only the Better Auth API route", () => {
+  it("exposes only the Better Auth, admin audit, and document vault API routes", () => {
     const routes = findRouteHandlers(apiRoot).map((route) =>
       path.relative(appRoot, route).split(path.sep).join("/"),
     );
 
-    expect(routes).toEqual(["api/better-auth/[...all]/route.ts"]);
+    expect(routes.sort()).toEqual([
+      "api/admin/audit/route.ts",
+      "api/better-auth/[...all]/route.ts",
+      "api/documents/[id]/download/route.ts",
+      "api/documents/route.ts",
+    ].sort());
   });
 
   it("keeps server-only configuration out of client components", () => {

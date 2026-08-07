@@ -45,6 +45,7 @@ const validInput = () => ({
     zecShelf: true,
     publicFiles: false,
     letterSignons: false,
+    documentVault: false,
   },
 });
 
@@ -78,6 +79,7 @@ describe("SiteConfig", () => {
       zecShelf: false,
       publicFiles: true,
       letterSignons: true,
+      documentVault: true,
     });
 
     expect(features.personalHome).toBe(true);

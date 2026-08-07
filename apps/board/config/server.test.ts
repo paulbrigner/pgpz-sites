@@ -15,6 +15,7 @@ const BOARD_ENV = {
   BOARD_MEMBER_EMAILS: "ada@example.org, Grace@Example.org",
   BOARD_ADMIN_EMAILS: "ada@example.org",
   BOARD_EXECUTIVE_DIRECTOR_EMAILS: "executive@example.org",
+  BOARD_LEGAL_COUNSEL_EMAILS: "sam@example.org",
 } satisfies Record<string, string>;
 
 describe("board server-only configuration", () => {
@@ -92,6 +93,35 @@ describe("board server-only configuration", () => {
         BOARD_EXECUTIVE_DIRECTOR_EMAILS: "ada@example.org",
       }),
     ).toThrow(/must not overlap/);
+  });
+
+  it("resolves legal counsel as an active administrator outside the Board roster", async () => {
+    const adapter = createBoardServerConfig(BOARD_ENV).membership.adapter;
+    await expect(
+      resolveActiveMembership(adapter, { email: " SAM@example.org " }),
+    ).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "legal-counsel", isAdmin: true },
+    });
+    await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "admin", isAdmin: true },
+    });
+  });
+
+  it("rejects legal counsel who overlaps the Board roster or the Executive Director roster", () => {
+    expect(() =>
+      createBoardServerConfig({
+        ...BOARD_ENV,
+        BOARD_LEGAL_COUNSEL_EMAILS: "ada@example.org",
+      }),
+    ).toThrow(/must not overlap BOARD_MEMBER_EMAILS/);
+    expect(() =>
+      createBoardServerConfig({
+        ...BOARD_ENV,
+        BOARD_LEGAL_COUNSEL_EMAILS: "executive@example.org",
+      }),
+    ).toThrow(/must not overlap BOARD_EXECUTIVE_DIRECTOR_EMAILS/);
   });
 
   it("locks every account out when the allowlist is empty or missing", async () => {

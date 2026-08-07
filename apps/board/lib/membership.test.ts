@@ -3,6 +3,7 @@ import {
   createBoardMembershipAdapter,
   parseBoardAdminEmails,
   parseBoardExecutiveDirectorEmails,
+  parseBoardLegalCounselEmails,
   parseBoardMemberEmails,
 } from "./membership";
 
@@ -111,5 +112,74 @@ describe("board membership allowlist", () => {
         BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@pgpz.org",
       }),
     ).toThrow(/must not overlap/);
+  });
+
+  it("parses the legal counsel allowlist with the same normalization", () => {
+    expect(parseBoardLegalCounselEmails("  Sam@PGPZ.org \n grace@example.org")).toEqual(
+      new Set(["sam@pgpz.org", "grace@example.org"]),
+    );
+    expect(parseBoardLegalCounselEmails("")).toEqual(new Set());
+    expect(parseBoardLegalCounselEmails(undefined)).toEqual(new Set());
+  });
+
+  it("resolves legal counsel as an active administrator with a unique role", async () => {
+    const adapter = createBoardMembershipAdapter({
+      BOARD_MEMBER_EMAILS: "director@pgpz.org",
+      BOARD_ADMIN_EMAILS: "director@pgpz.org",
+      BOARD_LEGAL_COUNSEL_EMAILS: "sam@pgpz.org",
+    });
+
+    await expect(adapter.resolve({ email: "  SAM@pgpz.org " })).resolves.toMatchObject({
+      active: true,
+      attributes: {
+        source: "legal-counsel",
+        role: "legal-counsel",
+        isAdmin: true,
+      },
+    });
+    // Legal Counsel is not a Board member; ordinary roster resolution unchanged.
+    await expect(adapter.resolve({ email: "director@pgpz.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "admin", isAdmin: true },
+    });
+    expect((await adapter.resolve({ email: "other@pgpz.org" })).active).toBe(false);
+  });
+
+  it("grants legal counsel access without any member roster configured", async () => {
+    const adapter = createBoardMembershipAdapter({
+      BOARD_MEMBER_EMAILS: "",
+      BOARD_ADMIN_EMAILS: "",
+      BOARD_EXECUTIVE_DIRECTOR_EMAILS: "",
+      BOARD_LEGAL_COUNSEL_EMAILS: "sam@pgpz.org",
+    });
+
+    await expect(adapter.resolve({ email: "sam@pgpz.org" })).resolves.toMatchObject({
+      active: true,
+      attributes: { role: "legal-counsel", isAdmin: true },
+    });
+    await expect(adapter.resolve({ email: "anyone@pgpz.org" })).resolves.toMatchObject({
+      active: false,
+    });
+  });
+
+  it("rejects legal counsel who is also on the Board roster", () => {
+    expect(() =>
+      createBoardMembershipAdapter({
+        BOARD_MEMBER_EMAILS: "sam@pgpz.org",
+        BOARD_ADMIN_EMAILS: "",
+        BOARD_LEGAL_COUNSEL_EMAILS: "sam@pgpz.org",
+      }),
+    ).toThrow(/must not overlap BOARD_MEMBER_EMAILS/);
+  });
+
+  it("rejects legal counsel who is also the executive director", () => {
+    expect(() =>
+      createBoardMembershipAdapter({
+        BOARD_MEMBER_EMAILS: "director@pgpz.org",
+        BOARD_ADMIN_EMAILS: "",
+        BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@pgpz.org",
+        BOARD_LEGAL_COUNSEL_EMAILS: "div@pgpz.org",
+      }),
+    ).toThrow(/must not overlap BOARD_EXECUTIVE_DIRECTOR_EMAILS/);
   });
 });

@@ -66,6 +66,13 @@ export const boardPrivacy: BoardLegalDocument = {
       ],
     },
     {
+      title: "Governance audit ledger",
+      paragraphs: [
+        "As a governance hub, the portal keeps an append-only audit ledger of authentication and governance-document activity. For each event it records a stable user identity or the claimed email of a failed sign-in, the board role and capability snapshot, the action and outcome, a target identifier and exact version where relevant, and timing.",
+        "Ledger entries are cryptographically hash-chained so tampering, deletion, or reordering is detectable, and are retained (never erased) in a separate, encrypted, write-only store. Password hashes, session tokens, cookies, and file contents are never written to the ledger. Access to the ledger is limited to board administrators, the Executive Director, and Legal Counsel.",
+      ],
+    },
+    {
       title: "No marketing delivery",
       paragraphs: [
         "The portal does not send newsletters, invitations, or marketing email. Its initial deployment has outbound email delivery disabled entirely.",

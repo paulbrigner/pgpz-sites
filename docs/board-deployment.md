@@ -87,6 +87,7 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
 | `BOARD_ADMIN_EMAILS` | yes | administrator allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` |
 | `BOARD_EXECUTIVE_DIRECTOR_EMAILS` | no | staff allowlist: the Executive Director gains portal access and administrator privileges **without** joining the Board roster; must be disjoint from `BOARD_MEMBER_EMAILS` |
+| `BOARD_LEGAL_COUNSEL_EMAILS` | no | staff allowlist: Legal Counsel gains the same admin-equivalent portal privileges (document management, audit review) **without** joining the Board roster; must be pairwise disjoint from `BOARD_MEMBER_EMAILS` and `BOARD_EXECUTIVE_DIRECTOR_EMAILS` |
 | `EMAIL_FROM` | no | unused until email delivery is added |
 
 `tooling/write-amplify-env.mjs board` fails the build if any required variable
@@ -119,8 +120,9 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
   count without writing anything.
 - Refuses emails not on `BOARD_MEMBER_EMAILS` when that variable is set in the
   shell; the Executive Director's address is accepted when it is on
-  `BOARD_EXECUTIVE_DIRECTOR_EMAILS`. Always set the variables to the same
-  values as the Amplify allowlists to prevent provisioning mistakes.
+  `BOARD_EXECUTIVE_DIRECTOR_EMAILS`, and Legal Counsel's when on
+  `BOARD_LEGAL_COUNSEL_EMAILS`. Always set the variables to the same values as
+  the Amplify allowlists to prevent provisioning mistakes.
 - Records are written in the exact `BETTER_AUTH#...` shape the
   `@pgpz/auth-dynamodb` adapter reads, with Better Auth's own scrypt hash
   (`better-auth/crypto`), so sign-in works through the normal flow.
@@ -129,8 +131,9 @@ Administrator authorization is environment-managed rather than stored in the
 user record. Add an existing roster email to `BOARD_ADMIN_EMAILS` and redeploy;
 the server derives `isAdmin` only after confirming active Board membership.
 To grant administrator access without Board membership, add the address to
-`BOARD_EXECUTIVE_DIRECTOR_EMAILS` instead; that roster is checked first and
-carries its own active membership and administrator grant.
+`BOARD_EXECUTIVE_DIRECTOR_EMAILS` or `BOARD_LEGAL_COUNSEL_EMAILS` instead;
+those rosters are checked first and each carries its own active membership and
+administrator grant and must be mutually disjoint.
 
 ## 5. Removing a director
 
@@ -157,8 +160,62 @@ carries its own active membership and administrator grant.
 - An email on `BOARD_EXECUTIVE_DIRECTOR_EMAILS` signs in, sees the
   "Executive Director" badge (not a director badge), and can reach `/admin`
   without appearing on the Board roster.
+- An email on `BOARD_LEGAL_COUNSEL_EMAILS` signs in, sees the "Legal Counsel"
+  badge (never a director label), can reach `/admin`, and can manage
+  documents / review the audit ledger under the same capabilities as admins
+  and the Executive Director.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
 - Rotating a director's password signs their other devices out (sessions
   revoked), and `--dry-run` reports the revocation count first.
 - `curl -I` shows `X-Robots-Tag: noindex`, `X-Frame-Options: DENY`, CSP.
 - `https://board.pgpz.org/robots.txt` disallows all crawlers.
+
+## 7. Governance document vault and audit ledger infrastructure
+
+The Board backend stack (Phases 3+) provisions isolated governance resources in
+addition to the auth table. All are **Retain**-protected, KMS-encrypted
+(Board-only key, rotation on), PITR-enabled, and deletion-protected. They are
+described here because they carry distinct retention and isolation guarantees.
+
+### Dedicated tables
+
+- `PGPZBoardDocuments` — governance-document metadata + immutable per-version
+  rows (`PK=DOCUMENT#<id>`, `SK=META` / `SK=VERSION#<seq>#<versionId>`). Query
+  via the `Library`/`ByCategory`/`ByStatus` GSIs — never `Scan`. Web compute IAM
+  allows read + conditional write but **no `DeleteItem`**.
+- `PGPZBoardAuditLog` — append-only ledger. Web compute IAM allows only
+  `GetItem`/`PutItem`/`Query` (no `UpdateItem`/`DeleteItem`/`Scan`), so the
+  table is append-only by IAM as well as by application invariant. A DynamoDB
+  Stream (`NEW_AND_OLD_IMAGES`) feeds an external, separately-permissioned
+  `PgpzBoardAuditArchiver` role that writes to the WORM archive — the web
+  runtime has **no** access to that archive.
+
+Neither table has a TTL: documents and audit events are retained.
+
+### Storage boundaries
+
+- **Staging** — short-lived upload landing zone; lifecycle-expired
+  (`staging/`), deletable by the web runtime for orphan/rejected cleanup.
+- **Retained documents** — S3 Versioning + Object Lock enabled, TLS-only bucket
+  policy, BucketOwnerEnforced, Block Public Access. Web runtime IAM allows
+  put/get/head on `objects/*` but **no `DeleteObject`/`DeleteObjectVersion`**
+  (enforced by an explicit Deny).
+- **WORM audit archive** — Object Lock + Versioning; only the separate
+  archiver role may write; web compute is never granted access.
+
+### Legal retention decision
+
+`PgpzBoardBackend` exposes two parameters: `BoardObjectLockMode` (default
+`GOVERNANCE`) and `BoardRetentionDays` (default `90`). Per the revised plan,
+**only Legal Counsel may approve Object Lock mode and duration.** Use Governance
+mode in the isolated test stack; switch production to `COMPLIANCE` only after
+approving the irreversible retention period. Do not hide this decision in source
+constants — it lives in the CloudFormation parameters and the deployment record.
+
+### Environment variables
+
+The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`,
+`BOARD_DOCUMENTS_STAGING_BUCKET`, `BOARD_DOCUMENTS_RETAINED_BUCKET`,
+`BOARD_AUDIT_ARCHIVE_BUCKET`, and `BOARD_KMS_KEY_ID`. `write-amplify-env.mjs
+board` materializes them; the vault and ledger are fail-closed while unset.
+

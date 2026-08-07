@@ -34,10 +34,14 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
           <div className="flex flex-wrap items-center gap-2">
             {member.role === "executive-director" ? (
               <Badge tone="accent">Executive Director</Badge>
+            ) : member.role === "legal-counsel" ? (
+              <Badge tone="accent">Legal Counsel</Badge>
             ) : (
               <Badge tone="accent">Board of Directors</Badge>
             )}
-            {member.isAdmin && member.role !== "executive-director" ? <Badge>Board administrator</Badge> : null}
+            {member.isAdmin && member.role !== "executive-director" && member.role !== "legal-counsel" ? (
+              <Badge>Board administrator</Badge>
+            ) : null}
             <Badge>Private</Badge>
           </div>
           <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">
@@ -59,6 +63,13 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
               Open administration
             </Link>
           ) : null}
+          <Link
+            href="/documents"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            Document library
+          </Link>
         </section>
       </Container>
 

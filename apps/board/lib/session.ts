@@ -9,15 +9,29 @@ import {
 import { boardMembershipAdapter } from "@/config/server";
 import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
+import { auditBestEffort, authenticatedActor } from "@/lib/audit";
 
-export type BoardRole = "member" | "admin" | "executive-director";
+export type BoardRole = "member" | "admin" | "executive-director" | "legal-counsel";
 
 export type BoardMember = Readonly<{
+  /** Stable Better Auth user id, used for tamper-attributable audit events. */
+  id: string;
   name: string;
   email: string;
   role: BoardRole;
   isAdmin: boolean;
 }>;
+
+/** Named governance capability helpers backed by the resolved role. New
+ * privileged routes must use these instead of scattering raw `isAdmin` checks,
+ * so a future change to the capability mapping is a one-line edit here. */
+export function canManageBoardDocuments(member: BoardMember): boolean {
+  return member.isAdmin;
+}
+
+export function canReviewBoardAudit(member: BoardMember): boolean {
+  return member.isAdmin;
+}
 
 export type BoardMemberState =
   | { status: "anonymous" }
@@ -70,12 +84,14 @@ export async function resolveBoardMemberState(
       : "Board member";
   const role: BoardRole =
     membership.attributes?.role === "admin" ||
-    membership.attributes?.role === "executive-director"
+    membership.attributes?.role === "executive-director" ||
+    membership.attributes?.role === "legal-counsel"
       ? membership.attributes.role
       : "member";
   return {
     status: "member",
     member: {
+      id: typeof user.id === "string" ? user.id : "",
       name,
       email,
       role,
@@ -108,6 +124,19 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
  */
 export async function requireBoardAdmin(callbackPath = "/admin"): Promise<BoardMember> {
   const member = await requireBoardMember(callbackPath);
-  if (!member?.isAdmin) notFound();
+  if (!member?.isAdmin) {
+    if (member) {
+      // Best-effort authorization-denial audit on the privileged route.
+      await auditBestEffort({
+        category: "authorization",
+        action: "route_denied",
+        outcome: "denied",
+        reason: "admin_required",
+        actor: authenticatedActor(member),
+        target: { type: "route", id: callbackPath, version: null },
+      });
+    }
+    notFound();
+  }
   return member;
 }

@@ -32,6 +32,7 @@ describe("reference site configuration", () => {
       zecShelf: true,
       publicFiles: false,
       letterSignons: false,
+      documentVault: false,
     });
   });
 });

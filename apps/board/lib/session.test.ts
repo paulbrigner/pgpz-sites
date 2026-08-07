@@ -20,6 +20,13 @@ const staffRosterAdapter = () =>
     BOARD_EXECUTIVE_DIRECTOR_EMAILS: "div@example.org",
   });
 
+const counselRosterAdapter = () =>
+  createBoardMembershipAdapter({
+    BOARD_MEMBER_EMAILS: "ada@example.org, grace@example.org",
+    BOARD_ADMIN_EMAILS: "ada@example.org",
+    BOARD_LEGAL_COUNSEL_EMAILS: "sam@example.org",
+  });
+
 const noSession: BoardSessionResolver = async () => null;
 
 const sessionFor = (email: string, name?: string | null): BoardSessionResolver =>
@@ -52,7 +59,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Ada", email: "grace@example.org", role: "member", isAdmin: false },
+      member: { id: "user-1", name: "Ada", email: "grace@example.org", role: "member", isAdmin: false },
     });
 
     await expect(
@@ -62,7 +69,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Board member", email: "ada@example.org", role: "admin", isAdmin: true },
+      member: { id: "user-1", name: "Board member", email: "ada@example.org", role: "admin", isAdmin: true },
     });
   });
 
@@ -75,6 +82,7 @@ describe("resolveBoardMemberState", () => {
     ).resolves.toEqual({
       status: "member",
       member: {
+        id: "user-1",
         name: "Div",
         email: "div@example.org",
         role: "executive-director",
@@ -91,7 +99,25 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { name: "Ada", email: "ada@example.org", role: "admin", isAdmin: true },
+      member: { id: "user-1", name: "Ada", email: "ada@example.org", role: "admin", isAdmin: true },
+    });
+  });
+
+  it("classifies legal counsel as an administrator with the staff role and a stable id", async () => {
+    await expect(
+      resolveBoardMemberState(requestHeaders, {
+        resolveSession: sessionFor("Sam@Example.org", "Sam"),
+        membershipAdapter: counselRosterAdapter(),
+      }),
+    ).resolves.toEqual({
+      status: "member",
+      member: {
+        id: "user-1",
+        name: "Sam",
+        email: "sam@example.org",
+        role: "legal-counsel",
+        isAdmin: true,
+      },
     });
   });
 

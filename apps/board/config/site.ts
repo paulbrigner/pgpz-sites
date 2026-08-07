@@ -37,5 +37,6 @@ export const boardSiteConfig = defineSiteConfig({
     zecShelf: false,
     publicFiles: false,
     letterSignons: false,
+    documentVault: true,
   },
 } satisfies SiteConfig);
