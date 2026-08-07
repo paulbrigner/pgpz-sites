@@ -129,6 +129,12 @@ jobs:
           NEXTAUTH_TABLE: PGPZBoardCi
           BOARD_MEMBER_EMAILS: ci@example.invalid
           BOARD_ADMIN_EMAILS: ci@example.invalid
+          BOARD_DOCUMENTS_TABLE: PGPZBoardDocumentsCi
+          BOARD_AUDIT_TABLE: PGPZBoardAuditLogCi
+          BOARD_DOCUMENTS_STAGING_BUCKET: pgpz-board-ci-staging
+          BOARD_DOCUMENTS_RETAINED_BUCKET: pgpz-board-ci-retained
+          BOARD_AUDIT_ARCHIVE_BUCKET: pgpz-board-ci-audit-archive
+          BOARD_KMS_KEY_ID: ci-only-board-kms-key
         run: node tooling/write-amplify-env.mjs board
       - name: Build board application
         if: matrix.application == 'board'

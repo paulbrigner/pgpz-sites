@@ -147,6 +147,12 @@ const applications = {
       "BETTER_AUTH_SECRET",
       "BOARD_MEMBER_EMAILS",
       "BOARD_ADMIN_EMAILS",
+      "BOARD_DOCUMENTS_TABLE",
+      "BOARD_AUDIT_TABLE",
+      "BOARD_DOCUMENTS_STAGING_BUCKET",
+      "BOARD_DOCUMENTS_RETAINED_BUCKET",
+      "BOARD_AUDIT_ARCHIVE_BUCKET",
+      "BOARD_KMS_KEY_ID",
     ],
     // The private board portal shares none of the branded applications'
     // tables, credentials, buckets, or senders. Membership is decided only by

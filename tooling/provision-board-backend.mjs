@@ -42,6 +42,7 @@ function usage() {
     "Usage:",
     "  node tooling/provision-board-backend.mjs --account-id <12-digits>",
     "    [--region us-east-1] [--profile <profile>] [--validate-only]",
+    "    [--object-lock-mode GOVERNANCE|COMPLIANCE] [--retention-days 90]",
     `    [--apply --confirm ${APPLY_CONFIRMATION}]`,
     "",
     "Default mode is a local, no-AWS dry run. --validate-only only calls",
@@ -105,11 +106,20 @@ export function buildCliPlan({ values, flags }) {
   if (mode === "apply" && values.confirm !== APPLY_CONFIRMATION) {
     throw new Error(`--apply requires --confirm ${APPLY_CONFIRMATION}`);
   }
+  const objectLockMode = values["object-lock-mode"] || "GOVERNANCE";
+  if (!new Set(["GOVERNANCE", "COMPLIANCE"]).has(objectLockMode)) {
+    throw new Error("--object-lock-mode must be GOVERNANCE or COMPLIANCE");
+  }
+  const retentionDays = Number(values["retention-days"] || 90);
+  if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+    throw new Error("--retention-days must be a positive integer");
+  }
   return {
     ...plan,
     mode,
     profile: values.profile,
     terminationProtection: true,
+    parameters: { objectLockMode, retentionDays },
   };
 }
 
@@ -163,6 +173,9 @@ export function main(argv = process.argv.slice(2)) {
       "Application=board",
       "Environment=production",
       "--no-fail-on-empty-changeset",
+      "--parameter-overrides",
+      `BoardObjectLockMode=${plan.parameters.objectLockMode}`,
+      `BoardRetentionDays=${plan.parameters.retentionDays}`,
     ]);
     runAws(baseArguments, [
       "cloudformation",
@@ -191,6 +204,19 @@ export function main(argv = process.argv.slice(2)) {
     }
     if (outputs.ComputeRoleArn !== plan.computeRoleArn) {
       throw new Error("CloudFormation returned an unexpected Board compute role");
+    }
+    const requiredGovernanceOutputs = [
+      "DocumentsTableName",
+      "AuditTableName",
+      "StagingBucket",
+      "RetainedBucket",
+      "AuditArchiveBucket",
+      "KmsKeyArn",
+      "AuditArchiverRoleArn",
+    ];
+    const missingGovernanceOutputs = requiredGovernanceOutputs.filter((key) => !outputs[key]);
+    if (missingGovernanceOutputs.length > 0) {
+      throw new Error(`CloudFormation is missing governance outputs: ${missingGovernanceOutputs.join(", ")}`);
     }
 
     const table = parseAwsJson(
@@ -224,6 +250,48 @@ export function main(argv = process.argv.slice(2)) {
       backups?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus !== "ENABLED"
     ) {
       throw new Error("The deployed Board table did not pass protection checks");
+    }
+
+    for (const governanceTableName of [outputs.DocumentsTableName, outputs.AuditTableName]) {
+      const governanceTable = parseAwsJson(
+        runAws(
+          baseArguments,
+          ["dynamodb", "describe-table", "--table-name", governanceTableName, "--output", "json"],
+          { capture: true },
+        ),
+        `${governanceTableName} table`,
+      ).Table;
+      const governanceBackups = parseAwsJson(
+        runAws(
+          baseArguments,
+          ["dynamodb", "describe-continuous-backups", "--table-name", governanceTableName, "--output", "json"],
+          { capture: true },
+        ),
+        `${governanceTableName} backups`,
+      ).ContinuousBackupsDescription;
+      if (
+        governanceTable?.TableStatus !== "ACTIVE" ||
+        governanceTable?.DeletionProtectionEnabled !== true ||
+        governanceBackups?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus !== "ENABLED"
+      ) {
+        throw new Error(`${governanceTableName} did not pass retention protection checks`);
+      }
+    }
+
+    for (const bucketName of [outputs.RetainedBucket, outputs.AuditArchiveBucket]) {
+      const versioning = runAws(
+        baseArguments,
+        ["s3api", "get-bucket-versioning", "--bucket", bucketName, "--query", "Status", "--output", "text"],
+        { capture: true },
+      ).stdout.trim();
+      const objectLock = runAws(
+        baseArguments,
+        ["s3api", "get-object-lock-configuration", "--bucket", bucketName, "--query", "ObjectLockConfiguration.ObjectLockEnabled", "--output", "text"],
+        { capture: true },
+      ).stdout.trim();
+      if (versioning !== "Enabled" || objectLock !== "Enabled") {
+        throw new Error(`${bucketName} did not pass Object Lock protection checks`);
+      }
     }
 
     console.log(JSON.stringify({
