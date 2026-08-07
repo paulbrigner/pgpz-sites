@@ -30,6 +30,12 @@ function createFakeClient() {
         const key = `${item.pk}#${item.sk}`;
         const existing = items.get(key);
         const condition = put.ConditionExpression || "";
+        const referencedValues = new Set(condition.match(/:\w+/g) || []);
+        for (const valueName of Object.keys(put.ExpressionAttributeValues || {})) {
+          if (!referencedValues.has(valueName)) {
+            throw { name: "ValidationException", message: `Unused expression value: ${valueName}` };
+          }
+        }
         let ok = true;
         if (condition.includes("#eventHash")) {
           if (condition.includes("attribute_not_exists(#eventHash)")) {
