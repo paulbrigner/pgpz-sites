@@ -5,6 +5,11 @@ import {
   enforceSocialProofRateLimit,
   SocialProofError,
 } from "@/lib/social-proof";
+import {
+  createZcashMeAuthorization,
+  encodeZcashMeOidcAttempt,
+  ZCASHME_OIDC_COOKIE,
+} from "@/lib/zcashme-oidc";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +35,17 @@ export async function POST(request: NextRequest) {
       ipAddress: clientIp(request),
     });
 
-    return NextResponse.json(await createZcashMeChallenge(userId));
+    const challenge = await createZcashMeChallenge(userId);
+    const { attempt, authorizationUrl } = createZcashMeAuthorization(userId, challenge.challenge);
+    const response = NextResponse.json({ ...challenge, authorizationUrl });
+    response.cookies.set(ZCASHME_OIDC_COOKIE, encodeZcashMeOidcAttempt(attempt), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/api/social-proof/zcashme/callback",
+      maxAge: 10 * 60,
+    });
+    return response;
   } catch (err) {
     if (err instanceof SocialProofError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

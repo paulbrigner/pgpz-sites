@@ -60,6 +60,8 @@ export const SITE_URL =
   process.env.BETTER_AUTH_URL ||
   "https://community.pgpz.org";
 
+export const ZCASHME_AUTH_ISSUER = "https://auth.zcash.me";
+
 export const X_BEARER_TOKEN =
   (process.env.X_BEARER_TOKEN || process.env.XMON_X_API_BEARER_TOKEN) as string | undefined;
 export const X_API_BASE_URL = trimBaseUrl(process.env.X_API_BASE_URL || process.env.XMON_X_API_BASE_URL, "https://api.x.com/2");
