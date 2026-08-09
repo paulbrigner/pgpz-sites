@@ -25,15 +25,15 @@ type MembershipActivationState = MembershipStatus | "deactivated";
 
 export type SocialProofRecord = {
   userId: string;
-  provider: "x";
+  provider: "x" | "zcashme";
   status: "verified";
-  handle: string;
   profileUrl: string;
-  postUrl: string;
-  postId: string;
   challenge: string;
   verifiedAt: string;
   proofRetentionPolicy: string;
+  handle?: string;
+  postUrl?: string;
+  postId?: string;
 };
 
 type ChallengeRecord = {
@@ -43,7 +43,7 @@ type ChallengeRecord = {
   challengeId: string;
   challenge: string;
   userId: string;
-  provider: "x";
+  provider: "x" | "zcashme";
   status: "pending" | "verified" | "expired";
   createdAt: string;
   expiresAt: string;
@@ -103,6 +103,13 @@ const authorClaimKey = (authorId: string) => ({
   pk: `SOCIAL_PROOF#X_AUTHOR#${authorId}`,
   sk: "CLAIM",
 });
+const zcashMeAddressClaimKey = (address: string) => ({
+  pk: `SOCIAL_PROOF#ZCASHME_ADDRESS#${hashRateLimitValue(address)}`,
+  sk: "CLAIM",
+});
+
+const ZCASHME_DIRECTORY_URL = "https://zcash.me";
+const ZCASHME_LOOKUP_TIMEOUT_MS = 15_000;
 
 const hashRateLimitValue = (value: string) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -184,50 +191,23 @@ const buildSuggestedPost = (challenge: string) =>
   ].join("\n");
 
 export async function createXChallenge(userId: string) {
-  if (!userId) throw new SocialProofError("Unauthorized", 401);
-  await assertUserCanActivateMembership(userId);
-
-  const now = new Date();
-  const existing = await getLatestPendingChallenge(userId);
-  if (existing) {
-    return {
-      challengeId: existing.challengeId,
-      challenge: existing.challenge,
-      expiresAt: challengeDiscoveryExpiresAt(existing),
-      suggestedPost: buildSuggestedPost(existing.challenge),
-    };
-  }
-
-  const expires = new Date(now.getTime() + X_PROOF_CHALLENGE_TTL_MINUTES * 60 * 1000);
-  const challenge = `PGPZ-${randomBytes(5).toString("hex").toUpperCase()}`;
-  const challengeId = randomUUID();
-  const nowIso = now.toISOString();
-  const record: ChallengeRecord = {
-    pk: userProofPk(userId),
-    sk: `CHALLENGE#${nowIso}#${challengeId}`,
-    type: "SOCIAL_PROOF_CHALLENGE",
-    challengeId,
-    challenge,
-    userId,
-    provider: "x",
-    status: "pending",
-    createdAt: nowIso,
-    expiresAt: expires.toISOString(),
-    autoVerifyUntilAt: challengeAutoVerifyUntilAt(now),
-    autoVerifyNextCheckAt: nowIso,
-    autoVerifyAttemptCount: 0,
-  } as ChallengeRecord & { type: string };
-
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: record,
-  });
+  const record = await startMembershipProof(userId, "x");
 
   return {
-    challengeId,
-    challenge,
+    challengeId: record.challengeId,
+    challenge: record.challenge,
     expiresAt: record.expiresAt,
-    suggestedPost: buildSuggestedPost(challenge),
+    suggestedPost: buildSuggestedPost(record.challenge),
+  };
+}
+
+export async function createZcashMeChallenge(userId: string) {
+  const record = await startMembershipProof(userId, "zcashme");
+
+  return {
+    challengeId: record.challengeId,
+    challenge: record.challenge,
+    expiresAt: record.expiresAt,
   };
 }
 
@@ -279,13 +259,13 @@ export async function enforceSocialProofRateLimit({
     );
   } catch (err: any) {
     if (err?.name === "ConditionalCheckFailedException") {
-      throw new SocialProofError("Too many X proof attempts. Please wait and try again.", 429);
+      throw new SocialProofError("Too many membership proof attempts. Please wait and try again.", 429);
     }
     throw err;
   }
 }
 
-async function getLatestPendingChallenge(userId: string): Promise<ChallengeRecord | null> {
+async function getCurrentPendingMembershipProof(userId: string): Promise<ChallengeRecord | null> {
   const res = await documentClient.query({
     TableName: TABLE_NAME,
     KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :prefix)",
@@ -305,6 +285,69 @@ async function getLatestPendingChallenge(userId: string): Promise<ChallengeRecor
     return item as ChallengeRecord;
   }
   return null;
+}
+
+async function startMembershipProof(userId: string, provider: "x" | "zcashme") {
+  if (!userId) throw new SocialProofError("Unauthorized", 401);
+  await assertUserCanActivateMembership(userId);
+
+  const existing = await getCurrentPendingMembershipProof(userId);
+  if (existing) {
+    if (existing.provider !== provider) {
+      throw new SocialProofError(
+        `You already have a pending ${existing.provider === "x" ? "X" : "ZcashMe"} verification. Complete it or wait for it to expire before starting ${provider === "x" ? "X" : "ZcashMe"} verification.`,
+        409,
+      );
+    }
+    return existing;
+  }
+
+  const now = new Date();
+  const expires = new Date(now.getTime() + X_PROOF_CHALLENGE_TTL_MINUTES * 60 * 1000);
+  const challenge = `PGPZ-${randomBytes(5).toString("hex").toUpperCase()}`;
+  const challengeId = randomUUID();
+  const nowIso = now.toISOString();
+  const record: ChallengeRecord = {
+    pk: userProofPk(userId),
+    sk: `CHALLENGE#${nowIso}#${challengeId}`,
+    type: "SOCIAL_PROOF_CHALLENGE",
+    challengeId,
+    challenge,
+    userId,
+    provider,
+    status: "pending",
+    createdAt: nowIso,
+    expiresAt: expires.toISOString(),
+    autoVerifyUntilAt: challengeAutoVerifyUntilAt(now),
+    autoVerifyNextCheckAt: nowIso,
+    autoVerifyAttemptCount: 0,
+  } as ChallengeRecord & { type: string };
+
+  await documentClient.put({
+    TableName: TABLE_NAME,
+    Item: record,
+  });
+
+  return record;
+}
+
+async function requireCurrentMembershipProof(userId: string, provider: "x" | "zcashme") {
+  if (!userId) throw new SocialProofError("Unauthorized", 401);
+
+  const proof = await getCurrentPendingMembershipProof(userId);
+  const requestedProvider = provider === "x" ? "X" : "ZcashMe";
+  if (!proof) {
+    throw new SocialProofError(`Start ${requestedProvider} verification before continuing.`);
+  }
+  if (proof.provider !== provider) {
+    const currentProvider = proof.provider === "x" ? "X" : "ZcashMe";
+    throw new SocialProofError(
+      `Your current membership verification is ${currentProvider}. Complete it or wait for it to expire before starting ${requestedProvider} verification.`,
+      409,
+    );
+  }
+
+  return proof;
 }
 
 async function assertPostNotClaimed(postId: string, userId: string) {
@@ -340,6 +383,17 @@ async function assertAuthorNotClaimed(authorId: string, userId: string) {
 
   if (claim.Item && claim.Item.userId !== userId) {
     throw new SocialProofError("That X account has already been used for another membership.", 409);
+  }
+}
+
+async function assertZcashMeAddressNotClaimed(address: string, userId: string) {
+  const claim = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: zcashMeAddressClaimKey(address),
+  });
+
+  if (claim.Item && claim.Item.userId !== userId) {
+    throw new SocialProofError("That ZcashMe profile has already been used for another membership.", 409);
   }
 }
 
@@ -676,9 +730,9 @@ async function verifyXProofCandidate({
       type: "successful_join",
       memberUserId: userId,
       occurredAt: verifiedAt,
-      method: "x_self_verification",
-      xHandle: handle,
-      proofPostUrl: canonicalPostUrl,
+      method: "self_verification",
+      provider: "x",
+      proofUrl: canonicalPostUrl,
     });
   } catch (error) {
     console.error("Failed to dispatch admin self-verification notification", {
@@ -703,11 +757,7 @@ async function verifyXProofCandidate({
 }
 
 export async function verifyXProof(userId: string, postUrl: string): Promise<SocialProofRecord> {
-  if (!userId) throw new SocialProofError("Unauthorized", 401);
-  const challenge = await getLatestPendingChallenge(userId);
-  if (!challenge) {
-    throw new SocialProofError("Generate a fresh proof code before verifying your X post.");
-  }
+  const challenge = await requireCurrentMembershipProof(userId, "x");
 
   const { postId, urlHandle } = parseXPostUrl(postUrl);
   const { tweet, author } = await fetchXPost(postId);
@@ -719,6 +769,210 @@ export async function verifyXProof(userId: string, postUrl: string): Promise<Soc
     urlHandle,
     verificationMethod: "paste",
   });
+}
+
+type ZcashMeLookup = {
+  username?: unknown;
+  address?: unknown;
+  links?: unknown;
+};
+
+async function fetchZcashMeProfile(username: string): Promise<{
+  username: string;
+  address: string;
+  links: Array<{ platform: string; label: string; url: string }>;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ZCASHME_LOOKUP_TIMEOUT_MS);
+  let response: Response;
+  let body: ZcashMeLookup | null = null;
+
+  try {
+    response = await fetch(
+      `${ZCASHME_DIRECTORY_URL}/api/lookup/${encodeURIComponent(username)}`,
+      { cache: "no-store", signal: controller.signal },
+    );
+    body = await response.json().catch(() => null);
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new SocialProofError("Timed out while checking your ZcashMe profile.", 504);
+    }
+    throw new SocialProofError("Could not reach ZcashMe to check your profile.", 502);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (response.status === 404) {
+    throw new SocialProofError("The saved ZcashMe username does not have a public profile yet.", 404);
+  }
+  if (!response.ok || !body) {
+    throw new SocialProofError("ZcashMe could not return your public profile.", 502);
+  }
+
+  const canonicalUsername = typeof body.username === "string" ? body.username.trim() : "";
+  const address = typeof body.address === "string" ? body.address.trim() : "";
+  if (!canonicalUsername || !address) {
+    throw new SocialProofError("ZcashMe returned an incomplete public profile.", 502);
+  }
+
+  const links = Array.isArray(body.links)
+    ? body.links.flatMap((link) => {
+      if (!link || typeof link !== "object") return [];
+      const value = link as Record<string, unknown>;
+      const platform = typeof value.platform === "string" ? value.platform.trim() : "";
+      const label = typeof value.label === "string" ? value.label.trim() : "";
+      const url = typeof value.url === "string" ? value.url.trim() : "";
+      return platform && label ? [{ platform, label, url }] : [];
+    })
+    : [];
+
+  return { username: canonicalUsername, address, links };
+}
+
+export async function verifyZcashMeProof(userId: string): Promise<SocialProofRecord> {
+  const challenge = await requireCurrentMembershipProof(userId, "zcashme");
+  const user = await documentClient.get({
+    TableName: TABLE_NAME,
+    Key: userKey(userId),
+    ProjectionExpression: "zcashmeUsername",
+  });
+  const savedUsername = typeof user.Item?.zcashmeUsername === "string"
+    ? user.Item.zcashmeUsername.trim()
+    : "";
+  if (!savedUsername) {
+    throw new SocialProofError("Add your ZcashMe username to your PGPZ profile before verifying.");
+  }
+
+  const profile = await fetchZcashMeProfile(savedUsername);
+  const proofLink = profile.links.find(
+    (link) => link.platform.toLowerCase() === "pgpz" && link.label === challenge.challenge,
+  );
+  if (!proofLink) {
+    throw new SocialProofError("Your ZcashMe profile does not contain the current PGPZ verification code yet.");
+  }
+
+  await assertUserCanActivateMembership(userId);
+  await assertZcashMeAddressNotClaimed(profile.address, userId);
+
+  const verifiedAt = new Date().toISOString();
+  const profileUrl = `${ZCASHME_DIRECTORY_URL}/${encodeURIComponent(profile.username)}`;
+  const proofRetentionPolicy = MEMBERSHIP_PROOF_RETENTION_POLICY;
+  const proofRecord = {
+    pk: userProofPk(userId),
+    sk: `PROOF#zcashme#${challenge.challengeId}`,
+    type: "SOCIAL_PROOF",
+    userId,
+    provider: "zcashme",
+    status: "verified",
+    handle: profile.username,
+    profileUrl,
+    linkUrl: proofLink.url || null,
+    linkLabel: proofLink.label,
+    challenge: challenge.challenge,
+    verifiedAt,
+    proofRetentionPolicy,
+  };
+  const claimRecord = {
+    ...zcashMeAddressClaimKey(profile.address),
+    type: "SOCIAL_PROOF_ZCASHME_ADDRESS_CLAIM",
+    userId,
+    provider: "zcashme",
+    claimedAt: verifiedAt,
+  };
+
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: claimRecord,
+            ConditionExpression: "attribute_not_exists(#pk) OR userId = :userId",
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ExpressionAttributeValues: { ":userId": userId },
+          },
+        },
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: proofRecord,
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: { pk: challenge.pk, sk: challenge.sk },
+            UpdateExpression:
+              "SET #status = :status, verifiedProofProfileUrl = :profileUrl, verifiedAt = :verifiedAt",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":status": "verified",
+              ":profileUrl": profileUrl,
+              ":verifiedAt": verifiedAt,
+            },
+          },
+        },
+        {
+          Update: {
+            TableName: TABLE_NAME,
+            Key: userKey(userId),
+            UpdateExpression:
+              "SET membershipStatus = :active, membershipProvider = :provider, membershipVerifiedAt = :verifiedAt, membershipProofProfileUrl = :profileUrl, membershipProofProfileUsername = :username, zcashmeUsername = :username, proofRetentionPolicy = :policy, manualApprovalStatus = :manualNone, manualApprovalUpdatedAt = :verifiedAt",
+            ConditionExpression:
+              "(attribute_not_exists(#membershipStatus) OR #membershipStatus <> :active) AND (attribute_not_exists(#accountStatus) OR #accountStatus <> :deactivated) AND attribute_not_exists(#deactivatedAt)",
+            ExpressionAttributeNames: {
+              "#membershipStatus": "membershipStatus",
+              "#accountStatus": "accountStatus",
+              "#deactivatedAt": "deactivatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":active": "active",
+              ":deactivated": "deactivated",
+              ":provider": "zcashme",
+              ":verifiedAt": verifiedAt,
+              ":profileUrl": profileUrl,
+              ":username": profile.username,
+              ":policy": proofRetentionPolicy,
+              ":manualNone": "none",
+            },
+          },
+        },
+      ],
+    });
+  } catch (err: any) {
+    if (err?.name === "TransactionCanceledException") {
+      throw new SocialProofError("That ZcashMe profile or member record has already been used for membership.", 409);
+    }
+    throw err;
+  }
+
+  try {
+    await queueAdminSignupNotification({
+      type: "successful_join",
+      memberUserId: userId,
+      occurredAt: verifiedAt,
+      method: "self_verification",
+      provider: "zcashme",
+      proofUrl: profileUrl,
+    });
+  } catch (error) {
+    console.error("Failed to dispatch admin self-verification notification", {
+      memberUserId: userId,
+      zcashmeUsername: profile.username,
+      error,
+    });
+  }
+
+  return {
+    userId,
+    provider: "zcashme",
+    status: "verified",
+    handle: profile.username,
+    profileUrl,
+    challenge: challenge.challenge,
+    verifiedAt,
+    proofRetentionPolicy,
+  };
 }
 
 async function recordChallengeAutoVerifyAttempt({
@@ -866,10 +1120,7 @@ export async function findAndVerifyXProof(userId: string) {
     return { status: "already_active" as const, message: "Membership is already active." };
   }
 
-  const challenge = await getLatestPendingChallenge(userId);
-  if (!challenge) {
-    throw new SocialProofError("Generate verification text before searching for your X post.");
-  }
+  const challenge = await requireCurrentMembershipProof(userId, "x");
 
   const candidates = await searchXPostsForChallenges([challenge.challenge]);
   return verifyChallengeFromSearch({
@@ -919,13 +1170,15 @@ async function scanAutoVerifyChallenges(limit: number): Promise<ChallengeRecord[
       ProjectionExpression:
         "pk, sk, #type, challengeId, challenge, userId, provider, #status, createdAt, expiresAt, autoVerifyUntilAt, autoVerifyNextCheckAt, autoVerifyAttemptCount",
       FilterExpression:
-        "#type = :type AND #status = :pending AND ((attribute_exists(autoVerifyUntilAt) AND autoVerifyUntilAt >= :now) OR (attribute_not_exists(autoVerifyUntilAt) AND createdAt >= :legacyCreatedAtCutoff)) AND (attribute_not_exists(autoVerifyNextCheckAt) OR autoVerifyNextCheckAt <= :now) AND (attribute_not_exists(autoVerifyAttemptCount) OR autoVerifyAttemptCount < :maxAttempts)",
+        "#type = :type AND #provider = :provider AND #status = :pending AND ((attribute_exists(autoVerifyUntilAt) AND autoVerifyUntilAt >= :now) OR (attribute_not_exists(autoVerifyUntilAt) AND createdAt >= :legacyCreatedAtCutoff)) AND (attribute_not_exists(autoVerifyNextCheckAt) OR autoVerifyNextCheckAt <= :now) AND (attribute_not_exists(autoVerifyAttemptCount) OR autoVerifyAttemptCount < :maxAttempts)",
       ExpressionAttributeNames: {
         "#type": "type",
+        "#provider": "provider",
         "#status": "status",
       },
       ExpressionAttributeValues: {
         ":type": "SOCIAL_PROOF_CHALLENGE",
+        ":provider": "x",
         ":pending": "pending",
         ":now": now,
         ":legacyCreatedAtCutoff": legacyCreatedAtCutoff,
@@ -1076,6 +1329,10 @@ export async function getUserProofStatus(userId: string) {
     membershipProofPostUrl: (user.Item?.membershipProofPostUrl as string | undefined) || null,
     membershipProofPostId: (user.Item?.membershipProofPostId as string | undefined) || null,
     membershipProofHandle: (user.Item?.membershipProofHandle as string | undefined) || null,
+    membershipProofProfileUrl: (user.Item?.membershipProofProfileUrl as string | undefined) || null,
+    membershipProofProfileUsername:
+      (user.Item?.membershipProofProfileUsername as string | undefined) || null,
+    zcashmeUsername: (user.Item?.zcashmeUsername as string | undefined) || null,
     xHandle: (user.Item?.xHandle as string | undefined) || null,
     proofRetentionPolicy: (user.Item?.proofRetentionPolicy as string | undefined) || null,
     manualApprovalStatus: (user.Item?.manualApprovalStatus as string | undefined) || "none",
@@ -1085,6 +1342,7 @@ export async function getUserProofStatus(userId: string) {
       provider: item.provider || null,
       status: item.status || null,
       handle: item.handle || null,
+      profileUrl: item.profileUrl || null,
       postUrl: item.postUrl || null,
       postId: item.postId || null,
       verifiedAt: item.verifiedAt || null,

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { firstName, lastName } = body || {};
-    let { xHandle, linkedinUrl } = body || {};
+    let { xHandle, zcashmeUsername, linkedinUrl } = body || {};
 
     // Basic validations
     const err = (msg: string) => NextResponse.json({ error: msg }, { status: 400 });
@@ -21,6 +21,10 @@ export async function POST(request: NextRequest) {
       xHandle = xHandle.trim();
       if (xHandle && !xHandle.startsWith("@")) xHandle = `@${xHandle}`;
       if (xHandle.length > 50) return err("X handle too long");
+    }
+    if (zcashmeUsername && typeof zcashmeUsername === "string") {
+      zcashmeUsername = zcashmeUsername.trim();
+      if (zcashmeUsername.length > 50) return err("ZcashMe username too long");
     }
     if (linkedinUrl && typeof linkedinUrl === "string") {
       linkedinUrl = linkedinUrl.trim();
@@ -37,13 +41,14 @@ export async function POST(request: NextRequest) {
       TableName: TABLE_NAME,
       Key: { pk: `USER#${userId}`, sk: `USER#${userId}` },
       UpdateExpression:
-        "SET firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, linkedinUrl = :linkedinUrl, updatedAt = :now",
+        "SET firstName = :firstName, lastName = :lastName, #name = :name, xHandle = :xHandle, zcashmeUsername = :zcashmeUsername, linkedinUrl = :linkedinUrl, updatedAt = :now",
       ExpressionAttributeNames: { "#name": "name" },
       ExpressionAttributeValues: {
         ":firstName": firstName.trim(),
         ":lastName": lastName.trim(),
         ":name": name,
         ":xHandle": xHandle || null,
+        ":zcashmeUsername": zcashmeUsername || null,
         ":linkedinUrl": linkedinUrl || null,
         ":now": new Date().toISOString(),
       },
@@ -51,7 +56,7 @@ export async function POST(request: NextRequest) {
     });
 
     const item = updated.Attributes || {};
-    return NextResponse.json({ ok: true, user: { id: item.id, firstName: item.firstName, lastName: item.lastName, xHandle: item.xHandle, linkedinUrl: item.linkedinUrl } });
+    return NextResponse.json({ ok: true, user: { id: item.id, firstName: item.firstName, lastName: item.lastName, xHandle: item.xHandle, zcashmeUsername: item.zcashmeUsername, linkedinUrl: item.linkedinUrl } });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : (() => { try { return JSON.stringify(e); } catch { return String(e); } })();
     console.error("/api/profile/update error:", msg);

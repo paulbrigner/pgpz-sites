@@ -126,9 +126,9 @@ describe("social proof account lifecycle", () => {
       type: "successful_join",
       memberUserId: "user-1",
       occurredAt: result.verifiedAt,
-      method: "x_self_verification",
-      xHandle: "@verified",
-      proofPostUrl: "https://x.com/verified/status/12345",
+      method: "self_verification",
+      provider: "x",
+      proofUrl: "https://x.com/verified/status/12345",
     });
   });
 

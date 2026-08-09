@@ -16,6 +16,11 @@ const normalizeXHandle = (value: unknown) => {
   return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
 };
 
+const normalizeZcashmeUsername = (value: unknown) => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
 const normalizeLinkedinUrl = (value: unknown) => {
   if (typeof value !== "string") return "";
   return value.trim();
@@ -26,6 +31,7 @@ const validateProfile = (body: any) => {
   const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
   const xHandle = normalizeXHandle(body?.xHandle);
+  const zcashmeUsername = normalizeZcashmeUsername(body?.zcashmeUsername);
   const linkedinUrl = normalizeLinkedinUrl(body?.linkedinUrl);
   const referralCode = normalizeReferralCode(body?.referralCode);
   const legalAccepted = body?.legalAccepted === true;
@@ -41,6 +47,7 @@ const validateProfile = (body: any) => {
     throw new Error("Please accept the current Terms of Service, Privacy Policy, and Community Guidelines.");
   }
   if (xHandle.length > 50) throw new Error("X handle too long.");
+  if (zcashmeUsername.length > 50) throw new Error("ZcashMe username too long.");
 
   if (linkedinUrl) {
     try {
@@ -51,7 +58,7 @@ const validateProfile = (body: any) => {
     }
   }
 
-  return { email, firstName, lastName, xHandle, linkedinUrl, referralCode };
+  return { email, firstName, lastName, xHandle, zcashmeUsername, linkedinUrl, referralCode };
 };
 
 const pendingKey = (email: string, signupProfileId: string) => ({
@@ -77,6 +84,7 @@ export async function POST(request: NextRequest) {
         firstName: profile.firstName,
         lastName: profile.lastName,
         xHandle: profile.xHandle || null,
+        zcashmeUsername: profile.zcashmeUsername || null,
         linkedinUrl: profile.linkedinUrl || null,
         referralCode: profile.referralCode || null,
         legalAcceptedAt: now,
@@ -133,7 +141,7 @@ export async function PATCH(request: NextRequest) {
     const existing = await documentClient.get({
       TableName: TABLE_NAME,
       Key: userKey,
-      ProjectionExpression: "xHandle, membershipVerifiedAt",
+      ProjectionExpression: "xHandle, zcashmeUsername, membershipVerifiedAt",
     });
 
     const firstName = typeof item.firstName === "string" ? item.firstName.trim() : "";
@@ -141,10 +149,12 @@ export async function PATCH(request: NextRequest) {
     const name = `${firstName} ${lastName}`.trim();
     const linkedinUrl = typeof item.linkedinUrl === "string" ? item.linkedinUrl.trim() : "";
     const xHandle = normalizeXHandle(item.xHandle);
+    const zcashmeUsername = normalizeZcashmeUsername(item.zcashmeUsername);
     const legalAcceptedAt = typeof item.legalAcceptedAt === "string" ? item.legalAcceptedAt : null;
     const legalDocumentVersion =
       typeof item.legalDocumentVersion === "string" ? item.legalDocumentVersion : null;
     const canUpdateXHandle = xHandle && !existing.Item?.membershipVerifiedAt;
+    const canUpdateZcashmeUsername = zcashmeUsername && !existing.Item?.membershipVerifiedAt;
 
     const updateParts = [
       "firstName = :firstName",
@@ -167,6 +177,10 @@ export async function PATCH(request: NextRequest) {
     if (canUpdateXHandle) {
       updateParts.push("xHandle = :xHandle");
       values[":xHandle"] = xHandle;
+    }
+    if (canUpdateZcashmeUsername) {
+      updateParts.push("zcashmeUsername = :zcashmeUsername");
+      values[":zcashmeUsername"] = zcashmeUsername;
     }
 
     await documentClient.update({
@@ -197,7 +211,14 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       applied: true,
-      profile: { firstName, lastName, name, linkedinUrl, xHandle: canUpdateXHandle ? xHandle : null },
+      profile: {
+        firstName,
+        lastName,
+        name,
+        linkedinUrl,
+        xHandle: canUpdateXHandle ? xHandle : null,
+        zcashmeUsername: canUpdateZcashmeUsername ? zcashmeUsername : null,
+      },
     });
   } catch (err) {
     console.error("/api/signup/pending PATCH error:", err);
