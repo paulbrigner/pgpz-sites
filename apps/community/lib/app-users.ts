@@ -335,6 +335,7 @@ export function appSessionUserFromRecord(user: RawAppUser) {
     firstName,
     lastName,
     xHandle: typeof user.xHandle === "string" ? user.xHandle : null,
+    zcashmeUsername: typeof user.zcashmeUsername === "string" ? user.zcashmeUsername : null,
     linkedinUrl: typeof user.linkedinUrl === "string" ? user.linkedinUrl : null,
     isAdmin: user.isAdmin === true,
     welcomeEmailSentAt: typeof user.welcomeEmailSentAt === "string" ? user.welcomeEmailSentAt : null,
@@ -351,6 +352,12 @@ export function appSessionUserFromRecord(user: RawAppUser) {
       typeof user.membershipProofPostId === "string" ? user.membershipProofPostId : null,
     membershipProofHandle:
       typeof user.membershipProofHandle === "string" ? user.membershipProofHandle : null,
+    membershipProofProfileUrl:
+      typeof user.membershipProofProfileUrl === "string" ? user.membershipProofProfileUrl : null,
+    membershipProofProfileUsername:
+      typeof user.membershipProofProfileUsername === "string"
+        ? user.membershipProofProfileUsername
+        : null,
     proofRetentionPolicy:
       typeof user.proofRetentionPolicy === "string" ? user.proofRetentionPolicy : null,
     manualApprovalStatus:

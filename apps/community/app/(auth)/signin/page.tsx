@@ -63,6 +63,7 @@ const savePendingSignupProfile = async (profile: {
   firstName: string;
   lastName: string;
   xHandle: string;
+  zcashmeUsername: string;
   linkedinUrl: string;
   legalAccepted: boolean;
   legalDocumentVersion: string;
@@ -145,6 +146,7 @@ function EmailSignIn({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [xHandle, setXHandle] = useState("");
+  const [zcashmeUsername, setZcashmeUsername] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -190,6 +192,7 @@ function EmailSignIn({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           xHandle: xHandle.trim(),
+          zcashmeUsername: zcashmeUsername.trim(),
           linkedinUrl: linkedinUrl.trim(),
           legalAccepted: true,
           legalDocumentVersion: LEGAL_DOCUMENT_VERSION,
@@ -334,6 +337,17 @@ function EmailSignIn({
                     value={xHandle}
                     onChange={(event) => setXHandle(event.target.value)}
                     placeholder="@handle"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="zcashmeUsername" className="text-sm font-medium">
+                    ZcashMe username
+                  </label>
+                  <input
+                    id="zcashmeUsername"
+                    value={zcashmeUsername}
+                    onChange={(event) => setZcashmeUsername(event.target.value)}
                     className="w-full rounded-md border px-3 py-2 text-sm"
                   />
                 </div>
