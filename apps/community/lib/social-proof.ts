@@ -829,21 +829,29 @@ async function fetchZcashMeProfile(username: string): Promise<{
   return { username: canonicalUsername, address, links };
 }
 
-export async function verifyZcashMeProof(userId: string): Promise<SocialProofRecord> {
+export async function verifyZcashMeProof(
+  userId: string,
+  options: { username?: string } = {},
+): Promise<SocialProofRecord> {
   const challenge = await requireCurrentMembershipProof(userId, "zcashme");
-  const user = await documentClient.get({
-    TableName: TABLE_NAME,
-    Key: userKey(userId),
-    ProjectionExpression: "zcashmeUsername",
-  });
-  const savedUsername = typeof user.Item?.zcashmeUsername === "string"
-    ? user.Item.zcashmeUsername.trim()
-    : "";
-  if (!savedUsername) {
-    throw new SocialProofError("Add your ZcashMe username to your PGPZ profile before verifying.");
+  let username = options.username?.trim() || "";
+
+  if (!username) {
+    const user = await documentClient.get({
+      TableName: TABLE_NAME,
+      Key: userKey(userId),
+      ProjectionExpression: "zcashmeUsername",
+    });
+    username = typeof user.Item?.zcashmeUsername === "string"
+      ? user.Item.zcashmeUsername.trim()
+      : "";
   }
 
-  const profile = await fetchZcashMeProfile(savedUsername);
+  if (!username) {
+    throw new SocialProofError("Add your ZcashMe username to your PGPZ profile before verifying manually.");
+  }
+
+  const profile = await fetchZcashMeProfile(username);
   const proofLink = profile.links.find(
     (link) => link.platform.toLowerCase() === "pgpz" && link.label === challenge.challenge,
   );

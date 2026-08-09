@@ -53,6 +53,7 @@ type ZcashMeChallenge = {
   challengeId: string;
   challenge: string;
   expiresAt: string;
+  authorizationUrl: string;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -106,6 +107,7 @@ export default function HomeClient({
     [previewMember, session?.user],
   );
   const isSocialProofOnboarding = searchParams?.get("next") === "social-proof";
+  const zcashmeCallbackResult = searchParams?.get("zcashme");
   const signupProfileId = searchParams?.get("signupProfileId") || "";
   const referralCode = normalizeReferralCode(searchParams?.get(REFERRAL_QUERY_PARAM));
   const signupHref = referralCode
@@ -200,6 +202,18 @@ export default function HomeClient({
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (zcashmeCallbackResult !== "verified" && zcashmeCallbackResult !== "error") return;
+    if (zcashmeCallbackResult === "verified") {
+      setMessage("Member verification complete. Your PGPZ community membership is active.");
+    } else {
+      setError("ZcashMe verification could not be completed. Your code is still available to retry.");
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("zcashme");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [zcashmeCallbackResult]);
 
   useEffect(() => {
     if (heroFeatureSlides.length < 2) return;
@@ -302,7 +316,7 @@ export default function HomeClient({
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Unable to generate a ZcashMe verification code");
       setZcashMeChallenge(body);
-      setMessage("Your ZcashMe verification code is ready. Add it to your public ZcashMe profile, then check the profile here.");
+      setMessage("Your ZcashMe verification code is ready. Verify with ZcashMe or add the code manually to your public profile.");
     } catch (err: any) {
       setError(err?.message || "Unable to generate a ZcashMe verification code");
     } finally {
@@ -608,7 +622,7 @@ export default function HomeClient({
                           Verify with ZcashMe
                         </h3>
                         <p className="text-sm leading-6 text-slate-600">
-                          Add a PGPZ code to your public ZcashMe profile, then return here and we will check it.
+                          Verify with ZcashMe to add your code automatically, or add it manually to your public profile.
                         </p>
                       </div>
                       <Button
@@ -616,26 +630,20 @@ export default function HomeClient({
                         size="lg"
                         className="border border-[rgba(138,90,0,0.35)] bg-[var(--zcash-gold)] text-[var(--brand-ink)] shadow-sm hover:bg-[var(--zcash-gold-soft)]"
                         onClick={generateZcashMeChallenge}
-                        disabled={zcashMeChallengeLoading || !zcashmeUsername}
+                        disabled={zcashMeChallengeLoading}
                       >
                         {zcashMeChallengeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                         {zcashMeChallengeLoading ? "Preparing ZcashMe verification" : "Start ZcashMe verification"}
                       </Button>
                     </div>
 
-                    {!zcashmeUsername ? (
-                      <p className="mt-4 border-t border-[rgba(71,85,105,0.3)] pt-4 text-sm leading-6 text-slate-600">
-                        ZcashMe verification needs the ZcashMe username saved when you joined PGPZ.
-                      </p>
-                    ) : null}
-
                     {zcashMeChallenge ? (
                       <div className="mt-4 space-y-4 border-t border-[rgba(71,85,105,0.3)] pt-4">
                         <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
                           {[
-                            ["1", "Copy your PGPZ verification code."],
-                            ["2", `Open zcash.me/${zcashmeUsername} and add it as a PGPZ Code link.`],
-                            ["3", "Save the link, return here, and check your profile."],
+                            ["1", "Verify with ZcashMe to add the code automatically."],
+                            ["2", "Or copy the code and add it to your public profile yourself."],
+                            ["3", "Manual changes are checked here; assisted verification returns automatically."],
                           ].map(([step, body]) => (
                             <div key={step} className="rounded-md border bg-white/80 p-3">
                               <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-ink)] text-xs font-semibold text-[var(--zcash-gold)]">
@@ -652,24 +660,38 @@ export default function HomeClient({
                           </pre>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => window.location.assign(zcashMeChallenge.authorizationUrl)}
+                          >
+                            <ShieldCheck className="h-4 w-4" />
+                            Verify with ZcashMe
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
                           <Button type="button" variant="outline" onClick={copyZcashMeCode}>
                             <Clipboard className="h-4 w-4" />
                             Copy code
                           </Button>
-                          <Button type="button" variant="outline" asChild>
-                            <Link
-                              href={`https://zcash.me/${encodeURIComponent(zcashmeUsername)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Open ZcashMe profile
-                              <ExternalLink className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          <Button type="button" onClick={verifyZcashMeProof} disabled={zcashMeVerifyLoading}>
-                            {zcashMeVerifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
-                            Check my ZcashMe profile
-                          </Button>
+                          {zcashmeUsername ? (
+                            <>
+                              <Button type="button" variant="outline" asChild>
+                                <Link
+                                  href={`https://zcash.me/${encodeURIComponent(zcashmeUsername)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Open ZcashMe profile manually
+                                  <ExternalLink className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button type="button" onClick={verifyZcashMeProof} disabled={zcashMeVerifyLoading}>
+                                {zcashMeVerifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                                Check my ZcashMe profile
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="self-center text-sm text-slate-600">Save a ZcashMe username in Profile Settings to use the manual path.</p>
+                          )}
                         </div>
                       </div>
                     ) : null}
