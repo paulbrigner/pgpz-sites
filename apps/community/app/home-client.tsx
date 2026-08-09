@@ -32,6 +32,9 @@ type ProofStatus = {
   membershipProofPostUrl: string | null;
   membershipProofPostId: string | null;
   membershipProofHandle: string | null;
+  membershipProofProfileUrl: string | null;
+  membershipProofProfileUsername: string | null;
+  zcashmeUsername: string | null;
   xHandle: string | null;
   proofRetentionPolicy: string | null;
   manualApprovalStatus: "none" | "pending" | "approved" | string | null;
@@ -44,6 +47,12 @@ type XChallenge = {
   challenge: string;
   expiresAt: string;
   suggestedPost: string;
+};
+
+type ZcashMeChallenge = {
+  challengeId: string;
+  challenge: string;
+  expiresAt: string;
 };
 
 const formatDate = (value: string | null | undefined) => {
@@ -128,8 +137,11 @@ export default function HomeClient({
   const [proofStatus, setProofStatus] = useState<ProofStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<XChallenge | null>(null);
+  const [zcashMeChallenge, setZcashMeChallenge] = useState<ZcashMeChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
+  const [zcashMeChallengeLoading, setZcashMeChallengeLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [zcashMeVerifyLoading, setZcashMeVerifyLoading] = useState(false);
   const [findLoading, setFindLoading] = useState(false);
   const [manualApprovalLoading, setManualApprovalLoading] = useState(false);
   const [postUrl, setPostUrl] = useState("");
@@ -160,14 +172,15 @@ export default function HomeClient({
   const manualApprovalRequestedAt =
     proofStatus?.manualApprovalRequestedAt || sessionUser?.manualApprovalRequestedAt || null;
   const manualApprovalPending = manualApprovalStatus === "pending" && !isMember;
+  const zcashmeUsername = proofStatus?.zcashmeUsername || sessionUser?.zcashmeUsername || null;
   const onboardingTitle = manualApprovalPending
     ? "Manual approval requested"
     : isSocialProofOnboarding
       ? "Email confirmed"
       : "Finish membership setup";
   const onboardingDescription = manualApprovalPending
-    ? "An admin will review your membership request. You can also complete member verification with X at any time."
-    : "Post the verification text on X, then return here so the site can find the post or you can paste its link.";
+    ? "An admin will review your membership request. You can still complete membership verification with X or ZcashMe at any time."
+    : "Choose X or ZcashMe to complete membership verification, or request manual approval.";
 
   const refreshStatus = useCallback(async () => {
     if (!authenticated || previewMember) return;
@@ -280,6 +293,23 @@ export default function HomeClient({
     }
   };
 
+  const generateZcashMeChallenge = async () => {
+    setZcashMeChallengeLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/social-proof/zcashme/challenge", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to generate a ZcashMe verification code");
+      setZcashMeChallenge(body);
+      setMessage("Your ZcashMe verification code is ready. Add it to your public ZcashMe profile, then check the profile here.");
+    } catch (err: any) {
+      setError(err?.message || "Unable to generate a ZcashMe verification code");
+    } finally {
+      setZcashMeChallengeLoading(false);
+    }
+  };
+
   const verifyProof = async () => {
     setVerifyLoading(true);
     setMessage(null);
@@ -308,6 +338,31 @@ export default function HomeClient({
     if (!challenge?.suggestedPost) return;
     await navigator.clipboard.writeText(challenge.suggestedPost);
     setMessage("Verification text copied.");
+  };
+
+  const copyZcashMeCode = async () => {
+    if (!zcashMeChallenge?.challenge) return;
+    await navigator.clipboard.writeText(zcashMeChallenge.challenge);
+    setMessage("ZcashMe verification code copied.");
+  };
+
+  const verifyZcashMeProof = async () => {
+    setZcashMeVerifyLoading(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/social-proof/zcashme/verify", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to check your ZcashMe profile");
+      setMessage("Member verification complete. Your PGPZ community membership is active.");
+      setZcashMeChallenge(null);
+      await update({});
+      await refreshStatus();
+    } catch (err: any) {
+      setError(err?.message || "Unable to complete ZcashMe verification");
+    } finally {
+      setZcashMeVerifyLoading(false);
+    }
   };
 
   const findProofPost = async () => {
@@ -448,7 +503,7 @@ export default function HomeClient({
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
                       ? `Member since ${formatMemberSince(verifiedAt)}.`
-                      : "Complete member verification with X or request manual approval if you prefer not to link an X account."}
+                      : "Complete member verification with X, ZcashMe, or request manual approval."}
                   </p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
@@ -540,6 +595,82 @@ export default function HomeClient({
                           {verifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
                           Complete X verification
                         </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="rounded-lg border border-[rgba(71,85,105,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--brand-denim)]">
+                          ZCASHME SOCIAL PROOF
+                        </div>
+                        <h3 className="text-base font-semibold text-[var(--brand-ink)]">
+                          Verify with ZcashMe
+                        </h3>
+                        <p className="text-sm leading-6 text-slate-600">
+                          Add a PGPZ code to your public ZcashMe profile, then return here and we will check it.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="border border-[rgba(138,90,0,0.35)] bg-[var(--zcash-gold)] text-[var(--brand-ink)] shadow-sm hover:bg-[var(--zcash-gold-soft)]"
+                        onClick={generateZcashMeChallenge}
+                        disabled={zcashMeChallengeLoading || !zcashmeUsername}
+                      >
+                        {zcashMeChallengeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        {zcashMeChallengeLoading ? "Preparing ZcashMe verification" : "Start ZcashMe verification"}
+                      </Button>
+                    </div>
+
+                    {!zcashmeUsername ? (
+                      <p className="mt-4 border-t border-[rgba(71,85,105,0.3)] pt-4 text-sm leading-6 text-slate-600">
+                        ZcashMe verification needs the ZcashMe username saved when you joined PGPZ.
+                      </p>
+                    ) : null}
+
+                    {zcashMeChallenge ? (
+                      <div className="mt-4 space-y-4 border-t border-[rgba(71,85,105,0.3)] pt-4">
+                        <div className="grid gap-3 text-sm leading-6 text-slate-600 md:grid-cols-3">
+                          {[
+                            ["1", "Copy your PGPZ verification code."],
+                            ["2", `Open zcash.me/${zcashmeUsername} and add it as a PGPZ Code link.`],
+                            ["3", "Save the link, return here, and check your profile."],
+                          ].map(([step, body]) => (
+                            <div key={step} className="rounded-md border bg-white/80 p-3">
+                              <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-ink)] text-xs font-semibold text-[var(--zcash-gold)]">
+                                {step}
+                              </div>
+                              {body}
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">YOUR PGPZ CODE</div>
+                          <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-sm leading-6 text-white">
+                            {zcashMeChallenge.challenge}
+                          </pre>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" onClick={copyZcashMeCode}>
+                            <Clipboard className="h-4 w-4" />
+                            Copy code
+                          </Button>
+                          <Button type="button" variant="outline" asChild>
+                            <Link
+                              href={`https://zcash.me/${encodeURIComponent(zcashmeUsername)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Open ZcashMe profile
+                              <ExternalLink className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button type="button" onClick={verifyZcashMeProof} disabled={zcashMeVerifyLoading}>
+                            {zcashMeVerifyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}
+                            Check my ZcashMe profile
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                   </div>

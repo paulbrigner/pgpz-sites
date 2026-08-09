@@ -38,7 +38,7 @@ export const EMAIL_SERVER_SECURE = process.env.EMAIL_SERVER_SECURE as string | u
 export const SITE_NAME = "PGPZ Community";
 export const SIGNUP_NOTIFICATION_SUCCESSFUL_JOIN_OPTION = {
   label: "Successful self-verification",
-  description: "Email me when a new member joins through X self-verification.",
+  description: "Email me when a new member joins through self-verification.",
 } as const;
 
 export const CLOUDFRONT_DOMAIN = process.env.CLOUDFRONT_DOMAIN as string;

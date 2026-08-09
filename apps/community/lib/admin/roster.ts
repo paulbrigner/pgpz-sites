@@ -43,6 +43,8 @@ type RawUser = {
   membershipProofPostUrl?: string | null;
   membershipProofPostId?: string | null;
   membershipProofHandle?: string | null;
+  membershipProofProfileUrl?: string | null;
+  membershipProofProfileUsername?: string | null;
   proofRetentionPolicy?: string | null;
   manualApprovalStatus?: "none" | "pending" | "approved" | null;
   manualApprovalRequestedAt?: string | null;
@@ -69,6 +71,8 @@ export type AdminMember = {
   membershipProofPostUrl: string | null;
   membershipProofPostId: string | null;
   membershipProofHandle: string | null;
+  membershipProofProfileUrl: string | null;
+  membershipProofProfileUsername: string | null;
   proofRetentionPolicy: string | null;
   manualApprovalStatus: "none" | "pending" | "approved";
   manualApprovalRequestedAt: string | null;
@@ -232,6 +236,8 @@ const lifecycleRemoveExpression = [
   "membershipProofPostUrl",
   "membershipProofPostId",
   "membershipProofHandle",
+  "membershipProofProfileUrl",
+  "membershipProofProfileUsername",
   "proofRetentionPolicy",
   "manualApprovalRequestedAt",
   "manualApprovalApprovedAt",
@@ -277,7 +283,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, welcomeEmailSuppressedAt, welcomeEmailSuppressedReason, welcomeEmailSuppressedBy, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, membershipProofHandle, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, xHandle, linkedinUrl, isAdmin, welcomeEmailSentAt, welcomeEmailSuppressedAt, welcomeEmailSuppressedReason, welcomeEmailSuppressedBy, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, membershipProofPostUrl, membershipProofPostId, membershipProofHandle, membershipProofProfileUrl, membershipProofProfileUsername, proofRetentionPolicy, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -316,6 +322,8 @@ function toAdminMember(user: RawUser): AdminMember | null {
     membershipProofPostUrl: textOrNull(user.membershipProofPostUrl),
     membershipProofPostId: textOrNull(user.membershipProofPostId),
     membershipProofHandle: textOrNull(user.membershipProofHandle),
+    membershipProofProfileUrl: textOrNull(user.membershipProofProfileUrl),
+    membershipProofProfileUsername: textOrNull(user.membershipProofProfileUsername),
     proofRetentionPolicy: textOrNull(user.proofRetentionPolicy),
     manualApprovalStatus,
     manualApprovalRequestedAt: textOrNull(user.manualApprovalRequestedAt),

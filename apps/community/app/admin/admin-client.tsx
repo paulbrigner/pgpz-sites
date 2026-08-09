@@ -631,9 +631,15 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                     </div>
                     <div className="space-y-1">
                       <div className="font-medium">
-                        {manualApproved ? "Manual approval" : member.membershipProofHandle || "—"}
+                        {manualApproved
+                          ? "Manual approval"
+                          : member.membershipProvider === "zcashme"
+                            ? member.membershipProofProfileUsername || "ZcashMe profile"
+                            : member.membershipProofHandle || "—"}
                       </div>
-                      {!manualApproved && member.membershipProofHandle ? (
+                      {member.membershipProvider === "zcashme" && member.membershipProofProfileUsername ? (
+                        <div className="text-xs text-slate-500">Verified ZcashMe profile</div>
+                      ) : !manualApproved && member.membershipProofHandle ? (
                         <div className="text-xs text-slate-500">Verified X identity</div>
                       ) : null}
                       {member.xHandle && member.xHandle !== member.membershipProofHandle ? (
@@ -642,6 +648,11 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                       {member.membershipProofPostUrl ? (
                         <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofPostUrl} target="_blank" rel="noopener noreferrer">
                           Proof post
+                        </Link>
+                      ) : null}
+                      {member.membershipProofProfileUrl ? (
+                        <Link className="text-xs text-[var(--brand-denim)] underline" href={member.membershipProofProfileUrl} target="_blank" rel="noopener noreferrer">
+                          ZcashMe profile
                         </Link>
                       ) : null}
                       {manualPending && member.manualApprovalRequestedAt ? (
@@ -838,8 +849,12 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <dd className="text-right text-slate-800">{formatDateTime(member.joinedAt)}</dd>
                             </div>
                             <div className="flex justify-between gap-3">
-                              <dt className="font-medium text-slate-500">Proof post ID</dt>
-                              <dd className="max-w-[14rem] truncate text-right text-slate-800">{member.membershipProofPostId || "—"}</dd>
+                              <dt className="font-medium text-slate-500">Proof</dt>
+                              <dd className="max-w-[14rem] truncate text-right text-slate-800">
+                                {member.membershipProvider === "zcashme"
+                                  ? member.membershipProofProfileUsername || "—"
+                                  : member.membershipProofPostId || "—"}
+                              </dd>
                             </div>
                             <div className="flex justify-between gap-3">
                               <dt className="font-medium text-slate-500">Retention</dt>

@@ -54,9 +54,9 @@ const successfulJoinEvent = {
   type: "successful_join" as const,
   memberUserId: "member-1",
   occurredAt: "2026-07-21T14:00:00.000Z",
-  method: "x_self_verification" as const,
-  xHandle: "@verified",
-  proofPostUrl: "https://x.com/verified/status/12345",
+  method: "self_verification" as const,
+  provider: "x" as const,
+  proofUrl: "https://x.com/verified/status/12345",
 };
 
 describe("admin signup notifications", () => {
@@ -295,6 +295,6 @@ describe("admin signup notifications", () => {
     });
     expect(built.subject).toBe("[PGPZ Test] New member self-verified: Verified Member");
     expect(built.text).toContain("https://x.com/verified/status/12345");
-    expect(built.html).toContain("View X proof post");
+    expect(built.html).toContain("View X proof");
   });
 });

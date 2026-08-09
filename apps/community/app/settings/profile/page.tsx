@@ -36,6 +36,7 @@ export default function ProfileSettingsPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [xHandle, setXHandle] = useState("");
+  const [zcashmeUsername, setZcashmeUsername] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export default function ProfileSettingsPage() {
   const [emailPreferencesMessage, setEmailPreferencesMessage] = useState<string | null>(null);
   const [emailPreferencesError, setEmailPreferencesError] = useState<string | null>(null);
   const [initial, setInitial] = useState<
-    { firstName: string; lastName: string; xHandle: string; linkedinUrl: string } | null
+    { firstName: string; lastName: string; xHandle: string; zcashmeUsername: string; linkedinUrl: string } | null
   >(null);
 
   const sessionUser = session?.user as any | undefined;
@@ -68,6 +69,12 @@ export default function ProfileSettingsPage() {
     : null;
   const membershipProofPostUrl = typeof sessionUser?.membershipProofPostUrl === "string"
     ? sessionUser.membershipProofPostUrl
+    : null;
+  const membershipProofProfileUrl = typeof sessionUser?.membershipProofProfileUrl === "string"
+    ? sessionUser.membershipProofProfileUrl
+    : null;
+  const membershipProofProfileUsername = typeof sessionUser?.membershipProofProfileUsername === "string"
+    ? sessionUser.membershipProofProfileUsername
     : null;
   const memberSince = membershipVerifiedAt && Number.isFinite(Date.parse(membershipVerifiedAt))
     ? new Date(membershipVerifiedAt).toLocaleDateString(undefined, {
@@ -83,11 +90,13 @@ export default function ProfileSettingsPage() {
       firstName: (sessionUser.firstName as string) || "",
       lastName: (sessionUser.lastName as string) || "",
       xHandle: (sessionUser.xHandle as string) || "",
+      zcashmeUsername: (sessionUser.zcashmeUsername as string) || "",
       linkedinUrl: (sessionUser.linkedinUrl as string) || "",
     };
     setFirstName(next.firstName);
     setLastName(next.lastName);
     setXHandle(next.xHandle);
+    setZcashmeUsername(next.zcashmeUsername);
     setLinkedinUrl(next.linkedinUrl);
     setNewEmail(currentEmail || "");
     setInitial(next);
@@ -171,6 +180,7 @@ export default function ProfileSettingsPage() {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           xHandle: xHandle.trim(),
+          zcashmeUsername: zcashmeUsername.trim(),
           linkedinUrl: linkedinUrl.trim(),
         }),
       });
@@ -182,6 +192,7 @@ export default function ProfileSettingsPage() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         xHandle: xHandle.trim(),
+        zcashmeUsername: zcashmeUsername.trim(),
         linkedinUrl: linkedinUrl.trim(),
       };
       setMessage("Profile updated");
@@ -200,6 +211,7 @@ export default function ProfileSettingsPage() {
       firstName.trim() !== initial.firstName ||
       lastName.trim() !== initial.lastName ||
       xHandle.trim() !== initial.xHandle ||
+      zcashmeUsername.trim() !== initial.zcashmeUsername ||
       linkedinUrl.trim() !== initial.linkedinUrl
     );
   };
@@ -329,7 +341,9 @@ export default function ProfileSettingsPage() {
               <div className="mt-2 text-sm font-medium text-[var(--brand-ink)]">
                 {membershipProvider === "manual"
                   ? "Manual approval"
-                  : sessionUser?.membershipProofHandle || "Verified member"}
+                  : membershipProvider === "zcashme"
+                    ? membershipProofProfileUsername || "Verified ZcashMe profile"
+                    : sessionUser?.membershipProofHandle || "Verified member"}
               </div>
             </div>
             <div className="rounded-md border bg-white px-4 py-3">
@@ -343,6 +357,15 @@ export default function ProfileSettingsPage() {
                     rel="noopener noreferrer"
                   >
                     View verified X post
+                  </a>
+                ) : membershipProvider === "zcashme" && membershipProofProfileUrl ? (
+                  <a
+                    className="font-medium text-[var(--brand-denim)] underline"
+                    href={membershipProofProfileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View verified ZcashMe profile
                   </a>
                 ) : membershipProvider === "manual" ? (
                   <span className="text-slate-600">Manual approval by PGPZ admin</span>
@@ -489,6 +512,20 @@ export default function ProfileSettingsPage() {
               placeholder="https://www.linkedin.com/in/username"
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="zcashmeUsername" className="text-sm font-medium">
+              ZcashMe username
+            </label>
+            <input
+              id="zcashmeUsername"
+              value={zcashmeUsername}
+              onChange={(event) => setZcashmeUsername(event.target.value)}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Use your ZcashMe username without an @. This is used only to find your public ZcashMe profile for membership verification.
+            </p>
           </div>
           <Button type="submit" disabled={submitting}>
             {submitting ? "Saving..." : "Save changes"}
