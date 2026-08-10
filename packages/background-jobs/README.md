@@ -1,21 +1,54 @@
 # `@pgpz/background-jobs`
 
-Pure contracts and deterministic helpers for the Community and Coalition durable-job systems. The package deliberately contains no database, queue, framework, or email-provider implementation so both applications and their workers can share the same state model.
+Shared durable-job contracts and a dependency-injected runtime for Community
+and Coalition. Each app configures a separate DynamoDB table, SQS queue,
+recipient policy, administrator lookup, and internal authorization secret.
 
-The four supported job kinds are newsletter delivery, policy-update delivery, bulk invitations, and Coalition-to-Community synchronization. `live`, `validate_only`, and `smoke` modes are explicit on every job and task; callers remain responsible for enforcing the production recipient allowlist used by smoke jobs.
+## Domain behavior
 
-`delivery_unknown` requires review and is never automatically retryable. It represents work that may have reached an external provider before the worker lost its lease or acknowledgement, so an operator must reconcile it before taking any action that could duplicate a message. Reopening one requires an explicit duplicate-delivery acknowledgement and the exact task ID; the state machine permits that operator-only transition while keeping it out of normal retry eligibility.
+The package defines job/task states, deterministic idempotency, progress,
+cursor/index contracts, retention, audience snapshots, retry eligibility, and
+recipient normalization. Supported job kinds are newsletter delivery,
+policy-update delivery, bulk invitations, and Coalition-to-Community sync.
 
-The package also owns the storage-facing operational conventions shared by
-both applications:
+Every job uses an explicit mode:
 
-- `GSI1` lists jobs newest-first, while `GSI2` partitions parent jobs by
-  status and tasks by parent-job/status. Reconciliation can therefore query
-  only active work instead of walking completed history.
-- Cursor helpers encode and validate versioned, index-bound DynamoDB keys.
-  A cursor from one query shape cannot be replayed against another, and page
-  sizes are capped at 100.
-- Retention helpers keep parent summaries and idempotency claims for 180 days,
-  per-recipient task records for 90 days, and recoverable audience manifests
-  for 30 days. Active records renew their applicable expiration whenever
+- `validate_only`: validate/render without delivery;
+- `smoke`: one specifically authorized production recipient;
+- `live`: the approved production audience.
+
+`delivery_unknown` is never automatically retryable. It means delivery may have
+reached the provider before acknowledgement was recorded; an operator must
+reconcile it and explicitly accept duplicate-delivery risk before reopening it.
+
+## Injected runtime
+
+`configureBackgroundJobRuntime` binds the app's document client, table, queue,
+configuration, recipient resolver, administrator policy, and clock. The runtime
+then provides enqueue, staging/dispatch, claim/lease, completion, retry,
+cancellation, pagination, projection, and reconciliation behavior.
+
+The configuration is process-local and app-specific. Do not import one app's
+configured runtime from another app or move environment/resource selection into
+the package.
+
+## Storage conventions
+
+- `GSI1` lists jobs newest-first.
+- `GSI2` partitions parent jobs by status and tasks by parent/status.
+- Cursor payloads are versioned and query-bound; page size is capped at 100.
+- Parent summaries/idempotency claims retain 180 days, recipient tasks 90 days,
+  and recoverable audience manifests 30 days. Active records renew retention as
   their state advances.
+
+## Validation and operations
+
+```bash
+npm run test --workspace=@pgpz/background-jobs
+npm run typecheck --workspace=@pgpz/background-jobs
+npm run test:durable-jobs-infra
+```
+
+Use `docs/durable-jobs-runbook.md` for infrastructure, release, monitoring,
+reconciliation, DLQ, or rollback work. Package tests never authorize production
+email or prove that live queues/tables match the contracts.

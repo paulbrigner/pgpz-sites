@@ -1,5 +1,9 @@
 # X Monitor Community integration
 
+> **Status: current integration contract.** Verify the live consumer
+> entitlement, feature switches, credential scopes, and API behavior before
+> diagnosing or changing production.
+
 ## Scope
 
 `apps/community` provides an active-member, read-only view of X Monitor at

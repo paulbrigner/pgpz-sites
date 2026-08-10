@@ -1,5 +1,9 @@
 # Board Governance Vault, Legal Counsel Role, and Audit Ledger — Revised Plan
 
+> **Status: accepted historical implementation plan.** The feature has been
+> implemented. Use [`../board-deployment.md`](../board-deployment.md), the Board
+> README, and live infrastructure inspection for current operations.
+
 Status: architecture review complete; revise before implementation.
 
 This plan supersedes the implementation details in the original Hermes draft. The

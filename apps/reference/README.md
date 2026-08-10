@@ -1,82 +1,58 @@
 # PGPZ Reference
 
-`apps/reference` is a neutral, executable example of the public PGPZ site
-contracts. It proves that shared packages can be configured without importing
-PGPZ Community or PGPZ Coalition branding, aliases, membership workflows,
-seed content, or infrastructure singletons.
+Neutral executable proof of selected shared PGPZ contracts. Reference is not a
+third membership service and must not import Community/Coalition aliases,
+branding, membership workflows, seed content, or infrastructure singletons.
 
-The deployed reference is deliberately non-production:
+## Safety contract
 
-- membership mode is `externally-managed`, with no identity provider attached;
-- ZEC Shelf uses this app's synthetic, read-only seed catalog;
-- sign-up, sign-in, profiles, administration, and all mutation routes are absent;
-- newsletters, welcome mail, invitations, and all outbound email are disabled;
-- robots metadata and response headers prohibit indexing;
-- no production table, bucket, sender credential, or member record is used.
+The default deployed/local shape is read-only and non-production:
+
+- externally managed membership with no attached identity provider;
+- synthetic ZEC Shelf data and inert server adapters;
+- no sign-up, sign-in, profiles, admin, newsletter, invitation, or mutation API;
+- outbound email disabled;
+- indexing prohibited;
+- no branded table, bucket, sender, secret, credential, or member record.
+
+Current central feature switches enable only ZEC Shelf. The `/documents` surface
+is a neutral demonstration; it does not attach Board storage.
+
+## Routes and configuration
+
+- `/`: purpose and runtime posture;
+- `/architecture`: configuration/dependency boundaries;
+- `/zec-shelf`: shared feature with Reference-owned synthetic content;
+- `/documents`: neutral document contract demonstration;
+- `/api/zec-shelf/resources`: cached read-only API;
+- `/terms`, `/privacy`, `/reference-notice`: app-owned notices.
+
+`config/site.ts` is client-safe and validated through `@pgpz/core`.
+`config/server.ts` injects inert or isolated server resources. If persistence is
+ever enabled, provision Reference-only resources in a reviewed change.
 
 ## Local development
 
-Install once from the monorepo root, copy `.env.example` to `.env.local`, and
-run the workspace commands:
+Reference needs no Docker services:
 
 ```bash
-npm ci
-npm run dev --workspace=apps/reference
+cp apps/reference/.env.local.example apps/reference/.env.local
+npm run dev:reference
+```
+
+It runs at `http://localhost:3003` with `REFERENCE_DEPLOYMENT_MODE=demo` and
+`EMAIL_DELIVERY_MODE=disabled`.
+
+## Validation and deployment
+
+```bash
 npm run test --workspace=apps/reference
-npm run typecheck --workspace=apps/reference
+npm run typecheck:reference
 npm run lint --workspace=apps/reference
-npm run build --workspace=apps/reference
+npm run build:reference
 ```
 
-The runnable demo requires only these safety-oriented values:
-
-```text
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-REFERENCE_DEPLOYMENT_MODE=demo
-EMAIL_DELIVERY_MODE=disabled
-```
-
-`REGION_AWS`, `DYNAMODB_TABLE`, `ZEC_SHELF_PARTITION_KEY`, and the Better Auth
-keys are reserved for an isolated server adapter. They do not activate a
-production integration. Never use either branded application's table,
-credentials, storage, sender, auth secret, or catalog partition here.
-
-## Routes
-
-- `/` explains the reference purpose and safe runtime posture.
-- `/architecture` shows the configuration and one-way dependency boundaries.
-- `/zec-shelf` renders the shared feature package with app-owned content.
-- `/api/zec-shelf/resources` exposes only cached `GET`, `HEAD`, and `OPTIONS`.
-- `/terms`, `/privacy`, and `/reference-notice` are app-owned legal notices.
-
-There is intentionally no `/signin`, `/admin`, member-directory, newsletter,
-or write API surface.
-
-## Configuration boundary
-
-`config/site.ts` is client-safe and validated by `@pgpz/core`. It defines the
-canonical origin, neutral identity, navigation, legal links, externally managed
-membership mode, and feature switches. Server resources must be injected
-through `@pgpz/core/server`; credentials and resource identifiers must never be
-added to the public site configuration.
-
-## Amplify safety
-
-The root monorepo build specification is authoritative. The app-local
-`amplify.yml` documents a standalone fallback and still installs/builds from
-the monorepo root. A non-production Amplify app should use:
-
-- `WEB_COMPUTE` and `AMPLIFY_MONOREPO_APP_ROOT=apps/reference`;
-- no runtime IAM role, table, auth provider, or storage for the initial
-  seed-backed read-only deployment;
-- Basic Auth and disabled automatic builds during initial validation;
-- the exact custom hostname `reference.pgpz.org` only after the default
-  Amplify hostname passes smoke tests;
-- `EMAIL_DELIVERY_MODE=disabled` with no SMTP credentials.
-
-If a later feature needs persistence, authentication, or storage, provision a
-reference-only IAM role, table, partition, auth secret, and bucket in a
-separate reviewed change. Never attach a branded application's resources.
-
-Promoting this example into a site generator remains a separate decision after
-the reference build stays green through multiple shared-package changes.
+Root `amplify.yml` is authoritative with
+`AMPLIFY_MONOREPO_APP_ROOT=apps/reference`. A hosted Reference deployment must
+remain isolated, non-indexed, and email-disabled. The dated design/deployment
+documents are historical; this README and current config/tests define behavior.

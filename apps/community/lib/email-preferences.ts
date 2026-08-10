@@ -1,22 +1,19 @@
 import "server-only";
 
+import {
+  emailPreferencesFromUser,
+  memberAcceptsEmailCategory,
+  preferenceField,
+  type MemberEmailCategory,
+  type MemberEmailPreferences,
+} from "@pgpz/email-domain";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 
-export type MemberEmailCategory = "newsletter" | "policy_update";
-
-type RawEmailPreferenceUser = Record<string, unknown> & {
-  emailSuppressed?: boolean | null;
-  emailSuppressedReason?: string | null;
-  emailNewsletterOptIn?: boolean | null;
-  emailPolicyUpdateOptIn?: boolean | null;
-};
-
-export type MemberEmailPreferences = {
-  newsletter: boolean;
-  policyUpdates: boolean;
-  globallySuppressed: boolean;
-  suppressionReason: string | null;
-  canSelfResubscribe: boolean;
+export {
+  emailPreferencesFromUser,
+  memberAcceptsEmailCategory,
+  type MemberEmailCategory,
+  type MemberEmailPreferences,
 };
 
 const userKey = (userId: string) => ({
@@ -24,35 +21,11 @@ const userKey = (userId: string) => ({
   sk: `USER#${userId}`,
 });
 
-const preferenceField = (category: MemberEmailCategory) =>
-  category === "newsletter" ? "emailNewsletterOptIn" : "emailPolicyUpdateOptIn";
-
 const isConditionalCheckFailure = (error: unknown) =>
   !!error &&
   typeof error === "object" &&
   "name" in error &&
   error.name === "ConditionalCheckFailedException";
-
-export function memberAcceptsEmailCategory(
-  user: RawEmailPreferenceUser,
-  category: MemberEmailCategory,
-) {
-  if (user.emailSuppressed === true) return false;
-  return user[preferenceField(category)] !== false;
-}
-
-export function emailPreferencesFromUser(user: RawEmailPreferenceUser): MemberEmailPreferences {
-  const globallySuppressed = user.emailSuppressed === true;
-  const suppressionReason =
-    typeof user.emailSuppressedReason === "string" ? user.emailSuppressedReason : null;
-  return {
-    newsletter: !globallySuppressed && user.emailNewsletterOptIn !== false,
-    policyUpdates: !globallySuppressed && user.emailPolicyUpdateOptIn !== false,
-    globallySuppressed,
-    suppressionReason,
-    canSelfResubscribe: !globallySuppressed || suppressionReason === "newsletter_unsubscribe",
-  };
-}
 
 export async function getMemberEmailPreferences(userId: string) {
   const result = await documentClient.get({

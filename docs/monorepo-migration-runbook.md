@@ -1,5 +1,9 @@
 # Monorepo migration, cutover, and rollback
 
+> **Status: completed migration procedure.** Retained for rollback history and
+> architectural evidence. Current development, validation, and deployment
+> guidance starts at [`README.md`](README.md) and [`architecture.md`](architecture.md).
+
 ## Immutable baseline
 
 The source repositories remain unchanged emergency rollback sources. Their

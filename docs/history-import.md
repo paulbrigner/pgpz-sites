@@ -1,5 +1,9 @@
 # History import baseline
 
+> **Status: immutable historical baseline with a current verifier.** Do not
+> reinterpret the recorded source tips as current application commits. Run
+> `npm run history:verify` to validate that the imported history remains intact.
+
 The monorepo was initialized on July 17, 2026 by rewriting fresh disposable
 clones with a dependency-free `git filter-branch --index-filter` path-prefix
 operation, then merging the two rewritten histories without squashing. The

@@ -1,5 +1,8 @@
 # Email ownership and identity reconciliation
 
+> **Status: current guarded runbook.** Start with read-only audit/preflight and
+> verify the exact app, table, account, and collision report before repair.
+
 Community and Coalition use one durable item per normalized email to prevent
 eventually consistent GSI lookups from allowing duplicate identities:
 

@@ -1,0 +1,807 @@
+import { randomUUID } from "node:crypto";
+import type { BackgroundJobMode } from "@pgpz/background-jobs";
+import type {
+  AdminNewsletter,
+  NewsletterDraftInput,
+  NewsletterSendRun,
+} from "@pgpz/email-domain";
+import type { EmailTransport, EmailTransportFactory } from "./types";
+
+export type NewsletterRouteRequest = {
+  headers: {
+    get(name: string): string | null;
+  };
+  json(): Promise<any>;
+};
+
+export type NewsletterRouteResponse = {
+  readonly status: number;
+  json(): Promise<any>;
+};
+
+export type NewsletterRouteRecipient = {
+  id: string;
+  email: string;
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+
+export type NewsletterRouteDependencies<
+  ResponseType extends NewsletterRouteResponse = NewsletterRouteResponse,
+> = {
+  jsonResponse(
+    body: unknown,
+    init?: { status?: number },
+  ): ResponseType;
+  requireAdminSession(): Promise<any>;
+  buildEmailServerConfig(): unknown;
+  isValidEmail(value: string): boolean;
+  normalizeEmail(value: unknown): string;
+  deleteNewsletterDraft(newsletterId: string): Promise<any>;
+  getNewsletter(newsletterId: string): Promise<AdminNewsletter | null>;
+  getNewsletterSendRun(sendRunId: string): Promise<NewsletterSendRun | null>;
+  listNewsletterSendRuns(): Promise<NewsletterSendRun[]>;
+  listNewsletters(): Promise<AdminNewsletter[]>;
+  markNewsletterSent(input: any): Promise<any>;
+  recordNewsletterDraftSend(newsletterId: string): Promise<any>;
+  recordNewsletterSendRun(input: any): Promise<any>;
+  saveNewsletterDraft(input: NewsletterDraftInput): Promise<AdminNewsletter>;
+  bindNewsletterTrackingDestinations(
+    trackingId: string,
+    destinations: string[],
+  ): Promise<any>;
+  createNewsletterTrackingRecord(input: any): Promise<{
+    trackingId: string;
+    sentAt?: string;
+  }>;
+  markNewsletterTrackingSent(input: any): Promise<any>;
+  listPolicyUpdateRecipients(
+    category: "newsletter",
+  ): Promise<NewsletterRouteRecipient[]>;
+  findUserProfileByEmail(email: string): Promise<any>;
+  getUserProfileDisplayName(profile: any): string | null;
+  recordEmailEvent(input: any): Promise<any>;
+  emailFrom: string | null | undefined;
+  siteUrl: string;
+  listUnsubscribeHeaders(
+    url: string | null | undefined,
+  ): Record<string, string> | undefined;
+  buildNewsletterEmail(
+    newsletter: any,
+    recipient: any,
+    siteUrl: string,
+    tracking?: any,
+  ): {
+    subject: string;
+    text: string;
+    html: string;
+    unsubscribeUrl: string | null;
+    trackedDestinations: string[];
+  };
+  backgroundJobIdForIdempotencyKey(idempotencyKey: string): string;
+  enqueueBackgroundJob(input: any): Promise<{
+    duplicate: boolean;
+    job: { id: string; [key: string]: any };
+  }>;
+  createTransport: EmailTransportFactory;
+};
+
+export function createNewsletterRouteHandlers<
+  ResponseType extends NewsletterRouteResponse,
+>({
+  jsonResponse,
+  requireAdminSession,
+  buildEmailServerConfig,
+  isValidEmail,
+  normalizeEmail,
+  deleteNewsletterDraft,
+  getNewsletter,
+  getNewsletterSendRun,
+  listNewsletterSendRuns,
+  listNewsletters,
+  markNewsletterSent,
+  recordNewsletterDraftSend,
+  recordNewsletterSendRun,
+  saveNewsletterDraft,
+  bindNewsletterTrackingDestinations,
+  createNewsletterTrackingRecord,
+  markNewsletterTrackingSent,
+  listPolicyUpdateRecipients,
+  findUserProfileByEmail,
+  getUserProfileDisplayName,
+  recordEmailEvent,
+  emailFrom: EMAIL_FROM,
+  siteUrl: SITE_URL,
+  listUnsubscribeHeaders,
+  buildNewsletterEmail,
+  backgroundJobIdForIdempotencyKey,
+  enqueueBackgroundJob,
+  createTransport,
+}: NewsletterRouteDependencies<ResponseType>) {
+type NewsletterSendRecipient = Omit<NewsletterRouteRecipient, "id"> & {
+  id: string | null;
+};
+
+type NewsletterAudienceMode = "all_active_members" | "selected_members";
+
+async function requireAdminOrForbidden() {
+  try {
+    const session = await requireAdminSession();
+    return { session, response: null };
+  } catch {
+    return {
+      session: null,
+      response: jsonResponse({ error: "Admin access required" }, { status: 403 }),
+    };
+  }
+}
+
+async function buildDraftRecipient(email: string): Promise<NewsletterSendRecipient> {
+  const profile = await findUserProfileByEmail(email);
+  return {
+    id: profile?.id || null,
+    email,
+    name: profile ? getUserProfileDisplayName(profile) : null,
+    firstName: profile?.firstName || null,
+    lastName: profile?.lastName || null,
+  };
+}
+
+function normalizeRecipientIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function backgroundJobMode(body: any): BackgroundJobMode {
+  if (body?.deliveryMode === "validate_only") return "validate_only";
+  if (body?.deliveryMode === "smoke") return "smoke";
+  return "live";
+}
+
+function requestIdempotencyKey(request: NewsletterRouteRequest, body: any, action: string) {
+  const supplied = request.headers.get("idempotency-key") ||
+    (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "");
+  return `newsletter:${action}:${supplied || randomUUID()}`;
+}
+
+async function queueNewsletterSnapshot({
+  request,
+  body,
+  action,
+  snapshot,
+  recipients,
+  audienceMode,
+  activeRecipientCount,
+  adminUserId,
+  sourceSendRunId,
+  idempotencyKey: suppliedJobIdempotencyKey,
+}: {
+  request: NewsletterRouteRequest;
+  body: any;
+  action: string;
+  snapshot: NewsletterSnapshot;
+  recipients: NewsletterSendRecipient[];
+  audienceMode: NewsletterAudienceMode;
+  activeRecipientCount: number;
+  adminUserId: string | null;
+  sourceSendRunId?: string | null;
+  idempotencyKey?: string;
+}) {
+  const idempotencyKey =
+    suppliedJobIdempotencyKey || requestIdempotencyKey(request, body, action);
+  const jobId = backgroundJobIdForIdempotencyKey(idempotencyKey);
+  await recordNewsletterSendRun({
+    sendRunId: jobId,
+    newsletterId: snapshot.newsletterId,
+    newsletter: snapshot,
+    audienceMode,
+    adminUserId,
+    recipientCount: recipients.length,
+    sentCount: 0,
+    failedCount: 0,
+    failurePreview: [],
+  });
+  const queued = await enqueueBackgroundJob({
+    kind: "newsletter",
+    mode: backgroundJobMode(body),
+    sourceId: snapshot.newsletterId,
+    createdBy: adminUserId,
+    idempotencyKey,
+    payload: {
+      newsletterId: snapshot.newsletterId,
+      newsletter: snapshot,
+      audienceMode,
+      sourceSendRunId: sourceSendRunId || null,
+      adminUserId,
+    },
+    recipients: recipients.map((recipient) => ({
+      recipientKey: recipient.id || recipient.email,
+      userId: recipient.id,
+      email: recipient.email,
+      name: recipient.name,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+    })),
+  });
+  return jsonResponse({
+    ok: true,
+    queued: true,
+    duplicate: queued.duplicate,
+    job: queued.job,
+    jobId: queued.job.id,
+    statusUrl: `/api/admin/jobs?jobId=${encodeURIComponent(queued.job.id)}`,
+    sendRun: await getNewsletterSendRun(queued.job.id),
+    audienceMode,
+    activeRecipientCount,
+    recipientCount: recipients.length,
+    sent: 0,
+    failed: 0,
+  }, { status: 202 });
+}
+
+async function resolveNewsletterAudience(body: any) {
+  const audienceMode: NewsletterAudienceMode =
+    body?.audienceMode === "selected_members" ? "selected_members" : "all_active_members";
+  const allRecipients = await listPolicyUpdateRecipients("newsletter");
+
+  if (audienceMode === "all_active_members") {
+    return { audienceMode, recipients: allRecipients, activeRecipientCount: allRecipients.length };
+  }
+
+  const recipientIds = normalizeRecipientIds(body?.recipientIds);
+  if (!recipientIds.length) {
+    throw new Error("Select at least one active member recipient.");
+  }
+
+  const selectedIds = new Set(recipientIds);
+  const recipients = allRecipients.filter((recipient) => selectedIds.has(recipient.id));
+  if (recipients.length !== selectedIds.size) {
+    throw new Error("Selected recipients must be active members with unsuppressed email addresses.");
+  }
+
+  return { audienceMode, recipients, activeRecipientCount: allRecipients.length };
+}
+
+type NewsletterSnapshot = {
+  newsletterId: string;
+  subject: string;
+  preheader: string;
+  body: string;
+  previewText: string;
+};
+
+async function sendNewsletterSnapshot({
+  snapshot,
+  recipients,
+  audienceMode,
+  adminUserId,
+  sourceSendRunId,
+  transporter,
+  draftSend = false,
+}: {
+  snapshot: NewsletterSnapshot;
+  recipients: NewsletterSendRecipient[];
+  audienceMode: NewsletterAudienceMode;
+  adminUserId: string | null;
+  sourceSendRunId?: string | null;
+  transporter: EmailTransport;
+  draftSend?: boolean;
+}) {
+  const failures: Array<{ email: string; error: string }> = [];
+  const sendRunId = randomUUID();
+  let sent = 0;
+
+  for (const recipient of recipients) {
+    const tracking = draftSend
+      ? null
+      : await createNewsletterTrackingRecord({
+          newsletterId: snapshot.newsletterId,
+          sendRunId,
+          audienceMode,
+          userId: recipient.id,
+          email: recipient.email,
+        });
+    const built = buildNewsletterEmail(
+      {
+        subject: snapshot.subject,
+        preheader: snapshot.preheader,
+        body: snapshot.body,
+      },
+      {
+        email: recipient.email,
+        name: recipient.name,
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+      },
+      SITE_URL,
+      tracking
+        ? {
+            trackingId: tracking.trackingId,
+            trackLinks: true,
+            includeOpenPixel: true,
+            includeUnsubscribe: true,
+          }
+        : undefined,
+    );
+    try {
+      if (tracking) {
+        await bindNewsletterTrackingDestinations(
+          tracking.trackingId,
+          built.trackedDestinations,
+        );
+      }
+      const sendResult = await transporter.sendMail({
+        to: recipient.email,
+        from: EMAIL_FROM,
+        subject: draftSend ? `[Draft] ${built.subject}` : built.subject,
+        text: built.text,
+        html: built.html,
+        headers: listUnsubscribeHeaders(built.unsubscribeUrl),
+      });
+      if (tracking) {
+        await markNewsletterTrackingSent({
+          trackingId: tracking.trackingId,
+          providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
+        });
+      }
+      sent += 1;
+      await recordEmailEvent({
+        userId: recipient.id,
+        email: recipient.email,
+        type: draftSend ? "newsletter_draft" : "newsletter",
+        subject: built.subject,
+        status: "sent",
+        providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
+        metadata: {
+          newsletterId: snapshot.newsletterId,
+          ...(tracking ? { trackingId: tracking.trackingId } : {}),
+          audience: "active_members",
+          audienceMode,
+          ...(sourceSendRunId ? { sourceSendRunId } : {}),
+          ...(draftSend ? { draft: true } : {}),
+          profileNameResolved: !!recipient.name,
+        },
+      });
+    } catch (err: any) {
+      const error = typeof err?.message === "string" ? err.message : "Failed to send newsletter";
+      failures.push({ email: recipient.email, error });
+      await recordEmailEvent({
+        userId: recipient.id,
+        email: recipient.email,
+        type: draftSend ? "newsletter_draft" : "newsletter",
+        subject: snapshot.subject,
+        status: "failed",
+        error,
+        metadata: {
+          newsletterId: snapshot.newsletterId,
+          ...(tracking ? { trackingId: tracking.trackingId } : {}),
+          audience: "active_members",
+          audienceMode,
+          ...(sourceSendRunId ? { sourceSendRunId } : {}),
+          ...(draftSend ? { draft: true } : {}),
+          profileNameResolved: !!recipient.name,
+        },
+      }).catch(() => undefined);
+    }
+  }
+
+  if (draftSend) {
+    if (sent > 0) await recordNewsletterDraftSend(snapshot.newsletterId);
+    return { sendRun: null, sent, failures };
+  }
+
+  const sendRun = await recordNewsletterSendRun({
+    sendRunId,
+    newsletterId: snapshot.newsletterId,
+    newsletter: snapshot,
+    audienceMode,
+    adminUserId,
+    recipientCount: recipients.length,
+    sentCount: sent,
+    failedCount: failures.length,
+    failurePreview: failures,
+  });
+
+  return { sendRun, sent, failures };
+}
+
+async function GET() {
+  const { response } = await requireAdminOrForbidden();
+  if (response) return response;
+
+  const [newsletters, sendRuns, recipients] = await Promise.all([
+    listNewsletters(),
+    listNewsletterSendRuns(),
+    listPolicyUpdateRecipients("newsletter"),
+  ]);
+  const sendRunNewsletterIds = new Set(sendRuns.map((sendRun) => sendRun.newsletterId));
+  const legacySendRuns = newsletters
+    .filter((newsletter) => newsletter.status === "sent" && !sendRunNewsletterIds.has(newsletter.id))
+    .map((newsletter) => ({
+      id: `legacy-${newsletter.id}`,
+      newsletterId: newsletter.id,
+      subject: newsletter.subject,
+      preheader: newsletter.preheader,
+      body: newsletter.body,
+      previewText: newsletter.previewText,
+      audienceMode: "all_active_members" as const,
+      sentAt: newsletter.sentAt || newsletter.updatedAt,
+      sentBy: newsletter.sentBy,
+      stats: {
+        recipientCount: newsletter.stats.recipientCount,
+        sentCount: newsletter.stats.sentCount,
+        failedCount: newsletter.stats.failedCount,
+        openCount: newsletter.stats.openCount,
+        clickCount: newsletter.stats.clickCount,
+        unsubscribeCount: newsletter.stats.unsubscribeCount,
+        possibleForwardOpenCount: newsletter.stats.possibleForwardOpenCount,
+      },
+      failurePreview: newsletter.failurePreview,
+    }));
+  const allSendRuns = [...sendRuns, ...legacySendRuns].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+
+  return jsonResponse({
+    newsletters,
+    sendRuns: allSendRuns,
+    recipientCount: recipients.length,
+    recipients,
+  });
+}
+
+async function POST(request: NewsletterRouteRequest) {
+  const { session, response } = await requireAdminOrForbidden();
+  if (response) return response;
+
+  let body: any = null;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const action = typeof body?.action === "string" ? body.action : "save";
+  const adminUserId = (session?.user as any)?.id || null;
+
+  if (action === "save") {
+    try {
+      const newsletter = await saveNewsletterDraft({
+        id: typeof body?.id === "string" ? body.id : null,
+        subject: typeof body?.subject === "string" ? body.subject : "",
+        preheader: typeof body?.preheader === "string" ? body.preheader : "",
+        body: typeof body?.body === "string" ? body.body : "",
+        adminUserId,
+      });
+      return jsonResponse({ ok: true, newsletter });
+    } catch (err: any) {
+      const message = typeof err?.message === "string" ? err.message : "Failed to save newsletter draft";
+      return jsonResponse({ error: message }, { status: message.includes("cannot be edited") ? 409 : 400 });
+    }
+  }
+
+  if (action === "delete") {
+    const newsletterId = typeof body?.id === "string" ? body.id.trim() : "";
+    try {
+      const result = await deleteNewsletterDraft(newsletterId);
+      return jsonResponse(result);
+    } catch (err: any) {
+      const message = typeof err?.message === "string" ? err.message : "Failed to delete newsletter draft";
+      const status = message.includes("not found") ? 404 : message.includes("Only draft") ? 409 : 400;
+      return jsonResponse({ error: message }, { status });
+    }
+  }
+
+  const transportConfig = buildEmailServerConfig();
+  if (!transportConfig || !EMAIL_FROM) {
+    return jsonResponse({ error: "Email provider not configured" }, { status: 500 });
+  }
+
+  if (action === "sendDraft") {
+    const draftRecipientEmail = normalizeEmail(body?.draftRecipientEmail);
+    if (!draftRecipientEmail || !isValidEmail(draftRecipientEmail)) {
+      return jsonResponse({ error: "Enter a valid draft recipient email" }, { status: 400 });
+    }
+
+    try {
+      const newsletter = await saveNewsletterDraft({
+        id: typeof body?.id === "string" ? body.id : null,
+        subject: typeof body?.subject === "string" ? body.subject : "",
+        preheader: typeof body?.preheader === "string" ? body.preheader : "",
+        body: typeof body?.body === "string" ? body.body : "",
+        adminUserId,
+      });
+      const recipient = await buildDraftRecipient(draftRecipientEmail);
+      const built = buildNewsletterEmail(
+        newsletter,
+        {
+          email: recipient.email,
+          name: recipient.name,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+        },
+        SITE_URL,
+      );
+      const transporter = createTransport(transportConfig);
+      const sendResult = await transporter.sendMail({
+        to: recipient.email,
+        from: EMAIL_FROM,
+        subject: `[Draft] ${built.subject}`,
+        text: built.text,
+        html: built.html,
+        headers: listUnsubscribeHeaders(built.unsubscribeUrl),
+      });
+
+      await recordEmailEvent({
+        userId: recipient.id,
+        email: recipient.email,
+        type: "newsletter_draft",
+        subject: built.subject,
+        status: "sent",
+        providerMessageId: sendResult?.messageId ? String(sendResult.messageId) : null,
+        metadata: {
+          newsletterId: newsletter.id,
+          draft: true,
+          profileNameResolved: !!recipient.name,
+        },
+      });
+      await recordNewsletterDraftSend(newsletter.id);
+
+      return jsonResponse({
+        ok: true,
+        draft: true,
+        newsletter,
+        recipientEmail: recipient.email,
+        resolvedRecipientName: recipient.firstName || null,
+      });
+    } catch (err: any) {
+      const message = typeof err?.message === "string" ? err.message : "Failed to send newsletter draft";
+      await recordEmailEvent({
+        userId: null,
+        email: draftRecipientEmail,
+        type: "newsletter_draft",
+        subject: typeof body?.subject === "string" ? body.subject : null,
+        status: "failed",
+        error: message,
+        metadata: {
+          newsletterId: typeof body?.id === "string" ? body.id : null,
+          draft: true,
+        },
+      }).catch(() => undefined);
+      return jsonResponse({ error: message }, { status: 500 });
+    }
+  }
+
+  if (action === "sendPrevious") {
+    const sourceSendRunId = typeof body?.sendRunId === "string" ? body.sendRunId.trim() : "";
+    const confirmSend = body?.confirmSend === true;
+    const draftSend = body?.draftSend === true;
+    if (!confirmSend) {
+      return jsonResponse({ error: "confirmSend must be true before sending a previous newsletter" }, { status: 400 });
+    }
+    if (!sourceSendRunId) {
+      return jsonResponse({ error: "Send history item is required" }, { status: 400 });
+    }
+
+    let snapshot: NewsletterSnapshot | null = null;
+    if (sourceSendRunId.startsWith("legacy-")) {
+      const newsletter = await getNewsletter(sourceSendRunId.replace(/^legacy-/, ""));
+      if (newsletter) {
+        snapshot = {
+          newsletterId: newsletter.id,
+          subject: newsletter.subject,
+          preheader: newsletter.preheader,
+          body: newsletter.body,
+          previewText: newsletter.previewText,
+        };
+      }
+    } else {
+      const previousSend = await getNewsletterSendRun(sourceSendRunId);
+      if (previousSend) {
+        snapshot = {
+          newsletterId: previousSend.newsletterId,
+          subject: previousSend.subject,
+          preheader: previousSend.preheader,
+          body: previousSend.body,
+          previewText: previousSend.previewText,
+        };
+      }
+    }
+
+    if (!snapshot) {
+      return jsonResponse({ error: "Previous newsletter send not found" }, { status: 404 });
+    }
+
+    let resolvedAudience: Awaited<ReturnType<typeof resolveNewsletterAudience>>;
+    try {
+      resolvedAudience = await resolveNewsletterAudience({ ...body, audienceMode: "selected_members" });
+    } catch (err: any) {
+      return jsonResponse(
+        { error: typeof err?.message === "string" ? err.message : "Invalid newsletter audience" },
+        { status: 400 },
+      );
+    }
+
+    const { recipients, activeRecipientCount } = resolvedAudience;
+    if (!recipients.length) {
+      return jsonResponse({ error: "Select at least one active member recipient." }, { status: 400 });
+    }
+
+    if (!draftSend) {
+      return queueNewsletterSnapshot({
+        request,
+        body,
+        action,
+        snapshot,
+        recipients,
+        audienceMode: "selected_members",
+        activeRecipientCount,
+        adminUserId,
+        sourceSendRunId,
+      });
+    }
+
+    const transporter = createTransport(transportConfig);
+    const { sendRun, sent, failures } = await sendNewsletterSnapshot({
+      snapshot,
+      recipients,
+      audienceMode: "selected_members",
+      adminUserId,
+      sourceSendRunId,
+      transporter,
+      draftSend,
+    });
+
+    return jsonResponse({
+      ok: failures.length === 0,
+      draft: draftSend,
+      sendRun: sendRun || undefined,
+      audienceMode: "selected_members",
+      activeRecipientCount,
+      recipientCount: recipients.length,
+      sent,
+      failed: failures.length,
+      failures: failures.slice(0, 10),
+    });
+  }
+
+  if (action === "send") {
+    const newsletterId = typeof body?.id === "string" ? body.id.trim() : "";
+    const confirmSend = body?.confirmSend === true;
+    const draftSend = body?.draftSend === true;
+    const draftPayloadProvided =
+      typeof body?.subject === "string" || typeof body?.preheader === "string" || typeof body?.body === "string";
+    const durableIdempotencyKey = draftSend
+      ? null
+      : requestIdempotencyKey(request, body, action);
+    if (!confirmSend) {
+      return jsonResponse({ error: "confirmSend must be true before sending a newsletter" }, { status: 400 });
+    }
+    if (!newsletterId && (!draftSend || !draftPayloadProvided)) {
+      return jsonResponse({ error: "Newsletter ID is required" }, { status: 400 });
+    }
+
+    let newsletter: NonNullable<Awaited<ReturnType<typeof getNewsletter>>>;
+    if (draftSend && draftPayloadProvided) {
+      try {
+        newsletter = await saveNewsletterDraft({
+          id: newsletterId || null,
+          subject: typeof body?.subject === "string" ? body.subject : "",
+          preheader: typeof body?.preheader === "string" ? body.preheader : "",
+          body: typeof body?.body === "string" ? body.body : "",
+          adminUserId,
+        });
+      } catch (err: any) {
+        const message = typeof err?.message === "string" ? err.message : "Failed to save newsletter draft";
+        return jsonResponse({ error: message }, { status: message.includes("cannot be edited") ? 409 : 400 });
+      }
+    } else {
+      const existingNewsletter = await getNewsletter(newsletterId);
+      if (!existingNewsletter) {
+        return jsonResponse({ error: "Newsletter not found" }, { status: 404 });
+      }
+      const requestedJobId = durableIdempotencyKey
+        ? backgroundJobIdForIdempotencyKey(durableIdempotencyKey)
+        : null;
+      if (
+        existingNewsletter.status !== "draft" &&
+        existingNewsletter.deliveryJobId !== requestedJobId
+      ) {
+        return jsonResponse(
+          { error: "This newsletter is already queued or has been sent" },
+          { status: 409 },
+        );
+      }
+      newsletter = existingNewsletter;
+    }
+
+    let resolvedAudience: Awaited<ReturnType<typeof resolveNewsletterAudience>>;
+    try {
+      resolvedAudience = await resolveNewsletterAudience(body);
+    } catch (err: any) {
+      return jsonResponse(
+        { error: typeof err?.message === "string" ? err.message : "Invalid newsletter audience" },
+        { status: 400 },
+      );
+    }
+
+    const { audienceMode, recipients, activeRecipientCount } = resolvedAudience;
+    if (draftSend && audienceMode !== "selected_members") {
+      return jsonResponse({ error: "Draft sends must use a selected member audience." }, { status: 400 });
+    }
+    if (!recipients.length) {
+      return jsonResponse({ error: "No active member recipients with unsuppressed email addresses" }, { status: 400 });
+    }
+
+    if (!draftSend) {
+      return queueNewsletterSnapshot({
+        request,
+        body,
+        action,
+        snapshot: {
+          newsletterId: newsletter.id,
+          subject: newsletter.subject,
+          preheader: newsletter.preheader,
+          body: newsletter.body,
+          previewText: newsletter.previewText,
+        },
+        recipients,
+        audienceMode,
+        activeRecipientCount,
+        adminUserId,
+        idempotencyKey: durableIdempotencyKey || undefined,
+      });
+    }
+
+    const transporter = createTransport(transportConfig);
+    const { sendRun, sent, failures } = await sendNewsletterSnapshot({
+      snapshot: {
+        newsletterId: newsletter.id,
+        subject: newsletter.subject,
+        preheader: newsletter.preheader,
+        body: newsletter.body,
+        previewText: newsletter.previewText,
+      },
+      recipients,
+      audienceMode,
+      adminUserId,
+      transporter,
+      draftSend,
+    });
+
+    if (audienceMode === "all_active_members" && !draftSend) {
+      await markNewsletterSent({
+        newsletterId: newsletter.id,
+        adminUserId,
+        recipientCount: recipients.length,
+        sentCount: sent,
+        failedCount: failures.length,
+        failurePreview: failures,
+      });
+    }
+
+    const sentNewsletter = await getNewsletter(newsletter.id);
+    return jsonResponse({
+      ok: failures.length === 0,
+      draft: draftSend,
+      newsletter: sentNewsletter || newsletter,
+      sendRun: sendRun || undefined,
+      audienceMode,
+      activeRecipientCount,
+      recipientCount: recipients.length,
+      sent,
+      failed: failures.length,
+      failures: failures.slice(0, 10),
+    });
+  }
+
+  return jsonResponse({ error: "Unknown newsletter action" }, { status: 400 });
+}
+
+  return { GET, POST };
+}

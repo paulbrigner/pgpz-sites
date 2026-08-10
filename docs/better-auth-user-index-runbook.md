@@ -1,5 +1,8 @@
 # Better Auth reverse-user index migration
 
+> **Status: current guarded runbook.** Verify each target table/index and AWS
+> identity before use; prior successful runs are not proof of current state.
+
 ## Purpose and storage contract
 
 Better Auth removes sessions and linked provider accounts by `userId`. The shared

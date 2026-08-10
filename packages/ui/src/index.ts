@@ -1,4 +1,13 @@
 export { Badge } from "./Badge";
+export { AdminShellSkeleton } from "./AdminShellSkeleton";
+export {
+  AdminSensitiveDataProvider,
+  formatSensitiveValue,
+  maskSensitiveValue,
+  SensitiveDataText,
+  type SensitiveDataKind,
+  useAdminSensitiveData,
+} from "./AdminSensitiveData";
 export { SecureLinkSubmitButton } from "./AuthAction";
 export { Button, buttonStyles, type ButtonSize, type ButtonVariant } from "./Button";
 export { cn } from "./cn";

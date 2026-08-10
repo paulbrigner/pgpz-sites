@@ -1,110 +1,86 @@
 # PGPZ Coalition
 
-Membership site for `coalition.pgpz.org`, built with Next.js 15 and AWS Amplify.
+Selective partner workspace for `coalition.pgpz.org`, built with Next.js 15.
+Members authenticate with Better Auth magic links and become active through an
+administrator-approved application or an administrator-created invitation.
+There is no X social-proof membership path.
 
-The coalition site is a selective workspace for Zcash ecosystem partners involved in shaping crypto policy. It is intended for sharing policy resources, coordinating messaging, and organizing coalition campaigns that advance Zcash policy in Washington, DC.
+## Ownership and capabilities
 
-## Features
+Coalition owns:
 
-- Email magic-link authentication with Better Auth.
-- DynamoDB-backed user/profile/session persistence.
-- Manual admin approval for coalition membership access.
-- Admin-created invitations with one-time activation links and an `invited` state.
-- Admin roster for pending, invited, active, and unapproved members with expandable member details.
-- Bulk invite action for outstanding invite-able members that have not already received an invitation email.
-- Welcome, invitation, newsletter, and policy-update email tooling backed by AWS SES SMTP.
-- Admin-editable invitation email template language for launch and future invite cohorts, including draft test sends and safe Markdown formatting.
-- Policy update archive with recurring weekly updates and featured/special updates.
-- Email open, click, unsubscribe, delivery, and send-run stats for newsletters and policy updates.
-- Active-member directory for members who opt into sharing contact details, including LinkedIn profiles and X handles when provided.
-- Members-only Signal group CTA with a scan-ready QR code on the authenticated home screen.
-- Zcash-inspired visual system using `#F5A800` as the primary gold with a distinct civic green/teal coalition palette.
+- application, approval, invitation, activation, and membership policy;
+- policy interest groups and the opt-in active-member directory;
+- letter campaigns and exact-document sign-on workflows;
+- invitation templates and Coalition-specific email rendering/audiences;
+- Coalition-to-Community sync policy and Coalition infrastructure;
+- app adapters for shared auth, email, jobs, access log, files, notifications,
+  admin UI, and policy-update distribution.
 
-## Membership Flow
+Current central feature switches enable public files and letter sign-ons. ZEC
+Shelf and the document vault are disabled.
 
-1. User requests access with email, profile details, corporate affiliation, job title, LinkedIn URL, X handle, and directory preference.
-2. User confirms the email magic link.
-3. User submits a coalition approval request.
-4. A PGPZ admin reviews the request.
-5. Admin approval activates coalition membership.
-6. Approved members can return to the partner workspace.
+See [manual approval membership](docs/manual-approval-membership.md) for the
+current membership and invitation contracts.
 
-Admins can also create a member directly from the admin roster. New admin-created members start as `invited`; they are excluded from active-member email sends, the member directory, and other active-member workflows until they activate the account from the invitation email.
+## Runtime boundaries
 
-There is no X social-proof approval path in this app.
+- Better Auth and application records use Coalition's table selected by
+  `NEXTAUTH_TABLE`; the legacy name does not mean NextAuth is active.
+- Production DynamoDB, S3, SQS, and SESv2 access comes from Coalition's Amplify
+  SSR compute role and default AWS credential chain.
+- Invitations are not active memberships. Invited users stay out of active
+  audiences, the member directory, and member-only workflows until activation.
+- Community sync is one-way, explicit, and job-backed. It does not merge tables,
+  sessions, roles, or Coalition-only fields.
+- Managed files and letter documents remain in private Coalition storage and are
+  delivered through authorized app routes.
 
-See [Manual Approval Membership](docs/manual-approval-membership.md) for implementation details.
+## Configuration
 
-## Environment
+Use `.env.example` for the production-shape inventory and `.env.local.example`
+for offline development. Important groups are site/Better Auth, Coalition table
+and compute role, email tracking/delivery, durable jobs, Community sync,
+policy-update/public-file storage, and letter-sign-on storage.
 
-From the monorepo root, copy `apps/coalition/.env.example` to
-`apps/coalition/.env.local` and set:
+Production requires valid signing secrets, `EMAIL_TRANSPORT=ses`, and app-owned
+AWS resources. Never serialize SMTP credentials or static AWS keys into a
+production build.
 
-```bash
-NEXT_PUBLIC_SITE_URL=https://coalition.pgpz.org
-REGION_AWS=us-east-1
-NEXTAUTH_TABLE=PGPZCoalitionNextAuth
-BETTER_AUTH_URL=https://coalition.pgpz.org
-BETTER_AUTH_SECRET=...
-BETTER_AUTH_TRUSTED_ORIGINS=https://coalition.pgpz.org
-EMAIL_TRACKING_SECRET=...
-EMAIL_TRACKING_SECRET_PREVIOUS=
-EMAIL_TRANSPORT=smtp
-EMAIL_SERVER_HOST=localhost
-EMAIL_SERVER_PORT=587
-EMAIL_SERVER_USER=...
-EMAIL_SERVER_PASSWORD=...
-EMAIL_FROM="PGPZ Coalition <no-reply@coalition.pgpz.org>"
-```
+## Local development
 
-`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Production requires `BETTER_AUTH_SECRET` and `EMAIL_TRACKING_SECRET` values of at least 32 bytes, plus `EMAIL_TRANSPORT=ses`. `EMAIL_TRACKING_SECRET_PREVIOUS` is verification-only during a reversible one-key rotation window. Production DynamoDB, S3, and SESv2 clients use the Amplify SSR Compute role through the AWS SDK default credential chain; SMTP remains available only for local/non-AWS development.
-
-Follow the repository-root [signing-secret and compute-role cutover runbook](../../docs/secrets-and-compute-role-cutover.md) before changing production credentials or rotating a tracking secret.
-
-See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
-
-## DynamoDB
-
-Create or verify the table:
+Follow [`docs/local-dev.md`](../../docs/local-dev.md). From the root:
 
 ```bash
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCoalitionNextAuth \
-  node apps/coalition/scripts/setup/create-dynamodb-tables.mjs
-```
-
-For AWS CLI operations in the existing environment, use:
-
-```bash
-aws sts get-caller-identity --profile zodldashboard --region us-east-1
-```
-
-## Development
-
-The root workspace install and lockfile are authoritative. Run these commands
-from the monorepo root; do not create an application-local lockfile or run a
-separate install in `apps/coalition`.
-
-```bash
-npm ci
+cp apps/coalition/.env.local.example apps/coalition/.env.local
+docker compose up -d
+npm run seed:local
 npm run dev:coalition
-npm run test --workspace=apps/coalition
-npm run build:coalition
-npm run start:coalition
 ```
 
-The former `serve out` script was intentionally removed. This application uses
-the Next.js server runtime and does not configure `output: "export"`, so it does
-not produce an `out/` directory; use `npm run start:coalition` after building.
+Coalition runs at `http://localhost:3001`; MailHog is at
+`http://localhost:8025`. Complete one magic-link sign-in, then grant admin:
 
-## Deployment
+```bash
+npm run admin:coalition -- paul@paulbrigner.com
+```
 
-The repository-root `amplify.yml` is authoritative for monorepo deployments;
-`apps/coalition/amplify.yml` is retained only as a rollback reference during
-the migration observation period. Configure the existing Coalition Amplify app
-with `AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`, keep its runtime environment
-variables and IAM role application-specific, and follow the root
-`docs/monorepo-migration-runbook.md` before reconnecting or deploying it.
+Offline config disables durable delivery jobs. Do not use local testing as
+evidence that live SQS/Lambda infrastructure is configured.
 
-## Design Resources
+## Validation and deployment
 
-See [PGPZ UX Enhancement Process](docs/ux-enhancement-process.md) for the Coalition Figma resource structure, capture workflow, and handoff process.
+```bash
+npm run test --workspace=apps/coalition
+npm run typecheck:coalition
+npm run build:coalition
+npm run parity:check
+```
+
+Root `amplify.yml` is authoritative with
+`AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`. Use the current runbook selected
+from [`docs/README.md`](../../docs/README.md), inspect live Amplify/AWS state,
+and identify the rollback target before production work.
+
+The [UX enhancement process](docs/ux-enhancement-process.md) documents the
+app's design capture and handoff workflow.

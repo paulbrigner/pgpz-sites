@@ -1,5 +1,9 @@
 # Board portal deployment runbook
 
+> **Status: current guarded runbook.** Confirm the live Amplify branch,
+> allowlists, stack outputs, Object Lock parameters, and rollback target before
+> any production change.
+
 `apps/board` is the private PGPZ Board of Directors portal at
 `https://board.pgpz.org`. This runbook covers the AWS/Amplify side: the
 DynamoDB table, the Amplify application, the IAM role, environment variables,
