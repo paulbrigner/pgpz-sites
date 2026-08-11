@@ -38,6 +38,7 @@ export function evaluateZcashMeAccess(
 ): ZcashMeAccess {
   const normalizedEmail = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
   const allowedEmails = parseZcashMeAllowedEmails(config.allowedEmails);
+  const activationOpenToAll = allowedEmails.has("*");
   const activeAccount = Boolean(user && isAccountActive(user));
 
   return {
@@ -46,7 +47,7 @@ export function evaluateZcashMeAccess(
       user?.membershipStatus !== "active" &&
       config.verificationEnabled &&
       Boolean(normalizedEmail) &&
-      allowedEmails.has(normalizedEmail),
+      (activationOpenToAll || allowedEmails.has(normalizedEmail)),
     canAdminDryRun:
       activeAccount &&
       config.adminDryRunEnabled &&

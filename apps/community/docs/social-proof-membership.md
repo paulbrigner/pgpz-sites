@@ -19,7 +19,7 @@ The pasted URL flow remains the most reliable path, but the site also supports:
 
 Both discovery paths use exact one-time-code searches, exclude reposts and quotes, and still pass through the same proof transaction used by pasted URLs.
 
-ZcashMe is an additional, fail-closed canary provider. An eligible user starts an
+ZcashMe is an additional, fail-closed social-proof provider. An eligible user starts an
 OAuth authorization-code flow with PKCE. ZcashMe adds the one-time PGPZ proof
 link to the selected public profile, then PGPZ reads that public profile and
 atomically activates membership. The signed OAuth-attempt cookie binds the PGPZ
@@ -90,7 +90,7 @@ Optional:
 - `SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS` (optional verification-only rotation key)
 - `MEMBERSHIP_PROOF_RETENTION_POLICY`
 - `ZCASHME_VERIFICATION_ENABLED` (defaults to `false`)
-- `ZCASHME_VERIFICATION_ALLOWED_EMAILS` (comma, semicolon, or whitespace separated)
+- `ZCASHME_VERIFICATION_ALLOWED_EMAILS` (comma, semicolon, or whitespace separated; `*` opens activation to every otherwise-eligible account)
 - `ZCASHME_ADMIN_DRY_RUN_ENABLED` (defaults to `false`)
 - `ZCASHME_AUTH_ISSUER` (defaults to `https://auth.zcash.me`)
 - `ZCASHME_DIRECTORY_URL` (defaults to `https://zcash.me`)
@@ -98,10 +98,12 @@ Optional:
 
 ## ZcashMe Rollout
 
-Normal activation requires both `ZCASHME_VERIFICATION_ENABLED=true` and an exact,
-case-insensitive email match in `ZCASHME_VERIFICATION_ALLOWED_EMAILS`. An empty
-allowlist always denies activation, including when the global switch is on.
-Every ZcashMe route rechecks this policy server-side.
+Normal activation requires `ZCASHME_VERIFICATION_ENABLED=true` and either an
+exact, case-insensitive email match or `*` in
+`ZCASHME_VERIFICATION_ALLOWED_EMAILS`. The wildcard still requires a signed-in,
+active account that is not already an active member. An empty allowlist always
+denies activation, including when the global switch is on. Every ZcashMe route
+rechecks this policy server-side.
 
 `ZCASHME_ADMIN_DRY_RUN_ENABLED=true` exposes a separate control to active
 administrators. The dry run completes real OAuth/PKCE and verifies the public
@@ -111,8 +113,8 @@ service does add or replace the PGPZ proof link on the selected public profile.
 
 Registered callbacks are production Community and `http://localhost:3000`; an
 Amplify preview callback is not required for this rollout. Validate with mocked
-tests, localhost, the production admin dry run, and later a dedicated canary
-account before adding user emails.
+tests, localhost, the production admin dry run, and a production account before
+opening the allowlist with `*`.
 
 For an immediate kill switch, set `ZCASHME_VERIFICATION_ENABLED=false` and
 `ZCASHME_ADMIN_DRY_RUN_ENABLED=false`. Reverting the application code is also
