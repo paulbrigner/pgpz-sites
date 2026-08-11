@@ -266,17 +266,11 @@ export async function listVisibleMemberProfiles(): Promise<CommunityMemberProfil
   } while (ExclusiveStartKey);
   if (!items.length) return [];
   const users = new Map<string, RawRecord>();
-  for (let offset = 0; offset < items.length; offset += 100) {
-    const roots = await documentClient.batchGet({
-      RequestItems: {
-        [TABLE_NAME]: {
-          Keys: items.slice(offset, offset + 100).map((item) => userKey(item.ownerUserId)),
-          ConsistentRead: true,
-        },
-      },
-    });
-    for (const user of (roots.Responses?.[TABLE_NAME] || []) as RawRecord[]) {
-      if (typeof user.id === "string") users.set(user.id, user);
+  for (let offset = 0; offset < items.length; offset += 25) {
+    const roots = await Promise.all(items.slice(offset, offset + 25).map((item) =>
+      getAppUserById(item.ownerUserId, { consistentRead: true })));
+    for (const user of roots) {
+      if (user && typeof user.id === "string") users.set(user.id, user as RawRecord);
     }
   }
   return items
