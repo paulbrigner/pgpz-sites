@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAppSession } from "@/lib/use-app-session";
 import { policyInterestGroupOptions } from "@/lib/policy-interest-groups";
+import { MemberProfileSettings } from "@/components/profile/MemberProfileSettings";
 
 type EmailPreferences = {
   newsletter: boolean;
@@ -28,7 +29,6 @@ export default function ProfileSettingsPage() {
   const [jobTitle, setJobTitle] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [xHandle, setXHandle] = useState("");
-  const [memberDirectoryOptIn, setMemberDirectoryOptIn] = useState(false);
   const [policyInterestGroups, setPolicyInterestGroups] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -50,7 +50,6 @@ export default function ProfileSettingsPage() {
       jobTitle: string;
       linkedinUrl: string;
       xHandle: string;
-      memberDirectoryOptIn: boolean;
       policyInterestGroups: string[];
     } | null
   >(null);
@@ -67,7 +66,6 @@ export default function ProfileSettingsPage() {
       jobTitle: (sessionUser.jobTitle as string) || "",
       linkedinUrl: (sessionUser.linkedinUrl as string) || "",
       xHandle: (sessionUser.xHandle as string) || "",
-      memberDirectoryOptIn: sessionUser.memberDirectoryOptIn === true,
       policyInterestGroups: Array.isArray(sessionUser.policyInterestGroups) ? sessionUser.policyInterestGroups : [],
     };
     setFirstName(next.firstName);
@@ -76,7 +74,6 @@ export default function ProfileSettingsPage() {
     setJobTitle(next.jobTitle);
     setLinkedinUrl(next.linkedinUrl);
     setXHandle(next.xHandle);
-    setMemberDirectoryOptIn(next.memberDirectoryOptIn);
     setPolicyInterestGroups(next.policyInterestGroups);
     setNewEmail(currentEmail || "");
     setInitial(next);
@@ -141,7 +138,6 @@ export default function ProfileSettingsPage() {
           jobTitle: jobTitle.trim(),
           linkedinUrl: linkedinUrl.trim(),
           xHandle: xHandle.trim(),
-          memberDirectoryOptIn,
           policyInterestGroups,
         }),
       });
@@ -156,7 +152,6 @@ export default function ProfileSettingsPage() {
         jobTitle: jobTitle.trim(),
         linkedinUrl: linkedinUrl.trim(),
         xHandle: xHandle.trim(),
-        memberDirectoryOptIn,
         policyInterestGroups,
       };
       setMessage("Profile updated");
@@ -178,7 +173,6 @@ export default function ProfileSettingsPage() {
       jobTitle.trim() !== initial.jobTitle ||
       linkedinUrl.trim() !== initial.linkedinUrl ||
       xHandle.trim() !== initial.xHandle ||
-      memberDirectoryOptIn !== initial.memberDirectoryOptIn ||
       policyInterestGroups.join(",") !== initial.policyInterestGroups.join(",")
     );
   };
@@ -460,25 +454,13 @@ export default function ProfileSettingsPage() {
               ))}
             </div>
           </div>
-          <div className="rounded-lg border bg-white/70 p-4">
-            <div className="flex gap-3">
-              <input
-                id="memberDirectoryOptIn"
-                type="checkbox"
-                checked={memberDirectoryOptIn}
-                onChange={(event) => setMemberDirectoryOptIn(event.target.checked)}
-                className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
-              />
-              <label htmlFor="memberDirectoryOptIn" className="text-sm leading-6 text-slate-600">
-                Show my name, affiliation, title, email, LinkedIn URL, and X handle to other active coalition members in the member directory.
-              </label>
-            </div>
-          </div>
           <Button type="submit" disabled={submitting}>
             {submitting ? "Saving..." : "Save changes"}
           </Button>
         </form>
       </section>
+
+      <MemberProfileSettings />
 
       <section className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="space-y-1">

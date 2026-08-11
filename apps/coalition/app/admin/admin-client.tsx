@@ -1047,17 +1047,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
               </div>
             </div>
             <div className="flex flex-col gap-3 rounded-lg border bg-white/70 p-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-              <label className="flex gap-3">
-                <input
-                  type="checkbox"
-                  checked={createForm.memberDirectoryOptIn}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, memberDirectoryOptIn: event.target.checked }))
-                  }
-                  className="mt-1 h-4 w-4 accent-[var(--zcash-gold)]"
-                />
-                <span>List this member in the active member directory after activation.</span>
-              </label>
+              <p>Members can opt into the protected directory from Profile Settings after activation.</p>
               <label className="flex gap-3">
                 <input
                   type="checkbox"
@@ -1524,6 +1514,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                               <input
                                 type="checkbox"
                                 checked={profileDraft.memberDirectoryOptIn}
+                                disabled={!member.memberDirectoryOptIn}
                                 onChange={(event) =>
                                   setProfileDrafts((current) => ({
                                     ...current,
@@ -1532,7 +1523,7 @@ export default function AdminClient({ initialRoster, currentAdminId }: Props) {
                                 }
                                 className="mt-0.5 h-4 w-4 accent-[var(--zcash-gold)]"
                               />
-                              <span>Directory opt-in</span>
+                              <span>{member.memberDirectoryOptIn ? "Uncheck to force-hide this member profile" : "This member has not opted into the directory"}</span>
                             </label>
                             <div className="flex justify-end">
                               <Button

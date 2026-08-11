@@ -7,7 +7,7 @@ export const siteFeatures = defineFeatureSwitches({
   personalHome: true,
   updates: true,
   newsletters: true,
-  memberDirectory: false,
+  memberDirectory: true,
   zecShelf: true,
   publicFiles: true,
   letterSignons: false,

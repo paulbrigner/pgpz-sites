@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useAppSession } from "@/lib/use-app-session";
 import { useAdminViewMode } from "@/components/admin/AdminViewMode";
 import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
+import { isFeatureEnabled } from "@/config/features";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
   const path = pathname || "/";
@@ -93,6 +94,9 @@ export function MainNav() {
         { key: "zec-shelf", label: "ZEC Shelf", href: "/zec-shelf" },
         ...(xMonitorEnabled && canAccessXMonitor
           ? [{ key: "x-monitor", label: "X Monitor", href: "/x-monitor" }]
+          : []),
+        ...(isMember && isFeatureEnabled("memberDirectory")
+          ? [{ key: "members", label: "Members", href: "/members" }]
           : []),
         ...(isMember
           ? [{ key: "invite", label: "Invite", href: "/settings/profile#member-recruitment" }]
@@ -188,6 +192,14 @@ export function MainNav() {
                     <Activity className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                     X Monitor
                   </Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ) : null}
+
+            {authenticated && isMember && isFeatureEnabled("memberDirectory") ? (
+              <NavigationMenuItem>
+                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/members") && currentMenuItemClasses)} asChild>
+                  <Link href="/members" aria-current={navHrefIsCurrent(pathname, "/members") ? "page" : undefined}>Members</Link>
                 </NavigationMenuLink>
               </NavigationMenuItem>
             ) : null}

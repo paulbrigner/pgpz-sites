@@ -9,6 +9,7 @@ import {
   prepareSingleRecipientBackgroundJob,
 } from "@/lib/admin/background-jobs";
 import { getAdminApprovalEligibility } from "@/lib/admin/approval-eligibility";
+import { ensureMemberProfileForActiveOptIn } from "@/lib/member-profiles";
 
 export type ManualApprovalStatus = "none" | "pending" | "approved";
 export type AccessApplicationStatus = "none" | "requested" | "approved" | "declined" | "withdrawn";
@@ -38,7 +39,7 @@ const activeAccountConditionValues = () => ({
 });
 
 const APPROVAL_STATE_PROJECTION =
-  "id, email, membershipStatus, manualApprovalStatus, manualApprovalRequestedAt, applicationStatus, accountStatus, deactivatedAt";
+  "id, email, membershipStatus, manualApprovalStatus, manualApprovalRequestedAt, applicationStatus, accountStatus, deactivatedAt, memberDirectoryOptIn";
 
 const normalizeManualApprovalStatus = (value: unknown): ManualApprovalStatus => {
   if (value === "pending" || value === "approved") return value;
@@ -347,6 +348,11 @@ export async function approveManualApproval({
   await dispatchStagedBackgroundJob(communitySyncJob.job.id).catch((error) => {
     console.error("Community synchronization was staged but immediate dispatch failed", error);
   });
+  if (user.Item.memberDirectoryOptIn === true) {
+    await ensureMemberProfileForActiveOptIn(userId).catch((error) => {
+      console.error("Coalition member profile slug creation needs retry", error);
+    });
+  }
 
   return {
     ok: true,

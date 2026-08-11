@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin/background-jobs";
 import { normalizePolicyInterestGroups } from "@/lib/policy-interest-groups";
 import { claimEmailOwnershipTransactionItem } from "@/lib/email-ownership";
+import { ensureMemberProfileForActiveOptIn } from "@/lib/member-profiles";
 
 export type CreateInvitedMemberInput = {
   email: string;
@@ -406,7 +407,7 @@ export async function acceptAuthenticatedInvitation({
     TableName: TABLE_NAME,
     Key: userKey(id),
     ProjectionExpression:
-      "id, email, membershipStatus, invitationStatus, invitationTokenHash, accountStatus, deactivatedAt",
+      "id, email, membershipStatus, invitationStatus, invitationTokenHash, accountStatus, deactivatedAt, memberDirectoryOptIn",
   });
   if (!user.Item?.id) throw new InvitationError("Member not found.", 404);
   if (!isAccountActive(user.Item)) {
@@ -493,6 +494,11 @@ export async function acceptAuthenticatedInvitation({
   await dispatchStagedBackgroundJob(communitySyncJob.job.id).catch((error) => {
     console.error("Community synchronization was staged but immediate dispatch failed", error);
   });
+  if (user.Item.memberDirectoryOptIn === true) {
+    await ensureMemberProfileForActiveOptIn(id).catch((error) => {
+      console.error("Coalition member profile slug creation needs retry", error);
+    });
+  }
 
   return {
     ok: true,

@@ -341,6 +341,8 @@ export function appSessionUserFromRecord(user: RawAppUser) {
     linkedinUrl: typeof user.linkedinUrl === "string" ? user.linkedinUrl : null,
     memberDirectoryOptIn:
       typeof user.memberDirectoryOptIn === "boolean" ? user.memberDirectoryOptIn : null,
+    memberProfileSlug:
+      typeof user.memberProfileSlug === "string" ? user.memberProfileSlug : null,
     policyInterestGroups: normalizePolicyInterestGroups(user.policyInterestGroups),
     isAdmin: user.isAdmin === true,
     welcomeEmailSentAt: typeof user.welcomeEmailSentAt === "string" ? user.welcomeEmailSentAt : null,

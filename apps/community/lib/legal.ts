@@ -127,8 +127,9 @@ export const privacyDocument: LegalDocument = {
     {
       title: "3. Accounts and profile information",
       paragraphs: [
-        "If you create an account, we may store and display the profile information you provide, including your first and last name, X handle, LinkedIn URL, and email address.",
-        "Depending on the settings of the Service, some profile information may be visible to other users.",
+        "If you create an account, we may store profile information you provide, including your first and last name, X handle, LinkedIn URL, and email address.",
+        "Active members may separately opt into a protected member profile with a vanity URL. Only other authenticated active Community members may view the opted-in name, headline, short bio, LinkedIn URL, and editable X handle. Email addresses, ZcashMe identities, and membership-proof records are not included in that profile.",
+        "Opting out removes member access immediately. We may retain the vanity URL reservation to prevent another account from impersonating a previously shared profile URL.",
       ],
     },
     {

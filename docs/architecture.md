@@ -59,6 +59,9 @@ authorization, routes, brand, and email policy.
 - `@pgpz/auth-dynamodb`: Better Auth persistence and rate-limit storage.
 - `@pgpz/email-runtime`: email persistence, handlers, and worker behavior.
 - `@pgpz/access-log`: access repository, request metadata, routes, and UI.
+- `@pgpz/member-directory`: protected profile DTOs, slug validation, and
+  key/index helpers; each app owns consent, authorization, fields, records,
+  routes, and its independent vanity namespace.
 - `@pgpz/public-files`: managed-file repository, delivery/admin handlers, UI.
 - `@pgpz/signup-notifications`: preferences, route handlers, jobs, and UI.
 - `@pgpz/zec-shelf`: catalog domain, client, repository, and safe URL checker.

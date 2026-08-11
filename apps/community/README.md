@@ -14,12 +14,19 @@ Community owns:
 - X Monitor and administrator-managed Topic Briefings integration;
 - the Community ZEC Shelf catalog and access policy;
 - referrals, Community copy/branding/legal identity, and Community infrastructure;
+- the app-local protected member-profile adapter, consent, fields, routes, and
+  Community-only vanity namespace;
 - app adapters for shared auth, email, jobs, access log, files, notifications,
   admin UI, and policy-update distribution.
 
-Current central feature switches enable ZEC Shelf and public files. Letter
-sign-ons and the document vault are disabled. A package being available in the
-monorepo does not authorize enabling it here.
+Current central feature switches enable the protected member directory, ZEC
+Shelf, and public files. Letter sign-ons and the document vault remain disabled.
+A package being available in the monorepo does not authorize enabling it here.
+
+`/members` and `/members/[slug]` authorize an active Community member before
+reading any profile. Profiles are off by default, use a sparse
+`GSI1` projection plus an app-local conditional slug claim, and never expose
+email, ZcashMe identity, or membership-proof data.
 
 See [social-proof membership](docs/social-proof-membership.md) for the current
 membership records and flow, and the root [architecture map](../../docs/architecture.md)

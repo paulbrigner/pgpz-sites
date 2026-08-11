@@ -673,6 +673,16 @@
       "app/api/internal/background-jobs/reconcile/route.ts",
       "app/api/admin/members/route.ts",
       {
+        "path": "app/api/members/directory/route.ts",
+        "reason": "Both apps enforce member-only directory access, while Coalition preserves its existing directory projection during migration and Community remains feature-gated."
+      },
+      "app/api/members/directory/route.test.ts",
+      {
+        "path": "app/api/profile/member-profile/route.ts",
+        "reason": "The owner routes share a neutral contract but retain app-owned session, consent, field, and error policies."
+      },
+      "app/api/profile/member-profile/route.test.ts",
+      {
         "path": "app/api/manual-approval/request/route.ts",
         "reason": "Coalition applications can be requested or withdrawn; Community exposes only its existing manual-approval request transition."
       },
@@ -687,6 +697,16 @@
         "reason": "Community server-renders published updates into its homepage; Coalition currently supplies its separate coalition workspace homepage."
       },
       "app/settings/profile/page.tsx",
+      {
+        "path": "app/members/page.tsx",
+        "reason": "Community and Coalition render separately branded member-only directory experiences."
+      },
+      {
+        "path": "app/members/[slug]/page.tsx",
+        "reason": "Protected vanity pages use separate app memberships, data, fields, and slug namespaces."
+      },
+      "app/members/members-client.tsx",
+      "components/profile/MemberProfileSettings.tsx",
       "components/home/Skeletons.tsx",
       "components/site/main-nav.test.tsx",
       "components/site/main-nav.tsx",
@@ -703,6 +723,10 @@
       "lib/admin/user-profile.ts",
       "lib/app-users.ts",
       "lib/manual-approval.ts",
+      {
+        "path": "lib/member-profiles.ts",
+        "reason": "The adapters inject app-local DynamoDB tables and project different consented fields while consuming the shared member-directory contract."
+      },
       "lib/system-email.ts"
     ],
     "reconcile-before-sharing": [
@@ -1366,6 +1390,55 @@
           "app": "coalition",
           "path": "components/admin/sensitive-data.tsx",
           "import": "@pgpz/ui"
+        }
+      ]
+    },
+    {
+      "name": "member-directory",
+      "packagePath": "packages/member-directory",
+      "contentOwnership": "The package owns protected profile DTOs, validation, vanity-slug rules, and DynamoDB key/index helpers. Each app owns authentication, membership policy, consent, fields, table records, routes, branding, migration, and release controls.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active-compatibility-migration"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/profile.ts",
+        "src/slug.ts",
+        "src/profile.test.ts",
+        "src/slug.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/member-profiles.ts",
+          "app/api/profile/member-profile/route.ts",
+          "app/api/members/directory/route.ts",
+          "app/members/page.tsx",
+          "app/members/[slug]/page.tsx",
+          "components/profile/MemberProfileSettings.tsx"
+        ],
+        "coalition": [
+          "lib/member-profiles.ts",
+          "app/api/profile/member-profile/route.ts",
+          "app/api/members/directory/route.ts",
+          "app/members/page.tsx",
+          "app/members/[slug]/page.tsx",
+          "components/profile/MemberProfileSettings.tsx"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/member-profiles.ts",
+          "import": "@pgpz/member-directory"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/member-profiles.ts",
+          "import": "@pgpz/member-directory"
         }
       ]
     },

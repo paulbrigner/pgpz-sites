@@ -12,6 +12,7 @@ import {
   updateAdminMemberNotes,
   updateAdminMemberProfile,
 } from "@/lib/admin/roster";
+import { hideMemberProfileForUser } from "@/lib/member-profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
       jobTitle: typeof body?.jobTitle === "string" ? body.jobTitle : "",
       linkedinUrl: typeof body?.linkedinUrl === "string" ? body.linkedinUrl : "",
       xHandle: typeof body?.xHandle === "string" ? body.xHandle : "",
-      memberDirectoryOptIn: body?.memberDirectoryOptIn === true,
+      memberDirectoryOptIn: false,
       policyInterestGroups: body?.policyInterestGroups,
       adminUserId,
     });
@@ -107,6 +108,11 @@ export async function PATCH(request: NextRequest) {
         confirmation,
       });
       return NextResponse.json(result);
+    }
+    if (action === "unpublish_member_profile") {
+      if (!userId) throw new AdminMemberActionError("User ID is required.");
+      await hideMemberProfileForUser(userId, false);
+      return NextResponse.json({ ok: true, userId, memberDirectoryOptIn: false });
     }
 
     if (body?.profile && typeof body.profile === "object") {

@@ -123,7 +123,8 @@ export const privacyDocument: LegalDocument = {
       title: "3. Accounts and profile information",
       paragraphs: [
         "If you create an account, we may store the profile information you provide, including your first and last name, corporate affiliation, job title, policy interest groups, LinkedIn URL, X handle, email address, and directory preference.",
-        "If you opt into the member directory and your membership is active, your profile contact details and policy interest groups may be visible to other active coalition members.",
+        "If you opt into the member directory and your membership is active, your profile contact details and policy interest groups may be visible to other active coalition members through the directory and a protected vanity URL. These pages are not intended for anonymous visitors or search indexing.",
+        "Opting out removes member access immediately. We may retain the vanity URL reservation to prevent another account from impersonating a previously shared profile URL.",
       ],
     },
     {

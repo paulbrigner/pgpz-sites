@@ -32,6 +32,7 @@ live AWS/Amplify state before acting; resource state and credentials can drift.
 | [`secrets-and-compute-role-cutover.md`](secrets-and-compute-role-cutover.md) | Signing-key rotation and Amplify compute-role changes |
 | [`board-deployment.md`](board-deployment.md) | Board app, roles, tables, vault, audit, and provisioning |
 | [`policy-update-email-asset-backfill.md`](policy-update-email-asset-backfill.md) | One-time policy-update email asset materialization |
+| [`member-profile-slug-backfill.md`](member-profile-slug-backfill.md) | Coalition protected-profile slug migration and verification |
 
 Production tooling is dry-run by default where supported. Do not use `--apply`,
 update Amplify variables, send email, reconcile records, or deploy without the

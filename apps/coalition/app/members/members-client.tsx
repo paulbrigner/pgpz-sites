@@ -17,6 +17,8 @@ type DirectoryMember = {
   linkedinUrl: string | null;
   xHandle: string | null;
   policyInterestGroups: string[];
+  slug: string | null;
+  profilePath: string | null;
 };
 
 export default function MembersClient({ initialMembers }: { initialMembers: DirectoryMember[] }) {
@@ -84,7 +86,9 @@ export default function MembersClient({ initialMembers }: { initialMembers: Dire
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {members.map((member) => (
             <article key={member.id} className="rounded-lg border bg-white/90 p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-[var(--brand-ink)]">{member.name}</h2>
+              <h2 className="text-lg font-semibold text-[var(--brand-ink)]">
+                {member.profilePath ? <Link href={member.profilePath} className="underline-offset-4 hover:underline">{member.name}</Link> : member.name}
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 {[member.jobTitle, member.company].filter(Boolean).join(" at ") || "Coalition member"}
               </p>
