@@ -1,5 +1,10 @@
 # Board Governance Vault + Legal Counsel Role + Audit Log — Implementation Plan
 
+> **Status: superseded.** Use the
+> [revised plan](2026-08-06-board-governance-vault-revised.md) for historical
+> design rationale and [`../board-deployment.md`](../board-deployment.md) for
+> current operations.
+
 **Goal:** Give the private PGPZ Board portal (a) a versioned governance-document
 vault, (b) a Legal Counsel auth role with admin-equivalent access, and (c) a
 tamper-evident audit log covering authentication and document-vault lifecycle.

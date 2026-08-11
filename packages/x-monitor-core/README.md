@@ -12,3 +12,9 @@ The source snapshot was vendored from
 
 Changes to the vendored source require an intentional source upgrade and a
 manifest update; Community-specific behavior belongs in `apps/community`.
+
+```bash
+npm run xmonitor:verify-vendor
+npm run test --workspace=@pgpz/x-monitor-core
+npm run typecheck --workspace=@pgpz/x-monitor-core
+```

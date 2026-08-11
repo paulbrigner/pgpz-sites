@@ -1,5 +1,8 @@
 # Policy-update email asset backfill
 
+> **Status: current one-time migration runbook.** Dry-run first for one app and
+> apply only to an explicitly selected target after reviewing every planned row.
+
 Run this one-time migration before deploying the public email-asset route that
 requires immutable materializations. The utility reads published policy-update
 uploads through `GSI1`, selects only valid local image paths referenced by their

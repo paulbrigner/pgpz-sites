@@ -1,168 +1,102 @@
 # PGPZ Community
 
-Community site for `community.pgpz.org`, built with Next.js 15 and AWS Amplify.
+Community application for `community.pgpz.org`. It is a Next.js 15 application
+with Better Auth magic-link sign-in and X social-proof membership. It does not
+use the former NFT, wallet, SIWE, token, allowance, or renewal model.
 
-Membership is activated through automated X social proof. The previous NFT, Unlock, wallet, SIWE, token, allowance, and renewal model has been removed from this repo.
+## Ownership and capabilities
 
-## Features
+Community owns:
 
-- Email magic-link authentication with Better Auth.
-- DynamoDB-backed user/profile/session persistence.
-- X proof challenge generation and automatic verification.
-- Denormalized active membership state on the user record.
-- Social proof audit records in the same DynamoDB table.
-- Admin roster for active/unverified members and welcome emails.
-- Admin-managed resource files with stable public or members-only URLs.
-- Zcash-inspired visual system using `#F5A800` as the primary gold.
+- X proof challenge, discovery, verification, rate limits, and membership policy;
+- X Monitor and administrator-managed Topic Briefings integration;
+- the Community ZEC Shelf catalog and access policy;
+- referrals, Community copy/branding/legal identity, and Community infrastructure;
+- app adapters for shared auth, email, jobs, access log, files, notifications,
+  admin UI, and policy-update distribution.
 
-## Membership Flow
+Current central feature switches enable ZEC Shelf and public files. Letter
+sign-ons and the document vault are disabled. A package being available in the
+monorepo does not authorize enabling it here.
 
-1. User signs in by email.
-2. User generates an X proof code.
-3. User posts the generated proof text publicly on X.
-4. User submits the X post URL.
-5. Server verifies author/content/timing through the X API.
-6. Membership becomes active automatically.
+See [social-proof membership](docs/social-proof-membership.md) for the current
+membership records and flow, and the root [architecture map](../../docs/architecture.md)
+for shared-package boundaries.
 
-By default, membership remains valid if the proof post is later deleted. The setting is captured as `MEMBERSHIP_PROOF_RETENTION_POLICY=valid_if_deleted` so the policy can be changed later without redesigning the data model.
+## Runtime boundaries
 
-See [Social Proof Membership](docs/social-proof-membership.md) for implementation details.
+- Better Auth users/sessions and application records use the Community table
+  selected by the legacy-named `NEXTAUTH_TABLE` variable.
+- Production DynamoDB, S3, SQS, and SESv2 access comes from Community's Amplify
+  SSR compute role through the default AWS credential chain.
+- Community buckets, queues, X credentials, signing secrets, member records,
+  and authorization must never be reused by Coalition, Board, or Reference.
+- Managed `/resources/...` files remain in a private bucket and are authorized
+  by app routes. Do not add competing static files under `public/resources`.
+- X Monitor is a separate read/manage API boundary. See
+  [`docs/x-monitor-community-integration.md`](../../docs/x-monitor-community-integration.md).
 
-## Environment
+## Configuration
 
-From the monorepo root, copy `apps/community/.env.example` to
-`apps/community/.env.local` and set:
+Use `.env.example` as the production-shape inventory and `.env.local.example`
+for offline development. Do not duplicate the entire variable list here; the
+examples and server validators are authoritative.
 
-```bash
-NEXT_PUBLIC_SITE_URL=https://community.pgpz.org
-REGION_AWS=us-east-1
-NEXTAUTH_TABLE=PGPZCommunityNextAuth
-BETTER_AUTH_URL=https://community.pgpz.org
-BETTER_AUTH_SECRET=...
-BETTER_AUTH_TRUSTED_ORIGINS=https://community.pgpz.org
-EMAIL_TRACKING_SECRET=...
-EMAIL_TRACKING_SECRET_PREVIOUS=
-X_BEARER_TOKEN=...
-X_API_BASE_URL=https://api.x.com/2
-X_API_TIMEOUT_MS=15000
-X_PROOF_RATE_LIMIT_WINDOW_MINUTES=15
-X_PROOF_CHALLENGE_RATE_LIMIT=10
-X_PROOF_VERIFY_RATE_LIMIT=6
-SOCIAL_PROOF_AUTOVERIFY_SECRET=...
-SOCIAL_PROOF_AUTOVERIFY_SECRET_PREVIOUS=
-EMAIL_TRANSPORT=smtp
-EMAIL_SERVER_HOST=localhost
-EMAIL_SERVER_PORT=587
-EMAIL_SERVER_USER=...
-EMAIL_SERVER_PASSWORD=...
-EMAIL_FROM="PGPZ Community <no-reply@community.pgpz.org>"
-```
+Important groups are site/Better Auth, Community table and compute role, email
+tracking/delivery, background jobs, X proof, X Monitor, policy-update storage,
+and public-file storage. Production signing secrets must satisfy the root
+production validator and `EMAIL_TRANSPORT` must be `ses`.
 
-`NEXTAUTH_TABLE` is retained as the legacy name of the shared application table; it does not indicate that NextAuth is still active. Production requires `BETTER_AUTH_SECRET` and `EMAIL_TRACKING_SECRET` values of at least 32 bytes, plus `EMAIL_TRANSPORT=ses`. `EMAIL_TRACKING_SECRET_PREVIOUS` is verification-only during a reversible one-key rotation window. Production DynamoDB, S3, and SESv2 clients use the Amplify SSR Compute role through the AWS SDK default credential chain; SMTP remains available only for local/non-AWS development.
+## Local development
 
-Follow the repository-root [signing-secret and compute-role cutover runbook](../../docs/secrets-and-compute-role-cutover.md) before changing production credentials or rotating a tracking secret.
-
-See the [Better Auth Direct Cutover Runbook](docs/BETTER_AUTH_PARALLEL_MIGRATION.md) for release and rollback criteria.
-
-## DynamoDB
-
-Create or verify the shared table:
+Follow [`docs/local-dev.md`](../../docs/local-dev.md). From the repository root:
 
 ```bash
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth \
-  node apps/community/scripts/setup/create-dynamodb-tables.mjs
-```
-
-For AWS CLI operations in the existing environment, use:
-
-```bash
-aws sts get-caller-identity --profile zodldashboard --region us-east-1
-```
-
-## Development
-
-The root workspace install and lockfile are authoritative. Run these commands
-from the monorepo root; do not create an application-local lockfile or run a
-separate install in `apps/community`.
-
-```bash
-npm ci
+cp apps/community/.env.local.example apps/community/.env.local
+docker compose up -d
+npm run seed:local
 npm run dev:community
-npm run test --workspace=apps/community
-npm run build:community
-npm run start:community
 ```
 
-The former `serve out` script was intentionally removed. This application uses
-the Next.js server runtime and does not configure `output: "export"`, so it does
-not produce an `out/` directory; use `npm run start:community` after building.
-
-## Forum Markdown Export
-
-New policy updates use Word (`.docx`) as the canonical source. In **Admin → Update distribution**:
-
-1. Upload the DOCX source.
-2. Generate the structured portal content and downloadable PDF.
-3. Review the portal, PDF, and Markdown outputs.
-4. Publish and send through the existing workflow.
-
-New PDF uploads are not supported. Existing pre-DOCX records remain readable and downloadable.
-
-After an update has been uploaded and generated, use **Admin → Update distribution → Markdown** to copy and download a clean Markdown version for forum posting. The export uses direct links and public email-asset image URLs, with no tracking links, open pixel, unsubscribe link, or inline attachments.
-
-The command-line exporter is available as a fallback:
+Community runs at `http://localhost:3000`. Magic-link email is captured by
+MailHog at `http://localhost:8025`. After the first local sign-in, grant admin:
 
 ```bash
-AWS_PROFILE=pgpcommunity REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZCommunityNextAuth \
-  npm run forum:update --workspace=apps/community -- \
-  --slug 2026-06-15-weekly-policy-memo \
-  --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
+npm run admin:community -- paul@paulbrigner.com
 ```
 
-If the local AWS SSO session is expired, refresh it first:
+The X proof flow still needs a valid X API credential; unrelated local flows do
+not. Background delivery jobs remain disabled in the offline configuration.
+
+## Policy updates and files
+
+New policy updates use DOCX as the canonical source. The admin flow uploads the
+source, generates structured portal content and a PDF, allows review, then
+publishes/sends through the durable workflow. Existing legacy PDF records remain
+readable. The Markdown exporter is an operational fallback:
 
 ```bash
-aws sso login --profile pgpcommunity
-```
-
-For a pre-DOCX legacy record only, the exporter can still use its source PDF as a compatibility fallback:
-
-```bash
+AWS_PROFILE=pgpcommunity REGION_AWS=us-east-1 \
+NEXTAUTH_TABLE=PGPZCommunityNextAuth \
 npm run forum:update --workspace=apps/community -- \
-  --source pdf \
-  --pdf "/path/to/weekly-policy-memo.pdf" \
   --slug 2026-06-15-weekly-policy-memo \
-  --title "Weekly Policy Memo: June 15, 2026" \
-  --published-at 2026-06-15 \
-  --display-date "Week of June 15, 2026" \
-  --summary "FinCEN AML rulemaking, Illinois crypto tax, and stablecoin customer-identification requirements" \
   --output output/zcash-forum-weekly-policy-memo-2026-06-15.md
 ```
 
-## Resource File Library
+Administrators manage stable public or members-only downloads through **Admin ->
+Public files**. Objects stay private; Archive removes route access without
+deleting stored history.
 
-Administrators can upload and maintain downloadable files in **Admin → Public
-files**. Each record has a stable `/resources/...` URL and can be set to either:
+## Validation and deployment
 
-- **Public** — available without authentication.
-- **Members only** — available to active Community members and administrators.
+```bash
+npm run test --workspace=apps/community
+npm run typecheck:community
+npm run build:community
+npm run parity:check
+```
 
-Objects remain in the private `pgpz-community-content` bucket under the
-`public-files/` prefix. The application route checks DynamoDB metadata and
-streams the selected immutable S3 version; the bucket itself is never made
-public. Replacing a file preserves its URL and prior version, while Archive
-removes route access without deleting its stored history.
-
-Do not add managed resources under `apps/community/public/resources`; an exact
-static file there would bypass the managed route. The two initial statements
-are retained only as checksum-pinned migration fixtures under
-`tooling/fixtures/initial-community-public-files`.
-
-## Deployment
-
-The repository-root `amplify.yml` is authoritative for monorepo deployments;
-`apps/community/amplify.yml` is retained only as a rollback reference during
-the migration observation period. Configure the existing Community Amplify app
-with `AMPLIFY_MONOREPO_APP_ROOT=apps/community`, keep its runtime environment
-variables and IAM role application-specific, and follow the root
-`docs/monorepo-migration-runbook.md` before reconnecting or deploying it.
+Root `amplify.yml` is authoritative with
+`AMPLIFY_MONOREPO_APP_ROOT=apps/community`. Before production changes, select
+the relevant current runbook from [`docs/README.md`](../../docs/README.md),
+inspect live branch variables/resources, and identify the rollback commit.

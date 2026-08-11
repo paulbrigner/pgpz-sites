@@ -1,0 +1,35 @@
+# Local-only dev infrastructure for running the PGPZ apps without AWS.
+#
+# This file is NOT used by Amplify builds. It only provisions local stand-ins
+# for two of the managed services the branded apps touch at runtime:
+#
+#   dynamodb-local  -> replaces DynamoDB (auth sessions, profiles,
+#                      membership records, background-job snapshots)
+#   mailhog         -> fake SMTP server; captures outbound email so magic-link
+#                      sign-in and admin sends can be verified without SES.
+#
+# Board ships with email disabled, so it only needs dynamodb-local. Reference
+# is fully offline by design (inert clients) and needs neither service unless
+# you opt into its isolated server adapter.
+
+services:
+  # Amazon's official DynamoDB Local emulator on the standard port. In-memory
+  # storage; data does not survive a container restart.
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8000/ >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Local fake SMTP + inspection web UI. Accepts mail on :1025, never delivers,
+  # and shows every captured message at http://localhost:8025.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"   # SMTP (point the apps' nodemailer here)
+      - "8025:8025"   # web UI inbox

@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@source "../../../packages/access-log/src";
+@source "../../../packages/email-admin-ui/src";
+@source "../../../packages/public-files/src";
+@source "../../../packages/signup-notifications/src";
 @source "../../../packages/ui/src";
 @source "../../../packages/zec-shelf/src";
 

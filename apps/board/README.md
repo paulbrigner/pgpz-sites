@@ -1,63 +1,71 @@
 # PGPZ Board
 
-Private portal for the PGPZ Board of Directors at `https://board.pgpz.org`.
+Private governance portal at `board.pgpz.org`. Every route except `/signin` and
+the Better Auth API is protected. Self-registration is disabled and the site
+refuses indexing at metadata, robots, and response-header layers.
 
-Every route except `/signin` and the Better Auth API is gated by the
-authenticated portal layout. Access requires **both** a provisioned account
-and an email on the `BOARD_MEMBER_EMAILS` allowlist; an empty allowlist locks
-everyone out. Self-registration is disabled, the site refuses search indexing
-at every layer, and outbound email is not wired up.
+## Access model
 
-Administrator status is independently granted by `BOARD_ADMIN_EMAILS`, which
-must be a subset of the member roster. Administrators receive an enforced
-server-only `/admin` surface; no browser-based account mutation API is exposed.
+Authentication alone never grants portal access:
 
-Staff access is separate: the Executive Director (staff, not a director) is
-granted portal access and administrator privileges through
-`BOARD_EXECUTIVE_DIRECTOR_EMAILS`, which must be disjoint from
-`BOARD_MEMBER_EMAILS`. Legal Counsel is a second staff role via
-`BOARD_LEGAL_COUNSEL_EMAILS` with the same admin-equivalent capabilities
-(document management, audit review), pairwise disjoint from both the Board and
-Executive Director rosters. The dashboard shows each staff role's distinctive
-badge ("Executive Director" / "Legal Counsel") instead of a director badge.
+- `BOARD_MEMBER_EMAILS`: directors allowed into the portal;
+- `BOARD_ADMIN_EMAILS`: director administrators; must be a member subset;
+- `BOARD_EXECUTIVE_DIRECTOR_EMAILS`: administrator-equivalent staff, disjoint
+  from directors;
+- `BOARD_LEGAL_COUNSEL_EMAILS`: administrator-equivalent counsel, pairwise
+  disjoint from directors and Executive Director.
+
+An absent/empty member and staff roster locks everyone out. UI badges do not
+replace server authorization; routes and repositories enforce current roles.
+
+## Governance boundary
+
+Board owns its auth table, document metadata table, audit table, staging bucket,
+retained/Object-Lock bucket, audit archive, KMS key, and compute role. The
+`@pgpz/document-vault` and `@pgpz/audit-log` packages provide neutral contracts;
+Board supplies retention, roles, infrastructure, routes, and event semantics.
+
+The document vault and audit ledger fail closed when required resources are
+unset. Reference examples must never attach Board data or credentials.
 
 ## Local development
 
+Follow [`docs/local-dev.md`](../../docs/local-dev.md). From the root:
+
 ```bash
-# from the repository root
+cp apps/board/.env.local.example apps/board/.env.local
+docker compose up -d dynamodb-local
+npm run seed:local -- --app board --password 'choose-at-least-12-characters'
 npm run dev:board
 ```
 
-Open http://localhost:3000. With no `BOARD_MEMBER_EMAILS` configured every
-account is treated as off-roster, which is the safe default.
+Board runs at `http://localhost:3002`. Local authentication/admin surfaces work;
+S3/KMS/Object Lock governance persistence does not run in the offline stack.
 
-## Running the checks
+## Provisioning
 
-```bash
-npm run typecheck:board
-npm run test --workspace=apps/board
-npm run build:board
-```
-
-## Provisioning directors
-
-Accounts are created by the board administrator with the provisioning script:
+Use the guarded script from the repository root:
 
 ```bash
 REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
-  npx tsx scripts/provision-board-member.ts director@example.org --name "Director Name"
+npx tsx apps/board/scripts/provision-board-member.ts \
+  director@example.org --name "Director Name"
 ```
 
-The script generates a random 24-character password, prints it once, and asks
-you to deliver it privately. Rerunning it for the same email rotates the
-password hash **and revokes the director's existing sessions by default**
-(`--keep-sessions` keeps them; `--dry-run` previews the plan and revocation
-count **without mutating anything**). It refuses to provision email addresses
-that are not on `BOARD_MEMBER_EMAILS` (or `BOARD_EXECUTIVE_DIRECTOR_EMAILS`
-/ `BOARD_LEGAL_COUNSEL_EMAILS` for staff) when those variables are set.
+It prints a generated password once, rotates an existing password and revokes
+sessions by default, supports `--dry-run`, and refuses addresses outside the
+configured Board/staff rosters. Deliver credentials through a private channel.
 
-## Environment
+## Validation and deployment
 
-See `.env.example`. Deployment details, the DynamoDB table schema, the IAM
-role, and the Amplify app setup are documented in
-`docs/board-deployment.md`.
+```bash
+npm run test --workspace=apps/board
+npm run typecheck:board
+npm run build:board
+npm run test:board-backend-infra
+```
+
+Use [`docs/board-deployment.md`](../../docs/board-deployment.md) for current
+roles, environment, infrastructure, provisioning, release checks, and legal
+retention prerequisites. Root `amplify.yml` is authoritative with
+`AMPLIFY_MONOREPO_APP_ROOT=apps/board`.

@@ -7,6 +7,20 @@
  */
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const LOCAL_ENV_FILE = resolve(APP_ROOT, ".env.local");
+
+// Unlike `next dev`, standalone scripts do not load the app's .env.local.
+// Node's loader preserves variables already supplied by the shell, so callers
+// can still explicitly target another environment.
+if (existsSync(LOCAL_ENV_FILE)) {
+  loadEnvFile(LOCAL_ENV_FILE);
+}
 
 const REGION = process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1";
 const TABLE_NAME = process.env.NEXTAUTH_TABLE || "PGPZCommunityNextAuth";

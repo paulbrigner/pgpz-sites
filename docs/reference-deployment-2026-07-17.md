@@ -1,5 +1,10 @@
 # Reference deployment record — 2026-07-17
 
+> **Status: historical deployment evidence.** Verify the current Amplify job,
+> branch variables, domain, and runtime before relying on any recorded state.
+> Current app behavior is in
+> [`apps/reference/README.md`](../apps/reference/README.md).
+
 ## Release identity
 
 - Owner: Paul Brigner

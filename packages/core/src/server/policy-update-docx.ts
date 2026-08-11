@@ -3,7 +3,6 @@ import JSZip from "jszip";
 import mammoth from "mammoth";
 import { parseDocument } from "htmlparser2";
 import PDFDocument from "pdfkit";
-import { imageSize } from "image-size";
 
 const MAX_DOCX_BYTES = 25 * 1024 * 1024;
 const MAX_DOCX_ENTRIES = 2_000;
@@ -13,6 +12,11 @@ const ASSET_SCHEME = "pgpz-docx-asset:";
 const PAGE_BREAK_TOKEN = "[[PGPZ_PAGE_BREAK]]";
 const DIVIDER_TOKEN = "[[PGPZ_DIVIDER]]";
 const EMUS_PER_POINT = 12_700;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_START_OF_FRAME_MARKERS = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7,
+  0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+]);
 
 export type PolicyUpdateTextRun = {
   text: string;
@@ -242,6 +246,49 @@ function imageExtension(contentType: string) {
   if (/gif/i.test(contentType)) return "gif";
   if (/webp/i.test(contentType)) return "webp";
   return "bin";
+}
+
+function safeRasterDimensions(bytes: Buffer, contentType: string) {
+  if (/^image\/png(?:;|$)/i.test(contentType)) {
+    if (
+      bytes.length < 24 ||
+      !bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) ||
+      bytes.subarray(12, 16).toString("ascii") !== "IHDR"
+    ) {
+      return undefined;
+    }
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    return width > 0 && height > 0 ? { width, height } : undefined;
+  }
+
+  if (!/^image\/jpe?g(?:;|$)/i.test(contentType) || bytes.length < 4) return undefined;
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return undefined;
+
+  let offset = 2;
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset] !== 0xff) return undefined;
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) return undefined;
+
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === 0xd9 || marker === 0xda) return undefined;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+    if (offset + 2 > bytes.length) return undefined;
+
+    const segmentLength = bytes.readUInt16BE(offset);
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) return undefined;
+    if (JPEG_START_OF_FRAME_MARKERS.has(marker)) {
+      if (segmentLength < 7) return undefined;
+      const height = bytes.readUInt16BE(offset + 3);
+      const width = bytes.readUInt16BE(offset + 5);
+      return width > 0 && height > 0 ? { width, height } : undefined;
+    }
+    offset += segmentLength;
+  }
+
+  return undefined;
 }
 
 function relationshipTargets(xml: string) {
@@ -558,12 +605,7 @@ export async function parsePolicyUpdateDocx(
         const contentType = String(image.contentType || "application/octet-stream").toLowerCase();
         const imageBytes = Buffer.from(await image.read("base64"), "base64");
         const fileName = `docx-image-${String(assets.length + 1).padStart(2, "0")}.${imageExtension(contentType)}`;
-        let dimensions: ReturnType<typeof imageSize> | undefined;
-        try {
-          dimensions = imageSize(imageBytes);
-        } catch {
-          dimensions = undefined;
-        }
+        const dimensions = safeRasterDimensions(imageBytes, contentType);
         const sha256 = createHash("sha256").update(imageBytes).digest("hex");
         const displaySizes = displaySizeBySha256.get(sha256) || [];
         const occurrence = displaySizeOccurrenceBySha256.get(sha256) || 0;

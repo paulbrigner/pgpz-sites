@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  AdminSensitiveDataProvider,
+  AdminShellSkeleton,
   BackgroundJobProgressPanel,
   Badge,
   Button,
@@ -14,7 +16,21 @@ import {
   PersonalHomePanel,
   SecureLinkSubmitButton,
   SectionHeading,
+  SensitiveDataText,
+  maskSensitiveValue,
+  useAdminSensitiveData,
 } from "./index";
+
+function SensitiveDataFixture() {
+  const { toggleSensitiveDataVisibility } = useAdminSensitiveData();
+
+  return (
+    <>
+      <SensitiveDataText value="Paul Brigner" kind="name" />
+      <button type="button" onClick={toggleSensitiveDataVisibility}>Show details</button>
+    </>
+  );
+}
 
 describe("shared UI primitives", () => {
   it("renders an accessible non-production notice", () => {
@@ -53,6 +69,13 @@ describe("shared UI primitives", () => {
     );
     expect(screen.getByText("Ready")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Neutral by design" })).toBeVisible();
+  });
+
+  it("renders the shared admin loading structure", () => {
+    const { container } = render(<AdminShellSkeleton />);
+
+    expect(container.querySelectorAll(".animate-pulse")).toHaveLength(1);
+    expect(container.querySelectorAll(".md\\:grid-cols-4 > div")).toHaveLength(4);
   });
 
   it("composes a brand-neutral personal home with accessible landmarks and actions", () => {
@@ -112,6 +135,20 @@ describe("shared UI primitives", () => {
     expect(screen.getByText("Needs Review")).toBeInTheDocument();
     expect(screen.getByText("Needs review 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry failed recipients" })).toBeInTheDocument();
+  });
+
+  it("masks admin-sensitive data until the shared provider reveals it", () => {
+    expect(maskSensitiveValue("paul@example.com", "email")).toBe("p***@e******.com");
+
+    render(
+      <AdminSensitiveDataProvider>
+        <SensitiveDataFixture />
+      </AdminSensitiveDataProvider>,
+    );
+
+    expect(screen.getByText("P*** B******")).toHaveClass("select-none");
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText("Paul Brigner")).not.toHaveClass("select-none");
   });
 
   it("reuses a durable request key until the server acknowledgement is recorded", async () => {

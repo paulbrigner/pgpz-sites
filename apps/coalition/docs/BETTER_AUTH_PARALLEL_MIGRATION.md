@@ -1,5 +1,9 @@
 # Better Auth Direct Cutover Runbook
 
+> **Status: completed cutover contract.** Better Auth is now the sole active
+> provider. Retain this document for rollback history; use the app README,
+> `@pgpz/auth-dynamodb` README, and root identity/index runbooks for current work.
+
 Status: Coalition and Community use Better Auth exclusively for new sign-ins, server session resolution, and sign-out. The legacy NextAuth route and runtime dependency are removed; a browser holding only a NextAuth cookie must complete one new magic-link sign-in.
 
 Application identity, profiles, membership, invitations, and administrator authorization remain in the shared `USER#...` records. Better Auth users and sessions map to those records by normalized email, so the cutover does not migrate or discard membership data.

@@ -1,5 +1,8 @@
 # Durable background-jobs runbook
 
+> **Status: current guarded runbook.** Re-inventory each app's live table,
+> queues, Lambdas, environment, smoke allowlist, and alarms before acting.
+
 This runbook covers the production infrastructure and cutover for Community
 and Coalition newsletters, policy-update sends, Coalition bulk invitations,
 and Coalition-to-Community synchronization. Each application has an isolated

@@ -43,11 +43,11 @@
       },
       {
         "path": "app/api/access-log/page-view/route.ts",
-        "sha256": "aebb7af971a02758ae8b1411150eb806787c6ebace8558a5b58fe98c2f0ffe83"
+        "sha256": "fbcd01a09177efa04b2b087b9fd216b23141dda80053f26d9b0dddcf78ef6936"
       },
       {
         "path": "app/api/admin/access-log/route.ts",
-        "sha256": "332a4ffe39b94baaf5076f5bede57f06bead628693106cd0a13f4e02db9cfc40"
+        "sha256": "54a7c4fcc6f3af950e65ae702a28cd165bcb6350eff50e8ba066a774c95a2593"
       },
       {
         "path": "app/api/admin/jobs/route.ts",
@@ -59,7 +59,7 @@
       },
       {
         "path": "app/api/admin/newsletters/route.ts",
-        "sha256": "1b6c5bb244dbdb76fa5d798d634d2ff7fe529f6f5a2e105b15bda54d1cd98222"
+        "sha256": "aea7dac376a7e21504413096fbe30f7bf5660905c51c21a0d941760b381dc9a7"
       },
       {
         "path": "app/api/admin/policy-updates/route.test.ts",
@@ -75,7 +75,7 @@
       },
       {
         "path": "app/api/admin/signup-notification-preferences/route.ts",
-        "sha256": "d07f95b8e2017f00910cdf3a06522a85e49969046ec98abfe55af7d696d0e051"
+        "sha256": "f693a88a3d14124384bec46aa71676ea123190fee2245f530995853a100c1056"
       },
       {
         "path": "app/api/admin/users/adminize/route.ts",
@@ -167,15 +167,15 @@
       },
       {
         "path": "components/access/AccessTracker.tsx",
-        "sha256": "15e9ea5171bcacd90e23bdf4b1f375d1a7e1ef817dca6d22ac11cc9079167472"
+        "sha256": "a9f42eee95cea926712b084550037c91ed34c9410b2113f050d58d5b8afbaab1"
       },
       {
         "path": "components/admin/AccessLogPanel.tsx",
-        "sha256": "85e66c1ff7d92d4db7720ed09d5d91ccfbefed0bb9b31a0739fc52ebcccb6790"
+        "sha256": "b2c90c658021e459e7fac52123ad2535c9ead21b9b0c95935265681e2b7d86b5"
       },
       {
         "path": "components/admin/AdminSkeleton.tsx",
-        "sha256": "b4e975edd9d8a56e04b2c6a8eeddde3bb483f48ddd72c9ff5efcf13b56134572"
+        "sha256": "0728c2ce29f2fb3308eff9450aa100336d2b1033479eb730597b6e71aa72250e"
       },
       {
         "path": "components/admin/AdminViewMode.tsx",
@@ -183,15 +183,15 @@
       },
       {
         "path": "components/admin/NewsletterMailer.tsx",
-        "sha256": "ea756dbe1d340ffd0f8c63773dbf8513a642dfb236ab8a58d54da19d62672cdf"
+        "sha256": "04e7bb5dbf09ee11469c5ed8a19f8d20a8872cc2ee9203165f2d02910ff59fd0"
       },
       {
         "path": "components/admin/SignupNotificationsPanel.tsx",
-        "sha256": "a6a9869141259556910ab5963a9bbcb773dadef088d97ca9c2a830d37eb40d18"
+        "sha256": "23621259b3faf64987d7b37cb079734e8442a45809d9674a8bc52ca9b145f69c"
       },
       {
         "path": "components/admin/sensitive-data.tsx",
-        "sha256": "37b52c06b792f3f410981a85ddeb0b80d62d4cce856cebf5e5d9cca0a66bf135"
+        "sha256": "a13c9085c95ce6a7eea89883878cdf1fe167c3d7dc838a04ff75ec247f5f9d69"
       },
       {
         "path": "components/ui/alert-dialog.tsx",
@@ -299,7 +299,7 @@
       },
       {
         "path": "lib/admin/access-log.ts",
-        "sha256": "ad19084baac5fd479d9086cfea307660964142c57babb96b0909a518dbc6829b"
+        "sha256": "c3e323668e60fa453103be5143f777852074959d757cfa7948de3d8cd5838243"
       },
       {
         "path": "lib/admin/auth.ts",
@@ -307,19 +307,19 @@
       },
       {
         "path": "lib/admin/background-jobs.ts",
-        "sha256": "f037760b980e56231b91e1c914caab52335586e1aa9221cc980620a1bd085aa9"
+        "sha256": "35a2b82211e3a9929ae30813f181a03da84a0f97f753c8840d92d0d46bb5cebf"
       },
       {
         "path": "lib/admin/email-log.ts",
-        "sha256": "fb5775dd4c7195d279024eee974aa64b981f23c471dcce663ddfcbba2f86c9f3"
+        "sha256": "e593236bbaf92c75e8b07285782656f1545aaa9dd51d9d6ac82180e523dedaff"
       },
       {
         "path": "lib/admin/email-background-job-processor.ts",
-        "sha256": "7e9851f103990fd818e204f0832fad33204076728b5e862205b5eb61d1a4e886"
+        "sha256": "2a98264b15b593db99321e3455a5bb5ee35addf12e4da3ccffc1f762b6b07744"
       },
       {
         "path": "lib/admin/email-tracking.ts",
-        "sha256": "e2513dfdd9bf2845c959b7b717e4f862ceed51b16c7f79d033176c8b3f4d29f7"
+        "sha256": "fe8c6f8996224503416da0e782ec8c53df917845a3460e9be0876ae3e1321e00"
       },
       {
         "path": "lib/admin/email-transport.ts",
@@ -335,7 +335,7 @@
       },
       {
         "path": "lib/admin/newsletters.ts",
-        "sha256": "91907cb4c0936f298cadcb8e0190bef07156d3f83fa8c4babc04825beaee52f3"
+        "sha256": "430f694675f93e4ec62b2b8246a656a924f8e3d59a90b3d4272c35d72a145b4a"
       },
       {
         "path": "lib/admin/policy-update-email-assets.ts",
@@ -343,7 +343,7 @@
       },
       {
         "path": "lib/admin/signup-notifications.ts",
-        "sha256": "fb0206e7aef53991342bc6bda51e3cbc9a131262c17748752084d7cd45bdb17e"
+        "sha256": "ebd321bacf5657c13c1fe7cf4e9eafd1df27daccbc64e8973d3c74932d17698b"
       },
       {
         "path": "lib/app-session.ts",
@@ -379,7 +379,7 @@
       },
       {
         "path": "lib/email-link-security.ts",
-        "sha256": "a3fc7d1cd82e35c80b1cf00d6e0cfee654f25ca954ed623c591918ae2e81ca1f"
+        "sha256": "c8288c8c5f05dd801e42785b9f848efe5cc832d770011380af9fd6eec9ad9f68"
       },
       {
         "path": "lib/email-ownership.ts",
@@ -387,7 +387,7 @@
       },
       {
         "path": "lib/email-preferences.ts",
-        "sha256": "47ce2756deb62c31549a38063fcc069738cc7a8a48b70934b12350103ac4b2c7"
+        "sha256": "1c8b89afdd024489b98e8be59ef97945fb5ca44b036a955f192ecfaaee0986f1"
       },
       {
         "path": "lib/legacy-session-cookies.ts",
@@ -583,7 +583,7 @@
       },
       {
         "path": "app/api/admin/public-files/route.ts",
-        "sha256": "1968d0b89c1f89cc244705456d8f5d3289d3156a6ceb5f3b3afd43b403451b6d"
+        "sha256": "b356b0fb4522598a7e65e744ac47c804e8b4f0a26a0c6d8c61d64a963341b434"
       },
       {
         "path": "app/resources/[...path]/route.test.ts",
@@ -591,11 +591,11 @@
       },
       {
         "path": "app/resources/[...path]/route.ts",
-        "sha256": "6ae29832dd2185ce7be0f08aeb39796ce40ad7d7b2ab5166e24299c1bb83ce7e"
+        "sha256": "82062439c74ed4515935652094c11a604cdc9808839af3f02e472e0522ebd9ae"
       },
       {
         "path": "components/admin/PublicFileLibraryPanel.tsx",
-        "sha256": "65649f0bdc07ce6d6d0266f53b26b1f91f9fc4184e6c739fe9f7c78c2e772ee0"
+        "sha256": "6d02ac4855e0e6bd38339ce5f2b1254d982e5a00be70445263bd55634c62491a"
       },
       {
         "path": "lib/__tests__/admin-public-files.test.ts",
@@ -607,7 +607,7 @@
       },
       {
         "path": "lib/admin/public-files.ts",
-        "sha256": "a89bc50bea14953775f6956fe2257264717f0647b3066aa0efdc90e3b6ea8875"
+        "sha256": "47966e355299a3833ad5c424c73926c2d7d15c3890227994497b4fa99fafc9f4"
       },
       {
         "path": "lib/public-file-access.ts",
@@ -615,7 +615,7 @@
       },
       {
         "path": "lib/public-files.ts",
-        "sha256": "cd8ab9994a89a57c3dffcbc50dc1cebe6ed64ec8229b52e76d1a5c09e0fe816a"
+        "sha256": "bf2d2afecc64e81abf90c0895ee8458e12b13a8829aa97e339b50080f9fdeacf"
       },
       {
         "path": "vitest.setup.ts",
@@ -878,6 +878,494 @@
           "app": "coalition",
           "path": "lib/letter-signons.ts",
           "import": "@pgpz/letter-signons"
+        }
+      ]
+    },
+    {
+      "name": "background-jobs-runtime",
+      "packagePath": "packages/background-jobs",
+      "contentOwnership": "The package owns provider-neutral background-job orchestration, persistence operations, queue dispatch, progress, retry, retention, and state transitions. Each app injects its DynamoDB document client, application table, email normalization, and SQS transport.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "src/index.ts",
+        "src/runtime.ts",
+        "src/contracts.ts",
+        "src/state-machine.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/admin/background-jobs.ts",
+          "lib/dynamodb.ts",
+          "lib/aws-runtime.ts"
+        ],
+        "coalition": [
+          "lib/admin/background-jobs.ts",
+          "lib/dynamodb.ts",
+          "lib/aws-runtime.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/admin/background-jobs.ts",
+          "import": "@pgpz/background-jobs"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/background-jobs.ts",
+          "import": "@pgpz/background-jobs"
+        }
+      ]
+    },
+    {
+      "name": "email-domain",
+      "packagePath": "packages/email-domain",
+      "contentOwnership": "The package owns provider-neutral email contracts, signed-link security, preference interpretation, tracking normalization, newsletter validation and normalization, and policy-update history grouping. Each app retains DynamoDB persistence, recipient policy, configuration secrets, routes, and transport.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/contracts.ts",
+        "src/link-security.ts",
+        "src/preferences.ts",
+        "src/tracking.ts",
+        "src/newsletters.ts",
+        "src/policy-update-history.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/email-link-security.ts",
+          "lib/email-preferences.ts",
+          "lib/admin/email-tracking.ts",
+          "lib/admin/newsletters.ts",
+          "lib/admin/email-log.ts"
+        ],
+        "coalition": [
+          "lib/email-link-security.ts",
+          "lib/email-preferences.ts",
+          "lib/admin/email-tracking.ts",
+          "lib/admin/newsletters.ts",
+          "lib/admin/email-log.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/email-link-security.ts",
+          "import": "@pgpz/email-domain"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/email-link-security.ts",
+          "import": "@pgpz/email-domain"
+        },
+        {
+          "app": "community",
+          "path": "lib/admin/newsletters.ts",
+          "import": "@pgpz/email-domain"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/newsletters.ts",
+          "import": "@pgpz/email-domain"
+        }
+      ]
+    },
+    {
+      "name": "email-runtime",
+      "packagePath": "packages/email-runtime",
+      "contentOwnership": "The package owns dependency-injected newsletter persistence, email logging and tracking, background-job processing, and newsletter route mechanics. Each app composes its own DynamoDB table, delivery transport, recipient policy, secrets, branding, authorization, and policy-update renderers.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/email-log.ts",
+        "src/email-tracking.ts",
+        "src/newsletters.ts",
+        "src/email-background-job-processor.ts",
+        "src/newsletter-route.ts",
+        "src/runtime.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/admin/email-log.ts",
+          "lib/admin/email-tracking.ts",
+          "lib/admin/newsletters.ts",
+          "lib/admin/email-background-job-processor.ts",
+          "app/api/admin/newsletters/route.ts"
+        ],
+        "coalition": [
+          "lib/admin/email-log.ts",
+          "lib/admin/email-tracking.ts",
+          "lib/admin/newsletters.ts",
+          "lib/admin/email-background-job-processor.ts",
+          "app/api/admin/newsletters/route.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/admin/email-log.ts",
+          "import": "@pgpz/email-runtime"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/email-log.ts",
+          "import": "@pgpz/email-runtime"
+        },
+        {
+          "app": "community",
+          "path": "lib/admin/email-background-job-processor.ts",
+          "import": "@pgpz/email-runtime"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/email-background-job-processor.ts",
+          "import": "@pgpz/email-runtime"
+        },
+        {
+          "app": "community",
+          "path": "app/api/admin/newsletters/route.ts",
+          "import": "@pgpz/email-runtime"
+        },
+        {
+          "app": "coalition",
+          "path": "app/api/admin/newsletters/route.ts",
+          "import": "@pgpz/email-runtime"
+        }
+      ]
+    },
+    {
+      "name": "email-admin-ui",
+      "packagePath": "packages/email-admin-ui",
+      "contentOwnership": "The package owns the shared newsletter administration client, API contracts, endpoint configuration, and form helpers. Each app injects its branded button and retains the admin page composition.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/NewsletterMailer.tsx"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "components/admin/NewsletterMailer.tsx"
+        ],
+        "coalition": [
+          "components/admin/NewsletterMailer.tsx"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "components/admin/NewsletterMailer.tsx",
+          "import": "@pgpz/email-admin-ui"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/NewsletterMailer.tsx",
+          "import": "@pgpz/email-admin-ui"
+        }
+      ]
+    },
+    {
+      "name": "public-files",
+      "packagePath": "packages/public-files",
+      "contentOwnership": "The package owns public-file domain validation, dependency-injected persistence, object-key/version behavior, admin and delivery route mechanics, and the reusable admin library panel. Each app retains feature flags, authorization, S3 transport adapters, and configuration.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/client.ts",
+        "src/server.ts",
+        "src/domain.ts",
+        "src/runtime.ts",
+        "src/admin-route.ts",
+        "src/resource-route.ts",
+        "src/PublicFileLibraryPanel.tsx"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/public-files.ts",
+          "lib/admin/public-files.ts",
+          "components/admin/PublicFileLibraryPanel.tsx",
+          "app/api/admin/public-files/route.ts",
+          "app/resources/[...path]/route.ts"
+        ],
+        "coalition": [
+          "lib/public-files.ts",
+          "lib/admin/public-files.ts",
+          "components/admin/PublicFileLibraryPanel.tsx",
+          "app/api/admin/public-files/route.ts",
+          "app/resources/[...path]/route.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/admin/public-files.ts",
+          "import": "@pgpz/public-files/server"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/public-files.ts",
+          "import": "@pgpz/public-files/server"
+        },
+        {
+          "app": "community",
+          "path": "components/admin/PublicFileLibraryPanel.tsx",
+          "import": "@pgpz/public-files/client"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/PublicFileLibraryPanel.tsx",
+          "import": "@pgpz/public-files/client"
+        },
+        {
+          "app": "community",
+          "path": "app/api/admin/public-files/route.ts",
+          "import": "@pgpz/public-files/server"
+        },
+        {
+          "app": "coalition",
+          "path": "app/api/admin/public-files/route.ts",
+          "import": "@pgpz/public-files/server"
+        },
+        {
+          "app": "community",
+          "path": "app/resources/[...path]/route.ts",
+          "import": "@pgpz/public-files/server"
+        },
+        {
+          "app": "coalition",
+          "path": "app/resources/[...path]/route.ts",
+          "import": "@pgpz/public-files/server"
+        }
+      ]
+    },
+    {
+      "name": "access-log",
+      "packagePath": "packages/access-log",
+      "contentOwnership": "The package owns access-event normalization and persistence, request metadata handling, access-log route mechanics, page-view tracking, and the reusable administration panel. Each app retains its own DynamoDB table, sessions, administrator authorization, error types, and UI bindings.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/client.ts",
+        "src/server.ts",
+        "src/runtime.ts",
+        "src/routes.ts",
+        "src/AccessLogPanel.tsx",
+        "src/AccessTracker.tsx",
+        "src/runtime.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/admin/access-log.ts",
+          "components/admin/AccessLogPanel.tsx",
+          "components/access/AccessTracker.tsx",
+          "app/api/admin/access-log/route.ts",
+          "app/api/access-log/page-view/route.ts"
+        ],
+        "coalition": [
+          "lib/admin/access-log.ts",
+          "components/admin/AccessLogPanel.tsx",
+          "components/access/AccessTracker.tsx",
+          "app/api/admin/access-log/route.ts",
+          "app/api/access-log/page-view/route.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/admin/access-log.ts",
+          "import": "@pgpz/access-log/server"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/access-log.ts",
+          "import": "@pgpz/access-log/server"
+        },
+        {
+          "app": "community",
+          "path": "components/admin/AccessLogPanel.tsx",
+          "import": "@pgpz/access-log/client"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/AccessLogPanel.tsx",
+          "import": "@pgpz/access-log/client"
+        },
+        {
+          "app": "community",
+          "path": "components/access/AccessTracker.tsx",
+          "import": "@pgpz/access-log/client"
+        },
+        {
+          "app": "coalition",
+          "path": "components/access/AccessTracker.tsx",
+          "import": "@pgpz/access-log/client"
+        },
+        {
+          "app": "community",
+          "path": "app/api/admin/access-log/route.ts",
+          "import": "@pgpz/access-log/routes"
+        },
+        {
+          "app": "coalition",
+          "path": "app/api/admin/access-log/route.ts",
+          "import": "@pgpz/access-log/routes"
+        },
+        {
+          "app": "community",
+          "path": "app/api/access-log/page-view/route.ts",
+          "import": "@pgpz/access-log/routes"
+        },
+        {
+          "app": "coalition",
+          "path": "app/api/access-log/page-view/route.ts",
+          "import": "@pgpz/access-log/routes"
+        }
+      ]
+    },
+    {
+      "name": "signup-notifications",
+      "packagePath": "packages/signup-notifications",
+      "contentOwnership": "The package owns administrator signup-notification preferences, eligible-recipient selection, durable-job creation, email assembly flow, preference route mechanics, and the reusable administration panel. Each app retains its own member data, table, site branding, successful-join policy, delivery queue, and administrator authorization.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "README.md",
+        "src/index.ts",
+        "src/client.ts",
+        "src/server.ts",
+        "src/runtime.ts",
+        "src/routes.ts",
+        "src/SignupNotificationsPanel.tsx",
+        "src/runtime.test.ts"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "lib/admin/signup-notifications.ts",
+          "components/admin/SignupNotificationsPanel.tsx",
+          "app/api/admin/signup-notification-preferences/route.ts"
+        ],
+        "coalition": [
+          "lib/admin/signup-notifications.ts",
+          "components/admin/SignupNotificationsPanel.tsx",
+          "app/api/admin/signup-notification-preferences/route.ts"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "lib/admin/signup-notifications.ts",
+          "import": "@pgpz/signup-notifications/server"
+        },
+        {
+          "app": "coalition",
+          "path": "lib/admin/signup-notifications.ts",
+          "import": "@pgpz/signup-notifications/server"
+        },
+        {
+          "app": "community",
+          "path": "components/admin/SignupNotificationsPanel.tsx",
+          "import": "@pgpz/signup-notifications/client"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/SignupNotificationsPanel.tsx",
+          "import": "@pgpz/signup-notifications/client"
+        },
+        {
+          "app": "community",
+          "path": "app/api/admin/signup-notification-preferences/route.ts",
+          "import": "@pgpz/signup-notifications/routes"
+        },
+        {
+          "app": "coalition",
+          "path": "app/api/admin/signup-notification-preferences/route.ts",
+          "import": "@pgpz/signup-notifications/routes"
+        }
+      ]
+    },
+    {
+      "name": "shared-admin-ui",
+      "packagePath": "packages/ui",
+      "contentOwnership": "The shared UI package owns brand-neutral admin loading and sensitive-data primitives. Each app retains branded buttons, icons, route composition, and workflow-specific admin panels.",
+      "adoption": {
+        "community": "active",
+        "coalition": "active"
+      },
+      "requiredPackagePaths": [
+        "package.json",
+        "src/index.ts",
+        "src/AdminShellSkeleton.tsx",
+        "src/AdminSensitiveData.tsx"
+      ],
+      "forbiddenAppLocalImplementationPaths": [],
+      "appOwnedIntegrationPaths": {
+        "community": [
+          "components/admin/AdminSkeleton.tsx",
+          "components/admin/sensitive-data.tsx"
+        ],
+        "coalition": [
+          "components/admin/AdminSkeleton.tsx",
+          "components/admin/sensitive-data.tsx"
+        ]
+      },
+      "requiredConsumers": [
+        {
+          "app": "community",
+          "path": "components/admin/AdminSkeleton.tsx",
+          "import": "@pgpz/ui"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/AdminSkeleton.tsx",
+          "import": "@pgpz/ui"
+        },
+        {
+          "app": "community",
+          "path": "components/admin/sensitive-data.tsx",
+          "import": "@pgpz/ui"
+        },
+        {
+          "app": "coalition",
+          "path": "components/admin/sensitive-data.tsx",
+          "import": "@pgpz/ui"
         }
       ]
     },

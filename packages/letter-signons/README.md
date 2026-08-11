@@ -9,3 +9,8 @@ Each application remains responsible for its own authentication, membership
 rules, DynamoDB records, PDF object storage, email transport, routes, and
 administrative UI. Coalition is the first enabled consumer; Community registers
 the feature switch but keeps it disabled until its launch is authorized.
+
+```bash
+npm run test --workspace=@pgpz/letter-signons
+npm run typecheck --workspace=@pgpz/letter-signons
+```

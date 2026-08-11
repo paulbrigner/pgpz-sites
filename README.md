@@ -1,150 +1,130 @@
-# PGPZ sites
+# PGPZ Sites
 
-This repository contains the independently deployed PGPZ Community and PGPZ
-Coalition applications, the private PGPZ Board of Directors portal, and
-narrowly scoped packages that keep shared behavior consistent. A shared
-repository does not merge the applications' membership workflows, data,
-sessions, environment variables, domains, or release controls.
+PGPZ Sites is an npm-workspace monorepo containing four independently deployed
+Next.js applications and neutral packages shared where their behavior is truly
+the same. Sharing source does **not** merge application data, membership,
+sessions, authorization, infrastructure, configuration, or release controls.
 
-## Repository layout
+## Start here
 
-```text
-apps/community/         PGPZ Community Next.js application
-apps/coalition/         PGPZ Coalition Next.js application
-apps/reference/         Neutral executable example and CI proving ground
-apps/board/             Private PGPZ Board of Directors portal
-packages/core/          Public and server-only configuration contracts
-packages/auth-dynamodb/ Injected Better Auth persistence and rate limits
-packages/ui/            Brand-neutral interface primitives
-packages/zec-shelf/     Reusable ZEC Shelf feature
-templates/              Starter configuration examples
-tooling/                Repository and deployment helpers
-docs/                   Migration records and operating runbooks
-```
+- [Agent guide](AGENTS.md): compact rules and task-specific context routing.
+- [Documentation index](docs/README.md): current runbooks versus historical records.
+- [Architecture](docs/architecture.md): app boundaries, package layers, and feature ownership.
+- [Local development](docs/local-dev.md): offline DynamoDB/MailHog setup.
+- [Testing](docs/testing.md): focused checks and release gates.
 
-The two source histories were imported without squashing. See
-[`docs/history-import.md`](docs/history-import.md) for the immutable source-tip
-baseline and its verification command.
+## Applications
 
-## Requirements
+| Workspace | Purpose | Primary boundary |
+| --- | --- | --- |
+| [`apps/community`](apps/community/README.md) | Public/member Community site | X social-proof membership, X Monitor, ZEC Shelf |
+| [`apps/coalition`](apps/coalition/README.md) | Selective policy partner workspace | Manual approval, invitations, groups, letter sign-ons |
+| [`apps/board`](apps/board/README.md) | Private Board governance portal | Allowlisted roles, document vault, audit ledger |
+| [`apps/reference`](apps/reference/README.md) | Neutral executable example | Read-only demo with no branded data plane |
 
-- Node.js 22, as recorded in `.nvmrc` and the workspace engine constraint.
-- npm with the checked-in root `package-lock.json`. The root lockfile becomes
-  authoritative once generated; application-local lockfiles are migration
-  inputs only and should not remain active afterward.
+Each app has its own domain, environment, auth policy, runtime resources, and
+Amplify release. Community and Coalition deliberately retain some parallel
+adapters where site policy differs.
 
-Install dependencies once at the repository root:
+## Shared packages
+
+| Package | Responsibility |
+| --- | --- |
+| [`@pgpz/core`](packages/core/README.md) | Site configuration, capabilities, server contracts, policy-update DOCX/PDF pipeline |
+| [`@pgpz/ui`](packages/ui/README.md) | Brand-neutral UI and admin-shell primitives |
+| [`@pgpz/auth-dynamodb`](packages/auth-dynamodb/README.md) | Better Auth DynamoDB adapter, indexes, TTL, and rate limits |
+| [`@pgpz/background-jobs`](packages/background-jobs/README.md) | Durable-job domain plus injected DynamoDB/SQS runtime |
+| [`@pgpz/email-domain`](packages/email-domain/README.md) | Pure email preferences, tracking, and history behavior |
+| [`@pgpz/email-runtime`](packages/email-runtime/README.md) | Injected email persistence, route, and worker behavior |
+| [`@pgpz/email-admin-ui`](packages/email-admin-ui/README.md) | Shared newsletter administration UI |
+| [`@pgpz/access-log`](packages/access-log/README.md) | Access events, routes, tracker, and admin UI |
+| [`@pgpz/public-files`](packages/public-files/README.md) | Managed-file domain, runtime, routes, and admin UI |
+| [`@pgpz/signup-notifications`](packages/signup-notifications/README.md) | Signup notification preferences and delivery flow |
+| [`@pgpz/letter-signons`](packages/letter-signons/README.md) | Provider-neutral campaign and signer contracts |
+| [`@pgpz/zec-shelf`](packages/zec-shelf/README.md) | Reusable resource catalog feature |
+| [`@pgpz/x-monitor-core`](packages/x-monitor-core/README.md) | Pinned framework-neutral X Monitor read client |
+| [`@pgpz/audit-log`](packages/audit-log/README.md) | Tamper-evident audit-chain contracts |
+| [`@pgpz/document-vault`](packages/document-vault/README.md) | Governance document lifecycle and storage contracts |
+
+Packages own neutral behavior and accept dependencies from consumers. Apps own
+branding, environment mapping, AWS clients, authentication/authorization,
+membership policy, route adapters, and deployment.
+
+## Requirements and install
+
+- Node.js `>=22 <23` (`.nvmrc` and root engine constraint).
+- npm and the checked-in root `package-lock.json`.
+- Docker only for the optional offline local stack.
 
 ```bash
 nvm use
 npm ci
 ```
 
-Common commands:
+Install once at the repository root. Do not create app-local lockfiles or rely
+on root hoisting instead of direct workspace dependencies.
+
+## Common commands
 
 ```bash
 npm run dev:community
 npm run dev:coalition
-npm run dev:reference
 npm run dev:board
-npm run check
+npm run dev:reference
+
+npm run test --workspace=apps/community
+npm run test --workspace=@pgpz/core
+npm run typecheck --workspace=@pgpz/core
 npm run build:community
-npm run build:coalition
-npm run build:reference
-npm run build:board
-npm run history:verify
+
+npm run docs:verify
 npm run parity:check
 npm run boundaries:check
+npm run check
+
 npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm run check` verifies the imported-history baseline, enforces the parity
-manifest and extracted-feature placement, checks workspace import and direct
-dependency boundaries, typechecks both apps and package workspaces, runs all
-tests, and runs each available workspace linter.
+Use focused checks during development. Before closing a cross-workspace change,
+run the final gate described in [Testing](docs/testing.md).
 
-`npm run test:e2e` starts the two branded applications and the private Board
-portal on isolated local ports and runs the same anonymous critical journeys
-against Community and Coalition (server-rendered public content,
-protected-admin redirects, mobile navigation, and serious/critical axe
-accessibility findings), plus the Board portal's privacy-boundary journeys
-(anonymous document/RSC payload checks, malicious post-sign-in callback
-validation, robots and hardening headers). It uses only local test
-configuration and does not send email or require a production login.
+## Architectural rules
 
-## Dependency boundaries
+- Apps may import declared packages, never another app.
+- Packages may not import from `apps/*` or use an app's `@/` alias.
+- Every workspace declares every package and CLI it consumes directly.
+- Shared behavior belongs in packages only when it can remain brand-, policy-,
+  environment-, auth-, and infrastructure-neutral.
+- Feature registration is central; enablement and adapters remain app-owned.
+- Community/Coalition mirrored files are governed by
+  `tooling/parity/manifest.json`, not by assumption.
 
-- Applications may depend on declared packages but may not import another
-  application workspace.
-- Packages must not import from either application or use an application's `@/`
-  alias.
-- Application-specific membership state machines, access policy, routes,
-  branding, seed content, and infrastructure remain inside their application.
-- Each workspace must declare the packages and command-line tools it consumes;
-  root hoisting is not a substitute for a direct declaration.
-
-`npm run boundaries:check` rejects package-to-application and
-application-to-application imports, and verifies that every statically or
-dynamically imported third-party or workspace package is declared directly by
-its consumer. `npm run parity:check` separately enforces the sibling-file
-manifest and ZEC Shelf extraction placement.
+The automated boundary and parity checks enforce these rules. See
+[Architecture](docs/architecture.md) before extracting or broadening a feature.
 
 ## Deployment
 
-The root `amplify.yml` describes four independently deployed Amplify
-applications. Community, Coalition, and Board retain their own domains,
-environment variables, IAM roles, and DynamoDB tables. Reference is an
-isolated, seed-backed, read-only demonstration with no application data
-plane. Configure the matching monorepo root on each Amplify project:
+Root [`amplify.yml`](amplify.yml) defines four independent Amplify builds:
 
-- Community: `AMPLIFY_MONOREPO_APP_ROOT=apps/community`
-- Coalition: `AMPLIFY_MONOREPO_APP_ROOT=apps/coalition`
-- Reference: `AMPLIFY_MONOREPO_APP_ROOT=apps/reference`
-- Board: `AMPLIFY_MONOREPO_APP_ROOT=apps/board`
+| App | `AMPLIFY_MONOREPO_APP_ROOT` |
+| --- | --- |
+| Community | `apps/community` |
+| Coalition | `apps/coalition` |
+| Reference | `apps/reference` |
+| Board | `apps/board` |
 
-The build helper writes only the selected application's allowlisted variables
-to its own `.env.production`; it overwrites atomically and never prints values.
-Application-local `amplify.yml` files are retained during the observation
-period as rollback references, but the root specification is authoritative for
-monorepo builds.
+`tooling/write-amplify-env.mjs` writes only the selected app's allowlisted
+runtime variables. Production AWS access uses app-specific Amplify SSR compute
+roles and the default AWS credential chain. Never infer current production
+state from a README or dated record; inspect the live Amplify branch and use the
+current runbook selected from [the documentation index](docs/README.md).
 
-See [`docs/monorepo-migration-runbook.md`](docs/monorepo-migration-runbook.md)
-for cutover gates, live checks, and rollback instructions.
+## History and license
 
-Schema-sensitive production releases must also follow the guarded
-[`Better Auth user-index runbook`](docs/better-auth-user-index-runbook.md) and
-[`durable background-jobs runbook`](docs/durable-jobs-runbook.md) before the
-matching application code is deployed.
+Community and Coalition histories were imported without squashing. The
+immutable source-tip baseline and verifier are documented in
+[`docs/history-import.md`](docs/history-import.md).
 
-## Reference application
-
-`apps/reference` is the executable proof that shared packages can be configured
-without importing Community or Coalition branding, aliases, membership state
-machines, seed content, or infrastructure wiring. It is not a third production
-membership service. Its optional public deployment at `reference.pgpz.org` is
-non-production, read-only, non-indexed, and isolated from both branded apps.
-
-See [`docs/reference-application-plan.md`](docs/reference-application-plan.md)
-for its configuration contract, dependency rules, acceptance gates, and the
-later `create-pgpz-site` generator decision.
-
-## Board portal
-
-`apps/board` is the private portal for the PGPZ Board of Directors at
-`board.pgpz.org`. Every route except the sign-in page and the Better Auth API
-is gated by an authenticated layout, and access further requires the email to
-be on the `BOARD_MEMBER_EMAILS` allowlist. Self-registration is disabled;
-accounts are provisioned with
-`apps/board/scripts/provision-board-member.ts`. The site refuses search
-indexing at every layer and ships without outbound email.
-
-See [`docs/board-deployment.md`](docs/board-deployment.md) for the Amplify
-app, DynamoDB table, IAM role, environment variables, and director
-provisioning runbook.
-
-## License
-
-PGPZ Sites and its shared packages are available under either the MIT License
-or the Apache License 2.0 (`MIT OR Apache-2.0`). See `LICENSE-MIT` and
-`LICENSE-APACHE`. Copyright is held by PGPZ contributors.
+The repository is dual-licensed under MIT or Apache-2.0. See `LICENSE-MIT` and
+`LICENSE-APACHE`.

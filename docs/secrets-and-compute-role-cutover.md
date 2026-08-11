@@ -1,5 +1,9 @@
 # Signing-secret rotation and Amplify compute-role cutover
 
+> **Status: current security runbook.** Fetch the complete live branch
+> environment and role policy before changing either; never rebuild an
+> environment map from this document.
+
 This runbook replaces long-lived application AWS and SES SMTP credentials with
 temporary credentials from a branch-level Amplify SSR Compute role. AWS SDK v3
 clients intentionally omit `credentials`, which activates the

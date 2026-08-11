@@ -168,6 +168,12 @@ async function exampleDocxWithReusedImageSizes() {
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
+async function exampleDocxWithMismatchedImageBytes() {
+  const zip = await JSZip.loadAsync(await exampleDocxWithoutSummaryWithImage());
+  zip.file("word/media/image1.png", Buffer.from("not-a-png"));
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
 async function exampleDocxWithPageBreakMarkers() {
   const zip = await JSZip.loadAsync(await exampleDocx());
   const documentXml = await zip.file("word/document.xml")!.async("string");
@@ -273,6 +279,11 @@ describe("policy update DOCX pipeline", () => {
 
     expect(parsed.keyTakeaways).toEqual([]);
     expect(parsed.actionItems).toEqual([]);
+    expect(parsed.assets[0]).toMatchObject({
+      contentType: "image/png",
+      width: 1,
+      height: 1,
+    });
     expect(parsed.sections[0]).toMatchObject({
       heading: "Policy Development Heading",
       images: [
@@ -284,6 +295,16 @@ describe("policy update DOCX pipeline", () => {
         },
       ],
     });
+  });
+
+  it("does not inspect dimensions when embedded image bytes do not match their type", async () => {
+    const parsed = await parsePolicyUpdateDocx(await exampleDocxWithMismatchedImageBytes(), {
+      assetBasePath: "/api/policy-updates/example/assets",
+    });
+
+    expect(parsed.assets[0]).toMatchObject({ contentType: "image/png" });
+    expect(parsed.assets[0]).not.toHaveProperty("width");
+    expect(parsed.assets[0]).not.toHaveProperty("height");
   });
 
   it("preserves and coalesces DOCX page-break markers on the next visible content", async () => {

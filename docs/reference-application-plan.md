@@ -1,5 +1,10 @@
 # Reference application plan
 
+> **Status: historical design plan.** Reference has been implemented. Its
+> current contract is documented in
+> [`apps/reference/README.md`](../apps/reference/README.md) and enforced by its
+> config and route-surface tests.
+
 ## Purpose and timing
 
 Add `apps/reference` only after the initial monorepo migration, ZEC Shelf
