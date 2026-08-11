@@ -5,6 +5,7 @@ import {
   SocialProofError,
   verifyZcashMeProof,
 } from "@/lib/social-proof";
+import { getZcashMeAccess } from "@/lib/zcashme-access";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export async function POST(request: NextRequest) {
     const session = await resolveAppSession(request.headers);
     const userId = session?.user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!getZcashMeAccess(session.user).canActivate) {
+      throw new SocialProofError("ZcashMe membership verification is not enabled for this account.", 403);
+    }
 
     await enforceSocialProofRateLimit({
       action: "verify",

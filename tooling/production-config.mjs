@@ -57,6 +57,36 @@ export function validateBrandedProductionEnvironment(
   }
 
   if (applicationName === "community") {
+    for (const flagName of [
+      "ZCASHME_VERIFICATION_ENABLED",
+      "ZCASHME_ADMIN_DRY_RUN_ENABLED",
+    ]) {
+      const value = environment[flagName]?.trim().toLowerCase();
+      if (value && !new Set(["true", "false"]).has(value)) {
+        issues.push(`${flagName} must be true or false`);
+      }
+    }
+    const zcashMeTimeout = environment.ZCASHME_API_TIMEOUT_MS?.trim();
+    if (zcashMeTimeout) {
+      const timeout = Number(zcashMeTimeout);
+      if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 30_000) {
+        issues.push("ZCASHME_API_TIMEOUT_MS must be an integer from 1000 to 30000");
+      }
+    }
+    for (const urlName of ["ZCASHME_AUTH_ISSUER", "ZCASHME_DIRECTORY_URL"]) {
+      const configuredUrl = environment[urlName]?.trim();
+      if (!configuredUrl) continue;
+      let url;
+      try {
+        url = new URL(configuredUrl);
+      } catch {
+        url = null;
+      }
+      if (!url || url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+        issues.push(`${urlName} must be a credential-free HTTPS URL`);
+      }
+    }
+
     const autoverifySecret = validateSigningSecret(
       environment,
       "SOCIAL_PROOF_AUTOVERIFY_SECRET",

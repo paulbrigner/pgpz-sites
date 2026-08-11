@@ -146,6 +146,31 @@ test("requires strong distinct Community autoverify rotation keys", () => {
   );
 });
 
+test("validates optional ZcashMe rollout controls without requiring a canary", () => {
+  const environment = {
+    ...validEnvironment(),
+    SOCIAL_PROOF_AUTOVERIFY_SECRET: "a".repeat(64),
+    ZCASHME_VERIFICATION_ENABLED: "true",
+    ZCASHME_VERIFICATION_ALLOWED_EMAILS: "",
+    ZCASHME_ADMIN_DRY_RUN_ENABLED: "true",
+    ZCASHME_AUTH_ISSUER: "https://auth.zcash.me",
+    ZCASHME_DIRECTORY_URL: "https://zcash.me",
+    ZCASHME_API_TIMEOUT_MS: "15000",
+  };
+  assert.doesNotThrow(() =>
+    validateBrandedProductionEnvironment(environment, { applicationName: "community" }),
+  );
+  assert.throws(
+    () => validateBrandedProductionEnvironment({
+      ...environment,
+      ZCASHME_VERIFICATION_ENABLED: "sometimes",
+      ZCASHME_AUTH_ISSUER: "http://auth.example.test?token=secret",
+      ZCASHME_API_TIMEOUT_MS: "99999",
+    }, { applicationName: "community" }),
+    /ZCASHME_VERIFICATION_ENABLED must be true or false[\s\S]*ZCASHME_API_TIMEOUT_MS must be an integer[\s\S]*ZCASHME_AUTH_ISSUER must be a credential-free HTTPS URL/,
+  );
+});
+
 test("requires a complete server-only X Monitor client when Community enables the feature", () => {
   const environment = {
     ...validEnvironment(),

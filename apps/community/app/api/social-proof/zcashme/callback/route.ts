@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppSession } from "@/lib/app-session";
-import { SITE_URL, ZCASHME_AUTH_ISSUER } from "@/lib/config";
-import { SocialProofError, verifyZcashMeProof } from "@/lib/social-proof";
+import { SITE_URL, ZCASHME_API_TIMEOUT_MS, ZCASHME_AUTH_ISSUER } from "@/lib/config";
+import { SocialProofError, verifyZcashMeDryRun, verifyZcashMeProof } from "@/lib/social-proof";
+import { getZcashMeAccess } from "@/lib/zcashme-access";
 import {
   decodeZcashMeOidcAttempt,
   zcashMeCallbackUrl,
@@ -10,10 +11,20 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function redirectHome(result: "verified" | "error") {
+function redirectHome(result: "verified" | "dry-run-verified" | "error") {
   const url = new URL(SITE_URL);
   url.searchParams.set("zcashme", result);
   return NextResponse.redirect(url);
+}
+
+async function fetchZcashMeAuth(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ZCASHME_API_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function clearAttemptCookie(response: NextResponse) {
@@ -43,8 +54,12 @@ export async function GET(request: NextRequest) {
     if (attempt.userId !== userId) {
       throw new SocialProofError("This ZcashMe verification belongs to a different PGPZ account.", 403);
     }
+    const access = getZcashMeAccess(session.user);
+    if (attempt.mode === "admin_dry_run" ? !access.canAdminDryRun : !access.canActivate) {
+      throw new SocialProofError("This ZcashMe verification mode is no longer enabled for your account.", 403);
+    }
 
-    const tokenResponse = await fetch(`${ZCASHME_AUTH_ISSUER}/token`, {
+    const tokenResponse = await fetchZcashMeAuth(`${ZCASHME_AUTH_ISSUER}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -54,23 +69,29 @@ export async function GET(request: NextRequest) {
         redirect_uri: zcashMeCallbackUrl(),
         code_verifier: attempt.codeVerifier,
       }),
-      cache: "no-store",
     });
     const token = await tokenResponse.json().catch(() => null) as { access_token?: unknown } | null;
     if (!tokenResponse.ok || typeof token?.access_token !== "string") {
       throw new Error("ZcashMe could not complete the authorization exchange.");
     }
 
-    const profileResponse = await fetch(`${ZCASHME_AUTH_ISSUER}/me`, {
+    const profileResponse = await fetchZcashMeAuth(`${ZCASHME_AUTH_ISSUER}/me`, {
       headers: { Authorization: `Bearer ${token.access_token}` },
-      cache: "no-store",
     });
     const profile = await profileResponse.json().catch(() => null) as { sub?: unknown; username?: unknown } | null;
     if (!profileResponse.ok || typeof profile?.sub !== "string" || typeof profile?.username !== "string") {
       throw new Error("ZcashMe did not return an authenticated profile.");
     }
 
-    await verifyZcashMeProof(userId, { username: profile.username });
+    if (attempt.mode === "admin_dry_run") {
+      await verifyZcashMeDryRun({ username: profile.username, challenge: attempt.challenge });
+      return clearAttemptCookie(redirectHome("dry-run-verified"));
+    }
+
+    await verifyZcashMeProof(userId, {
+      username: profile.username,
+      expectedChallenge: attempt.challenge,
+    });
     return clearAttemptCookie(redirectHome("verified"));
   } catch (error) {
     console.error("ZcashMe assisted membership verification failed", error);

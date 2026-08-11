@@ -119,4 +119,51 @@ describe("signup-notification runtime", () => {
     expect(email.subject).toBe("[PGPZ Test] New member joined: New Member");
     expect(email.text).toContain("https://portal.example.test/admin");
   });
+
+  it("renders provider-neutral self-verification details for ZcashMe", () => {
+    const email = buildAdminSignupNotificationEmail({
+      event: {
+        type: "successful_join",
+        memberUserId: "member-1",
+        occurredAt: "2026-08-10T12:00:00.000Z",
+        method: "self_verification",
+        provider: "zcashme",
+        proofUrl: "https://zcash.me/member",
+      },
+      member: {
+        id: "member-1",
+        name: "New Member",
+        email: "new@example.test",
+        firstName: null,
+        lastName: null,
+      },
+    });
+
+    expect(email.html).toContain("through ZcashMe self-verification");
+    expect(email.html).toContain("[View ZcashMe proof](https://zcash.me/member)");
+    expect(email.text).toContain("ZcashMe proof: https://zcash.me/member");
+  });
+
+  it("preserves legacy X self-verification event rendering", () => {
+    const email = buildAdminSignupNotificationEmail({
+      event: {
+        type: "successful_join",
+        memberUserId: "member-1",
+        occurredAt: "2026-08-10T12:00:00.000Z",
+        method: "x_self_verification",
+        xHandle: "@member",
+        proofPostUrl: "https://x.com/member/status/1",
+      },
+      member: {
+        id: "member-1",
+        name: "New Member",
+        email: "new@example.test",
+        firstName: null,
+        lastName: null,
+      },
+    });
+
+    expect(email.text).toContain("X account: @member");
+    expect(email.text).toContain("X proof: https://x.com/member/status/1");
+  });
 });

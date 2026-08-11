@@ -27,7 +27,7 @@ There is no shared runtime process or shared authorization layer.
 
 | App | Membership/auth | App-specific capabilities | Data boundary |
 | --- | --- | --- | --- |
-| Community | Better Auth magic link plus X social proof | X Monitor, Topic Briefings, ZEC Shelf, referrals | Community table/buckets/queue/compute role |
+| Community | Better Auth magic link plus X and canary-gated ZcashMe social proof | X Monitor, Topic Briefings, ZEC Shelf, referrals | Community table/buckets/queue/compute role |
 | Coalition | Better Auth magic link plus manual approval or invitation | policy groups, directory, invitations, letter sign-ons | Coalition table/buckets/queue/compute role |
 | Board | Better Auth password plus explicit member/staff allowlists | governance documents and audit review | Board auth, document, audit, and storage resources |
 | Reference | externally managed/no attached identity provider | neutral read-only ZEC Shelf and document examples | synthetic/inert by default; never branded resources |
