@@ -7,6 +7,7 @@ import {
 } from "@/lib/better-auth-user-email";
 import { releaseEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
+import { deleteMemberProfileArtifacts, hideMemberProfileForUser, refreshMemberProfileProjection } from "@/lib/member-profiles";
 import { normalizeXHandle } from "@/lib/x-handle";
 import { normalizePolicyInterestGroups, type PolicyInterestGroupId } from "@/lib/policy-interest-groups";
 import {
@@ -32,6 +33,7 @@ type RawUser = {
   linkedinUrl?: string | null;
   xHandle?: string | null;
   memberDirectoryOptIn?: boolean | null;
+  memberProfileSlug?: string | null;
   policyInterestGroups?: unknown;
   isAdmin?: boolean | null;
   welcomeEmailSentAt?: string | null;
@@ -88,6 +90,7 @@ export type AdminMember = {
   linkedinUrl: string | null;
   xHandle: string | null;
   memberDirectoryOptIn: boolean;
+  memberProfileSlug: string | null;
   policyInterestGroups: PolicyInterestGroupId[];
   membershipStatus: MemberStatus;
   membershipProvider: string | null;
@@ -176,6 +179,8 @@ export type MemberDirectoryEntry = {
   linkedinUrl: string | null;
   xHandle: string | null;
   policyInterestGroups: PolicyInterestGroupId[];
+  slug: string | null;
+  profilePath: string | null;
 };
 
 export type BuildAdminRosterOptions = {
@@ -331,7 +336,7 @@ async function scanUsers(): Promise<RawUser[]> {
       TableName: TABLE_NAME,
       FilterExpression: "#type = :user",
       ProjectionExpression:
-        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, policyInterestGroups, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, applicationStatus, applicationRequestedAt, applicationApprovedAt, applicationApprovedBy, applicationDeclinedAt, applicationDeclinedBy, applicationDeclineReason, applicationWithdrawnAt, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
+        "id, #name, email, firstName, lastName, company, jobTitle, linkedinUrl, xHandle, memberDirectoryOptIn, memberProfileSlug, policyInterestGroups, isAdmin, welcomeEmailSentAt, invitationEmailSentAt, invitationAcceptedAt, invitationStatus, lastEmailSentAt, lastEmailType, emailBounceReason, emailSuppressed, emailSuppressedAt, emailSuppressedReason, emailSuppressedBy, emailNewsletterOptIn, emailPolicyUpdateOptIn, accountStatus, deactivatedAt, deactivatedBy, membershipStatus, membershipProvider, membershipVerifiedAt, manualApprovalStatus, manualApprovalRequestedAt, manualApprovalApprovedAt, manualApprovalApprovedBy, applicationStatus, applicationRequestedAt, applicationApprovedAt, applicationApprovedBy, applicationDeclinedAt, applicationDeclinedBy, applicationDeclineReason, applicationWithdrawnAt, communitySyncStatus, communitySyncAttemptedAt, communitySyncedAt, communitySyncMessage, communitySyncError, communityUserId, adminNotes, adminNotesUpdatedAt, adminNotesUpdatedBy",
       ExpressionAttributeNames: { "#type": "type", "#name": "name" },
       ExpressionAttributeValues: { ":user": "USER" },
       ExclusiveStartKey,
@@ -372,6 +377,7 @@ function toAdminMember(user: RawUser): AdminMember | null {
     linkedinUrl: textOrNull(user.linkedinUrl),
     xHandle: textOrNull(user.xHandle),
     memberDirectoryOptIn: user.memberDirectoryOptIn === true,
+    memberProfileSlug: typeof user.memberProfileSlug === "string" ? user.memberProfileSlug : null,
     policyInterestGroups: normalizePolicyInterestGroups(user.policyInterestGroups),
     membershipStatus: normalizeMembershipStatus(user.membershipStatus),
     membershipProvider: textOrNull(user.membershipProvider),
@@ -456,7 +462,9 @@ export async function updateAdminMemberProfile({
   const jobTitle = requireProfileText(profile.jobTitle, "Job title");
   const linkedinUrl = normalizeLinkedinUrl(profile.linkedinUrl);
   const xHandle = normalizeXHandle(profile.xHandle);
-  const memberDirectoryOptIn = profile.memberDirectoryOptIn === true;
+  // Administrators may preserve or force-disable an existing consent, but may
+  // not opt a member into profile sharing on their behalf.
+  const memberDirectoryOptIn = user.memberDirectoryOptIn === true && profile.memberDirectoryOptIn !== false;
   const policyInterestGroups = normalizePolicyInterestGroups(profile.policyInterestGroups);
   const name = `${firstName} ${lastName}`.trim();
   const now = new Date().toISOString();
@@ -512,6 +520,9 @@ export async function updateAdminMemberProfile({
       },
     });
   }
+
+  if (memberDirectoryOptIn) await refreshMemberProfileProjection(trimmedUserId);
+  else await hideMemberProfileForUser(trimmedUserId, false);
 
   return {
     ok: true,
@@ -749,6 +760,8 @@ export async function deactivateAdminMember({
     throw err;
   }
 
+  await hideMemberProfileForUser(user.id!, true);
+
   return {
     ok: true,
     userId: user.id!,
@@ -865,6 +878,8 @@ export async function deleteDeactivatedAdminMember({
   if (user.accountStatus !== "deactivated" && !user.deactivatedAt) {
     throw new AdminMemberActionError("Deactivate this user before deleting them.", 409);
   }
+
+  await deleteMemberProfileArtifacts(user.id!);
 
   const appItems: DynamoRecordKey[] = [];
   let ExclusiveStartKey: Record<string, any> | undefined;
@@ -1127,6 +1142,8 @@ export async function listActiveMemberDirectory(): Promise<MemberDirectoryEntry[
       linkedinUrl: member.linkedinUrl,
       xHandle: member.xHandle,
       policyInterestGroups: member.policyInterestGroups,
+      slug: member.memberProfileSlug,
+      profilePath: member.memberProfileSlug ? `/members/${member.memberProfileSlug}` : null,
     }))
     .sort((a, b) => {
       const companyCompare = (a.company || "").localeCompare(b.company || "", undefined, {

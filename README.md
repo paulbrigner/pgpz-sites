@@ -38,6 +38,7 @@ adapters where site policy differs.
 | [`@pgpz/email-runtime`](packages/email-runtime/README.md) | Injected email persistence, route, and worker behavior |
 | [`@pgpz/email-admin-ui`](packages/email-admin-ui/README.md) | Shared newsletter administration UI |
 | [`@pgpz/access-log`](packages/access-log/README.md) | Access events, routes, tracker, and admin UI |
+| [`@pgpz/member-directory`](packages/member-directory/README.md) | Protected member-profile contracts, safe projections, and vanity-slug rules |
 | [`@pgpz/public-files`](packages/public-files/README.md) | Managed-file domain, runtime, routes, and admin UI |
 | [`@pgpz/signup-notifications`](packages/signup-notifications/README.md) | Signup notification preferences and delivery flow |
 | [`@pgpz/letter-signons`](packages/letter-signons/README.md) | Provider-neutral campaign and signer contracts |

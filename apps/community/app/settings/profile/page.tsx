@@ -6,6 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2, Clipboard, Gift } from "lucide-react";
 import { useAppSession } from "@/lib/use-app-session";
+import { isFeatureEnabled } from "@/config/features";
+import { MemberProfileSettings } from "@/components/profile/MemberProfileSettings";
 
 type ReferralSummary = {
   referralCode: string;
@@ -532,6 +534,8 @@ export default function ProfileSettingsPage() {
           </Button>
         </form>
       </section>
+
+      {isMember && isFeatureEnabled("memberDirectory") ? <MemberProfileSettings /> : null}
 
       {isMember ? <section id="member-recruitment" className="rounded-lg border bg-white/80 p-6 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

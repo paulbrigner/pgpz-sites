@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { resolveAppSession } from "@/lib/app-session";
+import { refreshMemberProfileProjection } from "@/lib/member-profiles";
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
     });
 
     const item = updated.Attributes || {};
+    await refreshMemberProfileProjection(userId);
     return NextResponse.json({ ok: true, user: { id: item.id, firstName: item.firstName, lastName: item.lastName, xHandle: item.xHandle, zcashmeUsername: item.zcashmeUsername, linkedinUrl: item.linkedinUrl } });
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : (() => { try { return JSON.stringify(e); } catch { return String(e); } })();

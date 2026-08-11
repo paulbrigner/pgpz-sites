@@ -7,6 +7,7 @@ import {
 } from "@/lib/better-auth-user-email";
 import { releaseEmailOwnershipTransactionItem } from "@/lib/email-ownership";
 import { getUserDisplayName, textOrNull } from "@/lib/user-display-name";
+import { deleteMemberProfileArtifacts, hideMemberProfileForUser, refreshMemberProfileProjection } from "@/lib/member-profiles";
 import {
   memberAcceptsEmailCategory,
   type MemberEmailCategory,
@@ -429,6 +430,8 @@ export async function updateAdminMemberProfile({
     });
   }
 
+  await refreshMemberProfileProjection(trimmedUserId);
+
   return {
     ok: true,
     userId: trimmedUserId,
@@ -660,6 +663,8 @@ export async function deactivateAdminMember({
     throw err;
   }
 
+  await hideMemberProfileForUser(user.id!);
+
   return {
     ok: true,
     userId: user.id!,
@@ -775,6 +780,8 @@ export async function deleteDeactivatedAdminMember({
   if (user.accountStatus !== "deactivated" && !user.deactivatedAt) {
     throw new AdminMemberActionError("Deactivate this user before deleting them.", 409);
   }
+
+  await deleteMemberProfileArtifacts(user.id!);
 
   const appItems: DynamoRecordKey[] = [];
   let ExclusiveStartKey: Record<string, any> | undefined;

@@ -30,6 +30,14 @@ test("anonymous visitors see the sign-in gate on protected admin routes", async 
   expect(signupUrl.searchParams.get("reason")).toBe("signup");
 });
 
+test("member vanity routes fail closed for anonymous visitors", async ({ page }) => {
+  await page.goto("/members/example-member");
+  await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
+  const url = new URL(page.url());
+  expect(url.pathname).toBe("/signin");
+  expect(url.searchParams.get("callbackUrl")).toBe("/members/example-member");
+});
+
 test("mobile navigation exposes the anonymous critical paths", async ({ page }, testInfo) => {
   const application = applicationFor(testInfo.project.name);
   await page.goto("/terms");

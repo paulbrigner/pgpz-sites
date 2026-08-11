@@ -29,6 +29,7 @@
     "@pgpz/email-domain": "0.1.0",
     "@pgpz/email-runtime": "0.1.0",
     "@pgpz/background-jobs": "0.1.0",
+    "@pgpz/member-directory": "0.1.0",
     "@pgpz/public-files": "0.1.0",
     "@pgpz/signup-notifications": "0.1.0",
     "@pgpz/ui": "0.1.0",

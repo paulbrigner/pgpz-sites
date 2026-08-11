@@ -16,5 +16,7 @@ export async function GET() {
   }
 
   const members = await listActiveMemberDirectory();
-  return NextResponse.json({ members });
+  const response = NextResponse.json({ members });
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }

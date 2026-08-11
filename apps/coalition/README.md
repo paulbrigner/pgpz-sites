@@ -11,6 +11,8 @@ Coalition owns:
 
 - application, approval, invitation, activation, and membership policy;
 - policy interest groups and the opt-in active-member directory;
+- protected `/members/[slug]` vanity profiles in the Coalition-only slug
+  namespace;
 - letter campaigns and exact-document sign-on workflows;
 - invitation templates and Coalition-specific email rendering/audiences;
 - Coalition-to-Community sync policy and Coalition infrastructure;
@@ -19,6 +21,12 @@ Coalition owns:
 
 Current central feature switches enable public files and letter sign-ons. ZEC
 Shelf and the document vault are disabled.
+
+The existing `memberDirectoryOptIn` consent remains authoritative. Vanity
+profiles preserve its active-member-only audience and current field set. The
+directory remains compatible with records that have not yet received a slug;
+use the guarded [slug backfill runbook](../../docs/member-profile-slug-backfill.md)
+before treating vanity coverage as complete.
 
 See [manual approval membership](docs/manual-approval-membership.md) for the
 current membership and invitation contracts.
