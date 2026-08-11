@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MemberProfileValidationError } from "@pgpz/member-directory";
 import { resolveAppSession } from "@/lib/app-session";
+import { BETTER_AUTH_TRUSTED_ORIGINS, BETTER_AUTH_URL, SITE_URL } from "@/lib/config";
 import { getOwnerMemberProfile, saveOwnerMemberProfile } from "@/lib/member-profiles";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,13 @@ const sameOrigin = (request: NextRequest) => {
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    return new URL(origin).origin === request.nextUrl.origin;
+    const allowedOrigins = new Set<string>();
+    for (const candidate of [SITE_URL, BETTER_AUTH_URL, ...(BETTER_AUTH_TRUSTED_ORIGINS || "").split(/[,\s]+/)]) {
+      if (!candidate) continue;
+      try { allowedOrigins.add(new URL(candidate).origin); } catch { /* Ignore malformed optional configuration. */ }
+    }
+    if (process.env.NODE_ENV !== "production") allowedOrigins.add(request.nextUrl.origin);
+    return allowedOrigins.has(new URL(origin).origin);
   } catch {
     return false;
   }

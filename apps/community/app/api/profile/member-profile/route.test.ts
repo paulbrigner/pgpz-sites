@@ -21,4 +21,15 @@ describe("Community member profile owner API", () => {
     expect((await PUT(request)).status).toBe(200);
     expect(mocks.saveOwner).toHaveBeenCalledWith(expect.objectContaining({ userId: "member-1", slug: "ada", publish: true, expectedVersion: 2 }));
   });
+  it("accepts the configured public origin behind an Amplify internal request URL", async () => {
+    mocks.resolveAppSession.mockResolvedValue({ user: { id: "member-1" } });
+    const { PUT } = await import("./route");
+    const request = new NextRequest("https://internal-amplify-host.example/api/profile/member-profile", {
+      method: "PUT",
+      headers: { origin: "https://community.pgpz.org", "content-type": "application/json" },
+      body: JSON.stringify({ slug: "ada", published: true, version: 2 }),
+    });
+    expect((await PUT(request)).status).toBe(200);
+    expect(mocks.saveOwner).toHaveBeenCalledWith(expect.objectContaining({ userId: "member-1" }));
+  });
 });
