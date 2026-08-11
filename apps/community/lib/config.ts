@@ -60,7 +60,21 @@ export const SITE_URL =
   process.env.BETTER_AUTH_URL ||
   "https://community.pgpz.org";
 
-export const ZCASHME_AUTH_ISSUER = "https://auth.zcash.me";
+export const ZCASHME_AUTH_ISSUER = trimBaseUrl(
+  process.env.ZCASHME_AUTH_ISSUER,
+  "https://auth.zcash.me",
+);
+export const ZCASHME_DIRECTORY_URL = trimBaseUrl(
+  process.env.ZCASHME_DIRECTORY_URL,
+  "https://zcash.me",
+);
+export const ZCASHME_API_TIMEOUT_MS = parseNumber(process.env.ZCASHME_API_TIMEOUT_MS) || 15000;
+export const ZCASHME_VERIFICATION_ENABLED =
+  process.env.ZCASHME_VERIFICATION_ENABLED === "true";
+export const ZCASHME_VERIFICATION_ALLOWED_EMAILS =
+  process.env.ZCASHME_VERIFICATION_ALLOWED_EMAILS || "";
+export const ZCASHME_ADMIN_DRY_RUN_ENABLED =
+  process.env.ZCASHME_ADMIN_DRY_RUN_ENABLED === "true";
 
 export const X_BEARER_TOKEN =
   (process.env.X_BEARER_TOKEN || process.env.XMON_X_API_BEARER_TOKEN) as string | undefined;

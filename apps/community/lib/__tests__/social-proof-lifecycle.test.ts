@@ -26,6 +26,8 @@ vi.mock("@/lib/admin/signup-notifications", () => ({
 vi.mock("@/lib/config", () => ({
   MEMBERSHIP_PROOF_RETENTION_POLICY: "indefinite",
   SITE_URL: "https://community.example.test",
+  ZCASHME_API_TIMEOUT_MS: 1_000,
+  ZCASHME_DIRECTORY_URL: "https://zcash.example.test",
   X_API_BASE_URL: "https://api.x.example.test",
   X_API_TIMEOUT_MS: 1_000,
   X_BEARER_TOKEN: "test-token",
@@ -39,7 +41,7 @@ vi.mock("@/lib/config", () => ({
   X_PROOF_VERIFY_RATE_LIMIT: 5,
 }));
 
-import { createXChallenge, verifyXProof } from "@/lib/social-proof";
+import { createXChallenge, verifyXProof, verifyZcashMeDryRun } from "@/lib/social-proof";
 
 const pendingChallenge = {
   pk: "SOCIAL_PROOF#USER#user-1",
@@ -102,6 +104,78 @@ describe("social proof account lifecycle", () => {
     });
     expect(dynamoMocks.query).not.toHaveBeenCalled();
     expect(dynamoMocks.put).not.toHaveBeenCalled();
+  });
+
+  it("creates the challenge and current-challenge lock atomically", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: { membershipStatus: "none", accountStatus: "active" },
+    });
+    dynamoMocks.query.mockResolvedValue({ Items: [] });
+    dynamoMocks.transactWrite.mockResolvedValue({});
+
+    const result = await createXChallenge("user-1");
+
+    expect(result.challenge).toMatch(/^PGPZ-[0-9A-F]{10}$/);
+    expect(dynamoMocks.transactWrite).toHaveBeenCalledWith({
+      TransactItems: [
+        expect.objectContaining({ Put: expect.objectContaining({ Item: expect.objectContaining({ type: "SOCIAL_PROOF_CHALLENGE" }) }) }),
+        expect.objectContaining({
+          Put: expect.objectContaining({
+            Item: expect.objectContaining({
+              pk: "SOCIAL_PROOF#USER#user-1",
+              sk: "CURRENT_CHALLENGE",
+              status: "pending",
+            }),
+            ConditionExpression: expect.stringContaining("attribute_not_exists"),
+          }),
+        }),
+      ],
+    });
+  });
+
+  it("returns the winning same-provider challenge after a concurrent start", async () => {
+    dynamoMocks.get.mockResolvedValue({
+      Item: { membershipStatus: "none", accountStatus: "active" },
+    });
+    dynamoMocks.query
+      .mockResolvedValueOnce({ Items: [] })
+      .mockResolvedValueOnce({ Items: [pendingChallenge] });
+    dynamoMocks.transactWrite.mockRejectedValueOnce(
+      Object.assign(new Error("lost race"), { name: "TransactionCanceledException" }),
+    );
+
+    await expect(createXChallenge("user-1")).resolves.toMatchObject({
+      challengeId: "challenge-1",
+      challenge: "PGPZ-ABC123",
+    });
+  });
+
+  it("verifies a ZcashMe dry run without reading or writing PGPZ records", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        username: "canary",
+        address: "u1testaddress",
+        links: [{
+          platform: "pgpz",
+          label: "PGPZ-0123456789",
+          url: "https://community.example.test/challenge/PGPZ-0123456789",
+        }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    ));
+
+    await expect(verifyZcashMeDryRun({
+      username: "canary",
+      challenge: "PGPZ-0123456789",
+    })).resolves.toEqual({
+      ok: true,
+      username: "canary",
+      profileUrl: "https://zcash.example.test/canary",
+      challenge: "PGPZ-0123456789",
+    });
+    expect(dynamoMocks.get).not.toHaveBeenCalled();
+    expect(dynamoMocks.query).not.toHaveBeenCalled();
+    expect(dynamoMocks.transactWrite).not.toHaveBeenCalled();
+    expect(notificationMocks.send).not.toHaveBeenCalled();
   });
 
   it("notifies administrators after a successful X membership transaction", async () => {

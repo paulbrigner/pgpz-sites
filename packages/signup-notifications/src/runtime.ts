@@ -62,7 +62,9 @@ export type AdminSignupNotificationEvent =
       type: "successful_join";
       memberUserId: string;
       occurredAt: string;
-      method: "x_self_verification" | "admin_invitation";
+      method: "x_self_verification" | "self_verification" | "admin_invitation";
+      provider?: "x" | "zcashme" | null;
+      proofUrl?: string | null;
       xHandle?: string | null;
       proofPostUrl?: string | null;
     };
@@ -336,6 +338,13 @@ export function buildAdminSignupNotificationEmail({
   const timeLabel = formattedTimestamp(event.occurredAt);
   const isApproval = event.type === "approval_requested";
   const isInvitation = event.type === "successful_join" && event.method === "admin_invitation";
+  const provider = event.type === "successful_join"
+    ? event.provider || (event.method === "x_self_verification" ? "x" : null)
+    : null;
+  const providerLabel = provider === "zcashme" ? "ZcashMe" : "X";
+  const proofUrl = event.type === "successful_join"
+    ? event.proofUrl || event.proofPostUrl || null
+    : null;
   const subject = isApproval
     ? `[${SITE_NAME}] Approval requested: ${subjectMemberName}`
     : isInvitation
@@ -345,12 +354,12 @@ export function buildAdminSignupNotificationEmail({
     ? `${memberName} is waiting for an administrator's review.`
     : isInvitation
       ? `${memberName} accepted an administrator invitation.`
-      : `${memberName} successfully joined through X self-verification.`;
+      : `${memberName} successfully joined through ${providerLabel} self-verification.`;
   const eventDescription = isApproval
     ? "A signed-in user requested membership approval and is now waiting for an administrator's review."
     : isInvitation
       ? "A new member accepted an administrator invitation and activated their membership."
-      : "A new member successfully activated their membership through X self-verification.";
+      : `A new member successfully activated their membership through ${providerLabel} self-verification.`;
 
   const body = [
     renderEmailParagraph(eventDescription),
@@ -360,11 +369,11 @@ export function buildAdminSignupNotificationEmail({
       `<strong>${isApproval ? "Requested" : "Joined"}:</strong> ${escapeHtml(timeLabel)}`,
     ),
   ];
-  if (event.type === "successful_join" && event.xHandle) {
+  if (event.type === "successful_join" && provider === "x" && event.xHandle) {
     body.push(renderEmailParagraph(`<strong>X account:</strong> ${escapeHtml(event.xHandle)}`));
   }
-  if (event.type === "successful_join" && event.proofPostUrl) {
-    body.push(renderEmailButton({ href: event.proofPostUrl, label: "View X proof post" }));
+  if (proofUrl) {
+    body.push(renderEmailButton({ href: proofUrl, label: `View ${providerLabel} proof` }));
   }
   body.push(renderEmailButton({ href: adminUrl, label: isApproval ? "Review in Admin" : "Open Admin" }));
 
@@ -386,8 +395,8 @@ export function buildAdminSignupNotificationEmail({
     `Email: ${memberEmail}`,
     `${isApproval ? "Requested" : "Joined"}: ${timeLabel}`,
   ];
-  if (event.type === "successful_join" && event.xHandle) textLines.push(`X account: ${event.xHandle}`);
-  if (event.type === "successful_join" && event.proofPostUrl) textLines.push(`X proof: ${event.proofPostUrl}`);
+  if (event.type === "successful_join" && provider === "x" && event.xHandle) textLines.push(`X account: ${event.xHandle}`);
+  if (proofUrl) textLines.push(`${providerLabel} proof: ${proofUrl}`);
   textLines.push("", `Admin: ${adminUrl}`);
   return { subject, html, text: textLines.join("\n") };
 }

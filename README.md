@@ -17,7 +17,7 @@ sessions, authorization, infrastructure, configuration, or release controls.
 
 | Workspace | Purpose | Primary boundary |
 | --- | --- | --- |
-| [`apps/community`](apps/community/README.md) | Public/member Community site | X social-proof membership, X Monitor, ZEC Shelf |
+| [`apps/community`](apps/community/README.md) | Public/member Community site | X and canary-gated ZcashMe social-proof membership, X Monitor, ZEC Shelf |
 | [`apps/coalition`](apps/coalition/README.md) | Selective policy partner workspace | Manual approval, invitations, groups, letter sign-ons |
 | [`apps/board`](apps/board/README.md) | Private Board governance portal | Allowlisted roles, document vault, audit ledger |
 | [`apps/reference`](apps/reference/README.md) | Neutral executable example | Read-only demo with no branded data plane |

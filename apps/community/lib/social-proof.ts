@@ -4,9 +4,12 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import { isAccountActive } from "@pgpz/core";
 import { queueAdminSignupNotification } from "@/lib/admin/signup-notifications";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
+import { getZcashMeAccess } from "@/lib/zcashme-access";
 import {
   MEMBERSHIP_PROOF_RETENTION_POLICY,
   SITE_URL,
+  ZCASHME_API_TIMEOUT_MS,
+  ZCASHME_DIRECTORY_URL,
   X_API_BASE_URL,
   X_API_TIMEOUT_MS,
   X_BEARER_TOKEN,
@@ -107,9 +110,10 @@ const zcashMeAddressClaimKey = (address: string) => ({
   pk: `SOCIAL_PROOF#ZCASHME_ADDRESS#${hashRateLimitValue(address)}`,
   sk: "CLAIM",
 });
-
-const ZCASHME_DIRECTORY_URL = "https://zcash.me";
-const ZCASHME_LOOKUP_TIMEOUT_MS = 15_000;
+const currentChallengeKey = (userId: string) => ({
+  pk: userProofPk(userId),
+  sk: "CURRENT_CHALLENGE",
+});
 
 const hashRateLimitValue = (value: string) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -211,6 +215,13 @@ export async function createZcashMeChallenge(userId: string) {
   };
 }
 
+export function createAdminZcashMeDryRunChallenge() {
+  return {
+    challenge: `PGPZ-${randomBytes(5).toString("hex").toUpperCase()}`,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  };
+}
+
 export async function enforceSocialProofRateLimit({
   action,
   userId,
@@ -275,6 +286,7 @@ async function getCurrentPendingMembershipProof(userId: string): Promise<Challen
       ":prefix": "CHALLENGE#",
     },
     ScanIndexForward: false,
+    ConsistentRead: true,
     Limit: 20,
   });
 
@@ -323,10 +335,56 @@ async function startMembershipProof(userId: string, provider: "x" | "zcashme") {
     autoVerifyAttemptCount: 0,
   } as ChallengeRecord & { type: string };
 
-  await documentClient.put({
-    TableName: TABLE_NAME,
-    Item: record,
-  });
+  try {
+    await documentClient.transactWrite({
+      TransactItems: [
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: record,
+          },
+        },
+        {
+          Put: {
+            TableName: TABLE_NAME,
+            Item: {
+              ...currentChallengeKey(userId),
+              type: "SOCIAL_PROOF_CURRENT_CHALLENGE",
+              userId,
+              provider,
+              status: "pending",
+              challengeId,
+              challenge,
+              createdAt: nowIso,
+              expiresAt: record.autoVerifyUntilAt || record.expiresAt,
+            },
+            ConditionExpression:
+              "attribute_not_exists(#pk) OR #expiresAt < :now OR #status <> :pending",
+            ExpressionAttributeNames: {
+              "#pk": "pk",
+              "#expiresAt": "expiresAt",
+              "#status": "status",
+            },
+            ExpressionAttributeValues: {
+              ":now": nowIso,
+              ":pending": "pending",
+            },
+          },
+        },
+      ],
+    });
+  } catch (error: any) {
+    if (error?.name !== "TransactionCanceledException") throw error;
+    const winner = await getCurrentPendingMembershipProof(userId);
+    if (winner?.provider === provider) return winner;
+    if (winner) {
+      throw new SocialProofError(
+        `You already have a pending ${winner.provider === "x" ? "X" : "ZcashMe"} verification. Complete it or wait for it to expire before starting ${provider === "x" ? "X" : "ZcashMe"} verification.`,
+        409,
+      );
+    }
+    throw new SocialProofError("Another membership verification was started at the same time. Please try again.", 409);
+  }
 
   return record;
 }
@@ -690,6 +748,15 @@ async function verifyXProofCandidate({
           },
         },
         {
+          Delete: {
+            TableName: TABLE_NAME,
+            Key: currentChallengeKey(userId),
+            ConditionExpression: "attribute_not_exists(#pk) OR challengeId = :challengeId",
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ExpressionAttributeValues: { ":challengeId": challenge.challengeId },
+          },
+        },
+        {
           Update: {
             TableName: TABLE_NAME,
             Key: userKey(userId),
@@ -783,7 +850,7 @@ async function fetchZcashMeProfile(username: string): Promise<{
   links: Array<{ platform: string; label: string; url: string }>;
 }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ZCASHME_LOOKUP_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), ZCASHME_API_TIMEOUT_MS);
   let response: Response;
   let body: ZcashMeLookup | null = null;
 
@@ -831,9 +898,12 @@ async function fetchZcashMeProfile(username: string): Promise<{
 
 export async function verifyZcashMeProof(
   userId: string,
-  options: { username?: string } = {},
+  options: { username?: string; expectedChallenge?: string } = {},
 ): Promise<SocialProofRecord> {
   const challenge = await requireCurrentMembershipProof(userId, "zcashme");
+  if (options.expectedChallenge && options.expectedChallenge !== challenge.challenge) {
+    throw new SocialProofError("This ZcashMe authorization does not match your current proof code.", 409);
+  }
   let username = options.username?.trim() || "";
 
   if (!username) {
@@ -921,6 +991,15 @@ export async function verifyZcashMeProof(
           },
         },
         {
+          Delete: {
+            TableName: TABLE_NAME,
+            Key: currentChallengeKey(userId),
+            ConditionExpression: "attribute_not_exists(#pk) OR challengeId = :challengeId",
+            ExpressionAttributeNames: { "#pk": "pk" },
+            ExpressionAttributeValues: { ":challengeId": challenge.challengeId },
+          },
+        },
+        {
           Update: {
             TableName: TABLE_NAME,
             Key: userKey(userId),
@@ -980,6 +1059,29 @@ export async function verifyZcashMeProof(
     challenge: challenge.challenge,
     verifiedAt,
     proofRetentionPolicy,
+  };
+}
+
+export async function verifyZcashMeDryRun({
+  username,
+  challenge,
+}: {
+  username: string;
+  challenge: string;
+}) {
+  const profile = await fetchZcashMeProfile(username.trim());
+  const proofLink = profile.links.find(
+    (link) => link.platform.toLowerCase() === "pgpz" && link.label === challenge,
+  );
+  if (!proofLink) {
+    throw new SocialProofError("The authenticated ZcashMe profile does not contain the dry-run proof code.");
+  }
+
+  return {
+    ok: true as const,
+    username: profile.username,
+    profileUrl: `${ZCASHME_DIRECTORY_URL}/${encodeURIComponent(profile.username)}`,
+    challenge,
   };
 }
 
@@ -1346,6 +1448,7 @@ export async function getUserProofStatus(userId: string) {
     manualApprovalStatus: (user.Item?.manualApprovalStatus as string | undefined) || "none",
     manualApprovalRequestedAt: (user.Item?.manualApprovalRequestedAt as string | undefined) || null,
     manualApprovalApprovedAt: (user.Item?.manualApprovalApprovedAt as string | undefined) || null,
+    zcashMeAccess: getZcashMeAccess(user.Item),
     proofs: (proofs.Items || []).map((item) => ({
       provider: item.provider || null,
       status: item.status || null,

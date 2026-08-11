@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppSession } from "@/lib/app-session";
 import {
+  createAdminZcashMeDryRunChallenge,
   createZcashMeChallenge,
   enforceSocialProofRateLimit,
   SocialProofError,
@@ -10,6 +11,7 @@ import {
   encodeZcashMeOidcAttempt,
   ZCASHME_OIDC_COOKIE,
 } from "@/lib/zcashme-oidc";
+import { getZcashMeAccess } from "@/lib/zcashme-access";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,17 @@ export async function POST(request: NextRequest) {
     const session = await resolveAppSession(request.headers);
     const userId = session?.user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const body = await request.json().catch(() => ({})) as { mode?: unknown };
+    const mode = body.mode === "admin_dry_run" ? "admin_dry_run" : "activation";
+    const access = getZcashMeAccess(session.user);
+    if (mode === "admin_dry_run" ? !access.canAdminDryRun : !access.canActivate) {
+      throw new SocialProofError(
+        mode === "admin_dry_run"
+          ? "ZcashMe administrator dry runs are not enabled for this account."
+          : "ZcashMe membership verification is not enabled for this account.",
+        403,
+      );
+    }
 
     await enforceSocialProofRateLimit({
       action: "challenge",
@@ -35,8 +48,14 @@ export async function POST(request: NextRequest) {
       ipAddress: clientIp(request),
     });
 
-    const challenge = await createZcashMeChallenge(userId);
-    const { attempt, authorizationUrl } = createZcashMeAuthorization(userId, challenge.challenge);
+    const challenge = mode === "admin_dry_run"
+      ? createAdminZcashMeDryRunChallenge()
+      : await createZcashMeChallenge(userId);
+    const { attempt, authorizationUrl } = createZcashMeAuthorization(
+      userId,
+      challenge.challenge,
+      mode,
+    );
     const response = NextResponse.json({ ...challenge, authorizationUrl });
     response.cookies.set(ZCASHME_OIDC_COOKIE, encodeZcashMeOidcAttempt(attempt), {
       httpOnly: true,

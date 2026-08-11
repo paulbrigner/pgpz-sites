@@ -40,6 +40,10 @@ type ProofStatus = {
   manualApprovalStatus: "none" | "pending" | "approved" | string | null;
   manualApprovalRequestedAt: string | null;
   manualApprovalApprovedAt: string | null;
+  zcashMeAccess: {
+    canActivate: boolean;
+    canAdminDryRun: boolean;
+  };
 };
 
 type XChallenge = {
@@ -50,7 +54,7 @@ type XChallenge = {
 };
 
 type ZcashMeChallenge = {
-  challengeId: string;
+  challengeId?: string;
   challenge: string;
   expiresAt: string;
   authorizationUrl: string;
@@ -140,8 +144,10 @@ export default function HomeClient({
   const [statusError, setStatusError] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<XChallenge | null>(null);
   const [zcashMeChallenge, setZcashMeChallenge] = useState<ZcashMeChallenge | null>(null);
+  const [zcashMeDryRunChallenge, setZcashMeDryRunChallenge] = useState<ZcashMeChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [zcashMeChallengeLoading, setZcashMeChallengeLoading] = useState(false);
+  const [zcashMeDryRunLoading, setZcashMeDryRunLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [zcashMeVerifyLoading, setZcashMeVerifyLoading] = useState(false);
   const [findLoading, setFindLoading] = useState(false);
@@ -175,14 +181,16 @@ export default function HomeClient({
     proofStatus?.manualApprovalRequestedAt || sessionUser?.manualApprovalRequestedAt || null;
   const manualApprovalPending = manualApprovalStatus === "pending" && !isMember;
   const zcashmeUsername = proofStatus?.zcashmeUsername || sessionUser?.zcashmeUsername || null;
+  const canActivateWithZcashMe = proofStatus?.zcashMeAccess?.canActivate === true;
+  const canRunZcashMeAdminDryRun = proofStatus?.zcashMeAccess?.canAdminDryRun === true;
   const onboardingTitle = manualApprovalPending
     ? "Manual approval requested"
     : isSocialProofOnboarding
       ? "Email confirmed"
       : "Finish membership setup";
   const onboardingDescription = manualApprovalPending
-    ? "An admin will review your membership request. You can still complete membership verification with X or ZcashMe at any time."
-    : "Choose X or ZcashMe to complete membership verification, or request manual approval.";
+    ? `An admin will review your membership request. You can still complete membership verification with X${canActivateWithZcashMe ? " or ZcashMe" : ""} at any time.`
+    : `Choose X${canActivateWithZcashMe ? " or ZcashMe" : ""} to complete membership verification, or request manual approval.`;
 
   const refreshStatus = useCallback(async () => {
     if (!authenticated || previewMember) return;
@@ -204,9 +212,11 @@ export default function HomeClient({
   }, [refreshStatus]);
 
   useEffect(() => {
-    if (zcashmeCallbackResult !== "verified" && zcashmeCallbackResult !== "error") return;
+    if (!["verified", "dry-run-verified", "error"].includes(zcashmeCallbackResult || "")) return;
     if (zcashmeCallbackResult === "verified") {
       setMessage("Member verification complete. Your PGPZ community membership is active.");
+    } else if (zcashmeCallbackResult === "dry-run-verified") {
+      setMessage("ZcashMe administrator dry run completed. The authenticated public profile and proof code were verified; no PGPZ membership data was changed.");
     } else {
       setError("ZcashMe verification could not be completed. Your code is still available to retry.");
     }
@@ -307,20 +317,30 @@ export default function HomeClient({
     }
   };
 
-  const generateZcashMeChallenge = async () => {
-    setZcashMeChallengeLoading(true);
+  const generateZcashMeChallenge = async (mode: "activation" | "admin_dry_run" = "activation") => {
+    const dryRun = mode === "admin_dry_run";
+    if (dryRun) setZcashMeDryRunLoading(true);
+    else setZcashMeChallengeLoading(true);
     setMessage(null);
     setError(null);
     try {
-      const res = await fetch("/api/social-proof/zcashme/challenge", { method: "POST" });
+      const res = await fetch("/api/social-proof/zcashme/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "Unable to generate a ZcashMe verification code");
-      setZcashMeChallenge(body);
-      setMessage("Your ZcashMe verification code is ready. Verify with ZcashMe or add the code manually to your public profile.");
+      if (dryRun) setZcashMeDryRunChallenge(body);
+      else setZcashMeChallenge(body);
+      setMessage(dryRun
+        ? "The administrator dry run is ready. Continue to ZcashMe to test the real authorization and public-profile proof flow without changing PGPZ membership data."
+        : "Your ZcashMe verification code is ready. Verify with ZcashMe or add the code manually to your public profile.");
     } catch (err: any) {
       setError(err?.message || "Unable to generate a ZcashMe verification code");
     } finally {
-      setZcashMeChallengeLoading(false);
+      if (dryRun) setZcashMeDryRunLoading(false);
+      else setZcashMeChallengeLoading(false);
     }
   };
 
@@ -494,6 +514,45 @@ export default function HomeClient({
         </Alert>
       ) : null}
 
+      {canRunZcashMeAdminDryRun ? (
+        <section className="muted-card border border-[rgba(71,85,105,0.38)] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <p className="section-eyebrow text-[var(--brand-denim)]">ADMIN VERIFICATION</p>
+              <h2 className="text-lg font-semibold text-[var(--brand-ink)]">Test the ZcashMe flow without activating membership</h2>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                This runs the real OAuth, PKCE, and public-profile proof checks. It does not change
+                membership, reserve a ZcashMe address, or send signup notifications. ZcashMe will
+                add or replace the PGPZ proof link on the selected public profile.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => generateZcashMeChallenge("admin_dry_run")}
+              disabled={zcashMeDryRunLoading}
+            >
+              {zcashMeDryRunLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              {zcashMeDryRunLoading ? "Preparing dry run" : "Start admin dry run"}
+            </Button>
+          </div>
+          {zcashMeDryRunChallenge ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-4">
+              <code className="rounded-md bg-slate-950 px-3 py-2 text-sm text-white">
+                {zcashMeDryRunChallenge.challenge}
+              </code>
+              <Button
+                type="button"
+                onClick={() => window.location.assign(zcashMeDryRunChallenge.authorizationUrl)}
+              >
+                Continue to ZcashMe
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <>
           {isMember && personalHomeEnabled ? (
             <CommunityPersonalHome
@@ -517,7 +576,7 @@ export default function HomeClient({
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     {isMember
                       ? `Member since ${formatMemberSince(verifiedAt)}.`
-                      : "Complete member verification with X, ZcashMe, or request manual approval."}
+                      : `Complete member verification with X${canActivateWithZcashMe ? ", ZcashMe," : ""} or request manual approval.`}
                   </p>
                 </div>
                 <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
@@ -612,6 +671,7 @@ export default function HomeClient({
                       </div>
                     ) : null}
                   </div>
+                  {canActivateWithZcashMe ? (
                   <div className="rounded-lg border border-[rgba(71,85,105,0.58)] bg-white/90 p-4 shadow-[0_16px_28px_-24px_rgba(30,30,30,0.32)]">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
@@ -629,7 +689,7 @@ export default function HomeClient({
                         type="button"
                         size="lg"
                         className="border border-[rgba(138,90,0,0.35)] bg-[var(--zcash-gold)] text-[var(--brand-ink)] shadow-sm hover:bg-[var(--zcash-gold-soft)]"
-                        onClick={generateZcashMeChallenge}
+                        onClick={() => generateZcashMeChallenge("activation")}
                         disabled={zcashMeChallengeLoading}
                       >
                         {zcashMeChallengeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
@@ -696,6 +756,7 @@ export default function HomeClient({
                       </div>
                     ) : null}
                   </div>
+                  ) : null}
                   <div className="rounded-lg border bg-white/80 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
