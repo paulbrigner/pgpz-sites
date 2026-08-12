@@ -114,10 +114,12 @@ export function DocumentManager({ documents }: { documents: ManagerDocument[] })
             <option value="agreements">Agreements</option>
             <option value="policies">Policies</option>
             <option value="governance">Governance</option>
+            <option value="brand-trademark">Brand &amp; trademark</option>
           </select>
         </div>
         <input
           type="file"
+          accept=".pdf,.zip,.json,.txt,.md,.csv"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           className="mt-3 text-sm text-[var(--muted)]"
         />
@@ -156,6 +158,7 @@ export function DocumentManager({ documents }: { documents: ManagerDocument[] })
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <input
                   type="file"
+                  accept=".pdf,.zip,.json,.txt,.md,.csv"
                   onChange={(event) => {
                     const selected = event.target.files?.[0];
                     if (selected) void addVersion(document.documentId, selected);

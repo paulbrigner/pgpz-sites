@@ -57,6 +57,11 @@ describe("@pgpz/document-vault domain", () => {
     expect(classifyUploadedObject({ byteLength: 100, mimeType: "application/pdf", originalFileName: "x.pdf" })).toMatchObject({ accepted: true });
     expect(classifyUploadedObject({ byteLength: 0, mimeType: "application/pdf", originalFileName: "x.pdf" })).toMatchObject({ accepted: false, reason: "empty" });
     expect(classifyUploadedObject({ byteLength: 100, mimeType: "", originalFileName: "x" })).toMatchObject({ accepted: false, reason: "missing-content-type" });
+    expect(classifyUploadedObject({ byteLength: 100, mimeType: "application/zip", originalFileName: "x.zip" })).toMatchObject({ accepted: false, reason: "unsupported-content-type" });
+    expect(classifyUploadedObject(
+      { byteLength: 100, mimeType: "application/zip", originalFileName: "x.zip" },
+      { allowedMimeTypes: ["application/zip"], allowedExtensions: [".zip"] },
+    )).toMatchObject({ accepted: true, extension: ".zip" });
   });
 
   it("matches content magic bytes to the declared type", () => {
@@ -65,6 +70,10 @@ describe("@pgpz/document-vault domain", () => {
     expect(contentMatchesType("application/pdf", new Uint8Array([1, 2, 3]))).toBe(false);
     expect(contentMatchesType("text/plain", new Uint8Array([0x68, 0x69]))).toBe(true);
     expect(contentMatchesType("text/plain", new Uint8Array([0x68, 0x00, 0x69]))).toBe(false);
+    expect(contentMatchesType("application/zip", new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBe(true);
+    expect(contentMatchesType("application/zip", new Uint8Array([0x50, 0x4b, 0x00, 0x00]))).toBe(false);
+    expect(contentMatchesType("application/json", new TextEncoder().encode('{"ok":true}'))).toBe(true);
+    expect(contentMatchesType("application/json", new TextEncoder().encode("not json"))).toBe(false);
   });
 
   it("bumps the revision and current version on accept", () => {

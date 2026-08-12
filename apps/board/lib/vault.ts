@@ -14,6 +14,7 @@ import type { BoardMember } from "@/lib/session";
 import { boardDocumentObjectStore, computeSha256, isBoardStagingKey, newDocumentId } from "@/lib/object-store";
 import { createBoardDocumentRepository } from "@/lib/documents-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
+import { BOARD_DOCUMENT_TYPE_POLICY, boardExtensionMatchesMimeType } from "@/lib/document-policy";
 
 export const boardDocumentRepository = createBoardDocumentRepository();
 export const BOARD_DOCUMENT_PREFIX = "board";
@@ -73,8 +74,14 @@ export async function createDocument(input: {
 
   // Validate + promote the staged object to an immutable retained key.
   const staged = await boardDocumentObjectStore.readStaged(input.stagedKey);
-  const classified = classifyUploadedObject({ byteLength: staged.metadata.byteLength, mimeType: staged.metadata.mimeType, originalFileName: input.fileName });
+  const classified = classifyUploadedObject(
+    { byteLength: staged.metadata.byteLength, mimeType: staged.metadata.mimeType, originalFileName: input.fileName },
+    BOARD_DOCUMENT_TYPE_POLICY,
+  );
   if (!classified.accepted) throw new VaultValidationError(classified.reason, `Upload rejected: ${classified.reason}.`);
+  if (!boardExtensionMatchesMimeType(classified.extension, classified.mimeType)) {
+    throw new VaultValidationError("type-extension-mismatch", "Upload contents and filename type do not match.");
+  }
   const bytes = staged.bytes;
   if (!contentMatchesType(classified.mimeType, new Uint8Array(bytes))) {
     throw new VaultValidationError("signature-mismatch", "Upload contents do not match their declared type.");
@@ -136,8 +143,14 @@ export async function addVersion(input: {
   assertStagedKeyOwned(input.stagedKey);
 
   const staged = await boardDocumentObjectStore.readStaged(input.stagedKey);
-  const classified = classifyUploadedObject({ byteLength: staged.metadata.byteLength, mimeType: staged.metadata.mimeType, originalFileName: input.fileName });
+  const classified = classifyUploadedObject(
+    { byteLength: staged.metadata.byteLength, mimeType: staged.metadata.mimeType, originalFileName: input.fileName },
+    BOARD_DOCUMENT_TYPE_POLICY,
+  );
   if (!classified.accepted) throw new VaultValidationError(classified.reason, `Upload rejected: ${classified.reason}.`);
+  if (!boardExtensionMatchesMimeType(classified.extension, classified.mimeType)) {
+    throw new VaultValidationError("type-extension-mismatch", "Upload contents and filename type do not match.");
+  }
   if (!contentMatchesType(classified.mimeType, new Uint8Array(staged.bytes))) {
     throw new VaultValidationError("signature-mismatch", "Upload contents do not match their declared type.");
   }

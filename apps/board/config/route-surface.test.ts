@@ -44,6 +44,7 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, "signup"))).toBe(false);
     expect(existsSync(path.join(appRoot, "(portal)", "admin", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "(portal)", "admin", "audit", "page.tsx"))).toBe(true);
+    expect(existsSync(path.join(appRoot, "(portal)", "brand", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "api", "admin", "audit", "route.ts"))).toBe(true);
   });
 

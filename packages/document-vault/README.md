@@ -16,6 +16,11 @@ Object Lock policy, route responses, or audit semantics. Board owns those
 decisions and injects its isolated infrastructure. Reference may demonstrate
 neutral contracts but must not attach Board resources.
 
+Upload classification accepts an injected app-owned MIME/extension policy and
+performs neutral signature checks for supported PDF, ZIP, JSON, and text-based
+records. Enabling a format in this package does not enable it in any app; each
+consumer must explicitly include it in its own policy.
+
 ## Consumers and validation
 
 ```bash

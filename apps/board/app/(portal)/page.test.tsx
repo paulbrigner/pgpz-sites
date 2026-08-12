@@ -20,6 +20,7 @@ describe("board dashboard", () => {
     expect(screen.queryByRole("link", { name: /member directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /sign up/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /administration/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Brand & marketing" })).toHaveAttribute("href", "/brand");
   });
 
   it("shows the enforced administration surface only to administrators", () => {
