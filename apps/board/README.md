@@ -28,6 +28,33 @@ Board supplies retention, roles, infrastructure, routes, and event semantics.
 The document vault and audit ledger fail closed when required resources are
 unset. Reference examples must never attach Board data or credentials.
 
+## Brand and marketing library
+
+`/brand` is a Board-owned curated view of the current PGPZ identity and social
+media packages. It does not introduce a second file store: each download points
+to the same `brand-trademark` document record retained by the governance vault,
+so document versioning, Object Lock retention, role checks, and download audit
+events remain authoritative. The full `/documents` surface continues to expose
+the complete governance library and its current records.
+
+Board's upload adapter permits PDF, ZIP, JSON, Markdown, text, and CSV records.
+The neutral `@pgpz/document-vault` package validates the injected app policy and
+file signatures; ZIP bundles are delivered as attachments rather than rendered
+by the Board site.
+
+The guarded importer is dry-run by default and is idempotent by the current
+vault SHA-256. It requires live Board backend environment values and an existing
+administrator-equivalent actor:
+
+```bash
+cd apps/board
+NODE_OPTIONS=--conditions=react-server AWS_PROFILE=zodldashboard \
+npx tsx scripts/import-brand-library.ts --actor-email div@pgpz.org
+```
+
+Use the exact `--apply --confirm IMPORT_PGPZ_BRAND_LIBRARY` gate only after the
+dry-run plan and current production resources have been verified.
+
 ## Local development
 
 Follow [`docs/local-dev.md`](../../docs/local-dev.md). From the root:

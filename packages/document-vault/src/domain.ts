@@ -129,7 +129,7 @@ export function classifyUploadedObject(input: {
   byteLength: number;
   mimeType: string;
   originalFileName: string;
-}): ClassificationResult {
+}, policy: DocumentTypePolicy = DEFAULT_DOCUMENT_TYPE_POLICY): ClassificationResult {
   if (!Number.isFinite(input.byteLength) || input.byteLength <= 0) {
     return { accepted: false, reason: "empty" };
   }
@@ -139,6 +139,12 @@ export function classifyUploadedObject(input: {
   const mime = (input.mimeType ?? "").trim().toLowerCase();
   if (!mime) return { accepted: false, reason: "missing-content-type" };
   const extension = extensionOf(input.originalFileName);
+  if (!policy.allowedMimeTypes.includes(mime)) {
+    return { accepted: false, reason: "unsupported-content-type" };
+  }
+  if (!policy.allowedExtensions.includes(extension)) {
+    return { accepted: false, reason: "unsupported-extension" };
+  }
   return { accepted: true, mimeType: mime, extension };
 }
 
@@ -155,7 +161,28 @@ export function contentMatchesType(mimeType: string, bytes: Uint8Array): boolean
       bytes[4] === 0x2d // -
     );
   }
-  if (mimeType === "text/plain" || mimeType === "text/csv") return !bytes.includes(0);
+  if (mimeType === "application/zip" || mimeType === "application/x-zip-compressed") {
+    return (
+      bytes.length >= 4 &&
+      bytes[0] === 0x50 && // P
+      bytes[1] === 0x4b && // K
+      ((bytes[2] === 0x03 && bytes[3] === 0x04) ||
+        (bytes[2] === 0x05 && bytes[3] === 0x06) ||
+        (bytes[2] === 0x07 && bytes[3] === 0x08))
+    );
+  }
+  if (mimeType === "application/json") {
+    if (bytes.includes(0)) return false;
+    try {
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "text/markdown") {
+    return !bytes.includes(0);
+  }
   return false;
 }
 

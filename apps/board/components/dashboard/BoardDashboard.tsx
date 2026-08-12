@@ -1,5 +1,5 @@
 import { Badge, Container, SectionHeading, Surface } from "@pgpz/ui";
-import { CalendarDays, FileText, Landmark, LockKeyhole, Settings, Users } from "lucide-react";
+import { CalendarDays, FileText, Landmark, LockKeyhole, Palette, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import type { BoardMember } from "@/lib/session";
 
@@ -69,6 +69,13 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
           >
             <FileText className="h-4 w-4" aria-hidden="true" />
             Document library
+          </Link>
+          <Link
+            href="/brand"
+            className="ml-2 mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <Palette className="h-4 w-4" aria-hidden="true" />
+            Brand &amp; marketing
           </Link>
         </section>
       </Container>
