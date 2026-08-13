@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Download, Plus } from "lucide-react";
+import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 
 export type ManagerDocument = {
   documentId: string;
@@ -15,7 +16,7 @@ export type ManagerDocument = {
 };
 
 async function json(url: string, body: unknown) {
-  const response = await fetch(url, {
+  const response = await fetchWithBoardStepUp(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

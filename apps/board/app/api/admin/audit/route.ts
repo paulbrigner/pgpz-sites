@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canReviewBoardAudit, resolveBoardMemberState } from "@/lib/session";
 import { boardAuditLedger } from "@/lib/audit";
 import { recordAccessDenied, anonymousClaimedActor } from "@/lib/audit";
+import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ const UNAUTHORIZED = new Response(null, { status: 401 });
 const FORBIDDEN = () =>
   NextResponse.json({ error: "Audit review access required" }, { status: 403 });
 
-async function requireAuditReviewer(request: NextRequest) {
+async function requireAuditReviewer(request: NextRequest, requireStepUp = false) {
   const state = await resolveBoardMemberState(request.headers);
   if (state.status === "anonymous") return { response: UNAUTHORIZED, member: null };
   if (state.status !== "member" || !canReviewBoardAudit(state.member)) {
@@ -23,6 +24,12 @@ async function requireAuditReviewer(request: NextRequest) {
       reason: "audit_review_required",
     });
     return { response: FORBIDDEN(), member: null };
+  }
+  const assurance = await requireBoardPasskeySession(request.headers, state.member);
+  if (assurance) return { response: assurance, member: null };
+  if (requireStepUp) {
+    const stepUp = await requireBoardStepUp(request.headers, state.member);
+    if (stepUp) return { response: stepUp, member: null };
   }
   return { response: null, member: state.member };
 }
@@ -58,7 +65,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { response, member } = await requireAuditReviewer(request);
+  const { response, member } = await requireAuditReviewer(request, true);
   if (response) return response;
   void member;
 

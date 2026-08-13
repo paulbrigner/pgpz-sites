@@ -6,6 +6,8 @@ import { boardAuditLedger } from "@/lib/audit";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { anonymousClaimedActor, authenticatedActor, recordAccessDenied } from "@/lib/audit";
 import { canManageBoardUsers, resolveBoardMemberState, type BoardMember } from "@/lib/session";
+import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
+import { sendBoardPasskeySecurityNotice } from "@/lib/passkey-notification";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,28 @@ async function sessionDeleteItems(userId: string) {
   return deletes;
 }
 
+async function passkeyDeleteItems(userId: string) {
+  const deletes: Record<string, unknown>[] = [];
+  let cursor: Record<string, unknown> | undefined;
+  do {
+    const result = await documentClient.query({
+      TableName: TABLE_NAME,
+      IndexName: "GSI2",
+      KeyConditionExpression: "#pk = :pk",
+      ExpressionAttributeNames: { "#pk": "GSI2PK" },
+      ExpressionAttributeValues: { ":pk": `BETTER_AUTH#better_auth_passkeys#userId#${userId}` },
+      ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+    });
+    for (const item of result.Items || []) {
+      if (typeof item.pk === "string" && typeof item.sk === "string") {
+        deletes.push({ Delete: { TableName: TABLE_NAME, Key: { pk: item.pk, sk: item.sk } } });
+      }
+    }
+    cursor = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (cursor);
+  return deletes;
+}
+
 async function auditItems(admin: BoardMember, input: {
   action: string;
   targetId: string;
@@ -83,7 +107,7 @@ async function auditItems(admin: BoardMember, input: {
   })).TransactItems as Record<string, unknown>[];
 }
 
-async function requireUserManager(request: NextRequest): Promise<
+async function requireUserManager(request: NextRequest, requireStepUp = false): Promise<
   { response: NextResponse; admin: null } | { response: null; admin: BoardMember }
 > {
   const state = await resolveBoardMemberState(request.headers);
@@ -99,6 +123,12 @@ async function requireUserManager(request: NextRequest): Promise<
       reason: "user_management_required",
     });
     return { response: NextResponse.json({ error: "Board user management access required." }, { status: 403 }), admin: null };
+  }
+  const assurance = await requireBoardPasskeySession(request.headers, state.member);
+  if (assurance) return { response: assurance, admin: null };
+  if (requireStepUp) {
+    const stepUp = await requireBoardStepUp(request.headers, state.member);
+    if (stepUp) return { response: stepUp, admin: null };
   }
   return { response: null, admin: state.member };
 }
@@ -120,7 +150,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authorization = await requireUserManager(request);
+  const authorization = await requireUserManager(request, true);
   if (authorization.response) return authorization.response;
   try {
     const admin = authorization.admin;
@@ -166,7 +196,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const authorization = await requireUserManager(request);
+  const authorization = await requireUserManager(request, true);
   if (authorization.response) return authorization.response;
   try {
     const admin = authorization.admin;
@@ -178,7 +208,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "You cannot change your own role or access state." }, { status: 409 });
     }
     const action = typeof body?.action === "string" ? body.action : "";
-    const expectedConfirmation = action === "set_role" ? `CHANGE ROLE ${current.email}` : action === "revoke_sessions" ? `REVOKE ${current.email}` : `${action.toUpperCase()} ${current.email}`;
+    const expectedConfirmation = action === "set_role" ? `CHANGE ROLE ${current.email}` : action === "revoke_sessions" ? `REVOKE ${current.email}` : action === "reset_passkeys" ? `RESET PASSKEYS ${current.email}` : `${action.toUpperCase()} ${current.email}`;
     if (body?.confirmation !== expectedConfirmation) return NextResponse.json({ error: `Type ${expectedConfirmation} to confirm.` }, { status: 400 });
 
     let mutation;
@@ -198,13 +228,25 @@ export async function PATCH(request: NextRequest) {
       eventAction = "user_sessions_revoked";
       const authUserId = await authUserIdForEmail(current.email);
       if (authUserId) deletes = await sessionDeleteItems(authUserId);
+    } else if (action === "reset_passkeys") {
+      const authUserId = await authUserIdForEmail(current.email);
+      if (!authUserId) return NextResponse.json({ error: "Board authentication user not found." }, { status: 404 });
+      mutation = await boardAccessRepository.buildSessionRevocationItems({ id: current.id, expectedVersion: current.version, actorEmail: admin.email, reason: "Passkey recovery reset." });
+      eventAction = "user_passkeys_reset";
+      deletes = [
+        ...(await sessionDeleteItems(authUserId)),
+        ...(await passkeyDeleteItems(authUserId)),
+        { Delete: { TableName: TABLE_NAME, Key: { pk: `BOARD_SECURITY#PASSKEY_ENROLLED#${authUserId}`, sk: "CURRENT" } } },
+      ];
+      if (deletes.length > 90) throw new Error("Too many authentication records to reset atomically; contact an operator.");
     } else {
       return NextResponse.json({ error: "Unsupported Board user action." }, { status: 400 });
     }
     const audit = await auditItems(admin, { action: eventAction, targetId: current.id, version: mutation.record.version });
     const updated = await boardAccessRepository.execute(mutation, { additionalTransactItems: [...deletes, ...audit] });
+    if (action === "reset_passkeys") await sendBoardPasskeySecurityNotice(updated.email, "administratively reset");
     const authUserId = await authUserIdForEmail(updated.email);
-    return NextResponse.json({ user: responseUser(updated, authUserId ? await passkeyCount(authUserId) : 0), message: "Board access updated and recorded." });
+    return NextResponse.json({ user: responseUser(updated, action === "reset_passkeys" ? 0 : authUserId ? await passkeyCount(authUserId) : 0), message: action === "reset_passkeys" ? "Passkeys and sessions reset. The user must recover by email and register a new passkey." : "Board access updated and recorded." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update the Board user.";
     const conflict = /version conflict|TransactionCanceled|conditional/i.test(message);

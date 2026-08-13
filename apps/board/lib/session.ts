@@ -11,6 +11,8 @@ import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 import { auditBestEffort, authenticatedActor } from "@/lib/audit";
 import { roleCanAccessBoardAdministration, roleCanManageBoardDocuments, roleCanManageBoardUsers, roleCanReviewBoardAudit } from "@/lib/board-access";
+import { hasBoardPasskey } from "@/lib/passkey-enrollment";
+import { hasBoardPasskeySession } from "@/lib/passkey-step-up";
 
 export type BoardRole =
   | "member"
@@ -133,7 +135,12 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
   if (state.status === "anonymous") {
     redirect(`/signin?callbackUrl=${encodeURIComponent(resolveSafeCallbackUrl(callbackPath))}`);
   }
-  return state.status === "member" ? state.member : null;
+  if (state.status !== "member") return null;
+  if (callbackPath !== "/account/security") {
+    if (!(await hasBoardPasskey(state.member.id))) redirect("/account/security?enrollment=required");
+    if (!(await hasBoardPasskeySession(await headers(), state.member.id))) redirect("/account/security?verification=required");
+  }
+  return state.member;
 }
 
 /**

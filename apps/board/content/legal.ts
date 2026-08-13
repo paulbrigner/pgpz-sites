@@ -28,7 +28,7 @@ export const boardTerms: BoardLegalDocument = {
     {
       title: "Account responsibility",
       paragraphs: [
-        "Each user is responsible for protecting their email account and passkeys and for reporting suspected unauthorized use to the Board Chair or Executive Director promptly.",
+        "Each user is responsible for protecting their email account and passkeys and for reporting suspected unauthorized use to the Board Chair or Executive Director promptly. The portal requires a user-verified passkey before private Board content is available; email magic links are limited to onboarding and controlled recovery.",
       ],
     },
     {
@@ -49,7 +49,7 @@ export const boardPrivacy: BoardLegalDocument = {
       title: "Account data",
       paragraphs: [
         "The portal stores only the information needed to authorize and sign users in: name, email address, Board role and access status, and authentication records. Magic-link tokens are hashed and expire after ten minutes. Passkey records contain the public credential material and device metadata required by WebAuthn; the corresponding private key remains with the user's authenticator.",
-        "Password sign-in is retired. A legacy password hash may remain only until the guarded credential-removal process has deleted it; password controls and credential sign-in are disabled during that cleanup period.",
+        "Password sign-in is retired. Private Board content requires a user-verified passkey. Single-use email magic links are limited to initial passkey enrollment and controlled account recovery.",
         "Authenticated access is tracked with session records carrying the user's stable identity and a signed, expiring token. Sessions are deleted on sign-out, administrator revocation, or access deactivation.",
       ],
     },
@@ -76,7 +76,7 @@ export const boardPrivacy: BoardLegalDocument = {
     {
       title: "Service email only",
       paragraphs: [
-        "The portal sends only authentication and account-recovery messages needed to operate Board access. It does not send newsletters or marketing email.",
+        "The portal sends only authentication, account-recovery, and passkey security-notification messages needed to operate Board access. It does not send newsletters or marketing email.",
       ],
     },
     {

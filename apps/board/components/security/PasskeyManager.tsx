@@ -4,14 +4,17 @@ import { useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { buttonStyles } from "@pgpz/ui";
 import { betterAuthClient } from "@/lib/auth-client";
+import { verifyBoardPasskey } from "@/lib/step-up-client";
+import Link from "next/link";
 
-export function PasskeyManager() {
+export function PasskeyManager({ verificationRequired = false }: { verificationRequired?: boolean }) {
   const passkeys = betterAuthClient.useListPasskeys();
   const [addedPasskeys, setAddedPasskeys] = useState<Array<NonNullable<typeof passkeys.data>[number]>>([]);
   const [removedPasskeyIds, setRemovedPasskeyIds] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [verified, setVerified] = useState(!verificationRequired);
 
   const visiblePasskeys = Array.from(
     new Map(
@@ -25,6 +28,7 @@ export function PasskeyManager() {
     setBusy(true);
     setMessage(null);
     try {
+      if (visiblePasskeys.length > 0) await verifyBoardPasskey();
       const result = await betterAuthClient.passkey.addPasskey({ name: name.trim() || undefined });
       setMessage(result.error ? "Passkey registration was not completed." : "Passkey registered.");
       if (result.data) {
@@ -40,9 +44,14 @@ export function PasskeyManager() {
   }
 
   async function removePasskey(id: string) {
+    if (visiblePasskeys.length <= 1) {
+      setMessage("Add another passkey before removing your only passkey.");
+      return;
+    }
     if (!window.confirm("Remove this passkey? Make sure you retain another sign-in method.")) return;
     setBusy(true);
     try {
+      await verifyBoardPasskey();
       const result = await betterAuthClient.passkey.deletePasskey({ id });
       setMessage(result.error ? "The passkey could not be removed." : "Passkey removed.");
       if (!result.error) {
@@ -51,6 +60,20 @@ export function PasskeyManager() {
       }
     } catch {
       setMessage("The passkey could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyAndContinue() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await verifyBoardPasskey();
+      setVerified(true);
+      setMessage("Passkey verified. You can continue to the Board portal.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Passkey verification was not completed.");
     } finally {
       setBusy(false);
     }
@@ -69,6 +92,12 @@ export function PasskeyManager() {
         </ul>
       ) : !passkeys.isPending ? <p className="rounded-xl bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">No passkeys are registered yet.</p> : null}
       {message ? <p role="status" className="text-sm">{message}</p> : null}
+      {visiblePasskeys.length > 0 && !verified ? (
+        <button type="button" onClick={() => void verifyAndContinue()} disabled={busy} className={buttonStyles({ className: "w-fit" })}>Verify passkey to continue</button>
+      ) : null}
+      {visiblePasskeys.length > 0 && verified ? (
+        <Link href="/" className={buttonStyles({ variant: "outline", className: "w-fit" })}>Continue to the Board portal</Link>
+      ) : null}
     </div>
   );
 }

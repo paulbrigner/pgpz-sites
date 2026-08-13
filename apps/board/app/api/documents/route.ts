@@ -18,17 +18,24 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client } from "@/lib/s3";
 import { BOARD_DOCUMENTS_STAGING_BUCKET } from "@/lib/config";
+import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
 
 export const runtime = "nodejs";
 
 const UNAUTHORIZED = () => NextResponse.json({ error: "Authentication required" }, { status: 401 });
 
-function memberFor(request: NextRequest, requireManager: boolean) {
+function memberFor(request: NextRequest, requireManager: boolean, requireStepUp: boolean) {
   return (async () => {
     const state = await resolveBoardMemberState(request.headers);
     if (state.status !== "member") return { response: UNAUTHORIZED(), member: null };
+    const assurance = await requireBoardPasskeySession(request.headers, state.member);
+    if (assurance) return { response: assurance, member: null };
     if (requireManager && !canManageBoardDocuments(state.member)) {
       return { response: NextResponse.json({ error: "Not authorized to manage documents" }, { status: 403 }), member: null };
+    }
+    if (requireStepUp) {
+      const stepUp = await requireBoardStepUp(request.headers, state.member);
+      if (stepUp) return { response: stepUp, member: null };
     }
     return { response: null, member: state.member };
   })();
@@ -37,7 +44,7 @@ function memberFor(request: NextRequest, requireManager: boolean) {
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
 
 export async function GET(request: NextRequest) {
-  const { response, member } = await memberFor(request, false);
+  const { response, member } = await memberFor(request, false, false);
   if (response) return response;
   void member;
   const items = await boardDocumentRepository.listDocuments({ status: "active" });
@@ -55,7 +62,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { response, member } = await memberFor(request, true);
+  const { response, member } = await memberFor(request, true, true);
   if (response || !member) return response ?? NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const action = text(body?.action);
