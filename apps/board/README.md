@@ -60,20 +60,18 @@ Board supplies retention, roles, infrastructure, routes, and event semantics.
 The document vault and audit ledger fail closed when required resources are
 unset. Reference examples must never attach Board data or credentials.
 
-## Brand and marketing library
+## Brand and marketing records
 
-`/brand` is a Board-owned curated view of the current PGPZ identity and social
-media packages. It does not introduce a second file store: each download points
-to the same `brand-trademark` document record retained by the governance vault,
-so document versioning, Object Lock retention, role checks, and download audit
-events remain authoritative. The full `/documents` surface continues to expose
-the complete governance library and its current records.
+Current PGPZ identity and social-media packages live in the authoritative
+`brand-trademark` folder in `/documents`; the dashboard does not expose a
+separate curated brand view. Existing `/brand` bookmarks redirect to the
+Document Library. Document versioning, Object Lock retention, role checks, and
+download audit events therefore stay on the same governance-vault records.
 
 The full `/documents` surface groups records into Board-owned category folders
 and uses the curated brand registry to present packages, guidelines, manifests,
 and checksums as related document collections. Collections are collapsed until
-opened, while direct links from `/brand` can focus the authoritative record and
-its retained version history. These relationships are presentation metadata
+opened. These relationships are presentation metadata
 only; every row still downloads the authoritative retained vault record and
 generates the same audited read event.
 

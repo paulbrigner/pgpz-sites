@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { ArrowRight, FileText, KeyRound, Palette, ScrollText, Settings } from "lucide-react";
+import { ArrowRight, CalendarDays, FileText, KeyRound, ScrollText, Settings } from "lucide-react";
 import type { BoardMember } from "@/lib/session";
 
 export type { BoardMember };
@@ -13,10 +13,11 @@ const memberResources = [
     body: "Governance records, policies, agreements, and version history",
   },
   {
-    href: "/brand",
-    icon: Palette,
-    title: "Brand & marketing",
-    body: "Identity guidelines and production-ready brand packages",
+    href: null,
+    icon: CalendarDays,
+    title: "Board meetings",
+    body: "Scheduling, agendas, preparation materials, and minutes in one place",
+    comingSoon: true,
   },
   {
     href: "/account/security",
@@ -67,9 +68,10 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
         <h2 id="board-resources-heading" className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">Board resources</h2>
         <Surface className="mt-4 overflow-hidden p-0">
           <ul className="divide-y divide-[var(--border)]">
-            {memberResources.map(({ href, icon: Icon, title, body }) => (
-              <li key={href}>
-                <Link href={href} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-6">
+            {memberResources.map((resource) => {
+              const { href, icon: Icon, title, body } = resource;
+              const content = (
+                <>
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
                     <Icon className="h-5 w-5" aria-hidden="true" />
                   </span>
@@ -77,15 +79,31 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
                     <h3 className="font-semibold tracking-[-0.015em] text-[var(--foreground)]">{title}</h3>
                     <span className="mt-0.5 block truncate text-sm text-[var(--muted)]">{body}</span>
                   </span>
-                  {href === "/account/security" && passkeyCount !== null ? (
+                  {"comingSoon" in resource && resource.comingSoon ? (
+                    <span className="shrink-0 rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      Coming soon
+                    </span>
+                  ) : href === "/account/security" && passkeyCount !== null ? (
                     <span className="hidden shrink-0 text-xs font-semibold text-[var(--muted)] sm:inline">
                       {passkeyCount} {passkeyCount === 1 ? "passkey" : "passkeys"}
                     </span>
                   ) : null}
-                  <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--foreground)]" aria-hidden="true" />
-                </Link>
-              </li>
-            ))}
+                  {href ? <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--foreground)]" aria-hidden="true" /> : null}
+                </>
+              );
+
+              return (
+                <li key={title}>
+                  {href ? (
+                    <Link href={href} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-6">
+                      {content}
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-4 px-5 py-4 sm:px-6">{content}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Surface>
       </section>
