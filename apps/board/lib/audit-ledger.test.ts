@@ -10,12 +10,20 @@ function createFakeClient() {
     async get({ Key }: { Key: { pk: string; sk: string } }) {
       return { Item: items.get(`${Key.pk}#${Key.sk}`) };
     },
-    async query({ ExpressionAttributeValues }: { ExpressionAttributeValues: Record<string, unknown> }) {
+    async query({ ExpressionAttributeValues, ScanIndexForward = true, Limit }: { ExpressionAttributeValues: Record<string, unknown>; ScanIndexForward?: boolean; Limit?: number }) {
       const pk = ExpressionAttributeValues[":pk"] as string;
-      const prefix = ExpressionAttributeValues[":prefix"] as string;
-      const entries = [...items.values()]
-        .filter((item) => item.pk === pk && typeof item.sk === "string" && (item.sk as string).startsWith(prefix))
+      const prefix = ExpressionAttributeValues[":prefix"] as string | undefined;
+      const lower = ExpressionAttributeValues[":lower"] as string | undefined;
+      const upper = ExpressionAttributeValues[":upper"] as string | undefined;
+      let entries = [...items.values()]
+        .filter((item) => {
+          if (item.pk !== pk || typeof item.sk !== "string") return false;
+          if (prefix) return item.sk.startsWith(prefix);
+          return lower !== undefined && upper !== undefined && item.sk >= lower && item.sk <= upper;
+        })
         .sort((a, b) => String(a.sk).localeCompare(String(b.sk)));
+      if (!ScanIndexForward) entries = entries.reverse();
+      if (Limit !== undefined) entries = entries.slice(0, Limit);
       return { Items: entries, LastEvaluatedKey: undefined };
     },
     async transactWrite({ TransactItems }: { TransactItems: Array<{ Put?: { Item: Item; ConditionExpression?: string; ExpressionAttributeValues?: Record<string, unknown> } }> }) {
@@ -105,6 +113,14 @@ describe("board audit ledger adapter", () => {
     const all = await ledger.list();
     expect(all.map((entry) => entry.sequence)).toEqual([0, 1, 2, 3, 4]);
     expect((await ledger.list({ afterSequence: 1, limit: 2 })).map((entry) => entry.sequence)).toEqual([2, 3]);
+  });
+
+  it("returns cursor-paginated entries in newest-first order", async () => {
+    const ledger = createBoardAuditLedger(createFakeClient() as never);
+    for (let i = 0; i < 7; i += 1) await ledger.append(event(`recent-${i}`));
+
+    expect((await ledger.listNewest({ limit: 3 })).map((entry) => entry.sequence)).toEqual([6, 5, 4]);
+    expect((await ledger.listNewest({ beforeSequenceExclusive: 4, limit: 3 })).map((entry) => entry.sequence)).toEqual([3, 2, 1]);
   });
 
   it("round-trips metadata, targets, and actor capabilities", async () => {

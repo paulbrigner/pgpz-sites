@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   const limitRaw = Number(params.get("limit"));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 100;
 
-  const entries = await boardAuditLedger.list({ limit });
+  const entries = await boardAuditLedger.listNewest({ limit });
   const filtered = entries.filter((entry) => {
     if (category && entry.category !== category) return false;
     if (action && entry.action !== action) return false;
