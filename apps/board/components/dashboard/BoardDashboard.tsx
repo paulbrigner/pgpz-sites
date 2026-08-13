@@ -35,7 +35,7 @@ function roleLabel(member: BoardMember) {
 }
 
 function canAccessAdministration(member: BoardMember) {
-  return ["chair", "admin", "executive-director", "legal-counsel", "board-support"].includes(member.role);
+  return ["chair", "admin", "executive-director", "legal-counsel"].includes(member.role);
 }
 
 export function BoardDashboard({ member, passkeyCount = null }: { member: BoardMember; passkeyCount?: number | null }) {
@@ -97,7 +97,7 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-ink)]"><Settings className="h-5 w-5" aria-hidden="true" /></span>
               <div>
                 <h2 id="administration-heading" className="text-xl font-semibold text-[var(--foreground)]">Board tools</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">Open the document, audit, and access tools available to your role.</p>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">Open the audit and access tools available to your role.</p>
               </div>
             </div>
             <Link href="/admin" className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">

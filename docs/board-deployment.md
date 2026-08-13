@@ -134,6 +134,13 @@ an immutable access revision plus audit event.
 | Legal Counsel | manage | review | no |
 | Board Support | manage | no | no |
 
+Document-management controls live directly in `/documents`; the legacy
+`/admin/documents` location redirects there. Authorized document managers can
+add records, publish versions, change presentation-only display names, and
+archive or restore records without entering a separate administration
+interface. Display-name changes preserve canonical document and retained-object
+identity and are recorded as `display_name_updated` audit events.
+
 The legacy stored role `admin` remains readable as Board Chair for safe rollout,
 but current APIs do not assign it. Another full-administration user can change a
 legacy record to `chair` in `/admin/users`; self-role changes remain prohibited.

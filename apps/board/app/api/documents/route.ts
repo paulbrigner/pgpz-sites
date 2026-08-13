@@ -9,6 +9,7 @@ import {
   createDocument,
   restoreVersion,
   setArchived,
+  updateDisplayName,
   updateMetadata,
   VaultAuthorizationError,
   VaultValidationError,
@@ -128,6 +129,11 @@ export async function POST(request: NextRequest) {
       }
       case "updateMetadata": {
         const item = await updateMetadata({ member, documentId: text(body?.documentId), title: text(body?.title), description: text(body?.description), category: text(body?.category), visibility: text(body?.visibility) || "members" });
+        if (!item) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+        return ok(item);
+      }
+      case "updateDisplayName": {
+        const item = await updateDisplayName({ member, documentId: text(body?.documentId), displayName: text(body?.displayName) });
         if (!item) return NextResponse.json({ error: "Document not found" }, { status: 404 });
         return ok(item);
       }

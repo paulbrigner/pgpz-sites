@@ -1,4 +1,5 @@
 import type { DocumentItem, DocumentVersion } from "@pgpz/document-vault";
+import type { BoardDocumentItem } from "@/lib/documents-repository";
 import { BRAND_DOCUMENT_CATEGORY, BRAND_LIBRARY_ENTRIES } from "@/lib/brand-library";
 
 export type LibraryDocumentRole = "package" | "guidelines" | "governance" | "manifest" | "checksum" | "document";
@@ -17,6 +18,7 @@ export type LibraryDocument = Readonly<{
   updatedAt: string;
   byteLength: number;
   versionCount: number;
+  status: "active" | "archived";
   versions: ReadonlyArray<Readonly<{
     versionId: string;
     sequence: number;
@@ -34,13 +36,15 @@ export type LibraryCategory = Readonly<{
   documents: ReadonlyArray<LibraryDocument>;
 }>;
 
-const CATEGORY_DEFINITIONS = [
+export const DOCUMENT_CATEGORY_OPTIONS = [
   { key: "incorporation", label: "Corporate Records", description: "Formation documents, bylaws, amendments, and corporate filings." },
   { key: "governance", label: "Governance", description: "Board charters, committee materials, decisions, and governance frameworks." },
   { key: "policies", label: "Policies", description: "Board policies and procedures governing operations and conduct." },
   { key: "agreements", label: "Agreements", description: "Contracts, engagement letters, and other binding agreements." },
   { key: BRAND_DOCUMENT_CATEGORY, label: "Brand & Trademark", description: "Brand identity packages, guidelines, manifests, and checksum files." },
 ] as const;
+
+const CATEGORY_DEFINITIONS = DOCUMENT_CATEGORY_OPTIONS;
 
 const definitionByKey = new Map<string, (typeof CATEGORY_DEFINITIONS)[number]>(CATEGORY_DEFINITIONS.map((definition) => [definition.key, definition]));
 const brandEntryByTitle = new Map(BRAND_LIBRARY_ENTRIES.map((entry) => [entry.title, entry]));
@@ -77,7 +81,7 @@ function versionLabel(document: DocumentItem) {
 }
 
 export function buildDocumentLibrary(
-  documents: ReadonlyArray<DocumentItem>,
+  documents: ReadonlyArray<DocumentItem | BoardDocumentItem>,
   versionsByDocument: ReadonlyMap<string, ReadonlyArray<DocumentVersion>> = new Map(),
 ): ReadonlyArray<LibraryCategory> {
   const documentsByCategory = new Map<string, LibraryDocument[]>();
@@ -87,7 +91,7 @@ export function buildDocumentLibrary(
     const role = roleForTitle(document.title);
     const item: LibraryDocument = {
       documentId: document.documentId,
-      title: document.title,
+      title: "displayName" in document && document.displayName?.trim() ? document.displayName.trim() : document.title,
       description: document.description,
       category: document.category,
       categoryLabel: definition?.label ?? titleCaseCategory(document.category),
@@ -99,6 +103,7 @@ export function buildDocumentLibrary(
       updatedAt: document.updatedAt,
       byteLength: document.currentVersion.byteLength,
       versionCount: document.versionCount,
+      status: document.status,
       versions: [...(versionsByDocument.get(document.documentId) ?? [document.currentVersion])]
         .sort((left, right) => right.sequence - left.sequence)
         .map((version) => ({

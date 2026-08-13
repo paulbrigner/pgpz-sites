@@ -1,7 +1,7 @@
-import { Badge, Container, Surface } from "@pgpz/ui";
+import { Badge, Container } from "@pgpz/ui";
 import { DocumentLibrary } from "@/components/documents/DocumentLibrary";
 import { buildDocumentLibrary } from "@/lib/document-library";
-import { requireBoardMember } from "@/lib/session";
+import { canManageBoardDocuments, requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,8 @@ export default async function BoardDocumentsPage({
   const focusDocumentId = Array.isArray(rawDocumentId) ? rawDocumentId[0] : rawDocumentId;
   const rawHistory = params?.history;
   const showHistory = (Array.isArray(rawHistory) ? rawHistory[0] : rawHistory) === "1";
-  const documents = await boardDocumentRepository.listDocuments({ status: "active" });
+  const canManage = canManageBoardDocuments(member);
+  const documents = await boardDocumentRepository.listDocuments(canManage ? undefined : { status: "active" });
   const versionsByDocument = new Map(
     await Promise.all(
       documents
@@ -46,13 +47,7 @@ export default async function BoardDocumentsPage({
         </p>
       </section>
 
-      {documents.length === 0 ? (
-        <Surface className="mt-8 max-w-4xl p-8">
-          <p className="text-sm text-[var(--muted)]">No governance documents have been published yet.</p>
-        </Surface>
-      ) : (
-        <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} />
-      )}
+      <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} canManage={canManage} />
     </Container>
   );
 }

@@ -1,7 +1,7 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { FolderOpen, ScrollText, ShieldCheck, Users } from "lucide-react";
+import { ScrollText, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
-import { requireBoardAdministration, canManageBoardDocuments, canManageBoardUsers, canReviewBoardAudit } from "@/lib/session";
+import { requireBoardAdministration, canManageBoardUsers, canReviewBoardAudit } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function BoardAdminPage() {
         <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-[var(--foreground)] sm:text-5xl">
           Board administration
         </h1>
-        <p className="mt-4 text-base leading-7 text-[var(--muted)]">Manage Board access and documents, and review recorded site activity.</p>
+        <p className="mt-4 text-base leading-7 text-[var(--muted)]">Manage Board access and review recorded site activity.</p>
       </section>
 
       <Surface className="mt-10 max-w-3xl p-7 sm:p-8">
@@ -28,15 +28,6 @@ export default async function BoardAdminPage() {
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </span>
         <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Available tools</h2>
-        {canManageBoardDocuments(administrator) ? (
-          <Link
-            href="/admin/documents"
-            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-          >
-            <FolderOpen className="h-4 w-4" aria-hidden="true" />
-            Manage documents
-          </Link>
-        ) : null}
         {canReviewBoardAudit(administrator) ? (
           <Link
             href="/admin/audit"

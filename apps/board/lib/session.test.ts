@@ -145,7 +145,7 @@ describe("Board role capabilities", () => {
 
   it("limits Board Support to document operations", () => {
     const member = memberFor("board-support");
-    expect(canAccessBoardAdministration(member)).toBe(true);
+    expect(canAccessBoardAdministration(member)).toBe(false);
     expect(canManageBoardDocuments(member)).toBe(true);
     expect(canReviewBoardAudit(member)).toBe(false);
     expect(canManageBoardUsers(member)).toBe(false);
