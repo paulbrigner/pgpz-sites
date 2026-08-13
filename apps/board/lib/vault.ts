@@ -246,6 +246,8 @@ export async function updateMetadata(input: {
   visibility: string;
 }): Promise<DocumentItem | null> {
   assertDocumentManager(input.member);
+  const existing = await boardDocumentRepository.getDocument(input.documentId);
+  if (!existing) return null;
   const issues = validateDocumentMetadata({ title: input.title, description: input.description, category: input.category });
   if (issues.length > 0) throw new VaultValidationError("metadata", `Invalid document metadata: ${issues.join(", ")}`);
   const normalized = normalizeDocumentMetadata({ title: input.title, description: input.description, category: input.category });
@@ -257,8 +259,49 @@ export async function updateMetadata(input: {
     outcome: "success",
     actor: authenticatedActor(input.member),
     target: { type: "document", id: input.documentId, version: item.currentVersion.versionId },
-    metadata: new Map<string, string | number | boolean | null>([["category", normalized.category]]),
+    metadata: new Map<string, string | number | boolean | null>([
+      ["previous-title", existing.title],
+      ["title", normalized.title],
+      ["category", normalized.category],
+    ]),
     idempotencyKey: `meta-${input.documentId}-${input.member.id}-${Date.now()}`,
+    occurredAt: new Date().toISOString(),
+  });
+  return item;
+}
+
+export async function updateDisplayName(input: {
+  member: BoardMember;
+  documentId: string;
+  displayName: string;
+}): Promise<DocumentItem | null> {
+  assertDocumentManager(input.member);
+  const existing = await boardDocumentRepository.getDocument(input.documentId);
+  if (!existing) return null;
+  const issues = validateDocumentMetadata({
+    title: input.displayName,
+    description: existing.description,
+    category: existing.category,
+  });
+  if (issues.length > 0) throw new VaultValidationError("display-name", `Invalid display name: ${issues.filter((issue) => issue.startsWith("title.")).join(", ")}`);
+  const displayName = normalizeDocumentMetadata({ title: input.displayName, description: "", category: existing.category }).title;
+  const previousDisplayName = "displayName" in existing && typeof existing.displayName === "string" && existing.displayName.trim()
+    ? existing.displayName.trim()
+    : existing.title;
+  const item = await boardDocumentRepository.updateDisplayName(input.documentId, displayName, input.member.id);
+  if (!item) return null;
+  await boardAuditLedger.append({
+    category: "document_lifecycle",
+    action: "display_name_updated",
+    outcome: "success",
+    actor: authenticatedActor(input.member),
+    target: { type: "document", id: input.documentId, version: item.currentVersion.versionId },
+    metadata: new Map<string, string | number | boolean | null>([
+      ["canonical-title", existing.title],
+      ["previous-display-name", previousDisplayName],
+      ["display-name", displayName],
+    ]),
+    idempotencyKey: `display-name-${input.documentId}-${input.member.id}-${Date.now()}`,
     occurredAt: new Date().toISOString(),
   });
   return item;

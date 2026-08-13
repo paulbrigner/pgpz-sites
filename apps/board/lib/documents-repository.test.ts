@@ -25,17 +25,41 @@ function createFakeClient() {
         .sort((a, b) => String(a.sk).localeCompare(String(b.sk)));
       return { Items: rows, LastEvaluatedKey: undefined };
     },
-    async transactWrite({ TransactItems }: { TransactItems: Array<{ Put?: { Item: Item; ConditionExpression?: string } }> }) {
+    async transactWrite({ TransactItems }: { TransactItems: Array<{ Put?: { Item: Item; ConditionExpression?: string }; Update?: { Key: { pk: string; sk: string }; ExpressionAttributeValues: Record<string, unknown> } }> }) {
       const writes: Array<{ key: string; item: Item }> = [];
+      const updates: Array<{ key: string; item: Item }> = [];
       for (const entry of TransactItems) {
         const put = entry.Put;
-        if (!put) continue;
-        const item = put.Item;
-        const key = `${item.pk}#${item.sk}`;
-        if (put.ConditionExpression && items.get(key)) throw { name: "ConditionalCheckFailedException" };
-        writes.push({ key, item });
+        if (put) {
+          const item = put.Item;
+          const key = `${item.pk}#${item.sk}`;
+          if (put.ConditionExpression && items.get(key)) throw { name: "ConditionalCheckFailedException" };
+          writes.push({ key, item });
+        }
+        const update = entry.Update;
+        if (update) {
+          const key = `${update.Key.pk}#${update.Key.sk}`;
+          const current = items.get(key);
+          const values = update.ExpressionAttributeValues;
+          if (!current || current.revision !== values[":expectedRevision"]) throw { name: "ConditionalCheckFailedException" };
+          updates.push({ key, item: { ...current, currentVersionId: values[":currentVersionId"], revision: values[":nextRevision"], updatedAt: values[":updatedAt"], updatedBy: values[":updatedBy"] } });
+        }
       }
       for (const write of writes) items.set(write.key, write.item);
+      for (const update of updates) items.set(update.key, update.item);
+    },
+    async update({ Key, ExpressionAttributeValues }: { Key: { pk: string; sk: string }; ExpressionAttributeValues: Record<string, unknown> }) {
+      const key = `${Key.pk}#${Key.sk}`;
+      const current = items.get(key);
+      if (!current || current.revision !== ExpressionAttributeValues[":expectedRevision"]) throw { name: "ConditionalCheckFailedException" };
+      items.set(key, {
+        ...current,
+        ...(typeof ExpressionAttributeValues[":displayName"] === "string" ? { displayName: ExpressionAttributeValues[":displayName"] } : {}),
+        revision: ExpressionAttributeValues[":nextRevision"],
+        updatedAt: ExpressionAttributeValues[":updatedAt"],
+        updatedBy: ExpressionAttributeValues[":updatedBy"],
+      });
+      return {};
     },
   };
   return client;
@@ -99,5 +123,50 @@ describe("board documents repository", () => {
     const read = await repo.getDocument("doc-2");
     expect(read?.currentVersion.originalFileName).toBe("articles.pdf");
     expect(read?.currentVersion.sha256).toHaveLength(64);
+  });
+
+  it("updates a presentation name without changing canonical document identity", async () => {
+    const repo = createBoardDocumentRepository(createFakeClient() as never);
+    await repo.createDocument({
+      documentId: "brand-package",
+      title: "PGPZ Brand Package — Symbol as Z — Version 4",
+      description: "Canonical governed package",
+      category: "brand-trademark",
+      visibility: "members",
+      version: version("brand-package", "v1", 1),
+      actorId: "user-1",
+    });
+
+    const updated = await repo.updateDisplayName("brand-package", "Primary identity package", "user-2");
+    expect(updated?.displayName).toBe("Primary identity package");
+    expect(updated?.title).toBe("PGPZ Brand Package — Symbol as Z — Version 4");
+    await expect(repo.getDocument("brand-package")).resolves.toMatchObject({
+      displayName: "Primary identity package",
+      title: "PGPZ Brand Package — Symbol as Z — Version 4",
+      updatedBy: "user-2",
+    });
+  });
+
+  it("keeps file version numbers contiguous after presentation metadata changes", async () => {
+    const repo = createBoardDocumentRepository(createFakeClient() as never);
+    const created = await repo.createDocument({
+      documentId: "policy",
+      title: "Policy",
+      description: "",
+      category: "policies",
+      visibility: "members",
+      version: version("policy", "v1", 1),
+      actorId: "user-1",
+    });
+    const renamed = await repo.updateDisplayName("policy", "Current policy", "user-2");
+    const updated = await repo.acceptVersion({
+      documentId: "policy",
+      expectedRevision: renamed?.revision ?? created.revision,
+      head: renamed ?? created,
+      version: version("policy", "v2", 99),
+      actorId: "user-2",
+    });
+    expect(updated.currentVersion.sequence).toBe(2);
+    expect((await repo.listVersions("policy")).map((item) => item.sequence)).toEqual([1, 2]);
   });
 });

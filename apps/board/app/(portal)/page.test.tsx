@@ -64,7 +64,8 @@ describe("board dashboard", () => {
   it("shows Board Support document tools without calling the user an administrator", () => {
     render(<BoardDashboard member={{ id: "support-1", name: "Operations", email: "ops@example.org", role: "board-support", isAdmin: false }} />);
     expect(screen.getByText("Board Support")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open Board tools" })).toHaveAttribute("href", "/admin");
+    expect(screen.getByRole("link", { name: /Document library/ })).toHaveAttribute("href", "/documents");
+    expect(screen.queryByRole("link", { name: "Open Board tools" })).not.toBeInTheDocument();
     expect(screen.queryByText("Board Chair")).not.toBeInTheDocument();
   });
 

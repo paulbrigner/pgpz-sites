@@ -97,5 +97,5 @@ export function roleCanManageBoardUsers(role: BoardAccessRole): boolean {
 }
 
 export function roleCanAccessBoardAdministration(role: BoardAccessRole): boolean {
-  return roleCanManageBoardDocuments(role) || roleCanReviewBoardAudit(role) || roleCanManageBoardUsers(role);
+  return roleCanReviewBoardAudit(role) || roleCanManageBoardUsers(role);
 }

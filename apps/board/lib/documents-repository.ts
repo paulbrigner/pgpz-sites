@@ -14,6 +14,11 @@ import { BOARD_DOCUMENTS_TABLE } from "@/lib/config";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type VaultDocumentClient = any;
+export type BoardDocumentItem = DocumentItem & Readonly<{ displayName?: string }>;
+type BoardDocumentRecord = DocumentRecord & Readonly<{ displayName?: string }>;
+export type BoardDocumentRepository = DocumentRepository & {
+  updateDisplayName(documentId: string, displayName: string, actorId: string | null): Promise<BoardDocumentItem | null>;
+};
 const META_SK = "META";
 const VERSION_PREFIX = "VERSION#";
 const LIBRARY_PK = "DOCUMENTS";
@@ -24,13 +29,14 @@ const versionSk = (sequence: number, versionId: string) => `${VERSION_PREFIX}${p
 
 type Row = Record<string, unknown>;
 
-function metaRecord(record: DocumentRecord, includeLibrary = false): Row {
+function metaRecord(record: BoardDocumentRecord, includeLibrary = false): Row {
   return {
     pk: docPk(record.documentId),
     sk: META_SK,
     type: "DOCUMENT_META",
     documentId: record.documentId,
     title: record.title,
+    ...(record.displayName ? { displayName: record.displayName } : {}),
     description: record.description,
     category: record.category,
     visibility: record.visibility,
@@ -45,7 +51,7 @@ function metaRecord(record: DocumentRecord, includeLibrary = false): Row {
   };
 }
 
-function metaToRecord(item: Row | undefined | null): DocumentRecord | null {
+function metaToRecord(item: Row | undefined | null): BoardDocumentRecord | null {
   if (!item || item.type !== "DOCUMENT_META") return null;
   const documentId = String(item.documentId ?? "");
   const currentVersionId = String(item.currentVersionId ?? "");
@@ -53,6 +59,7 @@ function metaToRecord(item: Row | undefined | null): DocumentRecord | null {
   return {
     documentId,
     title: String(item.title ?? ""),
+    ...(typeof item.displayName === "string" && item.displayName.trim() ? { displayName: item.displayName.trim() } : {}),
     description: String(item.description ?? ""),
     category: String(item.category ?? ""),
     visibility: String(item.visibility ?? "members"),
@@ -111,10 +118,10 @@ function isConditional(error: unknown) {
     (error as { name?: unknown } | null)?.name === "TransactionCanceledException";
 }
 
-export function createBoardDocumentRepository(client: VaultDocumentClient = documentClient): DocumentRepository {
+export function createBoardDocumentRepository(client: VaultDocumentClient = documentClient): BoardDocumentRepository {
   const tableName = BOARD_DOCUMENTS_TABLE;
 
-  async function getMeta(documentId: string): Promise<DocumentRecord | null> {
+  async function getMeta(documentId: string): Promise<BoardDocumentRecord | null> {
     const result = await client.get({ TableName: tableName, Key: { pk: docPk(documentId), sk: META_SK } });
     return metaToRecord(result?.Item as Row | undefined);
   }
@@ -136,7 +143,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     return rows;
   }
 
-  async function toItem(record: DocumentRecord): Promise<DocumentItem> {
+  async function toItem(record: BoardDocumentRecord): Promise<BoardDocumentItem> {
     const rows = await listVersionRows(record.documentId);
     const versions = rows.map(itemToVersion).filter((v): v is DocumentVersion => !!v);
     const current = versions.find((v) => v.versionId === record.currentVersionId);
@@ -151,7 +158,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     },
 
     async listDocuments(filter?: DocumentFilter) {
-      const metas: DocumentRecord[] = [];
+      const metas: BoardDocumentRecord[] = [];
       let exclusiveStartKey: Record<string, unknown> | undefined;
       do {
         const result = await client.query({
@@ -182,7 +189,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       }); // sorted by updatedAt desc
       records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
-      const items: DocumentItem[] = [];
+      const items: BoardDocumentItem[] = [];
       for (const record of records) {
         try {
           items.push(await toItem(record));
@@ -227,7 +234,10 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       const current = await getMeta(input.documentId);
       if (!current) throw new Error(`Unknown document ${input.documentId}`);
       if (current.revision !== input.expectedRevision) throw new OptimisticConcurrencyError(input.documentId);
-      const version = { ...input.version, sequence: current.revision + 1 };
+      const currentVersions = (await listVersionRows(input.documentId))
+        .map(itemToVersion)
+        .filter((item): item is DocumentVersion => !!item);
+      const version = { ...input.version, sequence: Math.max(0, ...currentVersions.map((item) => item.sequence)) + 1 };
       const next = acceptUploadVersion(current, version);
       try {
         await client.transactWrite({
@@ -256,6 +266,39 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       if (!current) return null;
       const next = updateDocumentMetadata(current, metadata, new Date().toISOString(), actorId);
       await client.update(updateMetaStatement(current, next));
+      return toItem(next);
+    },
+
+    async updateDisplayName(documentId, displayName, actorId) {
+      const current = await getMeta(documentId);
+      if (!current) return null;
+      const now = new Date().toISOString();
+      const next: BoardDocumentRecord = {
+        ...current,
+        displayName,
+        revision: current.revision + 1,
+        updatedAt: now,
+        updatedBy: actorId,
+      };
+      try {
+        await client.update({
+          TableName: tableName,
+          Key: { pk: docPk(documentId), sk: META_SK },
+          UpdateExpression: "SET displayName = :displayName, #rev = :nextRevision, #updAt = :updatedAt, #updBy = :updatedBy",
+          ExpressionAttributeNames: { "#rev": "revision", "#updAt": "updatedAt", "#updBy": "updatedBy" },
+          ExpressionAttributeValues: {
+            ":displayName": displayName,
+            ":nextRevision": next.revision,
+            ":updatedAt": now,
+            ":updatedBy": actorId,
+            ":expectedRevision": current.revision,
+          },
+          ConditionExpression: "#rev = :expectedRevision",
+        });
+      } catch (error) {
+        if (isConditional(error)) throw new OptimisticConcurrencyError(documentId);
+        throw error;
+      }
       return toItem(next);
     },
   };

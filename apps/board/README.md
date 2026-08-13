@@ -77,6 +77,17 @@ its retained version history. These relationships are presentation metadata
 only; every row still downloads the authoritative retained vault record and
 generates the same audited read event.
 
+Document management is integrated into this same library rather than exposed as
+a parallel interface. Board Chair, Executive Director, Legal Counsel, and Board
+Support roles see permission-scoped controls for creating documents, adding a
+version within version history, changing a display name, and archiving or
+restoring records. Directors see only the reading interface. Display names are
+mutable Board presentation metadata: changing one does not rename retained
+objects, alter canonical document identity, or break governed brand-package
+relationships. Every mutation retains recent-passkey step-up enforcement and
+appends its normal audit evidence. `/admin/documents` remains only as a
+compatibility redirect to `/documents`.
+
 Board's upload adapter permits PDF, ZIP, JSON, Markdown, text, and CSV records.
 The neutral `@pgpz/document-vault` package validates the injected app policy and
 file signatures; ZIP bundles are delivered as attachments rather than rendered
