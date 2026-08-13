@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { FileText, KeyRound, Palette, ScrollText, Settings } from "lucide-react";
+import { ArrowRight, FileText, KeyRound, Palette, ScrollText, Settings } from "lucide-react";
 import type { BoardMember } from "@/lib/session";
 
 export type { BoardMember };
@@ -10,22 +10,19 @@ const memberResources = [
     href: "/documents",
     icon: FileText,
     title: "Document library",
-    body: "Browse current governance records, policies, agreements, and retained document versions.",
-    action: "Browse documents",
+    body: "Governance records, policies, agreements, and version history",
   },
   {
     href: "/brand",
     icon: Palette,
     title: "Brand & marketing",
-    body: "Open the current PGPZ identity guidelines and download production-ready brand packages.",
-    action: "Open brand resources",
+    body: "Identity guidelines and production-ready brand packages",
   },
   {
     href: "/account/security",
     icon: KeyRound,
     title: "Sign-in security",
-    body: "Register and manage passkeys for phishing-resistant access to the Board portal.",
-    action: "Manage passkeys",
+    body: "Passkeys and account recovery",
   },
 ] as const;
 
@@ -68,20 +65,29 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
 
       <section className="mt-10" aria-labelledby="board-resources-heading">
         <h2 id="board-resources-heading" className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">Board resources</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {memberResources.map(({ href, icon: Icon, title, body, action }) => (
-            <Surface key={href} className="flex h-full flex-col p-6 sm:p-7">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <h3 className="mt-5 text-xl font-semibold tracking-[-0.025em] text-[var(--foreground)]">{title}</h3>
-              <p className="mt-2 flex-1 text-sm leading-6 text-[var(--muted)]">{body}</p>
-              <Link href={href} className="mt-5 inline-flex w-fit items-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
-                {action}
-              </Link>
-            </Surface>
-          ))}
-        </div>
+        <Surface className="mt-4 overflow-hidden p-0">
+          <ul className="divide-y divide-[var(--border)]">
+            {memberResources.map(({ href, icon: Icon, title, body }) => (
+              <li key={href}>
+                <Link href={href} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-6">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
+                    <Icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <h3 className="font-semibold tracking-[-0.015em] text-[var(--foreground)]">{title}</h3>
+                    <span className="mt-0.5 block truncate text-sm text-[var(--muted)]">{body}</span>
+                  </span>
+                  {href === "/account/security" && passkeyCount !== null ? (
+                    <span className="hidden shrink-0 text-xs font-semibold text-[var(--muted)] sm:inline">
+                      {passkeyCount} {passkeyCount === 1 ? "passkey" : "passkeys"}
+                    </span>
+                  ) : null}
+                  <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--foreground)]" aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Surface>
       </section>
 
       {canAccessAdministration(member) ? (
