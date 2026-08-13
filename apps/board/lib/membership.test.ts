@@ -51,7 +51,7 @@ describe("board membership allowlist", () => {
     expect((await adapter.resolve({})).active).toBe(false);
     await expect(adapter.resolve({ email: "admin@pgpz.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
   });
 
@@ -83,7 +83,7 @@ describe("board membership allowlist", () => {
     // resolution is unchanged for directors.
     await expect(adapter.resolve({ email: "director@pgpz.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
     expect((await adapter.resolve({ email: "other@pgpz.org" })).active).toBe(false);
   });
@@ -134,13 +134,13 @@ describe("board membership allowlist", () => {
       attributes: {
         source: "legal-counsel",
         role: "legal-counsel",
-        isAdmin: true,
+        isAdmin: false,
       },
     });
     // Legal Counsel is not a Board member; ordinary roster resolution unchanged.
     await expect(adapter.resolve({ email: "director@pgpz.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
     expect((await adapter.resolve({ email: "other@pgpz.org" })).active).toBe(false);
   });
@@ -155,7 +155,7 @@ describe("board membership allowlist", () => {
 
     await expect(adapter.resolve({ email: "sam@pgpz.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "legal-counsel", isAdmin: true },
+      attributes: { role: "legal-counsel", isAdmin: false },
     });
     await expect(adapter.resolve({ email: "anyone@pgpz.org" })).resolves.toMatchObject({
       active: false,

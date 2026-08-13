@@ -37,7 +37,8 @@ export function parseBoardExecutiveDirectorEmails(
 
 /**
  * Parses the BOARD_LEGAL_COUNSEL_EMAILS allowlist. Legal counsel is a staff
- * role (like the Executive Director) with admin-equivalent privileges: it
+ * role with document-management and audit-review privileges but no user
+ * management: it
  * must stay pairwise disjoint from the Board and Executive Director rosters
  * while still granting portal access and the named governance capabilities.
  */
@@ -53,8 +54,8 @@ export function parseBoardLegalCounselEmails(
  * unset variable locks the portal closed instead of opening it.
  *
  * The Executive Director and Legal Counsel are distinct, non-director staff
- * roles: emails on their allowlists gain portal access and administrator
- * privileges without joining the Board roster, and configuration fails fast
+ * roles: emails on their allowlists gain their named portal capabilities
+ * without joining the Board roster, and configuration fails fast
  * if any of the three rosters overlap.
  */
 export function createBoardMembershipAdapter(
@@ -133,12 +134,12 @@ export function createBoardMembershipAdapter(
           attributes: {
             source: "legal-counsel",
             role: "legal-counsel",
-            isAdmin: true,
+            isAdmin: false,
           },
         };
       }
 
-      const isAdmin = active && adminAllowlist.has(email);
+      const isChair = active && adminAllowlist.has(email);
       return {
         active,
         reason: active
@@ -148,8 +149,8 @@ export function createBoardMembershipAdapter(
           ? {
               attributes: {
                 source: "board-roster",
-                role: isAdmin ? "admin" : "member",
-                isAdmin,
+                role: isChair ? "chair" : "member",
+                isAdmin: isChair,
               },
             }
           : {}),

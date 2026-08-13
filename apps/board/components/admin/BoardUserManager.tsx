@@ -8,7 +8,7 @@ export type BoardManagedUser = {
   id: string;
   email: string;
   name: string;
-  role: "member" | "admin" | "executive-director" | "legal-counsel";
+  role: "member" | "chair" | "board-support" | "admin" | "executive-director" | "legal-counsel";
   status: "invited" | "active" | "deactivated";
   passkeyCount: number;
   createdAt: string;
@@ -17,10 +17,14 @@ export type BoardManagedUser = {
 
 const roleLabels: Record<BoardManagedUser["role"], string> = {
   member: "Director",
-  admin: "Board administrator",
+  chair: "Board Chair",
+  "board-support": "Board Support",
+  admin: "Board Chair",
   "executive-director": "Executive Director",
   "legal-counsel": "Legal Counsel",
 };
+
+const assignableRoles = ["member", "chair", "board-support", "executive-director", "legal-counsel"] as const;
 
 const statusLabels: Record<BoardManagedUser["status"], string> = {
   invited: "Invited",
@@ -177,7 +181,7 @@ export function BoardUserManager({
           <form onSubmit={createUser} className="mt-5 grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--primary-soft)] p-5 md:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold">Name<input required value={createForm.name} onChange={(event) => setCreateForm((form) => ({ ...form, name: event.target.value }))} className="h-11 rounded-xl border border-[var(--border-strong)] bg-white px-3 font-normal" /></label>
             <label className="grid gap-2 text-sm font-semibold">Email<input required type="email" value={createForm.email} onChange={(event) => setCreateForm((form) => ({ ...form, email: event.target.value }))} className="h-11 rounded-xl border border-[var(--border-strong)] bg-white px-3 font-normal" /></label>
-            <label className="grid gap-2 text-sm font-semibold">Role<select value={createForm.role} onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value as BoardManagedUser["role"] }))} className="h-11 rounded-xl border border-[var(--border-strong)] bg-white px-3 font-normal">{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-semibold">Role<select value={createForm.role} onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value as BoardManagedUser["role"] }))} className="h-11 rounded-xl border border-[var(--border-strong)] bg-white px-3 font-normal">{assignableRoles.map((value) => <option key={value} value={value}>{roleLabels[value]}</option>)}</select></label>
             <div className="flex items-end"><button disabled={busy !== null} className={buttonStyles({ size: "sm" })}>Create passwordless user</button></div>
           </form>
         ) : null}
@@ -204,7 +208,7 @@ export function BoardUserManager({
                   <div className="border-t border-[var(--border)] bg-[var(--background)] px-4 py-5 sm:px-5">
                     <dl className="grid gap-4 text-sm sm:grid-cols-2"><div><dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Passkeys</dt><dd className="mt-1 flex items-center gap-1.5"><KeyRound className="h-4 w-4" aria-hidden="true" />{user.passkeyCount}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Access record updated</dt><dd className="mt-1">{displayDate(user.updatedAt)}</dd></div></dl>
                     <div className="mt-5 flex flex-wrap items-end gap-3">
-                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"><span>{user.name || user.email} role</span><select aria-label={`${user.name || user.email} role`} value={user.role} disabled={isSelf || busy !== null} onChange={(event) => void mutateUser(user, "set_role", event.target.value as BoardManagedUser["role"])} className="h-10 rounded-xl border border-[var(--border-strong)] bg-white px-3 text-sm font-normal normal-case tracking-normal text-[var(--foreground)]">{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                      <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"><span>{user.name || user.email} role</span><select aria-label={`${user.name || user.email} role`} value={user.role === "admin" ? "chair" : user.role} disabled={isSelf || busy !== null} onChange={(event) => void mutateUser(user, "set_role", event.target.value as BoardManagedUser["role"])} className="h-10 rounded-xl border border-[var(--border-strong)] bg-white px-3 text-sm font-normal normal-case tracking-normal text-[var(--foreground)]">{assignableRoles.map((value) => <option key={value} value={value}>{roleLabels[value]}</option>)}</select></label>
                       <button type="button" disabled={busy !== null} onClick={() => void mutateUser(user, "revoke_sessions")} className={buttonStyles({ variant: "outline", size: "sm" })}><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Revoke sessions</button>
                       {user.status === "deactivated" ? <button type="button" disabled={busy !== null} onClick={() => void mutateUser(user, "reactivate")} className={buttonStyles({ variant: "outline", size: "sm" })}>Reactivate</button> : <button type="button" disabled={isSelf || busy !== null} onClick={() => void mutateUser(user, "deactivate")} className={buttonStyles({ variant: "outline", size: "sm" })}>Deactivate</button>}
                     </div>

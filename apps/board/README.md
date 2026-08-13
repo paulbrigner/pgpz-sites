@@ -10,17 +10,30 @@ Authentication alone never grants portal access. During migration, access is
 read from the deployment allowlists below:
 
 - `BOARD_MEMBER_EMAILS`: directors allowed into the portal;
-- `BOARD_ADMIN_EMAILS`: director administrators; must be a member subset;
-- `BOARD_EXECUTIVE_DIRECTOR_EMAILS`: administrator-equivalent staff, disjoint
-  from directors;
-- `BOARD_LEGAL_COUNSEL_EMAILS`: administrator-equivalent counsel, pairwise
-  disjoint from directors and Executive Director.
+- `BOARD_ADMIN_EMAILS`: legacy deployment name for the Board Chair allowlist;
+  it must be a member subset and resolves to the `chair` role;
+- `BOARD_EXECUTIVE_DIRECTOR_EMAILS`: full-administration staff, disjoint from
+  directors;
+- `BOARD_LEGAL_COUNSEL_EMAILS`: limited counsel access, pairwise disjoint from
+  directors and Executive Director.
 
 An absent/empty member and staff roster locks everyone out. After the guarded
 roster migration, `BOARD_ACCESS_REGISTRY_ENABLED=true` makes
 `PGPZBoardAccess` the sole runtime role/status authority; it does not fall back
 to allowlists for a missing or deactivated record. UI badges do not replace
 server authorization; routes and repositories enforce current roles.
+
+| Role | Documents | Audit ledger | User management |
+| --- | --- | --- | --- |
+| Director | view | no | no |
+| Board Chair | manage | review | manage |
+| Executive Director | manage | review | manage |
+| Legal Counsel | manage | review | no |
+| Board Support | manage | no | no |
+
+The stored legacy role `admin` is read as Board Chair so existing access never
+fails during rollout, but current APIs and UI never assign `admin` to a new or
+updated record.
 
 ### Access registry migration
 
@@ -71,7 +84,7 @@ by the Board site.
 
 The guarded importer is dry-run by default and is idempotent by the current
 vault SHA-256. It requires live Board backend environment values and an existing
-administrator-equivalent actor:
+actor with document-management access:
 
 ```bash
 cd apps/board
@@ -96,36 +109,35 @@ npm run dev:board
 Board runs at `http://localhost:3002`. Local authentication/admin surfaces work;
 S3/KMS/Object Lock governance persistence does not run in the offline stack.
 
-## Legacy password provisioning
+## Emergency password rollback
 
-Use the guarded script from the repository root:
+Normal accounts are created through `/admin/users` and use passwordless sign-in.
+The old credential provisioner is retained only for controlled rollback and
+refuses to run unless password auth is explicitly enabled:
 
 ```bash
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
+BOARD_PASSWORD_AUTH_ENABLED=true REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
 npx tsx apps/board/scripts/provision-board-member.ts \
   director@example.org --name "Director Name"
 ```
 
-This transition-only script prints a generated password once, rotates an
-existing password and revokes sessions by default, supports `--dry-run`, and
-refuses addresses outside the configured Board/staff rosters. After the access
-registry and passwordless cutover, add users through `/admin/users`; do not use
-this password provisioner.
+Do not use this tool for onboarding. Any rollback-created credential is
+temporary and must be removed through the guarded removal workflow after the
+incident is resolved.
 
 ## Passwordless authentication
 
 Board supports 10-minute, single-use hashed magic links and WebAuthn passkeys.
 Passkey registration requires an authenticated session, uses the exact Board
 origin/RP ID (`board.pgpz.org` in production), and requires user verification.
-Users manage passkeys at `/account/security`.
+Users manage passkeys at `/account/security`. Passkey sign-in is the primary
+sign-in action; magic links remain available for onboarding and recovery. The
+dashboard prompts a user with zero passkeys to enroll, and user management
+reports passkey counts.
 
-The rollout is migration-aware: `BOARD_PASSWORDLESS_AUTH_ENABLED=true` enables
-magic links and passkeys while `BOARD_PASSWORD_AUTH_ENABLED=true` retains the
-existing password flow in a secondary disclosure. Do not disable passwords
-until every active Board user has completed a magic-link or passkey sign-in and
-the administrator has verified recovery access. After that checkpoint, set
-`BOARD_PASSWORD_AUTH_ENABLED=false`, deploy, revoke all sessions, and only then
-remove legacy credential-account records. The removal tool uses strongly
+`BOARD_PASSWORD_AUTH_ENABLED=false` is the normal state. After it has been
+deployed and existing sessions have been revoked, remove legacy credential
+records. The removal tool uses strongly
 consistent read-only scans and prints exact credential accounts and session
 counts by default:
 

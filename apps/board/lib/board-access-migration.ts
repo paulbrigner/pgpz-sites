@@ -55,7 +55,7 @@ export function parseLegacyBoardRosters(
     if (previous && previous !== role) throw new Error(`${email} occurs in both ${previous} and ${role} rosters`);
     assignments.set(email, role);
   };
-  for (const email of members) assign(email, admins.has(email) ? "admin" : "member");
+  for (const email of members) assign(email, admins.has(email) ? "chair" : "member");
   for (const email of executiveDirectors) assign(email, "executive-director");
   for (const email of legalCounsel) assign(email, "legal-counsel");
 

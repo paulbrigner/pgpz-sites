@@ -16,7 +16,7 @@ export const boardTerms: BoardLegalDocument = {
     {
       title: "Authorized access",
       paragraphs: [
-        "The board portal at board.pgpz.org is private. Access is limited to current members of the PGPZ Board of Directors whose email addresses are on the application roster. Accounts are provisioned by the board administrator and self-registration is disabled.",
+        "The board portal at board.pgpz.org is private. Access is limited to current directors and specifically authorized staff or counsel whose role is recorded in the Board access registry. Accounts are created by an authorized user manager and self-registration is disabled.",
       ],
     },
     {
@@ -28,7 +28,7 @@ export const boardTerms: BoardLegalDocument = {
     {
       title: "Account responsibility",
       paragraphs: [
-        "Each director is responsible for keeping their sign-in credentials safe and for reporting suspected unauthorized use to the board administrator promptly.",
+        "Each user is responsible for protecting their email account and passkeys and for reporting suspected unauthorized use to the Board Chair or Executive Director promptly.",
       ],
     },
     {
@@ -49,7 +49,7 @@ export const boardPrivacy: BoardLegalDocument = {
       title: "Account data",
       paragraphs: [
         "The portal stores only the information needed to authorize and sign users in: name, email address, Board role and access status, and authentication records. Magic-link tokens are hashed and expire after ten minutes. Passkey records contain the public credential material and device metadata required by WebAuthn; the corresponding private key remains with the user's authenticator.",
-        "During the passwordless transition, an existing account may also retain a Better Auth scrypt password hash. Passwords will be removed after the guarded cutover, once every active user has verified passwordless access.",
+        "Password sign-in is retired. A legacy password hash may remain only until the guarded credential-removal process has deleted it; password controls and credential sign-in are disabled during that cleanup period.",
         "Authenticated access is tracked with session records carrying the user's stable identity and a signed, expiring token. Sessions are deleted on sign-out, administrator revocation, or access deactivation.",
       ],
     },
@@ -70,7 +70,7 @@ export const boardPrivacy: BoardLegalDocument = {
       title: "Governance audit ledger",
       paragraphs: [
         "As a governance hub, the portal keeps an append-only audit ledger of authentication and governance-document activity. For each event it records a stable user identity or the claimed email of a failed sign-in, the board role and capability snapshot, the action and outcome, a target identifier and exact version where relevant, and timing.",
-        "Ledger entries are cryptographically hash-chained so tampering, deletion, or reordering is detectable, and are retained (never erased) in a separate, encrypted, write-only store. Password hashes, session tokens, cookies, and file contents are never written to the ledger. Access to the ledger is limited to board administrators, the Executive Director, and Legal Counsel.",
+        "Ledger entries are cryptographically hash-chained so tampering, deletion, or reordering is detectable, and are retained (never erased) in a separate, encrypted, write-only store. Password hashes, session tokens, cookies, and file contents are never written to the ledger. Audit-ledger review is limited to the Board Chair, Executive Director, and Legal Counsel.",
       ],
     },
     {

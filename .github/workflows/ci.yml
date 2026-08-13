@@ -132,7 +132,7 @@ jobs:
           BOARD_ACCESS_TABLE: PGPZBoardAccessCi
           BOARD_ACCESS_REGISTRY_ENABLED: 'false'
           BOARD_PASSWORDLESS_AUTH_ENABLED: 'true'
-          BOARD_PASSWORD_AUTH_ENABLED: 'true'
+          BOARD_PASSWORD_AUTH_ENABLED: 'false'
           BOARD_DOCUMENTS_TABLE: PGPZBoardDocumentsCi
           BOARD_AUDIT_TABLE: PGPZBoardAuditLogCi
           BOARD_DOCUMENTS_STAGING_BUCKET: pgpz-board-ci-staging

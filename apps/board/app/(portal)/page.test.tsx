@@ -26,12 +26,12 @@ describe("board dashboard", () => {
   it("shows the enforced administration surface only to administrators", () => {
     render(
       <BoardDashboard
-        member={{ id: "user-9", name: "Grace Admin", email: "grace@example.org", role: "admin", isAdmin: true }}
+        member={{ id: "user-9", name: "Grace Chair", email: "grace@example.org", role: "chair", isAdmin: true }}
       />,
     );
 
-    expect(screen.getByText("Board administrator")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open administration" })).toHaveAttribute("href", "/admin");
+    expect(screen.getByText("Board Chair")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Board tools" })).toHaveAttribute("href", "/admin");
   });
 
   it("shows the Executive Director badge instead of director badges for staff", () => {
@@ -43,20 +43,32 @@ describe("board dashboard", () => {
 
     expect(screen.getByText("Executive Director")).toBeVisible();
     expect(screen.queryByText("Board of Directors")).not.toBeInTheDocument();
-    expect(screen.queryByText("Board administrator")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open administration" })).toHaveAttribute("href", "/admin");
+    expect(screen.queryByText("Board Chair")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Board tools" })).toHaveAttribute("href", "/admin");
   });
 
   it("shows the Legal Counsel badge and administration access without director labels", () => {
     render(
       <BoardDashboard
-        member={{ id: "user-9", name: "Sam Counsel", email: "sam@example.org", role: "legal-counsel", isAdmin: true }}
+        member={{ id: "user-9", name: "Sam Counsel", email: "sam@example.org", role: "legal-counsel", isAdmin: false }}
       />,
     );
 
     expect(screen.getByText("Legal Counsel")).toBeVisible();
     expect(screen.queryByText("Board of Directors")).not.toBeInTheDocument();
-    expect(screen.queryByText("Board administrator")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open administration" })).toHaveAttribute("href", "/admin");
+    expect(screen.queryByText("Board Chair")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Board tools" })).toHaveAttribute("href", "/admin");
+  });
+
+  it("shows Board Support document tools without calling the user an administrator", () => {
+    render(<BoardDashboard member={{ id: "support-1", name: "Operations", email: "ops@example.org", role: "board-support", isAdmin: false }} />);
+    expect(screen.getByText("Board Support")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Board tools" })).toHaveAttribute("href", "/admin");
+    expect(screen.queryByText("Board Chair")).not.toBeInTheDocument();
+  });
+
+  it("nudges users without a passkey toward enrollment", () => {
+    render(<BoardDashboard member={{ id: "user-1", name: "Ada", email: "ada@example.org", role: "member", isAdmin: false }} passkeyCount={0} />);
+    expect(screen.getByRole("link", { name: "Add a passkey" })).toHaveAttribute("href", "/account/security");
   });
 });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveBoardMemberState } from "@/lib/session";
+import { canReviewBoardAudit, resolveBoardMemberState } from "@/lib/session";
 import { boardAuditLedger } from "@/lib/audit";
 import { recordAccessDenied, anonymousClaimedActor } from "@/lib/audit";
 
@@ -7,12 +7,12 @@ export const runtime = "nodejs";
 
 const UNAUTHORIZED = new Response(null, { status: 401 });
 const FORBIDDEN = () =>
-  NextResponse.json({ error: "Administrator access required" }, { status: 403 });
+  NextResponse.json({ error: "Audit review access required" }, { status: 403 });
 
-async function requireAdmin(request: NextRequest) {
+async function requireAuditReviewer(request: NextRequest) {
   const state = await resolveBoardMemberState(request.headers);
   if (state.status === "anonymous") return { response: UNAUTHORIZED, member: null };
-  if (state.status !== "member" || !state.member.isAdmin) {
+  if (state.status !== "member" || !canReviewBoardAudit(state.member)) {
     // Authorize before revealing whether a privileged surface exists.
     await recordAccessDenied({
       actor:
@@ -20,7 +20,7 @@ async function requireAdmin(request: NextRequest) {
           ? anonymousClaimedActor(state.email)
           : { type: "authenticated", userId: state.member.id, email: state.member.email, role: state.member.role, capabilities: [] },
       target: { type: "audit", id: "/api/admin/audit" },
-      reason: "admin_required",
+      reason: "audit_review_required",
     });
     return { response: FORBIDDEN(), member: null };
   }
@@ -30,7 +30,7 @@ async function requireAdmin(request: NextRequest) {
 const oneOf = (value: unknown) => (typeof value === "string" ? value : "");
 
 export async function GET(request: NextRequest) {
-  const { response, member } = await requireAdmin(request);
+  const { response, member } = await requireAuditReviewer(request);
   if (response) return response;
 
   const params = request.nextUrl.searchParams;
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { response, member } = await requireAdmin(request);
+  const { response, member } = await requireAuditReviewer(request);
   if (response) return response;
   void member;
 

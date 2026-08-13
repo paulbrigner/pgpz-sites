@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { AuditActor, AuditEventInput } from "@pgpz/audit-log";
 import { createBoardAuditLedger } from "@/lib/audit-ledger";
+import { roleCanManageBoardDocuments, roleCanManageBoardUsers, roleCanReviewBoardAudit, type BoardAccessRole } from "@/lib/board-access";
 
 /** The Board's append-only audit ledger (PGPZBoardAuditLog table). */
 export const boardAuditLedger = createBoardAuditLedger();
@@ -16,22 +17,24 @@ export type BoardAuditCategory =
   | "audit";
 
 /** Capabilities snapshot for a resolved, authenticated actor. */
-export function authenticatedActor(
-  member: {
-    id: string;
-    email: string;
-    role: string;
-    isAdmin: boolean;
-  },
-): AuditActor {
+export function authenticatedActor(member: {
+  id: string;
+  email: string;
+  role: string;
+  isAdmin: boolean;
+}): AuditActor {
+  const role = member.role as BoardAccessRole;
+  const capabilities = [
+    ...(roleCanManageBoardDocuments(role) ? ["manageBoardDocuments"] : []),
+    ...(roleCanReviewBoardAudit(role) ? ["reviewBoardAudit"] : []),
+    ...(roleCanManageBoardUsers(role) ? ["manageBoardUsers"] : []),
+  ];
   return {
     type: "authenticated",
     userId: member.id,
     email: member.email,
     role: member.role,
-    capabilities: member.isAdmin
-      ? ["manageBoardDocuments", "reviewBoardAudit", "manageBoardUsers"]
-      : [],
+    capabilities,
   };
 }
 

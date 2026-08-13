@@ -29,19 +29,24 @@ const memberResources = [
   },
 ] as const;
 
-export function BoardDashboard({ member }: { member: BoardMember }) {
+function roleLabel(member: BoardMember) {
+  if (member.role === "chair" || member.role === "admin") return "Board Chair";
+  if (member.role === "executive-director") return "Executive Director";
+  if (member.role === "legal-counsel") return "Legal Counsel";
+  if (member.role === "board-support") return "Board Support";
+  return "Board of Directors";
+}
+
+function canAccessAdministration(member: BoardMember) {
+  return ["chair", "admin", "executive-director", "legal-counsel", "board-support"].includes(member.role);
+}
+
+export function BoardDashboard({ member, passkeyCount = null }: { member: BoardMember; passkeyCount?: number | null }) {
   return (
     <Container className="py-10 sm:py-14">
       <section>
         <div className="flex flex-wrap items-center gap-2">
-          {member.role === "executive-director" ? (
-            <Badge tone="accent">Executive Director</Badge>
-          ) : member.role === "legal-counsel" ? (
-            <Badge tone="accent">Legal Counsel</Badge>
-          ) : (
-            <Badge tone="accent">Board of Directors</Badge>
-          )}
-          {member.isAdmin && member.role !== "executive-director" && member.role !== "legal-counsel" ? <Badge>Board administrator</Badge> : null}
+          <Badge tone="accent">{roleLabel(member)}</Badge>
         </div>
         <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">
           Welcome, {member.name}.
@@ -50,6 +55,16 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
           Signed in as <span className="font-semibold text-[var(--foreground)]">{member.email}</span>.
         </p>
       </section>
+
+      {passkeyCount === 0 ? (
+        <Surface className="mt-8 border-[var(--accent-border)] bg-[var(--accent-soft)] p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">Make your next sign-in faster and safer</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Add a passkey to use your device’s screen lock instead of waiting for an email link. Email remains available for recovery.</p>
+          </div>
+          <Link href="/account/security" className="mt-4 inline-flex shrink-0 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white sm:mt-0">Add a passkey</Link>
+        </Surface>
+      ) : null}
 
       <section className="mt-10" aria-labelledby="board-resources-heading">
         <h2 id="board-resources-heading" className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">Board resources</h2>
@@ -69,18 +84,18 @@ export function BoardDashboard({ member }: { member: BoardMember }) {
         </div>
       </section>
 
-      {member.isAdmin ? (
+      {canAccessAdministration(member) ? (
         <section className="mt-8" aria-labelledby="administration-heading">
           <Surface className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="flex items-start gap-4">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-ink)]"><Settings className="h-5 w-5" aria-hidden="true" /></span>
               <div>
-                <h2 id="administration-heading" className="text-xl font-semibold text-[var(--foreground)]">Administration</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">Manage retained documents and review the Board activity ledger.</p>
+                <h2 id="administration-heading" className="text-xl font-semibold text-[var(--foreground)]">Board tools</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--muted)]">Open the document, audit, and access tools available to your role.</p>
               </div>
             </div>
             <Link href="/admin" className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
-              <ScrollText className="h-4 w-4" aria-hidden="true" /> Open administration
+              <ScrollText className="h-4 w-4" aria-hidden="true" /> Open Board tools
             </Link>
           </Surface>
         </section>

@@ -68,7 +68,10 @@ function createFakeClient(options: {
   return { client, calls };
 }
 
-const memberEnv = { BOARD_MEMBER_EMAILS: "ada@example.org, new@example.org" };
+const memberEnv = {
+  BOARD_MEMBER_EMAILS: "ada@example.org, new@example.org",
+  BOARD_PASSWORD_AUTH_ENABLED: "true",
+};
 
 describe("provisionBoardMember --dry-run is strictly non-mutating", () => {
   it("reports the session count for an existing account without deleting anything", async () => {
@@ -168,5 +171,16 @@ describe("provisionBoardMember --dry-run is strictly non-mutating", () => {
     await expect(
       provisionBoardMember({ args: ["outsider@example.org"], env: memberEnv, client }),
     ).rejects.toThrow(/not on the BOARD_MEMBER_EMAILS/);
+  });
+
+  it("refuses provisioning while password auth is retired", async () => {
+    const { client } = createFakeClient({ existingUserId: null });
+    await expect(
+      provisionBoardMember({
+        args: ["new@example.org"],
+        env: { ...memberEnv, BOARD_PASSWORD_AUTH_ENABLED: "false" },
+        client,
+      }),
+    ).rejects.toThrow(/BOARD_PASSWORD_AUTH_ENABLED=true/);
   });
 });

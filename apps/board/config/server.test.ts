@@ -58,7 +58,7 @@ describe("board server-only configuration", () => {
     const adapter = createBoardServerConfig(BOARD_ENV).membership.adapter;
     await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
     await expect(resolveActiveMembership(adapter, { email: "grace@example.org" })).resolves.toMatchObject({
       active: true,
@@ -82,7 +82,7 @@ describe("board server-only configuration", () => {
     });
     await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
   });
 
@@ -101,11 +101,11 @@ describe("board server-only configuration", () => {
       resolveActiveMembership(adapter, { email: " SAM@example.org " }),
     ).resolves.toMatchObject({
       active: true,
-      attributes: { role: "legal-counsel", isAdmin: true },
+      attributes: { role: "legal-counsel", isAdmin: false },
     });
     await expect(resolveActiveMembership(adapter, { email: "ada@example.org" })).resolves.toMatchObject({
       active: true,
-      attributes: { role: "admin", isAdmin: true },
+      attributes: { role: "chair", isAdmin: true },
     });
   });
 

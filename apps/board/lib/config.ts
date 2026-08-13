@@ -7,12 +7,12 @@ export const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET || undefined;
 export const BETTER_AUTH_TRUSTED_ORIGINS = process.env.BETTER_AUTH_TRUSTED_ORIGINS || undefined;
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || BOARD_CANONICAL_URL).trim();
 
-/** Passwordless is enabled by default. Password sign-in remains enabled until
- * the guarded production cutover explicitly sets BOARD_PASSWORD_AUTH_ENABLED=false. */
+/** Passwordless is enabled by default. Password sign-in is retired unless a
+ * deliberate emergency rollback explicitly opts back in. */
 export const BOARD_PASSWORDLESS_AUTH_ENABLED =
   process.env.BOARD_PASSWORDLESS_AUTH_ENABLED?.trim().toLowerCase() !== "false";
 export const BOARD_PASSWORD_AUTH_ENABLED =
-  process.env.BOARD_PASSWORD_AUTH_ENABLED?.trim().toLowerCase() !== "false";
+  process.env.BOARD_PASSWORD_AUTH_ENABLED?.trim().toLowerCase() === "true";
 export const BOARD_ACCESS_REGISTRY_ENABLED =
   process.env.BOARD_ACCESS_REGISTRY_ENABLED?.trim().toLowerCase() === "true";
 
