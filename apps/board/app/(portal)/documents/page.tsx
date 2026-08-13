@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { Download, FileText } from "lucide-react";
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { formatBytes } from "@pgpz/document-vault";
+import { DocumentLibrary } from "@/components/documents/DocumentLibrary";
+import { buildDocumentLibrary } from "@/lib/document-library";
 import { requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 
@@ -12,20 +11,37 @@ export const metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default async function BoardDocumentsPage() {
+export default async function BoardDocumentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const member = await requireBoardMember("/documents");
   if (!member) return null;
+  const params = await searchParams;
+  const rawDocumentId = params?.document;
+  const focusDocumentId = Array.isArray(rawDocumentId) ? rawDocumentId[0] : rawDocumentId;
+  const rawHistory = params?.history;
+  const showHistory = (Array.isArray(rawHistory) ? rawHistory[0] : rawHistory) === "1";
   const documents = await boardDocumentRepository.listDocuments({ status: "active" });
+  const versionsByDocument = new Map(
+    await Promise.all(
+      documents
+        .filter((document) => document.versionCount > 1 || document.documentId === focusDocumentId)
+        .map(async (document) => [document.documentId, await boardDocumentRepository.listVersions(document.documentId)] as const),
+    ),
+  );
+  const categories = buildDocumentLibrary(documents, versionsByDocument);
 
   return (
-    <Container className="py-12 sm:py-16">
-      <section className="max-w-4xl">
+    <Container className="max-w-[90rem] py-2 sm:px-8 sm:py-3 lg:px-12">
+      <section className="max-w-6xl">
         <Badge tone="accent">Governance vault</Badge>
-        <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-[var(--foreground)] sm:text-5xl">
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-[var(--foreground)] sm:text-5xl">
           Document library
         </h1>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-          Founding documents, agreements, and policies preserved for the board. Signed in as{" "}
+        <p className="mt-3 text-base leading-7 text-[var(--muted)]">
+          Browse Board records by category, collection, or keyword. Signed in as{" "}
           <span className="font-semibold text-[var(--foreground)]">{member.email}</span>.
         </p>
       </section>
@@ -35,34 +51,7 @@ export default async function BoardDocumentsPage() {
           <p className="text-sm text-[var(--muted)]">No governance documents have been published yet.</p>
         </Surface>
       ) : (
-        <ul className="mt-8 grid max-w-4xl gap-4">
-          {documents.map((document) => (
-            <li key={document.documentId}>
-              <Surface className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-4">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
-                    <FileText className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--foreground)]">{document.title}</h2>
-                    <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{document.description}</p>
-                    <p className="mt-2 text-xs text-[var(--muted)]">
-                      {document.category} · v{document.currentVersion.versionId.slice(0, 8)} ·{" "}
-                      {formatBytes(document.currentVersion.byteLength)}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href={`/api/documents/${document.documentId}/download`}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                  View
-                </Link>
-              </Surface>
-            </li>
-          ))}
-        </ul>
+        <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} />
       )}
     </Container>
   );

@@ -17,6 +17,12 @@ remain shared across serverless instances. Existing production tables must
 follow the repository-root `docs/better-auth-user-index-runbook.md` before
 deploying `GSI2` reads.
 
+Passkey records use the application-configured `better_auth_passkeys` model.
+Credential-ID lookups use `GSI1`, while per-user passkey listing and deletion
+use `GSI2`. Public keys, authenticator counters, device and backup metadata,
+transports, and application-added names remain ordinary logical fields and are
+preserved when an indexed attribute or counter is updated.
+
 Applications that maintain a canonical email-ownership record inject a
 `userEmailOwnership` policy. User creation, email changes, and identity deletion
 then transact the Better Auth record and ownership claim together. Generic

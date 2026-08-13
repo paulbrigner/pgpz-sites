@@ -15,12 +15,12 @@ describe("board dashboard", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Welcome, Ada Director.");
     expect(screen.getByText("ada@example.org")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Meeting materials" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Decisions & resolutions" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Document library" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Brand & marketing" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /member directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /sign up/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /administration/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Brand & marketing" })).toHaveAttribute("href", "/brand");
+    expect(screen.getByRole("link", { name: "Open brand resources" })).toHaveAttribute("href", "/brand");
   });
 
   it("shows the enforced administration surface only to administrators", () => {

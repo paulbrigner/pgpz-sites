@@ -7,12 +7,31 @@ export const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET || undefined;
 export const BETTER_AUTH_TRUSTED_ORIGINS = process.env.BETTER_AUTH_TRUSTED_ORIGINS || undefined;
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || BOARD_CANONICAL_URL).trim();
 
+/** Passwordless is enabled by default. Password sign-in remains enabled until
+ * the guarded production cutover explicitly sets BOARD_PASSWORD_AUTH_ENABLED=false. */
+export const BOARD_PASSWORDLESS_AUTH_ENABLED =
+  process.env.BOARD_PASSWORDLESS_AUTH_ENABLED?.trim().toLowerCase() !== "false";
+export const BOARD_PASSWORD_AUTH_ENABLED =
+  process.env.BOARD_PASSWORD_AUTH_ENABLED?.trim().toLowerCase() !== "false";
+export const BOARD_ACCESS_REGISTRY_ENABLED =
+  process.env.BOARD_ACCESS_REGISTRY_ENABLED?.trim().toLowerCase() === "true";
+
+export const EMAIL_FROM = (process.env.EMAIL_FROM || "").trim();
+export const EMAIL_TRANSPORT = (process.env.EMAIL_TRANSPORT || "").trim();
+export const EMAIL_SERVER = (process.env.EMAIL_SERVER || "").trim();
+export const EMAIL_SERVER_HOST = (process.env.EMAIL_SERVER_HOST || "").trim();
+export const EMAIL_SERVER_PORT = (process.env.EMAIL_SERVER_PORT || "").trim();
+export const EMAIL_SERVER_SECURE = (process.env.EMAIL_SERVER_SECURE || "").trim();
+export const EMAIL_SERVER_USER = (process.env.EMAIL_SERVER_USER || "").trim();
+export const EMAIL_SERVER_PASSWORD = process.env.EMAIL_SERVER_PASSWORD || "";
+
 export const BOARD_BASE_PATH = "/api/better-auth";
 
 // Governance infrastructure (emitted by the PgpzBoardBackend stack outputs).
 // The vault and audit ledger are fail-closed / no-ops while these are unset.
 export const BOARD_DOCUMENTS_TABLE = (process.env.BOARD_DOCUMENTS_TABLE || "PGPZBoardDocuments").trim();
 export const BOARD_AUDIT_TABLE = (process.env.BOARD_AUDIT_TABLE || "PGPZBoardAuditLog").trim();
+export const BOARD_ACCESS_TABLE = (process.env.BOARD_ACCESS_TABLE || "PGPZBoardAccess").trim();
 export const BOARD_DOCUMENTS_STAGING_BUCKET = (process.env.BOARD_DOCUMENTS_STAGING_BUCKET || "").trim();
 export const BOARD_DOCUMENTS_RETAINED_BUCKET = (process.env.BOARD_DOCUMENTS_RETAINED_BUCKET || "").trim();
 export const BOARD_AUDIT_ARCHIVE_BUCKET = (process.env.BOARD_AUDIT_ARCHIVE_BUCKET || "").trim();

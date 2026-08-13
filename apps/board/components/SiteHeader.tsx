@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Container } from "@pgpz/ui";
 import { LockKeyhole } from "lucide-react";
-import { boardSiteConfig } from "@/config/site";
 import { SignOutButton } from "./SignOutButton";
 import { BoardMark } from "./BoardMark";
 
@@ -20,13 +19,9 @@ export async function SiteHeader() {
           aria-label="PGPZ Board home"
         >
           <BoardMark />
-          <span>
-            <span className="block text-sm font-bold tracking-[-0.01em] text-[var(--foreground)]">
-              {boardSiteConfig.name}
-            </span>
-            <span className="block text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-              Directors&apos; portal
-            </span>
+          <span className="border-l border-[var(--border-strong)] pl-3">
+            <span className="block text-sm font-bold tracking-[-0.01em] text-[var(--foreground)]">Board</span>
+            <span className="block text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Directors&apos; portal</span>
           </span>
         </Link>
 

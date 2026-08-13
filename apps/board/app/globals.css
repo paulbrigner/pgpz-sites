@@ -97,44 +97,6 @@
     transform: translateY(0);
   }
 
-  /* Board seal mark: evergreen tile with a PGPZ plain-ring motif and paper
-   * centre dot. The ring is a plain circle — never a Zcash roundel — so the
-   * private portal carries no official Logo that would need an external link. */
-  .board-mark {
-    position: relative;
-    display: inline-flex;
-    height: 2.75rem;
-    width: 2.75rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-radius: 0.95rem;
-    background:
-      radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.14), transparent 36%),
-      linear-gradient(150deg, #0d1f20, #102827 62%, #2b3b3a);
-    color: var(--accent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 18px 34px -24px rgba(13, 31, 32, 0.9);
-  }
-
-  .board-mark::before {
-    position: absolute;
-    inset: 0.34rem;
-    border: 2px solid rgba(245, 168, 0, 0.85);
-    border-radius: 9999px;
-    content: "";
-  }
-
-  .board-mark::after {
-    position: absolute;
-    height: 0.62rem;
-    width: 0.62rem;
-    border-radius: 9999px;
-    background: var(--brand-paper);
-    box-shadow: 0 0 0 3px rgba(245, 168, 0, 0.18);
-    content: "";
-  }
-
   .board-hero {
     position: relative;
     overflow: hidden;

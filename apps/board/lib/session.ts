@@ -33,6 +33,14 @@ export function canReviewBoardAudit(member: BoardMember): boolean {
   return member.isAdmin;
 }
 
+/** User administration is a distinct named capability even though the current
+ * Board policy grants it to the same administrator-equivalent roles. Keeping
+ * the check named prevents future role-policy changes from being scattered
+ * across routes and components. */
+export function canManageBoardUsers(member: BoardMember): boolean {
+  return member.isAdmin;
+}
+
 export type BoardMemberState =
   | { status: "anonymous" }
   | { status: "restricted"; email: string }

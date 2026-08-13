@@ -55,6 +55,7 @@ describe("private board feature surface", () => {
 
     expect(routes.sort()).toEqual([
       "api/admin/audit/route.ts",
+      "api/admin/users/route.ts",
       "api/better-auth/[...all]/route.ts",
       "api/documents/[id]/download/route.ts",
       "api/documents/route.ts",

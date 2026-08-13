@@ -105,7 +105,9 @@ async function sendBetterAuthMagicLink({ email, url }: { email: string; url: str
     });
 
     const rejected = (result.rejected || []).filter(Boolean).map(String);
-    const pending = (result.pending || []).filter(Boolean).map(String);
+    const pending = ("pending" in result && Array.isArray(result.pending) ? result.pending : [])
+      .filter(Boolean)
+      .map(String);
     const failed = rejected.concat(pending);
 
     if (failed.length) {

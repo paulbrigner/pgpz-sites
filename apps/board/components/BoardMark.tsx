@@ -1,7 +1,13 @@
-// Board seal mark — a decorative tile in the PGPZ board identity: an evergreen
-// tile, a gold plain-ring motif and a paper centre dot. It carries no text and
-// no official Zcash roundel, so it stays decorative (aria-hidden) and needs no
-// external Logo link. The ring is a plain circle brand motif, not a roundel.
-export function BoardMark() {
-  return <span className="board-mark" aria-hidden="true" />;
+import Image from "next/image";
+
+export function BoardMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <Image
+      src="/brand/pgpz-primary-on-light.png"
+      alt=""
+      width={compact ? 104 : 124}
+      height={compact ? 47 : 56}
+      className={compact ? "h-[2.35rem] w-auto" : "h-12 w-auto"}
+    />
+  );
 }

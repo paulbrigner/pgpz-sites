@@ -36,6 +36,7 @@ const MODEL_NAMES = new Set([
   "better_auth_sessions",
   "better_auth_accounts",
   "better_auth_verifications",
+  "better_auth_passkeys",
 ]);
 const MAX_WRITE_ATTEMPTS = 4;
 const INDEX_OR_TTL_FIELDS = new Set([
@@ -45,6 +46,7 @@ const INDEX_OR_TTL_FIELDS = new Set([
   "identifier",
   "providerId",
   "accountId",
+  "credentialID",
   "userId",
   "expiresAt",
 ]);
@@ -99,7 +101,9 @@ function assertSupportedModel(model: string) {
 
 function indexedAttributes(model: string, data: AdapterRecord) {
   const userIdAttributes =
-    (model === "better_auth_sessions" || model === "better_auth_accounts") &&
+    (model === "better_auth_sessions" ||
+      model === "better_auth_accounts" ||
+      model === "better_auth_passkeys") &&
       stringValue(data.userId)
       ? {
           GSI2PK: `${modelType(model)}#userId#${stringValue(data.userId)}`,
@@ -129,6 +133,13 @@ function indexedAttributes(model: string, data: AdapterRecord) {
     return {
       ...userIdAttributes,
       GSI1PK: `${modelType(model)}#provider#${String(data.providerId)}#${String(data.accountId)}`,
+      GSI1SK: String(data.id),
+    };
+  }
+  if (model === "better_auth_passkeys" && data.credentialID) {
+    return {
+      ...userIdAttributes,
+      GSI1PK: `${modelType(model)}#credentialID#${String(data.credentialID)}`,
       GSI1SK: String(data.id),
     };
   }
@@ -289,7 +300,21 @@ function indexPartitionKeys(
       };
     }
   }
-  if (model === "better_auth_sessions" || model === "better_auth_accounts") {
+  if (model === "better_auth_passkeys") {
+    const values = conditionValues(condition("credentialID"));
+    if (values.length) {
+      return {
+        indexName,
+        partitionKeyAttribute: "GSI1PK",
+        partitionKeys: values.map((value) => `${prefix}#credentialID#${String(value)}`),
+      };
+    }
+  }
+  if (
+    model === "better_auth_sessions" ||
+    model === "better_auth_accounts" ||
+    model === "better_auth_passkeys"
+  ) {
     const userIdCondition = condition("userId");
     const userIds = conditionValues(userIdCondition);
     const operator = userIdCondition?.operator || "eq";

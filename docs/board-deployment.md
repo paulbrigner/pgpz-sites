@@ -14,7 +14,8 @@ sender.
 ## 1. DynamoDB table
 
 The versioned `PgpzBoardBackend` CloudFormation stack creates a dedicated
-`PGPZBoardNextAuth` table in the same region as the Amplify app. The Better
+`PGPZBoardNextAuth` table and retained `PGPZBoardAccess` registry in the same
+region as the Amplify app. The Better
 Auth adapter (`@pgpz/auth-dynamodb`) uses the same schema as Community and
 Coalition:
 
@@ -43,6 +44,13 @@ The default invocation is local-only and makes no AWS calls. The apply mode
 verifies the selected account, table status, TTL, point-in-time recovery, and
 deletion protection before reporting success.
 
+The access registry is KMS-encrypted, PITR-enabled, deletion-protected, and
+Retain-protected. It deliberately has no TTL. Its `Roster` index lists profiles
+without a scan; normalized email ownership is enforced by a conditionally
+created claim row; every create, role/status change, and session-revocation
+change writes an immutable revision. The web role receives no `DeleteItem` or
+`Scan` on this table.
+
 ## 2. Amplify application
 
 Create an Amplify application from the pgpz-sites monorepo with:
@@ -70,11 +78,16 @@ The `PgpzBoardBackend` stack creates the dedicated
 - `dynamodb` on `PGPZBoardNextAuth` and its indexes: `GetItem`, `PutItem`,
   `Query`, `Scan`, `UpdateItem`, `DeleteItem`, `TransactWriteItems` (no
   `DescribeTable`)
-- no other tables, buckets, or SES identities
+- no other application tables or buckets
+
+The same role has a separate `PGPZBoardAccess` statement limited to `GetItem`,
+`PutItem`, `Query`, and `TransactWriteItems` on the registry and its index.
 
 `Scan` is required for the adapter's safe fallback when a query cannot be
 served by the modeled indexes. Its resource remains restricted to the Board
-table. SES is not required — the portal ships with outbound email disabled.
+table. Authentication delivery is restricted to `ses:SendEmail` and
+`ses:SendRawEmail` against the `pgpz.org` identity; the Board role has no
+general-purpose sender permission.
 
 ## 3. Environment variables
 
@@ -86,13 +99,18 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `BETTER_AUTH_URL` | yes | `https://board.pgpz.org` |
 | `BETTER_AUTH_SECRET` | yes | ≥32 random bytes, board-only, never reused |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | yes | `https://board.pgpz.org` |
-| `NEXTAUTH_TABLE` | yes | `PGPZBoardNextAuth` |
+| `NEXTAUTH_TABLE` | yes | `PGPZBoardNextAuth`; also stores Board passkey rows under physical model `better_auth_passkeys` |
+| `BOARD_ACCESS_TABLE` | yes | `PGPZBoardAccess`; Board-only roles, status, email claims, and immutable revisions |
+| `BOARD_ACCESS_REGISTRY_ENABLED` | yes | Keep `false` until the roster migration is verified; then `true` makes the registry authoritative |
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
 | `BOARD_ADMIN_EMAILS` | yes | administrator allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` |
 | `BOARD_EXECUTIVE_DIRECTOR_EMAILS` | no | staff allowlist: the Executive Director gains portal access and administrator privileges **without** joining the Board roster; must be disjoint from `BOARD_MEMBER_EMAILS` |
 | `BOARD_LEGAL_COUNSEL_EMAILS` | no | staff allowlist: Legal Counsel gains the same admin-equivalent portal privileges (document management, audit review) **without** joining the Board roster; must be pairwise disjoint from `BOARD_MEMBER_EMAILS` and `BOARD_EXECUTIVE_DIRECTOR_EMAILS` |
-| `EMAIL_FROM` | no | unused until email delivery is added |
+| `BOARD_PASSWORDLESS_AUTH_ENABLED` | yes | `true` enables magic links and passkeys |
+| `BOARD_PASSWORD_AUTH_ENABLED` | transition only | Keep `true` until the verified password-removal cutover; then set `false` |
+| `EMAIL_TRANSPORT` | yes | `ses` is mandatory in production |
+| `EMAIL_FROM` | yes | Board-specific verified sender, e.g. `PGPZ Board <board@pgpz.org>` |
 
 `tooling/write-amplify-env.mjs board` fails the build if any required variable
 is missing. Both roster variables are intentionally required. An unset member
@@ -131,24 +149,71 @@ REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
   `@pgpz/auth-dynamodb` adapter reads, with Better Auth's own scrypt hash
   (`better-auth/crypto`), so sign-in works through the normal flow.
 
-Administrator authorization is environment-managed rather than stored in the
-user record. Add an existing roster email to `BOARD_ADMIN_EMAILS` and redeploy;
-the server derives `isAdmin` only after confirming active Board membership.
-To grant administrator access without Board membership, add the address to
-`BOARD_EXECUTIVE_DIRECTOR_EMAILS` or `BOARD_LEGAL_COUNSEL_EMAILS` instead;
-those rosters are checked first and each carries its own active membership and
-administrator grant and must be mutually disjoint.
+Before the access-registry migration, administrator authorization remains
+environment-managed. After the migration is verified, set
+`BOARD_ACCESS_REGISTRY_ENABLED=true`: the Board administration UI becomes the
+role/status authority and changes take effect without editing Amplify rosters
+or redeploying. Missing, invited, and deactivated registry records fail closed;
+there is no fallback to the legacy allowlists.
 
-## 5. Removing a director
+### Passwordless transition and cutover
 
-1. Remove the address from `BOARD_ADMIN_EMAILS`, then from
-   `BOARD_MEMBER_EMAILS` in Amplify (takes effect on
-   next deploy; until then the roster still admits them).
-2. Delete the account records (user + credential account) from
-   `PGPZBoardNextAuth`, e.g. `aws dynamodb delete-item` on
-   `pk=sk=BETTER_AUTH#better_auth_users#<id>` and
-   `pk=sk=BETTER_AUTH#better_auth_accounts#<id>`.
-3. Optionally rotate `BETTER_AUTH_SECRET` if the departure is sensitive.
+1. Verify the Board SES sender/domain, DKIM and DMARC; grant the Board Amplify
+   role only `ses:SendEmail` and `ses:SendRawEmail` against that identity.
+2. Deploy with both passwordless and password auth enabled. Confirm a magic
+   link request always returns the same generic response and expires after ten
+   minutes; confirm the stored verification identifier is hashed.
+3. Have each active user complete passwordless sign-in and register a passkey
+   where feasible. Passkey registration is session-required and WebAuthn user
+   verification is required.
+4. Verify recovery email ownership and encourage two passkeys for privileged
+   users. Review `magic_link_sent`, `passkey_registered`, `passkey_updated`, and
+   `passkey_removed` events in the Board audit ledger.
+5. Set `BOARD_PASSWORD_AUTH_ENABLED=false`, deploy, and revoke all existing
+   sessions. Confirm password endpoints reject sign-in while magic links and
+   passkeys continue to work.
+6. Run the separate credential-removal migration in dry-run mode and review
+   exact account targets and per-user session counts:
+
+   ```bash
+   BOARD_PASSWORD_AUTH_ENABLED=false NEXTAUTH_TABLE=PGPZBoardNextAuth \
+     npm run remove:board-password-credentials
+   ```
+
+   Apply only after the dry-run review:
+
+   ```bash
+   BOARD_PASSWORD_AUTH_ENABLED=false NEXTAUTH_TABLE=PGPZBoardNextAuth \
+     npm run remove:board-password-credentials -- \
+       --apply --confirm REMOVE_BOARD_PASSWORD_CREDENTIALS \
+       --actor-email operator@pgpz.org
+   ```
+
+   The script refuses any state other than explicit password disablement and
+   conditionally deletes only `providerId=credential` accounts plus each
+   affected user's current sessions, while appending the traceable Board audit
+   event in the same transaction. Its 97-delete per-user ceiling reserves three
+   transaction items for the immutable ledger append. Users, passkeys,
+   verifications, OAuth accounts, and existing audit records are never deletion
+   targets. Any partial multi-user failure is reported with the exact affected
+   account IDs; rerun dry-run before retrying.
+
+Rollback before credential removal is configuration-only: restore
+`BOARD_PASSWORD_AUTH_ENABLED=true` and redeploy. After credential removal,
+rollback requires explicitly reprovisioning credentials and is not automatic.
+
+## 5. Removing a Board user
+
+1. Use `/admin/users` and type the required confirmation to deactivate access.
+2. The access transition, immutable revision, session deletions, and audit-chain
+   append commit in one DynamoDB transaction. If any part fails, access is not
+   reported as changed.
+3. Preserve the identity, passkeys, access revisions, and audit history. The
+   normal Board workflow does not permanently delete people or governance
+   evidence.
+4. Remove the address from the legacy environment roster during later
+   configuration cleanup; while registry mode is enabled it is not an access
+   authority.
 
 ## 6. Verification after deploy
 
@@ -158,7 +223,11 @@ administrator grant and must be mutually disjoint.
   (regression-covered by `e2e/board-portal.spec.ts`).
 - Malicious `callbackUrl` values (`javascript:`, `//host`, absolute URLs)
   resolve to `/` instead of navigating.
-- Signing in with a roster email + provisioned password reaches the dashboard.
+- During transition, signing in with a roster email + provisioned password reaches the dashboard.
+- A magic-link request has a generic response for known, unknown, and delivery-failure cases.
+- A magic link is single-use, hashed at rest, and expires in ten minutes.
+- Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification.
+- `/account/security` requires a Board session and supports passkey registration/removal.
 - An email present in both roster variables sees the Board administrator badge
   and can reach `/admin`; ordinary directors receive a concealed 404 there.
 - An email on `BOARD_EXECUTIVE_DIRECTOR_EMAILS` signs in, sees the
@@ -218,7 +287,7 @@ constants — it lives in the CloudFormation parameters and the deployment recor
 
 ### Environment variables
 
-The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`,
+The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`, `BOARD_ACCESS_TABLE`,
 `BOARD_DOCUMENTS_STAGING_BUCKET`, `BOARD_DOCUMENTS_RETAINED_BUCKET`,
 `BOARD_AUDIT_ARCHIVE_BUCKET`, and `BOARD_KMS_KEY_ID`. `write-amplify-env.mjs
 board` materializes them; the build now rejects a deployment when any of these

@@ -1,7 +1,7 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { FolderOpen, ScrollText, ShieldCheck } from "lucide-react";
+import { FolderOpen, ScrollText, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
-import { requireBoardAdmin, canManageBoardDocuments, canReviewBoardAudit } from "@/lib/session";
+import { requireBoardAdmin, canManageBoardDocuments, canManageBoardUsers, canReviewBoardAudit } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -20,19 +20,14 @@ export default async function BoardAdminPage() {
         <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-[var(--foreground)] sm:text-5xl">
           Board administration
         </h1>
-        <p className="mt-4 text-base leading-7 text-[var(--muted)]">
-          Administrator access is active for <span className="font-semibold text-[var(--foreground)]">{admin.email}</span>.
-        </p>
+        <p className="mt-4 text-base leading-7 text-[var(--muted)]">Manage Board access and documents, and review recorded site activity.</p>
       </section>
 
       <Surface className="mt-10 max-w-3xl p-7 sm:p-8">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </span>
-        <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Administrator controls</h2>
-        <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-          The administrator boundary is enforced server-side. Director roster changes and credential provisioning remain guarded operational tasks; no browser-based account mutation API is exposed.
-        </p>
+        <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Available tools</h2>
         {canManageBoardDocuments(admin) ? (
           <Link
             href="/admin/documents"
@@ -49,6 +44,15 @@ export default async function BoardAdminPage() {
           >
             <ScrollText className="h-4 w-4" aria-hidden="true" />
             Review audit ledger
+          </Link>
+        ) : null}
+        {canManageBoardUsers(admin) ? (
+          <Link
+            href="/admin/users"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            <Users className="h-4 w-4" aria-hidden="true" />
+            Manage users
           </Link>
         ) : null}
       </Surface>
