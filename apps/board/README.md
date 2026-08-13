@@ -127,13 +127,22 @@ incident is resolved.
 
 ## Passwordless authentication
 
-Board supports 10-minute, single-use hashed magic links and WebAuthn passkeys.
-Passkey registration requires an authenticated session, uses the exact Board
-origin/RP ID (`board.pgpz.org` in production), and requires user verification.
-Users manage passkeys at `/account/security`. Passkey sign-in is the primary
-sign-in action; magic links remain available for onboarding and recovery. The
-dashboard prompts a user with zero passkeys to enroll, and user management
-reports passkey counts.
+Board requires a user-verified WebAuthn passkey before any private Board content
+is available. Passkey ceremonies use the exact Board origin/RP ID
+(`board.pgpz.org` in production), and both registration and authentication
+reject ceremonies that do not verify the user. A passkey-authenticated session
+is valid for up to 12 hours; document mutations, access changes, audit
+verification/export, and passkey changes require another passkey verification
+within the preceding 10 minutes.
+
+Ten-minute, single-use hashed magic links are limited to initial onboarding and
+controlled recovery. A magic link can open `/account/security`, but it cannot
+open Board content. Users must register and then verify a passkey before
+continuing. Users manage passkeys at `/account/security`; two passkeys are
+recommended, and the final passkey cannot be removed. Board Chair and Executive
+Director users can perform an audited passkey reset for a user who has lost all
+authenticators. The user then uses a magic link to enroll a replacement.
+Registration, removal, and administrative reset send security notifications.
 
 `BOARD_PASSWORD_AUTH_ENABLED=false` is the normal state. After it has been
 deployed and existing sessions have been revoked, remove legacy credential
@@ -154,7 +163,7 @@ transaction. The 97-delete ceiling reserves transaction capacity for that
 immutable audit evidence. The tool never targets users, passkeys,
 verifications, OAuth accounts, or existing audit records, and reports partial
 multi-user failures for a fresh dry-run before retry. Keep magic links
-available for onboarding and controlled passkey recovery.
+available only for onboarding and controlled passkey recovery.
 
 Production email uses the Board-specific SES identity through the Amplify
 compute role. Local development uses MailHog SMTP; no production SMTP password

@@ -13,7 +13,21 @@ export function createBoardPasskeyPlugin(baseUrl: string) {
     ...identity,
     rpName: "PGPZ Board",
     authenticatorSelection: { userVerification: "required" },
-    registration: { requireSession: true },
+    registration: {
+      requireSession: true,
+      afterVerification: ({ verification }) => {
+        if (!verification.registrationInfo?.userVerified) {
+          throw new Error("Passkey registration requires local user verification.");
+        }
+      },
+    },
+    authentication: {
+      afterVerification: ({ verification }) => {
+        if (!verification.authenticationInfo.userVerified) {
+          throw new Error("Passkey authentication requires local user verification.");
+        }
+      },
+    },
     schema: { passkey: { modelName: BOARD_PASSKEY_MODEL_NAME } },
   });
 }

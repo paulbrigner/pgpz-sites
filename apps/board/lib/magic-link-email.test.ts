@@ -6,6 +6,7 @@ describe("Board magic-link email", () => {
     const email = buildBoardMagicLinkEmail("https://board.pgpz.org/callback?a=1&b=<bad>");
     expect(email.subject).toContain("PGPZ Board");
     expect(email.text).toContain("expires in 10 minutes");
+    expect(email.text).toContain("passkey is required");
     expect(email.html).toContain("a=1&amp;b=&lt;bad&gt;");
     expect(email.html).not.toContain("<bad>");
   });

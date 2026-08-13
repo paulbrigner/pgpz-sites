@@ -153,15 +153,23 @@ there is no fallback to the legacy allowlists.
    `BOARD_PASSWORD_AUTH_ENABLED=false`. Confirm a magic-link request always
    returns the same generic response and expires after ten minutes; confirm the
    stored verification identifier is hashed.
-3. Passkey is the primary sign-in action. Magic link remains available for
-   onboarding and recovery. The dashboard prompts users with zero passkeys;
-   passkey registration is session-required and WebAuthn verification is required.
-4. Verify recovery email ownership and encourage two passkeys for privileged
-   users. Review `magic_link_sent`, `passkey_registered`, `passkey_updated`, and
-   `passkey_removed` events in the Board audit ledger.
-5. After deploying password disablement, revoke all existing sessions and
+3. Passkey is required for every user before private Board content is available.
+   Magic link is only an onboarding and controlled-recovery entry point: it can
+   open `/account/security`, but cannot satisfy Board-content authentication.
+   Registration and authentication must both complete WebAuthn user verification.
+4. Verify recovery email ownership and encourage every user to register two
+   passkeys. A passkey-authenticated session lasts up to 12 hours. Document
+   mutations, access changes, audit verification/export, and passkey changes
+   require a passkey verification no more than 10 minutes old. Review
+   `magic_link_sent`, `passkey_registered`, `passkey_updated`,
+   `passkey_removed`, and `user_passkeys_reset` in the Board audit ledger.
+5. If a user loses every authenticator, a Board Chair or Executive Director can
+   use `/admin/users` to perform the exact-confirmation passkey reset. The reset
+   atomically removes passkeys and sessions while appending its audit evidence;
+   the user then follows a magic link and enrolls a replacement passkey.
+6. After deploying password disablement, revoke all existing sessions and
    confirm password endpoints reject sign-in while magic links and passkeys work.
-6. Run the credential-removal migration in dry-run mode and review
+7. Run the credential-removal migration in dry-run mode and review
    exact account targets and per-user session counts:
 
    ```bash
@@ -216,8 +224,14 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
 - A magic-link request has a generic response for known, unknown, and delivery-failure cases.
 - A magic link is single-use, hashed at rest, and expires in ten minutes.
 - Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification.
-- `/account/security` requires a Board session and supports passkey registration/removal.
-- A user with no passkey sees an enrollment prompt; a user with a passkey does not.
+- A magic-link session can reach `/account/security` but is redirected there
+  from every private Board-content route until a passkey is registered and verified.
+- `/account/security` supports passkey registration/removal, recommends two
+  authenticators, and prevents removal of the final passkey.
+- A passkey-authenticated session expires after 12 hours; sensitive mutations
+  require a passkey verification no more than 10 minutes old.
+- A Board Chair or Executive Director can perform an audited administrative
+  passkey reset; the affected user receives a security notification.
 - The Board Chair sees the `Board Chair` badge and can manage documents, audit,
   and users; ordinary directors receive a concealed 404 on privileged routes.
 - An email on `BOARD_EXECUTIVE_DIRECTOR_EMAILS` signs in, sees the

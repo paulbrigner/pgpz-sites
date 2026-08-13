@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { KeyRound, RefreshCcw, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { buttonStyles } from "@pgpz/ui";
+import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 
 export type BoardManagedUser = {
   id: string;
@@ -45,6 +46,7 @@ function confirmationFor(action: string, user: BoardManagedUser) {
   if (action === "reactivate") return `REACTIVATE ${user.email}`;
   if (action === "revoke_sessions") return `REVOKE ${user.email}`;
   if (action === "set_role") return `CHANGE ROLE ${user.email}`;
+  if (action === "reset_passkeys") return `RESET PASSKEYS ${user.email}`;
   return "";
 }
 
@@ -94,7 +96,7 @@ export function BoardUserManager({
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/admin/users", {
+      const response = await fetchWithBoardStepUp("/api/admin/users", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(createForm),
@@ -114,7 +116,7 @@ export function BoardUserManager({
 
   const mutateUser = async (
     user: BoardManagedUser,
-    action: "set_role" | "deactivate" | "reactivate" | "revoke_sessions",
+    action: "set_role" | "deactivate" | "reactivate" | "revoke_sessions" | "reset_passkeys",
     role?: BoardManagedUser["role"],
   ) => {
     const expected = confirmationFor(action, user);
@@ -124,7 +126,7 @@ export function BoardUserManager({
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/admin/users", {
+      const response = await fetchWithBoardStepUp("/api/admin/users", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ userId: user.id, action, role, confirmation }),
@@ -210,6 +212,7 @@ export function BoardUserManager({
                     <div className="mt-5 flex flex-wrap items-end gap-3">
                       <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"><span>{user.name || user.email} role</span><select aria-label={`${user.name || user.email} role`} value={user.role === "admin" ? "chair" : user.role} disabled={isSelf || busy !== null} onChange={(event) => void mutateUser(user, "set_role", event.target.value as BoardManagedUser["role"])} className="h-10 rounded-xl border border-[var(--border-strong)] bg-white px-3 text-sm font-normal normal-case tracking-normal text-[var(--foreground)]">{assignableRoles.map((value) => <option key={value} value={value}>{roleLabels[value]}</option>)}</select></label>
                       <button type="button" disabled={busy !== null} onClick={() => void mutateUser(user, "revoke_sessions")} className={buttonStyles({ variant: "outline", size: "sm" })}><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Revoke sessions</button>
+                      <button type="button" disabled={isSelf || busy !== null || user.passkeyCount === 0} onClick={() => void mutateUser(user, "reset_passkeys")} className={buttonStyles({ variant: "outline", size: "sm" })}><KeyRound className="h-4 w-4" aria-hidden="true" /> Reset passkeys</button>
                       {user.status === "deactivated" ? <button type="button" disabled={busy !== null} onClick={() => void mutateUser(user, "reactivate")} className={buttonStyles({ variant: "outline", size: "sm" })}>Reactivate</button> : <button type="button" disabled={isSelf || busy !== null} onClick={() => void mutateUser(user, "deactivate")} className={buttonStyles({ variant: "outline", size: "sm" })}>Deactivate</button>}
                     </div>
                     {isSelf ? <p className="mt-3 text-xs text-[var(--muted)]">Your own role and access cannot be changed from this screen.</p> : null}

@@ -14,5 +14,11 @@ describe("Board passkey configuration", () => {
     expect(plugin.options?.schema?.passkey?.modelName).toBe(BOARD_PASSKEY_MODEL_NAME);
     expect(plugin.options?.authenticatorSelection?.userVerification).toBe("required");
     expect(plugin.options?.registration?.requireSession).toBe(true);
+    expect(() => plugin.options?.registration?.afterVerification?.({
+      verification: { registrationInfo: { userVerified: false } },
+    } as never)).toThrow(/local user verification/);
+    expect(() => plugin.options?.authentication?.afterVerification?.({
+      verification: { authenticationInfo: { userVerified: false } },
+    } as never)).toThrow(/local user verification/);
   });
 });
