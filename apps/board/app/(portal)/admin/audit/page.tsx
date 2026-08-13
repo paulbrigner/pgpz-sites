@@ -1,6 +1,6 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
 import { notFound } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleMinus, ShieldCheck } from "lucide-react";
 import { requireBoardAdministration, canReviewBoardAudit } from "@/lib/session";
 import { boardAuditLedger } from "@/lib/audit";
 
@@ -11,8 +11,16 @@ export const metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-const outcomeTone = (outcome: string) =>
-  outcome === "success" ? "success" : outcome === "denied" ? "warning" : "neutral";
+function OutcomeIcon({ outcome }: { outcome: string }) {
+  const Icon = outcome === "success" ? CircleCheck : outcome === "denied" ? CircleAlert : CircleMinus;
+  const color = outcome === "success" ? "text-emerald-700" : outcome === "denied" ? "text-amber-700" : "text-[var(--muted)]";
+  return (
+    <span className={`inline-flex h-5 w-5 items-center justify-center ${color}`} title={`Outcome: ${outcome}`}>
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      <span className="sr-only">Outcome: {outcome}</span>
+    </span>
+  );
+}
 
 export default async function BoardAuditPage() {
   const administrator = await requireBoardAdministration("/admin/audit");
@@ -50,8 +58,8 @@ export default async function BoardAuditPage() {
         ) : (
           <ul className="divide-y divide-[var(--border)]">
             {events.map((event) => (
-              <li key={event.eventId} className="grid gap-1 px-6 py-4 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center">
-                <Badge tone={outcomeTone(event.outcome)}>{event.outcome}</Badge>
+              <li key={event.eventId} className="grid gap-x-3 gap-y-1 px-6 py-4 sm:grid-cols-[1.25rem_minmax(0,1fr)_auto] sm:items-center">
+                <OutcomeIcon outcome={event.outcome} />
                 <div>
                   <p className="text-sm font-semibold text-[var(--foreground)]">
                     {event.category} · {event.action}
