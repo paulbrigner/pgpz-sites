@@ -105,6 +105,11 @@ function provisionBoard(email, password) {
   run("npx", ["tsx", ...args]);
 }
 
+function createBoardAccessTable() {
+  const script = resolve(ROOT, "apps/board/scripts/setup/create-access-table.mjs");
+  run("node", [script, "--region", REGION, "--access-table", "PGPZBoardAccess"]);
+}
+
 function parseArgs(argv) {
   const out = { app: null, password: null };
   for (let i = 0; i < argv.length; i += 1) {
@@ -139,6 +144,8 @@ function main() {
     // Always ensure the board auth table exists before provisioning.
     console.log(`\n[seed] Creating ${BOARD.table} table...`);
     createTables("community", BOARD.table);
+    console.log("\n[seed] Creating PGPZBoardAccess table...");
+    createBoardAccessTable();
     console.log("\n[seed] Provisioning board account for paul@paulbrigner.com...");
     provisionBoard(email, password);
   } else {

@@ -38,8 +38,7 @@ export default async function AdminDocumentsPage() {
           Manage documents
         </h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-          Upload founding documents, add versions, restore prior versions, and archive. Every
-          change is written to the immutable audit ledger.
+          Add Board records, publish updated versions, or archive documents that are no longer current.
         </p>
       </section>
       <DocumentManager documents={serialized} />

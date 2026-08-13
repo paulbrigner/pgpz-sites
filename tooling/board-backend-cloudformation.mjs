@@ -4,6 +4,7 @@ export const BOARD_BACKEND = Object.freeze({
   tableName: "PGPZBoardNextAuth",
   documentsTableName: "PGPZBoardDocuments",
   auditTableName: "PGPZBoardAuditLog",
+  accessTableName: "PGPZBoardAccess",
   computeRoleName: "PgpzBoardAmplifyMainCompute",
   auditArchiverRoleName: "PgpzBoardAuditArchiver",
 });
@@ -31,6 +32,15 @@ export const BOARD_DOCUMENTS_ACTIONS = Object.freeze([
 /** Audit table: append-only. Only the immutable Put and read/query actions —
  * deliberately NO UpdateItem / DeleteItem / Scan. */
 export const BOARD_AUDIT_ACTIONS = Object.freeze([
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:Query",
+  "dynamodb:TransactWriteItems",
+]);
+
+/** Board access registry: indexed reads and conditional/transactional writes.
+ * Profiles are mutable, but revisions are immutable by application contract. */
+export const BOARD_ACCESS_ACTIONS = Object.freeze([
   "dynamodb:GetItem",
   "dynamodb:PutItem",
   "dynamodb:Query",
@@ -269,6 +279,42 @@ export function buildBoardBackendTemplate() {
           DeletionProtectionEnabled: true,
           SSESpecification: { SSEEnabled: true, SSEType: "KMS", KMSMasterKeyId: { Ref: "BoardKmsKey" } },
           StreamSpecification: { StreamViewType: "NEW_AND_OLD_IMAGES" },
+          Tags: confidentialTags,
+        },
+      },
+
+      // ---- Board-owned access registry: profile + immutable revisions, NO TTL ----
+      BoardAccessTable: {
+        Type: "AWS::DynamoDB::Table",
+        DeletionPolicy: "Retain",
+        UpdateReplacePolicy: "Retain",
+        Properties: {
+          TableName: BOARD_BACKEND.accessTableName,
+          BillingMode: "PAY_PER_REQUEST",
+          AttributeDefinitions: [
+            { AttributeName: "pk", AttributeType: "S" },
+            { AttributeName: "sk", AttributeType: "S" },
+            { AttributeName: "rosterPk", AttributeType: "S" },
+            { AttributeName: "rosterSk", AttributeType: "S" },
+          ],
+          KeySchema: [
+            { AttributeName: "pk", KeyType: "HASH" },
+            { AttributeName: "sk", KeyType: "RANGE" },
+          ],
+          GlobalSecondaryIndexes: [
+            {
+              IndexName: "Roster",
+              KeySchema: [
+                { AttributeName: "rosterPk", KeyType: "HASH" },
+                { AttributeName: "rosterSk", KeyType: "RANGE" },
+              ],
+              Projection: { ProjectionType: "ALL" },
+            },
+          ],
+          PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+          DeletionProtectionEnabled: true,
+          SSESpecification: { SSEEnabled: true, SSEType: "KMS", KMSMasterKeyId: { Ref: "BoardKmsKey" } },
+          // Deliberately no TimeToLiveSpecification: access history is retained.
           Tags: confidentialTags,
         },
       },
@@ -618,6 +664,15 @@ export function buildBoardBackendTemplate() {
                     ],
                   },
                   {
+                    Sid: "BoardAccessRegistry",
+                    Effect: "Allow",
+                    Action: [...BOARD_ACCESS_ACTIONS],
+                    Resource: [
+                      { "Fn::GetAtt": ["BoardAccessTable", "Arn"] },
+                      { "Fn::Sub": "${BoardAccessTable.Arn}/index/*" },
+                    ],
+                  },
+                  {
                     Sid: "StagingPutGetDelete",
                     Effect: "Allow",
                     Action: ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
@@ -643,6 +698,20 @@ export function buildBoardBackendTemplate() {
                       { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardRetainedBucket}/*" },
                       { "Fn::Sub": "arn:${AWS::Partition}:s3:::${BoardAuditArchiveBucket}/*" },
                     ],
+                  },
+                ],
+              },
+            },
+            {
+              PolicyName: "BoardAuthenticationEmail",
+              PolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Sid: "BoardSenderOnly",
+                    Effect: "Allow",
+                    Action: ["ses:SendEmail", "ses:SendRawEmail"],
+                    Resource: { "Fn::Sub": "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/pgpz.org" },
                   },
                 ],
               },
@@ -681,6 +750,20 @@ export function buildBoardBackendTemplate() {
           Dimensions: [{ Name: "TableName", Value: BOARD_BACKEND.auditTableName }],
         },
       },
+      BoardAccessTableErrorAlarm: {
+        Type: "AWS::CloudWatch::Alarm",
+        Properties: {
+          AlarmName: "PgpzBoardAccessTableSystemErrors",
+          ComparisonOperator: "GreaterThanThreshold",
+          EvaluationPeriods: 1,
+          Threshold: 0,
+          MetricName: "SystemErrors",
+          Namespace: "AWS/DynamoDB",
+          Statistic: "Sum",
+          Period: 300,
+          Dimensions: [{ Name: "TableName", Value: BOARD_BACKEND.accessTableName }],
+        },
+      },
     },
     Outputs: {
       TableName: { Value: { Ref: "BoardAuthTable" } },
@@ -689,6 +772,8 @@ export function buildBoardBackendTemplate() {
       DocumentsTableArn: { Value: { "Fn::GetAtt": ["BoardDocumentsTable", "Arn"] } },
       AuditTableName: { Value: { Ref: "BoardAuditLogTable" } },
       AuditTableArn: { Value: { "Fn::GetAtt": ["BoardAuditLogTable", "Arn"] } },
+      AccessTableName: { Value: { Ref: "BoardAccessTable" } },
+      AccessTableArn: { Value: { "Fn::GetAtt": ["BoardAccessTable", "Arn"] } },
       AuditTableStreamArn: { Value: { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] } },
       StagingBucket: { Value: { Ref: "BoardStagingBucket" } },
       RetainedBucket: { Value: { Ref: "BoardRetainedBucket" } },
@@ -718,6 +803,7 @@ export function buildBoardBackendStackPlan({
     tableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.tableName}`,
     documentsTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.documentsTableName}`,
     auditTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.auditTableName}`,
+    accessTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.accessTableName}`,
     computeRoleArn: `arn:aws:iam::${accountId}:role/${BOARD_BACKEND.computeRoleName}`,
     auditArchiverRoleArn: `arn:aws:iam::${accountId}:role/${BOARD_BACKEND.auditArchiverRoleName}`,
     template: buildBoardBackendTemplate(),

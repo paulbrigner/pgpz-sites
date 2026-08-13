@@ -29,7 +29,9 @@ export function authenticatedActor(
     userId: member.id,
     email: member.email,
     role: member.role,
-    capabilities: member.isAdmin ? ["manageBoardDocuments", "reviewBoardAudit"] : [],
+    capabilities: member.isAdmin
+      ? ["manageBoardDocuments", "reviewBoardAudit", "manageBoardUsers"]
+      : [],
   };
 }
 

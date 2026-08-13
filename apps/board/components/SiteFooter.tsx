@@ -13,12 +13,10 @@ export async function SiteFooter() {
     <footer className="border-t border-[var(--border)] bg-white/70 py-10">
       <Container className="flex flex-col gap-7 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-3">
-          <BoardMark />
+          <BoardMark compact />
           <div>
             <p className="text-sm font-bold text-[var(--foreground)]">{boardSiteConfig.legal.entityName}</p>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-              Private portal · Authorized board members only · Not indexed
-            </p>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">Board portal</p>
           </div>
         </div>
         {signedIn ? (

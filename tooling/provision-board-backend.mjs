@@ -205,9 +205,14 @@ export function main(argv = process.argv.slice(2)) {
     if (outputs.ComputeRoleArn !== plan.computeRoleArn) {
       throw new Error("CloudFormation returned an unexpected Board compute role");
     }
+    if (outputs.AccessTableName !== plan.accessTableName || outputs.AccessTableArn !== plan.accessTableArn) {
+      throw new Error("CloudFormation returned an unexpected Board access registry");
+    }
     const requiredGovernanceOutputs = [
       "DocumentsTableName",
       "AuditTableName",
+      "AccessTableName",
+      "AccessTableArn",
       "StagingBucket",
       "RetainedBucket",
       "AuditArchiveBucket",
@@ -252,7 +257,7 @@ export function main(argv = process.argv.slice(2)) {
       throw new Error("The deployed Board table did not pass protection checks");
     }
 
-    for (const governanceTableName of [outputs.DocumentsTableName, outputs.AuditTableName]) {
+    for (const governanceTableName of [outputs.DocumentsTableName, outputs.AuditTableName, outputs.AccessTableName]) {
       const governanceTable = parseAwsJson(
         runAws(
           baseArguments,

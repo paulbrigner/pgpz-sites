@@ -1,5 +1,6 @@
 import { toNextJsHandler } from "better-auth/next-js";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { anonymousClaimedActor, auditBestEffort, authenticatedActor } from "@/lib/audit";
 import { sanitizeClaimedEmail, shouldRecordFailureAudit } from "@/lib/failed-signin-audit";
@@ -38,6 +39,17 @@ function pathOf(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   const path = pathOf(request);
+
+  // Never disclose whether the email maps to a Board account or whether the
+  // provider accepted the message. Delivery success/failure is retained in the
+  // private audit ledger by sendBoardMagicLink.
+  if (path.endsWith("/sign-in/magic-link")) {
+    const response = await handlers.POST(request);
+    if (response.status >= 400) {
+      return NextResponse.json({ status: true }, { status: 200 });
+    }
+    return response;
+  }
 
   // Failed email/password sign-in: attribute via the claimed email only.
   if (path.endsWith("/sign-in/email")) {
@@ -79,6 +91,31 @@ export async function POST(request: NextRequest) {
           isAdmin: false,
         }),
         requestId: request.headers.get("x-request-id") ?? undefined,
+      });
+    }
+    return response;
+  }
+
+  if (
+    path.endsWith("/passkey/verify-registration") ||
+    path.endsWith("/passkey/delete-passkey") ||
+    path.endsWith("/passkey/update-passkey")
+  ) {
+    const session = await auth.api.getSession({ headers: request.headers }).catch(() => null);
+    const response = await handlers.POST(request);
+    const user = session?.user;
+    const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
+    if (response.ok && typeof user?.id === "string" && email) {
+      const action = path.endsWith("verify-registration")
+        ? "passkey_registered"
+        : path.endsWith("delete-passkey")
+          ? "passkey_removed"
+          : "passkey_updated";
+      await auditBestEffort({
+        category: "account",
+        action,
+        outcome: "success",
+        actor: authenticatedActor({ id: user.id, email, role: "member", isAdmin: false }),
       });
     }
     return response;

@@ -60,9 +60,14 @@ test("limits the Amplify role to the Board table and its indexes", () => {
     { "Fn::Sub": "${BoardAuthTable.Arn}/index/*" },
   ]);
   const policy = JSON.stringify(role.Policies);
-  // No cross-app resources and no other AWS services. The role's s3 access
-  // (added in Phase 3) must be locked to Board staging/retained buckets only.
-  assert.doesNotMatch(policy, /ses:|PGPZCommunity|PGPZCoalition/);
+  // No cross-app resources. Storage and authentication email remain locked to
+  // Board-owned resources and the exact PGPZ SES identity.
+  assert.doesNotMatch(policy, /PGPZCommunity|PGPZCoalition/);
+  const emailPolicy = role.Policies.find((candidate) => candidate.PolicyName === "BoardAuthenticationEmail");
+  assert.deepEqual(emailPolicy.PolicyDocument.Statement[0].Action, ["ses:SendEmail", "ses:SendRawEmail"]);
+  assert.deepEqual(emailPolicy.PolicyDocument.Statement[0].Resource, {
+    "Fn::Sub": "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/pgpz.org",
+  });
   const s3AllowResources = JSON.stringify(
     role.Policies.flatMap((policyDoc) => policyDoc.PolicyDocument.Statement)
       .filter((statement) => statement.Effect === "Allow" && statement.Action.some((action) => typeof action === "string" && action.startsWith("s3:")))
@@ -123,6 +128,16 @@ test("provisions dedicated governance and audit tables with retention protection
   assert.equal(audit.Properties.DeletionProtectionEnabled, true);
   assert.deepEqual(audit.Properties.StreamSpecification, { StreamViewType: "NEW_AND_OLD_IMAGES" });
   assert.equal(audit.Properties.TimeToLiveSpecification, undefined);
+
+  const access = resources.BoardAccessTable;
+  assert.equal(access.Properties.TableName, "PGPZBoardAccess");
+  assert.equal(access.DeletionPolicy, "Retain");
+  assert.equal(access.UpdateReplacePolicy, "Retain");
+  assert.equal(access.Properties.DeletionProtectionEnabled, true);
+  assert.deepEqual(access.Properties.PointInTimeRecoverySpecification, { PointInTimeRecoveryEnabled: true });
+  assert.deepEqual(access.Properties.SSESpecification.KMSMasterKeyId, { Ref: "BoardKmsKey" });
+  assert.equal(access.Properties.TimeToLiveSpecification, undefined);
+  assert.deepEqual(access.Properties.GlobalSecondaryIndexes.map((index) => index.IndexName), ["Roster"]);
 });
 
 test("uses a Board-only KMS key with rotation for docs, audit, and all buckets", () => {
@@ -135,6 +150,7 @@ test("uses a Board-only KMS key with rotation for docs, audit, and all buckets",
   const refs = [
     resources.BoardDocumentsTable.Properties.SSESpecification.KMSMasterKeyId,
     resources.BoardAuditLogTable.Properties.SSESpecification.KMSMasterKeyId,
+    resources.BoardAccessTable.Properties.SSESpecification.KMSMasterKeyId,
     resources.BoardRetainedBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
     resources.BoardStagingBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
     resources.BoardAuditArchiveBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
@@ -215,6 +231,11 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   assert.ok(!documents.Action.includes("dynamodb:DeleteItem"));
   assert.ok(!documents.Action.includes("dynamodb:Scan"));
 
+  const access = statements.find((statement) => statement.Sid === "BoardAccessRegistry");
+  assert.ok(access.Action.includes("dynamodb:TransactWriteItems"));
+  assert.ok(!access.Action.includes("dynamodb:DeleteItem"));
+  assert.ok(!access.Action.includes("dynamodb:Scan"));
+
   const staging = statements.find((statement) => statement.Sid === "StagingPutGetDelete");
   assert.ok(staging.Action.includes("s3:DeleteObject"));
 
@@ -231,13 +252,14 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   // The web runtime may NEVER write to the WORM archive (only the Deny references it).
   const allowStatementJson = JSON.stringify(statements.filter((statement) => statement.Effect === "Allow"));
   assert.doesNotMatch(allowStatementJson, /BoardAuditArchiveBucket/);
-  assert.doesNotMatch(allowPolicy, /ses:|PGPZCommunity|PGPZCoalition/);
+  assert.doesNotMatch(allowPolicy, /PGPZCommunity|PGPZCoalition/);
 });
 
 test("exposes governance resource names and arns from the stack plan", () => {
   const plan = buildBoardBackendStackPlan({ accountId: "123456789012" });
   assert.equal(plan.documentsTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardDocuments");
   assert.equal(plan.auditTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardAuditLog");
+  assert.equal(plan.accessTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardAccess");
   assert.equal(plan.auditArchiverRoleArn, "arn:aws:iam::123456789012:role/PgpzBoardAuditArchiver");
-  assert.match(JSON.stringify(plan.template.Outputs), /DocumentsTableName|AuditTableName|RetainedBucket|AuditArchiveBucket|AuditArchiverRoleArn/);
+  assert.match(JSON.stringify(plan.template.Outputs), /DocumentsTableName|AuditTableName|AccessTableName|RetainedBucket|AuditArchiveBucket|AuditArchiverRoleArn/);
 });

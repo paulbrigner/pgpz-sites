@@ -84,16 +84,16 @@ test.describe("board portal sign-in callback validation", () => {
     test(`resolves ${query} to ${expected}`, async ({ page }) => {
       await page.goto(`/signin?${query}`);
 
-      const form = page.locator("form[data-safe-callback]");
-      await expect(form).toBeVisible();
-      await expect(form).toHaveAttribute("data-safe-callback", expected);
+      const signInControls = page.locator("[data-safe-callback]");
+      await expect(signInControls).toBeVisible();
+      await expect(signInControls).toHaveAttribute("data-safe-callback", expected);
     });
   }
 
   test("resolves missing callbacks to the dashboard root", async ({ page }) => {
     await page.goto("/signin");
 
-    await expect(page.locator("form[data-safe-callback]")).toHaveAttribute("data-safe-callback", "/");
+    await expect(page.locator("[data-safe-callback]")).toHaveAttribute("data-safe-callback", "/");
   });
 });
 

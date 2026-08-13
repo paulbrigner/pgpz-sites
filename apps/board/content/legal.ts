@@ -48,8 +48,9 @@ export const boardPrivacy: BoardLegalDocument = {
     {
       title: "Account data",
       paragraphs: [
-        "The portal stores only the information needed to sign directors in: name, email address, and a password hash. Password hashes use the Better Auth scrypt format and are never stored or transmitted in plain text.",
-        "Authenticated access is tracked with session records that carry the director's user identity and a signed, expiring session token. Session records are deleted when the director signs out voluntarily or when an administrator rotates their password.",
+        "The portal stores only the information needed to authorize and sign users in: name, email address, Board role and access status, and authentication records. Magic-link tokens are hashed and expire after ten minutes. Passkey records contain the public credential material and device metadata required by WebAuthn; the corresponding private key remains with the user's authenticator.",
+        "During the passwordless transition, an existing account may also retain a Better Auth scrypt password hash. Passwords will be removed after the guarded cutover, once every active user has verified passwordless access.",
+        "Authenticated access is tracked with session records carrying the user's stable identity and a signed, expiring token. Sessions are deleted on sign-out, administrator revocation, or access deactivation.",
       ],
     },
     {
@@ -73,9 +74,9 @@ export const boardPrivacy: BoardLegalDocument = {
       ],
     },
     {
-      title: "No marketing delivery",
+      title: "Service email only",
       paragraphs: [
-        "The portal does not send newsletters, invitations, or marketing email. Its initial deployment has outbound email delivery disabled entirely.",
+        "The portal sends only authentication and account-recovery messages needed to operate Board access. It does not send newsletters or marketing email.",
       ],
     },
     {

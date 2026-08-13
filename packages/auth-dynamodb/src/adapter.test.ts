@@ -99,6 +99,7 @@ describe("injected Better Auth DynamoDB adapter contract", () => {
       session: { modelName: "better_auth_sessions" },
       account: { modelName: "better_auth_accounts" },
       verification: { modelName: "better_auth_verifications" },
+      passkey: { modelName: "better_auth_passkeys" },
     } as any);
 
     const created = await adapter.create({
@@ -216,6 +217,85 @@ describe("injected Better Auth DynamoDB adapter contract", () => {
     expect(fake.client.scan).not.toHaveBeenCalled();
   });
 
+  it("indexes passkeys by credential ID and user ID while preserving credential data on updates", async () => {
+    const adapter = createBetterAuthAdapterImplementation({
+      ...config(),
+      indexName: "AuthLookupIndex",
+      userIdIndexName: "AuthUserIndex",
+    });
+    await adapter.create({
+      model: "better_auth_passkeys",
+      data: {
+        id: "passkey-1",
+        userId: "user-1",
+        credentialID: "credential-1",
+        publicKey: "public-key-1",
+        counter: 0,
+        deviceType: "singleDevice",
+        backedUp: false,
+        transports: "internal,hybrid",
+      },
+    });
+
+    await expect(adapter.findOne<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "credentialID", value: "credential-1" }],
+    })).resolves.toMatchObject({
+      id: "passkey-1",
+      publicKey: "public-key-1",
+      counter: 0,
+      deviceType: "singleDevice",
+      backedUp: false,
+      transports: "internal,hybrid",
+    });
+    await expect(adapter.findMany<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "userId", value: "user-1" }],
+    })).resolves.toEqual([expect.objectContaining({ id: "passkey-1" })]);
+    expect(fake.client.query).toHaveBeenCalledWith(expect.objectContaining({
+      IndexName: "AuthLookupIndex",
+      ExpressionAttributeNames: { "#indexpk": "GSI1PK" },
+    }));
+    expect(fake.client.query).toHaveBeenCalledWith(expect.objectContaining({
+      IndexName: "AuthUserIndex",
+      ExpressionAttributeNames: { "#indexpk": "GSI2PK" },
+    }));
+    expect(fake.client.scan).not.toHaveBeenCalled();
+    expect(Array.from(fake.state.items.values())[0]).toMatchObject({
+      GSI1PK: "BETTER_AUTH#better_auth_passkeys#credentialID#credential-1",
+      GSI2PK: "BETTER_AUTH#better_auth_passkeys#userId#user-1",
+    });
+
+    await adapter.update({
+      model: "better_auth_passkeys",
+      where: [{ field: "id", value: "passkey-1" }],
+      update: { counter: 1, name: "Primary passkey" },
+    });
+    await expect(adapter.findOne<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "credentialID", value: "credential-1" }],
+    })).resolves.toMatchObject({
+      id: "passkey-1",
+      publicKey: "public-key-1",
+      counter: 1,
+      name: "Primary passkey",
+    });
+
+    await adapter.update({
+      model: "better_auth_passkeys",
+      where: [{ field: "id", value: "passkey-1" }],
+      update: { credentialID: "credential-2" },
+    });
+    await expect(adapter.findOne({
+      model: "better_auth_passkeys",
+      where: [{ field: "credentialID", value: "credential-1" }],
+    })).resolves.toBeNull();
+    await expect(adapter.findOne<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "credentialID", value: "credential-2" }],
+    })).resolves.toMatchObject({ publicKey: "public-key-1", counter: 1 });
+  });
+
   it.each([
     {
       label: "sessions",
@@ -233,6 +313,15 @@ describe("injected Better Auth DynamoDB adapter contract", () => {
         { id: "account-1", providerId: "github", accountId: "github-1", userId: "user-1" },
         { id: "account-2", providerId: "google", accountId: "google-1", userId: "user-1" },
         { id: "account-3", providerId: "github", accountId: "github-2", userId: "user-2" },
+      ],
+    },
+    {
+      label: "passkeys",
+      model: "better_auth_passkeys",
+      records: [
+        { id: "passkey-1", credentialID: "credential-1", userId: "user-1" },
+        { id: "passkey-2", credentialID: "credential-2", userId: "user-1" },
+        { id: "passkey-3", credentialID: "credential-3", userId: "user-2" },
       ],
     },
   ])("uses the sparse reverse-user GSI without scans for paginated $label findMany/deleteMany", async ({

@@ -361,6 +361,14 @@ describeWithDynamoDB("Better Auth adapter against an AWS-compatible DynamoDB end
         { id: "reverse-account-3", providerId: "github", accountId: "reverse-github-2", userId: "reverse-user-2" },
       ],
     },
+    {
+      model: "better_auth_passkeys",
+      records: [
+        { id: "reverse-passkey-1", credentialID: "reverse-credential-1", userId: "reverse-user-1" },
+        { id: "reverse-passkey-2", credentialID: "reverse-credential-2", userId: "reverse-user-1" },
+        { id: "reverse-passkey-3", credentialID: "reverse-credential-3", userId: "reverse-user-2" },
+      ],
+    },
   ])("uses paginated GSI2 userId queries for $model findMany/deleteMany", async ({
     model,
     records,
@@ -405,6 +413,65 @@ describeWithDynamoDB("Better Auth adapter against an AWS-compatible DynamoDB end
       model,
       where: [{ field: "userId", value: "reverse-user-2" }],
     })).resolves.toEqual([expect.objectContaining({ id: records[2].id })]);
+  });
+
+  it("persists passkey fields, uses credential lookup, and updates the signature counter", async () => {
+    const metrics = { query: 0, scan: 0 };
+    const instrumentedClient = {
+      get: (input: any) => documentClient.get(input),
+      put: (input: any) => documentClient.put(input),
+      query: (input: any) => {
+        metrics.query += 1;
+        return documentClient.query(input);
+      },
+      scan: (input: any) => {
+        metrics.scan += 1;
+        return documentClient.scan(input);
+      },
+      delete: (input: any) => documentClient.delete(input),
+      update: (input: any) => documentClient.update(input),
+    };
+    const adapter = createBetterAuthAdapterImplementation({
+      documentClient: instrumentedClient,
+      tableName,
+    });
+    await adapter.create({
+      model: "better_auth_passkeys",
+      data: {
+        id: "integration-passkey",
+        userId: "integration-passkey-user",
+        credentialID: "integration-credential",
+        publicKey: "integration-public-key",
+        counter: 0,
+        deviceType: "multiDevice",
+        backedUp: true,
+      },
+    });
+
+    await expect(adapter.findOne<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "credentialID", value: "integration-credential" }],
+    })).resolves.toMatchObject({
+      publicKey: "integration-public-key",
+      counter: 0,
+      deviceType: "multiDevice",
+      backedUp: true,
+    });
+    expect(metrics.query).toBeGreaterThan(0);
+    expect(metrics.scan).toBe(0);
+
+    await adapter.update({
+      model: "better_auth_passkeys",
+      where: [{ field: "id", value: "integration-passkey" }],
+      update: { counter: 7 },
+    });
+    await expect(adapter.findMany<Record<string, any>>({
+      model: "better_auth_passkeys",
+      where: [{ field: "userId", value: "integration-passkey-user" }],
+    })).resolves.toEqual([
+      expect.objectContaining({ publicKey: "integration-public-key", counter: 7 }),
+    ]);
+    expect(metrics.scan).toBe(0);
   });
 
   it("shares the durable rate-limit counter across storage instances", async () => {

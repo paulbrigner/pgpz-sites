@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Archive, BookOpen, Download, FileCheck2, Package, ShieldCheck } from "lucide-react";
+import { Archive, BookOpen, Download, Package } from "lucide-react";
 import { Badge, Container, Surface } from "@pgpz/ui";
 import { formatBytes, type DocumentItem } from "@pgpz/document-vault";
 import { requireBoardMember } from "@/lib/session";
@@ -30,12 +30,18 @@ function DownloadCard({ entry, document }: { entry: BrandLibraryEntry; document?
           <p className="mb-3 text-xs text-[var(--muted)]">
             Current vault version · {formatBytes(document.currentVersion.byteLength)}
           </p>
-          <Link
+          <a
             href={`/api/documents/${document.documentId}/download`}
             className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
             {entry.kind === "package" ? "Download package" : "View guidelines"}
+          </a>
+          <Link
+            href={`/documents?document=${encodeURIComponent(document.documentId)}&history=1#document-${encodeURIComponent(document.documentId)}`}
+            className="ml-4 inline-flex text-xs font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4 hover:decoration-[var(--primary)] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          >
+            View record &amp; version history
           </Link>
         </div>
       ) : (
@@ -52,7 +58,6 @@ export default async function BrandMarketingPage() {
   const documents = await boardDocumentRepository.listDocuments({ category: BRAND_DOCUMENT_CATEGORY, status: "active" });
   const byTitle = new Map(documents.map((document) => [document.title, document]));
   const primaryEntries = BRAND_LIBRARY_ENTRIES.filter((entry) => entry.kind === "guidelines" || entry.kind === "package");
-  const supportingEntries = BRAND_LIBRARY_ENTRIES.filter((entry) => entry.kind === "governance" || entry.kind === "verification");
 
   return (
     <Container className="py-12 sm:py-16">
@@ -62,7 +67,7 @@ export default async function BrandMarketingPage() {
           Brand &amp; marketing
         </h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--muted)]">
-          The current PGPZ identity and social-media systems, organized for practical use. Every file on this page is the same retained, versioned record preserved in the Board Document Library.
+          Current identity guidelines and production packages for PGPZ communications.
         </p>
       </section>
 
@@ -78,47 +83,8 @@ export default async function BrandMarketingPage() {
         </div>
       </section>
 
-      <section className="mt-12 max-w-6xl" aria-labelledby="brand-governance-records">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
-          <h2 id="brand-governance-records" className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">
-            Governance and integrity records
-          </h2>
-        </div>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--muted)]">
-          Trademark-use records, manifests, and checksums are retained alongside the packages so the Board can confirm scope and verify exact contents.
-        </p>
-        <ul className="mt-5 grid gap-3 md:grid-cols-2">
-          {supportingEntries.map((entry) => {
-            const document = byTitle.get(entry.title);
-            return (
-              <li key={entry.key}>
-                <Surface className="flex h-full items-start justify-between gap-4 p-5">
-                  <div className="flex items-start gap-3">
-                    <FileCheck2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden="true" />
-                    <div>
-                      <h3 className="font-semibold text-[var(--foreground)]">{entry.title}</h3>
-                      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{entry.description}</p>
-                    </div>
-                  </div>
-                  {document ? (
-                    <Link
-                      href={`/api/documents/${document.documentId}/download`}
-                      aria-label={`Download ${entry.title}`}
-                      className="shrink-0 rounded-full border border-[var(--border-strong)] bg-white p-2 text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-                    >
-                      <Download className="h-4 w-4" aria-hidden="true" />
-                    </Link>
-                  ) : null}
-                </Surface>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <p className="mt-10 text-sm text-[var(--muted)]">
-        Need version history or another governance document? <Link href="/documents" className="font-semibold text-[var(--primary)] underline-offset-4 hover:underline">Open the full Document Library</Link>.
+      <p className="mt-8 text-sm text-[var(--muted)]">
+        Looking for manifests, checksums, trademark records, or another Board document? <Link href="/documents" className="font-semibold text-[var(--primary)] underline-offset-4 hover:underline">Open the Document Library</Link>.
       </p>
     </Container>
   );

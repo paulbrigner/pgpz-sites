@@ -32,7 +32,7 @@ export function SignOutButton({ label = "Sign out" }: { label?: string }) {
         type="button"
         onClick={handleSignOut}
         disabled={signingOut}
-        className={buttonStyles({ variant: "outline", size: "sm", className: "disabled:opacity-60" })}
+        className={buttonStyles({ variant: "outline", size: "sm", className: "whitespace-nowrap disabled:opacity-60" })}
       >
         <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
         {signingOut ? "Signing out…" : label}

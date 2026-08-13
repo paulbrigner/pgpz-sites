@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { Container, Surface } from "@pgpz/ui";
 import { SignInForm } from "./signin-form";
+import { BOARD_PASSWORDLESS_AUTH_ENABLED, BOARD_PASSWORD_AUTH_ENABLED } from "@/lib/config";
 
 export const metadata = {
   title: "Sign in",
@@ -19,11 +20,11 @@ export default function SignInPage() {
             Board sign in
           </h1>
           <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-            Access is restricted to current PGPZ Board of Directors members.
+            Use a one-time email link or a registered passkey.
           </p>
         </div>
         <Suspense>
-          <SignInForm />
+          <SignInForm passwordlessEnabled={BOARD_PASSWORDLESS_AUTH_ENABLED} passwordEnabled={BOARD_PASSWORD_AUTH_ENABLED} />
         </Suspense>
       </Surface>
     </Container>

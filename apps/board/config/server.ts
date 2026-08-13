@@ -11,6 +11,7 @@ import {
   boardSiteConfig,
 } from "./site";
 import { createBoardMembershipAdapter } from "@/lib/membership";
+import { createBoardAccessMembershipAdapter } from "@/lib/board-access-membership";
 import { documentClient } from "@/lib/dynamodb";
 
 const inertEmailTransport = Object.freeze({ mode: "disabled" });
@@ -40,7 +41,10 @@ export function createBoardServerConfig(env: BoardEnvironment = process.env) {
   });
   const tableName = env.NEXTAUTH_TABLE?.trim() || "PGPZBoardNextAuth";
   const baseUrl = env.BETTER_AUTH_URL?.trim() || env.NEXT_PUBLIC_SITE_URL?.trim() || BOARD_CANONICAL_URL;
-  const membershipAdapter: MembershipAdapter = createBoardMembershipAdapter(env);
+  const membershipAdapter: MembershipAdapter =
+    env.BOARD_ACCESS_REGISTRY_ENABLED?.trim().toLowerCase() === "true"
+      ? createBoardAccessMembershipAdapter()
+      : createBoardMembershipAdapter(env);
 
   const config = defineServerConfig({
     dynamodb: {
@@ -73,4 +77,7 @@ export function createBoardServerConfig(env: BoardEnvironment = process.env) {
 
 // The membership roster is read once per server process from the environment
 // allowlist. An empty or missing allowlist locks every account out.
-export const boardMembershipAdapter = createBoardMembershipAdapter(process.env);
+export const boardMembershipAdapter =
+  process.env.BOARD_ACCESS_REGISTRY_ENABLED?.trim().toLowerCase() === "true"
+    ? createBoardAccessMembershipAdapter()
+    : createBoardMembershipAdapter(process.env);
