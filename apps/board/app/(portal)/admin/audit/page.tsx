@@ -1,8 +1,10 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleAlert, CircleCheck, CircleMinus, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleMinus, RefreshCw, ShieldCheck } from "lucide-react";
 import { requireBoardAdministration, canReviewBoardAudit } from "@/lib/session";
 import { boardAuditLedger } from "@/lib/audit";
+import { AUDIT_PAGE_SIZE, resolveAuditPage } from "@/lib/audit-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +24,24 @@ function OutcomeIcon({ outcome }: { outcome: string }) {
   );
 }
 
-export default async function BoardAuditPage() {
+export default async function BoardAuditPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const administrator = await requireBoardAdministration("/admin/audit");
   if (!canReviewBoardAudit(administrator)) notFound();
 
-  const [events, verification] = await Promise.all([
-    boardAuditLedger.list({ limit: 100 }),
+  const params = await searchParams;
+  const [verification, head] = await Promise.all([
     boardAuditLedger.verify(),
+    boardAuditLedger.readHead(),
   ]);
+  const pagination = resolveAuditPage(params?.page, verification.entryCount, head?.sequence ?? null);
+  const events = await boardAuditLedger.listNewest({
+    beforeSequenceExclusive: pagination.beforeSequenceExclusive,
+    limit: AUDIT_PAGE_SIZE,
+  });
 
   return (
     <Container className="py-12 sm:py-16">
@@ -49,9 +61,18 @@ export default async function BoardAuditPage() {
       </section>
 
       <Surface className="mt-8 overflow-hidden max-w-4xl">
-        <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-6 py-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-6 py-4">
           <ShieldCheck className="h-4 w-4 text-[var(--primary)]" aria-hidden="true" />
           <span className="text-sm font-semibold text-[var(--foreground)]">Recent events</span>
+          <span className="text-xs text-[var(--muted)]">
+            {pagination.firstOrdinal}–{pagination.lastOrdinal} of {verification.entryCount}
+          </span>
+          <form action="/admin/audit" method="get" className="ml-auto">
+            <input type="hidden" name="page" value={pagination.page} />
+            <button type="submit" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Refresh
+            </button>
+          </form>
         </div>
         {events.length === 0 ? (
           <p className="px-6 py-10 text-sm text-[var(--muted)]">No audit events recorded yet.</p>
@@ -77,6 +98,21 @@ export default async function BoardAuditPage() {
             ))}
           </ul>
         )}
+        {verification.entryCount > AUDIT_PAGE_SIZE ? (
+          <nav aria-label="Audit event pages" className="flex items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--surface-muted)] px-6 py-4">
+            {pagination.page > 1 ? (
+              <Link href={`/admin/audit?page=${pagination.page - 1}`} className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:underline">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Newer
+              </Link>
+            ) : <span />}
+            <span className="text-xs text-[var(--muted)]">Page {pagination.page} of {pagination.totalPages}</span>
+            {pagination.page < pagination.totalPages ? (
+              <Link href={`/admin/audit?page=${pagination.page + 1}`} className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:underline">
+                Older <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            ) : <span />}
+          </nav>
+        ) : null}
       </Surface>
     </Container>
   );

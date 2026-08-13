@@ -117,6 +117,7 @@ function isTransactionCanceled(error: unknown): boolean {
  */
 export function createBoardAuditLedger(client: LedgerDocumentClient = documentClient): AuditLedger & {
   list(options?: { afterSequence?: number; limit?: number }): Promise<AuditChainEntry[]>;
+  listNewest(options: { beforeSequenceExclusive?: number; limit: number }): Promise<AuditChainEntry[]>;
   verify(): Promise<{ ok: boolean; entryCount: number; issues: readonly string[] }>;
   buildAppendItems(input: AppendInput): Promise<{ TransactItems: unknown[]; entry: AuditChainEntry }>;
 } {
@@ -229,6 +230,23 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
     return entries;
   }
 
+  async function listNewest(options: { beforeSequenceExclusive?: number; limit: number }) {
+    const upperBound = options.beforeSequenceExclusive === undefined
+      ? `${ENTRY_PREFIX}\uffff`
+      : `${ENTRY_PREFIX}${pad(options.beforeSequenceExclusive)}#`;
+    const result = await client.query({
+      TableName: tableName,
+      KeyConditionExpression: "#pk = :pk AND #sk BETWEEN :lower AND :upper",
+      ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+      ExpressionAttributeValues: { ":pk": PK, ":lower": ENTRY_PREFIX, ":upper": upperBound },
+      ScanIndexForward: false,
+      Limit: options.limit,
+    });
+    return ((result.Items || []) as AuditItem[])
+      .map(itemToEntry)
+      .filter((entry): entry is AuditChainEntry => !!entry);
+  }
+
   return {
     async readHead() {
       return readHead();
@@ -243,6 +261,9 @@ export function createBoardAuditLedger(client: LedgerDocumentClient = documentCl
     },
     async list(options) {
       return listAll(options);
+    },
+    async listNewest(options) {
+      return listNewest(options);
     },
     async verify() {
       const head = await readHead();

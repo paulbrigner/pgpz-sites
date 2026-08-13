@@ -60,6 +60,11 @@ Board supplies retention, roles, infrastructure, routes, and event semantics.
 The document vault and audit ledger fail closed when required resources are
 unset. Reference examples must never attach Board data or credentials.
 
+Authorized reviewers see audit events newest-first in `/admin/audit`, 25 per
+page, with explicit refresh and newer/older navigation. Pagination affects only
+the presentation query; the integrity indicator continues to verify the entire
+stored hash chain against its recorded head.
+
 ## Brand and marketing records
 
 Current PGPZ identity and social-media packages live in the authoritative

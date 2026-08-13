@@ -275,6 +275,11 @@ described here because they carry distinct retention and isolation guarantees.
 
 Neither table has a TTL: documents and audit events are retained.
 
+The `/admin/audit` review surface queries entries newest-first and paginates 25
+events at a time. Its refresh control repeats the server read without mutating
+the ledger. The integrity status is not page-scoped: every render verifies the
+complete ascending chain and cross-checks it against the stored head.
+
 ### Storage boundaries
 
 - **Staging** — short-lived upload landing zone; lifecycle-expired
