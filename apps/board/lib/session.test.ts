@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createBoardMembershipAdapter } from "@/lib/membership";
 import {
+  canAccessBoardAdministration,
+  canManageBoardDocuments,
+  canManageBoardUsers,
+  canReviewBoardAudit,
   resolveBoardMemberState,
+  type BoardMember,
   type BoardSessionResolver,
 } from "@/lib/session";
 
@@ -69,7 +74,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { id: "user-1", name: "Board member", email: "ada@example.org", role: "admin", isAdmin: true },
+      member: { id: "user-1", name: "Board member", email: "ada@example.org", role: "chair", isAdmin: true },
     });
   });
 
@@ -99,7 +104,7 @@ describe("resolveBoardMemberState", () => {
       }),
     ).resolves.toEqual({
       status: "member",
-      member: { id: "user-1", name: "Ada", email: "ada@example.org", role: "admin", isAdmin: true },
+      member: { id: "user-1", name: "Ada", email: "ada@example.org", role: "chair", isAdmin: true },
     });
   });
 
@@ -116,7 +121,7 @@ describe("resolveBoardMemberState", () => {
         name: "Sam",
         email: "sam@example.org",
         role: "legal-counsel",
-        isAdmin: true,
+        isAdmin: false,
       },
     });
   });
@@ -129,5 +134,34 @@ describe("resolveBoardMemberState", () => {
     });
 
     expect(state).toEqual({ status: "restricted", email: "ada@example.org" });
+  });
+});
+
+describe("Board role capabilities", () => {
+  const memberFor = (role: BoardMember["role"]): BoardMember => ({
+    id: "user-1", name: role, email: `${role}@example.org`, role,
+    isAdmin: ["chair", "admin", "executive-director"].includes(role),
+  });
+
+  it("limits Board Support to document operations", () => {
+    const member = memberFor("board-support");
+    expect(canAccessBoardAdministration(member)).toBe(true);
+    expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canReviewBoardAudit(member)).toBe(false);
+    expect(canManageBoardUsers(member)).toBe(false);
+  });
+
+  it("lets Legal Counsel manage documents and review audit without user management", () => {
+    const member = memberFor("legal-counsel");
+    expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canReviewBoardAudit(member)).toBe(true);
+    expect(canManageBoardUsers(member)).toBe(false);
+  });
+
+  it.each(["chair", "admin", "executive-director"] as const)("grants %s full Board administration", (role) => {
+    const member = memberFor(role);
+    expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canReviewBoardAudit(member)).toBe(true);
+    expect(canManageBoardUsers(member)).toBe(true);
   });
 });

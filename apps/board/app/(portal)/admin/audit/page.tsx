@@ -1,6 +1,7 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
+import { notFound } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
-import { requireBoardAdmin, canReviewBoardAudit } from "@/lib/session";
+import { requireBoardAdministration, canReviewBoardAudit } from "@/lib/session";
 import { boardAuditLedger } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +15,8 @@ const outcomeTone = (outcome: string) =>
   outcome === "success" ? "success" : outcome === "denied" ? "warning" : "neutral";
 
 export default async function BoardAuditPage() {
-  const admin = await requireBoardAdmin("/admin/audit");
-  if (!canReviewBoardAudit(admin)) return null;
+  const administrator = await requireBoardAdministration("/admin/audit");
+  if (!canReviewBoardAudit(administrator)) notFound();
 
   const [events, verification] = await Promise.all([
     boardAuditLedger.list({ limit: 100 }),

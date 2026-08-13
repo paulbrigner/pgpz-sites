@@ -104,75 +104,64 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `BOARD_ACCESS_REGISTRY_ENABLED` | yes | Keep `false` until the roster migration is verified; then `true` makes the registry authoritative |
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
-| `BOARD_ADMIN_EMAILS` | yes | administrator allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` |
-| `BOARD_EXECUTIVE_DIRECTOR_EMAILS` | no | staff allowlist: the Executive Director gains portal access and administrator privileges **without** joining the Board roster; must be disjoint from `BOARD_MEMBER_EMAILS` |
-| `BOARD_LEGAL_COUNSEL_EMAILS` | no | staff allowlist: Legal Counsel gains the same admin-equivalent portal privileges (document management, audit review) **without** joining the Board roster; must be pairwise disjoint from `BOARD_MEMBER_EMAILS` and `BOARD_EXECUTIVE_DIRECTOR_EMAILS` |
+| `BOARD_ADMIN_EMAILS` | yes | legacy deployment name for the Board Chair allowlist; every entry must also be in `BOARD_MEMBER_EMAILS` and resolves to `chair` |
+| `BOARD_EXECUTIVE_DIRECTOR_EMAILS` | no | staff allowlist: the Executive Director has full Board administration **without** joining the Board roster; must be disjoint from `BOARD_MEMBER_EMAILS` |
+| `BOARD_LEGAL_COUNSEL_EMAILS` | no | legacy staff allowlist: Legal Counsel can manage documents and review the audit ledger, but cannot manage users; must be pairwise disjoint from `BOARD_MEMBER_EMAILS` and `BOARD_EXECUTIVE_DIRECTOR_EMAILS` |
 | `BOARD_PASSWORDLESS_AUTH_ENABLED` | yes | `true` enables magic links and passkeys |
-| `BOARD_PASSWORD_AUTH_ENABLED` | transition only | Keep `true` until the verified password-removal cutover; then set `false` |
+| `BOARD_PASSWORD_AUTH_ENABLED` | yes | normal value is `false`; set `true` only for a controlled emergency rollback |
 | `EMAIL_TRANSPORT` | yes | `ses` is mandatory in production |
 | `EMAIL_FROM` | yes | Board-specific verified sender, e.g. `PGPZ Board <board@pgpz.org>` |
 
 `tooling/write-amplify-env.mjs board` fails the build if any required variable
 is missing. Both roster variables are intentionally required. An unset member
-allowlist locks every account out, an administrator outside the member roster
+allowlist locks every account out, a Board Chair outside the member roster
 fails configuration instead of gaining access, and an Executive Director who
 overlaps the member roster fails configuration instead of holding a dual role.
 
-## 4. Provisioning directors
+## 4. Provisioning users and assigning roles
 
-Accounts cannot self-register. The board administrator creates and rotates
-them with:
+Accounts cannot self-register. A Board Chair or Executive Director creates a
+user through `/admin/users`, assigns a current role, and sends no password. The
+user requests a magic link on `/signin`, then registers a passkey from
+`/account/security`. Role and status changes take effect immediately and append
+an immutable access revision plus audit event.
 
-```bash
-cd apps/board
-REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
-  npx tsx scripts/provision-board-member.ts director@example.org --name "Director Name"
-```
+| Role | Documents | Audit ledger | User management |
+| --- | --- | --- | --- |
+| Director | view | no | no |
+| Board Chair | manage | review | manage |
+| Executive Director | manage | review | manage |
+| Legal Counsel | manage | review | no |
+| Board Support | manage | no | no |
 
-- Generates a random 24-character password, prints it once; deliver privately.
-- Rerunning for the same email rotates the password hash **and revokes every
-  stored session for that director by default**, so the old password and all
-  existing session cookies stop working immediately. Use `--keep-sessions` to
-  rotate the password only.
-- New identities are created transactionally (user + credential account in a
-  single `TransactWriteItems`), so a failure cannot leave a half-created
-  account. Session-revocation failures abort with a non-zero exit; partial
-  recovery is never silent.
-- `--dry-run` reports the planned action, account id, and session-revocation
-  count without writing anything.
-- Refuses emails not on `BOARD_MEMBER_EMAILS` when that variable is set in the
-  shell; the Executive Director's address is accepted when it is on
-  `BOARD_EXECUTIVE_DIRECTOR_EMAILS`, and Legal Counsel's when on
-  `BOARD_LEGAL_COUNSEL_EMAILS`. Always set the variables to the same values as
-  the Amplify allowlists to prevent provisioning mistakes.
-- Records are written in the exact `BETTER_AUTH#...` shape the
-  `@pgpz/auth-dynamodb` adapter reads, with Better Auth's own scrypt hash
-  (`better-auth/crypto`), so sign-in works through the normal flow.
+The legacy stored role `admin` remains readable as Board Chair for safe rollout,
+but current APIs do not assign it. Another full-administration user can change a
+legacy record to `chair` in `/admin/users`; self-role changes remain prohibited.
 
-Before the access-registry migration, administrator authorization remains
+Before the access-registry migration, role authorization remains
 environment-managed. After the migration is verified, set
 `BOARD_ACCESS_REGISTRY_ENABLED=true`: the Board administration UI becomes the
 role/status authority and changes take effect without editing Amplify rosters
 or redeploying. Missing, invited, and deactivated registry records fail closed;
 there is no fallback to the legacy allowlists.
 
-### Passwordless transition and cutover
+### Passwordless operation and credential retirement
 
 1. Verify the Board SES sender/domain, DKIM and DMARC; grant the Board Amplify
    role only `ses:SendEmail` and `ses:SendRawEmail` against that identity.
-2. Deploy with both passwordless and password auth enabled. Confirm a magic
-   link request always returns the same generic response and expires after ten
-   minutes; confirm the stored verification identifier is hashed.
-3. Have each active user complete passwordless sign-in and register a passkey
-   where feasible. Passkey registration is session-required and WebAuthn user
-   verification is required.
+2. Keep `BOARD_PASSWORDLESS_AUTH_ENABLED=true` and
+   `BOARD_PASSWORD_AUTH_ENABLED=false`. Confirm a magic-link request always
+   returns the same generic response and expires after ten minutes; confirm the
+   stored verification identifier is hashed.
+3. Passkey is the primary sign-in action. Magic link remains available for
+   onboarding and recovery. The dashboard prompts users with zero passkeys;
+   passkey registration is session-required and WebAuthn verification is required.
 4. Verify recovery email ownership and encourage two passkeys for privileged
    users. Review `magic_link_sent`, `passkey_registered`, `passkey_updated`, and
    `passkey_removed` events in the Board audit ledger.
-5. Set `BOARD_PASSWORD_AUTH_ENABLED=false`, deploy, and revoke all existing
-   sessions. Confirm password endpoints reject sign-in while magic links and
-   passkeys continue to work.
-6. Run the separate credential-removal migration in dry-run mode and review
+5. After deploying password disablement, revoke all existing sessions and
+   confirm password endpoints reject sign-in while magic links and passkeys work.
+6. Run the credential-removal migration in dry-run mode and review
    exact account targets and per-user session counts:
 
    ```bash
@@ -223,23 +212,23 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
   (regression-covered by `e2e/board-portal.spec.ts`).
 - Malicious `callbackUrl` values (`javascript:`, `//host`, absolute URLs)
   resolve to `/` instead of navigating.
-- During transition, signing in with a roster email + provisioned password reaches the dashboard.
+- Password controls are absent and credential sign-in endpoints reject use.
 - A magic-link request has a generic response for known, unknown, and delivery-failure cases.
 - A magic link is single-use, hashed at rest, and expires in ten minutes.
 - Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification.
 - `/account/security` requires a Board session and supports passkey registration/removal.
-- An email present in both roster variables sees the Board administrator badge
-  and can reach `/admin`; ordinary directors receive a concealed 404 there.
+- A user with no passkey sees an enrollment prompt; a user with a passkey does not.
+- The Board Chair sees the `Board Chair` badge and can manage documents, audit,
+  and users; ordinary directors receive a concealed 404 on privileged routes.
 - An email on `BOARD_EXECUTIVE_DIRECTOR_EMAILS` signs in, sees the
-  "Executive Director" badge (not a director badge), and can reach `/admin`
-  without appearing on the Board roster.
+  `Executive Director` badge, and has full Board administration without
+  appearing on the Board roster.
 - An email on `BOARD_LEGAL_COUNSEL_EMAILS` signs in, sees the "Legal Counsel"
-  badge (never a director label), can reach `/admin`, and can manage
-  documents / review the audit ledger under the same capabilities as admins
-  and the Executive Director.
+  badge, can manage documents and review the audit ledger, and cannot manage
+  users, roles, access status, or sessions.
+- A `Board Support` user can manage documents but cannot review the audit ledger
+  or manage users, roles, access status, or sessions.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
-- Rotating a director's password signs their other devices out (sessions
-  revoked), and `--dry-run` reports the revocation count first.
 - `curl -I` shows `X-Robots-Tag: noindex`, `X-Frame-Options: DENY`, CSP.
 - `https://board.pgpz.org/robots.txt` disallows all crawlers.
 

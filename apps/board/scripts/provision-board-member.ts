@@ -1,10 +1,9 @@
 /**
- * Create or rotate a Board portal account directly in the board DynamoDB table.
+ * Deprecated emergency-only password credential provisioner.
  *
- * The portal disables self-registration, so every account is provisioned here
- * by the board administrator. Passwords are hashed with Better Auth's own
- * scrypt implementation (better-auth/crypto), so newly created records sign in
- * through the normal email-and-password flow.
+ * Normal Board users are created through /admin/users and authenticate with
+ * magic links or passkeys. This tool refuses to run unless password auth is
+ * explicitly re-enabled for a controlled rollback.
  *
  * Usage:
  *   REGION_AWS=us-east-1 NEXTAUTH_TABLE=PGPZBoardNextAuth \
@@ -252,6 +251,9 @@ export async function provisionBoardMember(params: {
   const env = params.env ?? {};
   const client = params.client;
   const tableName = env.NEXTAUTH_TABLE?.trim() || "PGPZBoardNextAuth";
+  if (env.BOARD_PASSWORD_AUTH_ENABLED?.trim().toLowerCase() !== "true") {
+    throw new Error("BOARD_PASSWORD_AUTH_ENABLED=true is required for emergency password provisioning.");
+  }
 
   const allowlist = parseAllowlist(env.BOARD_MEMBER_EMAILS);
   const executiveDirectorAllowlist = parseAllowlist(env.BOARD_EXECUTIVE_DIRECTOR_EMAILS);

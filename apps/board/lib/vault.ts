@@ -10,7 +10,7 @@ import {
   restoreVersion as computeRestored,
   validateDocumentMetadata,
 } from "@pgpz/document-vault";
-import type { BoardMember } from "@/lib/session";
+import { canManageBoardDocuments, type BoardMember } from "@/lib/session";
 import { boardDocumentObjectStore, computeSha256, isBoardStagingKey, newDocumentId } from "@/lib/object-store";
 import { createBoardDocumentRepository } from "@/lib/documents-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
@@ -36,7 +36,7 @@ export class VaultAuthorizationError extends Error {
 }
 
 function assertDocumentManager(member: BoardMember): void {
-  if (!member.isAdmin) throw new VaultAuthorizationError();
+  if (!canManageBoardDocuments(member)) throw new VaultAuthorizationError();
 }
 
 /**

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { boardAccessRepository } from "@/lib/board-access-repository";
-import { isBoardAccessRole, type BoardAccessRecord, type BoardAccessRole } from "@/lib/board-access";
+import { isBoardAssignableAccessRole, type BoardAccessRecord, type BoardAccessRole } from "@/lib/board-access";
 import { boardAuditLedger } from "@/lib/audit";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
 import { anonymousClaimedActor, authenticatedActor, recordAccessDenied } from "@/lib/audit";
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     const admin = authorization.admin;
     const body = await request.json().catch(() => ({}));
     const role = body?.role;
-    if (!isBoardAccessRole(role)) return NextResponse.json({ error: "Select a valid Board role." }, { status: 400 });
+    if (!isBoardAssignableAccessRole(role)) return NextResponse.json({ error: "Select a valid Board role." }, { status: 400 });
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const existingAuthUserId = email ? await authUserIdForEmail(email) : null;
     const id = existingAuthUserId || randomUUID();
@@ -185,7 +185,7 @@ export async function PATCH(request: NextRequest) {
     let eventAction: string;
     let deletes: Record<string, unknown>[] = [];
     if (action === "set_role") {
-      if (!isBoardAccessRole(body?.role)) return NextResponse.json({ error: "Select a valid Board role." }, { status: 400 });
+      if (!isBoardAssignableAccessRole(body?.role)) return NextResponse.json({ error: "Select a valid Board role." }, { status: 400 });
       mutation = await boardAccessRepository.buildRoleChangeItems({ id: current.id, expectedVersion: current.version, role: body.role as BoardAccessRole, actorEmail: admin.email });
       eventAction = "user_role_changed";
     } else if (action === "deactivate" || action === "reactivate") {

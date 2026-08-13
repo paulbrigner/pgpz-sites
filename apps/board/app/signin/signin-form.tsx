@@ -80,6 +80,13 @@ export function SignInForm({
     <div data-safe-callback={safeCallbackUrl} className="grid gap-6 px-8 py-8">
       {passwordlessEnabled ? (
         <>
+          <button type="button" onClick={signInWithPasskey} disabled={submitting !== null}
+            className={buttonStyles({ size: "lg", className: "justify-center disabled:opacity-60" })}>
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+            {submitting === "passkey" ? "Checking passkey…" : "Sign in with a passkey"}
+          </button>
+
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><span className="h-px flex-1 bg-[var(--border)]" />or use email<span className="h-px flex-1 bg-[var(--border)]" /></div>
           <form onSubmit={requestMagicLink} className="grid gap-4" noValidate>
             <label className="grid gap-2 text-sm font-semibold text-[var(--foreground)]">
               Email
@@ -89,18 +96,12 @@ export function SignInForm({
                 placeholder="director@example.org" />
             </label>
             <button type="submit" disabled={submitting !== null}
-              className={buttonStyles({ size: "lg", className: "justify-center disabled:opacity-60" })}>
+              className={buttonStyles({ variant: "secondary", size: "lg", className: "justify-center disabled:opacity-60" })}>
               <Link2 className="h-4 w-4" aria-hidden="true" />
               {submitting === "magic" ? "Sending link…" : "Email me a sign-in link"}
             </button>
           </form>
 
-          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><span className="h-px flex-1 bg-[var(--border)]" />or<span className="h-px flex-1 bg-[var(--border)]" /></div>
-          <button type="button" onClick={signInWithPasskey} disabled={submitting !== null}
-            className={buttonStyles({ variant: "secondary", size: "lg", className: "justify-center disabled:opacity-60" })}>
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {submitting === "passkey" ? "Checking passkey…" : "Sign in with a passkey"}
-          </button>
         </>
       ) : null}
 

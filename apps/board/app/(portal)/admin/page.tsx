@@ -1,7 +1,7 @@
 import { Badge, Container, Surface } from "@pgpz/ui";
 import { FolderOpen, ScrollText, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
-import { requireBoardAdmin, canManageBoardDocuments, canManageBoardUsers, canReviewBoardAudit } from "@/lib/session";
+import { requireBoardAdministration, canManageBoardDocuments, canManageBoardUsers, canReviewBoardAudit } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +11,12 @@ export const metadata = {
 };
 
 export default async function BoardAdminPage() {
-  const admin = await requireBoardAdmin("/admin");
+  const administrator = await requireBoardAdministration("/admin");
 
   return (
     <Container className="py-12 sm:py-16">
       <section className="max-w-3xl">
-        <Badge tone="accent">Administrator only</Badge>
+        <Badge tone="accent">Privileged access</Badge>
         <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-[var(--foreground)] sm:text-5xl">
           Board administration
         </h1>
@@ -28,7 +28,7 @@ export default async function BoardAdminPage() {
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </span>
         <h2 className="mt-6 text-xl font-semibold text-[var(--foreground)]">Available tools</h2>
-        {canManageBoardDocuments(admin) ? (
+        {canManageBoardDocuments(administrator) ? (
           <Link
             href="/admin/documents"
             className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
@@ -37,7 +37,7 @@ export default async function BoardAdminPage() {
             Manage documents
           </Link>
         ) : null}
-        {canReviewBoardAudit(admin) ? (
+        {canReviewBoardAudit(administrator) ? (
           <Link
             href="/admin/audit"
             className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
@@ -46,7 +46,7 @@ export default async function BoardAdminPage() {
             Review audit ledger
           </Link>
         ) : null}
-        {canManageBoardUsers(admin) ? (
+        {canManageBoardUsers(administrator) ? (
           <Link
             href="/admin/users"
             className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"

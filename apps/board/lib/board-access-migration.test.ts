@@ -10,7 +10,7 @@ describe("Board access roster migration", () => {
       BOARD_LEGAL_COUNSEL_EMAILS: "legal@pgpz.org",
     });
     expect(candidates.map(({ email, role }) => ({ email, role }))).toEqual([
-      { email: "admin@pgpz.org", role: "admin" },
+      { email: "admin@pgpz.org", role: "chair" },
       { email: "director@pgpz.org", role: "member" },
       { email: "div@pgpz.org", role: "executive-director" },
       { email: "legal@pgpz.org", role: "legal-counsel" },

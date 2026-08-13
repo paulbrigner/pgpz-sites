@@ -97,6 +97,19 @@ test.describe("board portal sign-in callback validation", () => {
   });
 });
 
+test.describe("board portal passwordless sign-in", () => {
+  test("presents passkeys first, retains email recovery, and exposes no password control", async ({ page }) => {
+    await page.goto("/signin");
+    const controls = page.locator("[data-safe-callback]");
+    await expect(controls.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
+    await expect(controls.getByRole("button", { name: "Email me a sign-in link" })).toBeVisible();
+    await expect(controls.getByText("Use password during transition")).toHaveCount(0);
+
+    const buttonLabels = await controls.getByRole("button").allTextContents();
+    expect(buttonLabels.indexOf("Sign in with a passkey")).toBeLessThan(buttonLabels.indexOf("Email me a sign-in link"));
+  });
+});
+
 test.describe("board portal hardening surface", () => {
   test("private headers and robots are applied", async ({ request }) => {
     const response = await request.get("/signin");

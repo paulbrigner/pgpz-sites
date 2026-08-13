@@ -10,8 +10,15 @@ import { boardMembershipAdapter } from "@/config/server";
 import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 import { auditBestEffort, authenticatedActor } from "@/lib/audit";
+import { roleCanAccessBoardAdministration, roleCanManageBoardDocuments, roleCanManageBoardUsers, roleCanReviewBoardAudit } from "@/lib/board-access";
 
-export type BoardRole = "member" | "admin" | "executive-director" | "legal-counsel";
+export type BoardRole =
+  | "member"
+  | "chair"
+  | "board-support"
+  | "admin"
+  | "executive-director"
+  | "legal-counsel";
 
 export type BoardMember = Readonly<{
   /** Stable Better Auth user id, used for tamper-attributable audit events. */
@@ -26,19 +33,22 @@ export type BoardMember = Readonly<{
  * privileged routes must use these instead of scattering raw `isAdmin` checks,
  * so a future change to the capability mapping is a one-line edit here. */
 export function canManageBoardDocuments(member: BoardMember): boolean {
-  return member.isAdmin;
+  return roleCanManageBoardDocuments(member.role);
 }
 
 export function canReviewBoardAudit(member: BoardMember): boolean {
-  return member.isAdmin;
+  return roleCanReviewBoardAudit(member.role);
 }
 
-/** User administration is a distinct named capability even though the current
- * Board policy grants it to the same administrator-equivalent roles. Keeping
- * the check named prevents future role-policy changes from being scattered
- * across routes and components. */
+/** User administration is deliberately narrower than document and audit
+ * capabilities. Legal Counsel and Board Support must never inherit it merely
+ * because they can access a subset of Board tools. */
 export function canManageBoardUsers(member: BoardMember): boolean {
-  return member.isAdmin;
+  return roleCanManageBoardUsers(member.role);
+}
+
+export function canAccessBoardAdministration(member: BoardMember): boolean {
+  return roleCanAccessBoardAdministration(member.role);
 }
 
 export type BoardMemberState =
@@ -91,6 +101,8 @@ export async function resolveBoardMemberState(
       ? user.name.trim()
       : "Board member";
   const role: BoardRole =
+    membership.attributes?.role === "chair" ||
+    membership.attributes?.role === "board-support" ||
     membership.attributes?.role === "admin" ||
     membership.attributes?.role === "executive-director" ||
     membership.attributes?.role === "legal-counsel"
@@ -125,14 +137,13 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
 }
 
 /**
- * Server-only guard for administrator pages. Administrator status is derived
- * from BOARD_ADMIN_EMAILS after membership is confirmed, so an administrator
- * can never bypass the Board roster. Non-administrators receive a concealed
- * 404 response instead of learning about the privileged route surface.
+ * Server-only guard for Board administration pages. Capability status is
+ * derived from the resolved role after membership is confirmed. Read-only
+ * roles receive a concealed 404 instead of learning about privileged routes.
  */
-export async function requireBoardAdmin(callbackPath = "/admin"): Promise<BoardMember> {
+export async function requireBoardAdministration(callbackPath = "/admin"): Promise<BoardMember> {
   const member = await requireBoardMember(callbackPath);
-  if (!member?.isAdmin) {
+  if (!member || !canAccessBoardAdministration(member)) {
     if (member) {
       // Best-effort authorization-denial audit on the privileged route.
       await auditBestEffort({

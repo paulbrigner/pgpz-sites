@@ -26,7 +26,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           <p className="mt-3 text-sm leading-6 text-[var(--accent-ink)]">
             The email <strong>{state.email}</strong> is signed in but is not listed in
             <code className="mx-1 rounded bg-white/70 px-1.5 py-0.5 font-mono text-xs">BOARD_MEMBER_EMAILS</code>.
-            Contact the board administrator if you believe this is a mistake.
+            Contact the Board Chair or Executive Director if you believe this is a mistake.
           </p>
           <div className="mt-6">
             <SignOutButton label="Sign out and return to the sign-in page" />

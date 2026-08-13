@@ -1,5 +1,6 @@
 import { Badge, Container } from "@pgpz/ui";
-import { requireBoardAdmin, canManageBoardDocuments } from "@/lib/session";
+import { notFound } from "next/navigation";
+import { requireBoardAdministration, canManageBoardDocuments } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 import { DocumentManager } from "@/components/documents/DocumentManager";
 
@@ -11,8 +12,8 @@ export const metadata = {
 };
 
 export default async function AdminDocumentsPage() {
-  const admin = await requireBoardAdmin("/admin/documents");
-  if (!canManageBoardDocuments(admin)) return null;
+  const administrator = await requireBoardAdministration("/admin/documents");
+  if (!canManageBoardDocuments(administrator)) notFound();
 
   const documents = await boardDocumentRepository.listDocuments();
 
