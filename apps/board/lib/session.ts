@@ -10,7 +10,15 @@ import { boardMembershipAdapter } from "@/config/server";
 import { auth } from "@/lib/auth";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 import { auditBestEffort, authenticatedActor } from "@/lib/audit";
-import { roleCanAccessBoardAdministration, roleCanManageBoardDocuments, roleCanManageBoardUsers, roleCanReviewBoardAudit } from "@/lib/board-access";
+import {
+  roleCanAccessBoardAdministration,
+  roleCanManageBoardDocuments,
+  roleCanManageBoardMeetings,
+  roleCanManageBoardUsers,
+  roleCanPrepareBoardMeetings,
+  roleCanReviewBoardAudit,
+  roleCanSendBoardMeetingCommunications,
+} from "@/lib/board-access";
 import { hasBoardPasskey } from "@/lib/passkey-enrollment";
 import { hasBoardPasskeySession } from "@/lib/passkey-step-up";
 
@@ -47,6 +55,18 @@ export function canReviewBoardAudit(member: BoardMember): boolean {
  * because they can access a subset of Board tools. */
 export function canManageBoardUsers(member: BoardMember): boolean {
   return roleCanManageBoardUsers(member.role);
+}
+
+export function canManageBoardMeetings(member: BoardMember): boolean {
+  return roleCanManageBoardMeetings(member.role);
+}
+
+export function canPrepareBoardMeetings(member: BoardMember): boolean {
+  return roleCanPrepareBoardMeetings(member.role);
+}
+
+export function canSendBoardMeetingCommunications(member: BoardMember): boolean {
+  return roleCanSendBoardMeetingCommunications(member.role);
 }
 
 export function canAccessBoardAdministration(member: BoardMember): boolean {

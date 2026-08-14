@@ -3,8 +3,11 @@ import { createBoardMembershipAdapter } from "@/lib/membership";
 import {
   canAccessBoardAdministration,
   canManageBoardDocuments,
+  canManageBoardMeetings,
   canManageBoardUsers,
+  canPrepareBoardMeetings,
   canReviewBoardAudit,
+  canSendBoardMeetingCommunications,
   resolveBoardMemberState,
   type BoardMember,
   type BoardSessionResolver,
@@ -143,10 +146,13 @@ describe("Board role capabilities", () => {
     isAdmin: ["chair", "admin", "executive-director"].includes(role),
   });
 
-  it("limits Board Support to document operations", () => {
+  it("lets Board Support prepare meetings and documents without official meeting authority", () => {
     const member = memberFor("board-support");
     expect(canAccessBoardAdministration(member)).toBe(false);
     expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canPrepareBoardMeetings(member)).toBe(true);
+    expect(canManageBoardMeetings(member)).toBe(false);
+    expect(canSendBoardMeetingCommunications(member)).toBe(false);
     expect(canReviewBoardAudit(member)).toBe(false);
     expect(canManageBoardUsers(member)).toBe(false);
   });
@@ -154,6 +160,9 @@ describe("Board role capabilities", () => {
   it("lets Legal Counsel manage documents and review audit without user management", () => {
     const member = memberFor("legal-counsel");
     expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canPrepareBoardMeetings(member)).toBe(false);
+    expect(canManageBoardMeetings(member)).toBe(false);
+    expect(canSendBoardMeetingCommunications(member)).toBe(false);
     expect(canReviewBoardAudit(member)).toBe(true);
     expect(canManageBoardUsers(member)).toBe(false);
   });
@@ -161,6 +170,9 @@ describe("Board role capabilities", () => {
   it.each(["chair", "admin", "executive-director"] as const)("grants %s full Board administration", (role) => {
     const member = memberFor(role);
     expect(canManageBoardDocuments(member)).toBe(true);
+    expect(canPrepareBoardMeetings(member)).toBe(true);
+    expect(canManageBoardMeetings(member)).toBe(true);
+    expect(canSendBoardMeetingCommunications(member)).toBe(true);
     expect(canReviewBoardAudit(member)).toBe(true);
     expect(canManageBoardUsers(member)).toBe(true);
   });

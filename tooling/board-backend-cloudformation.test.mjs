@@ -138,6 +138,21 @@ test("provisions dedicated governance and audit tables with retention protection
   assert.deepEqual(access.Properties.SSESpecification.KMSMasterKeyId, { Ref: "BoardKmsKey" });
   assert.equal(access.Properties.TimeToLiveSpecification, undefined);
   assert.deepEqual(access.Properties.GlobalSecondaryIndexes.map((index) => index.IndexName), ["Roster"]);
+
+  const meetings = resources.BoardMeetingsTable;
+  assert.equal(meetings.Properties.TableName, "PGPZBoardMeetings");
+  assert.equal(meetings.DeletionPolicy, "Retain");
+  assert.equal(meetings.UpdateReplacePolicy, "Retain");
+  assert.equal(meetings.Properties.DeletionProtectionEnabled, true);
+  assert.deepEqual(meetings.Properties.PointInTimeRecoverySpecification, { PointInTimeRecoveryEnabled: true });
+  assert.deepEqual(meetings.Properties.SSESpecification.KMSMasterKeyId, { Ref: "BoardKmsKey" });
+  assert.equal(meetings.Properties.TimeToLiveSpecification, undefined);
+  assert.deepEqual(meetings.Properties.GlobalSecondaryIndexes.map((index) => index.IndexName), ["Timeline"]);
+  assert.deepEqual(docs.Properties.GlobalSecondaryIndexes.map((index) => index.IndexName), ["Library", "ByCategory", "ByStatus", "MeetingDocuments"]);
+  assert.deepEqual(docs.Properties.GlobalSecondaryIndexes.find((index) => index.IndexName === "MeetingDocuments").Projection, {
+    ProjectionType: "INCLUDE",
+    NonKeyAttributes: ["documentId"],
+  });
 });
 
 test("uses a Board-only KMS key with rotation for docs, audit, and all buckets", () => {
@@ -151,6 +166,7 @@ test("uses a Board-only KMS key with rotation for docs, audit, and all buckets",
     resources.BoardDocumentsTable.Properties.SSESpecification.KMSMasterKeyId,
     resources.BoardAuditLogTable.Properties.SSESpecification.KMSMasterKeyId,
     resources.BoardAccessTable.Properties.SSESpecification.KMSMasterKeyId,
+    resources.BoardMeetingsTable.Properties.SSESpecification.KMSMasterKeyId,
     resources.BoardRetainedBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
     resources.BoardStagingBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
     resources.BoardAuditArchiveBucket.Properties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.KMSMasterKeyID,
@@ -236,6 +252,12 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   assert.ok(!access.Action.includes("dynamodb:DeleteItem"));
   assert.ok(!access.Action.includes("dynamodb:Scan"));
 
+  const meetings = statements.find((statement) => statement.Sid === "BoardMeetingsNoDelete");
+  assert.ok(meetings.Action.includes("dynamodb:TransactWriteItems"));
+  assert.ok(meetings.Action.includes("dynamodb:Query"));
+  assert.ok(!meetings.Action.includes("dynamodb:DeleteItem"));
+  assert.ok(!meetings.Action.includes("dynamodb:Scan"));
+
   const staging = statements.find((statement) => statement.Sid === "StagingPutGetDelete");
   assert.ok(staging.Action.includes("s3:DeleteObject"));
 
@@ -260,6 +282,7 @@ test("exposes governance resource names and arns from the stack plan", () => {
   assert.equal(plan.documentsTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardDocuments");
   assert.equal(plan.auditTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardAuditLog");
   assert.equal(plan.accessTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardAccess");
+  assert.equal(plan.meetingsTableArn, "arn:aws:dynamodb:us-east-1:123456789012:table/PGPZBoardMeetings");
   assert.equal(plan.auditArchiverRoleArn, "arn:aws:iam::123456789012:role/PgpzBoardAuditArchiver");
-  assert.match(JSON.stringify(plan.template.Outputs), /DocumentsTableName|AuditTableName|AccessTableName|RetainedBucket|AuditArchiveBucket|AuditArchiverRoleArn/);
+  assert.match(JSON.stringify(plan.template.Outputs), /DocumentsTableName|AuditTableName|AccessTableName|MeetingsTableName|RetainedBucket|AuditArchiveBucket|AuditArchiverRoleArn/);
 });

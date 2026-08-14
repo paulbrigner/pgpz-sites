@@ -45,10 +45,12 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, "(portal)", "admin", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "(portal)", "admin", "audit", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "(portal)", "brand", "page.tsx"))).toBe(true);
+    expect(existsSync(path.join(appRoot, "(portal)", "meetings", "page.tsx"))).toBe(true);
+    expect(existsSync(path.join(appRoot, "(portal)", "meetings", "[id]", "page.tsx"))).toBe(true);
     expect(existsSync(path.join(appRoot, "api", "admin", "audit", "route.ts"))).toBe(true);
   });
 
-  it("exposes only the Better Auth, admin audit, and document vault API routes", () => {
+  it("exposes only the Better Auth, administration, document vault, and meeting API routes", () => {
     const routes = findRouteHandlers(apiRoot).map((route) =>
       path.relative(appRoot, route).split(path.sep).join("/"),
     );
@@ -59,6 +61,9 @@ describe("private board feature surface", () => {
       "api/better-auth/[...all]/route.ts",
       "api/documents/[id]/download/route.ts",
       "api/documents/route.ts",
+      "api/meetings/[id]/calendar/route.ts",
+      "api/meetings/[id]/communications/route.ts",
+      "api/meetings/route.ts",
     ].sort());
   });
 

@@ -12,7 +12,13 @@ import {
 } from "@pgpz/document-vault";
 import { canManageBoardDocuments, type BoardMember } from "@/lib/session";
 import { boardDocumentObjectStore, computeSha256, isBoardStagingKey, newDocumentId } from "@/lib/object-store";
-import { createBoardDocumentRepository } from "@/lib/documents-repository";
+import {
+  BOARD_MEETING_DOCUMENT_SECTIONS,
+  createBoardDocumentRepository,
+  type BoardDocumentOwnership,
+  type BoardMeetingDocumentSection,
+} from "@/lib/documents-repository";
+import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
 import { BOARD_DOCUMENT_TYPE_POLICY, boardExtensionMatchesMimeType } from "@/lib/document-policy";
 
@@ -64,8 +70,30 @@ export async function createDocument(input: {
   description: string;
   category: string;
   visibility?: string;
+  ownerType?: "library" | "meeting";
+  meetingId?: string;
+  meetingSection?: BoardMeetingDocumentSection;
+  agendaItemId?: string | null;
 }): Promise<DocumentItem> {
   assertDocumentManager(input.member);
+
+  let ownership: BoardDocumentOwnership = { ownerType: "library" };
+  if (input.ownerType === "meeting") {
+    const meetingId = input.meetingId?.trim() || "";
+    if (!meetingId) throw new VaultValidationError("meeting-id", "A meeting is required for meeting documents.");
+    if (!input.meetingSection || !BOARD_MEETING_DOCUMENT_SECTIONS.includes(input.meetingSection)) {
+      throw new VaultValidationError("meeting-section", "Select a valid meeting document section.");
+    }
+    if (!(await boardMeetingsRepository.getMeeting(meetingId))) {
+      throw new VaultValidationError("meeting-not-found", "The selected meeting does not exist.");
+    }
+    ownership = {
+      ownerType: "meeting",
+      meetingId,
+      meetingSection: input.meetingSection,
+      agendaItemId: input.agendaItemId?.trim() || null,
+    };
+  }
 
   const metadataIssues = validateDocumentMetadata({ title: input.title, description: input.description, category: input.category });
   if (metadataIssues.length > 0) throw new VaultValidationError("metadata", `Invalid document metadata: ${metadataIssues.join(", ")}`);
@@ -116,6 +144,7 @@ export async function createDocument(input: {
     visibility: input.visibility ?? "members",
     version,
     actorId: input.member.id,
+    ownership,
   });
 
   await boardAuditLedger.append({
@@ -124,7 +153,13 @@ export async function createDocument(input: {
     outcome: "success",
     actor: authenticatedActor(input.member),
     target: { type: "document", id: documentId, version: versionId },
-    metadata: new Map<string, string | number | boolean | null>([["title", title], ["category", category], ["size", staged.metadata.byteLength]]),
+    metadata: new Map<string, string | number | boolean | null>([
+      ["title", title],
+      ["category", category],
+      ["size", staged.metadata.byteLength],
+      ["ownerType", ownership.ownerType],
+      ...(ownership.ownerType === "meeting" ? [["meetingId", ownership.meetingId] as const, ["meetingSection", ownership.meetingSection] as const] : []),
+    ]),
     idempotencyKey: `doc-created-${documentId}`,
     occurredAt: new Date().toISOString(),
   });

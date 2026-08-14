@@ -101,6 +101,10 @@ you do not have to run them individually:
 - Creates `PGPZCommunityNextAuth`, `PGPZCoalitionNextAuth`, and
   `PGPZBoardNextAuth` tables (identical better-auth schema: `pk/sk` +
   GSI1/GSI2 + TTL).
+- Creates the Board-only `PGPZBoardAccess`, `PGPZBoardMeetings`, and
+  `PGPZBoardDocuments` tables, including the meeting timeline and
+  meeting-document indexes used by the local portal. S3-retained document
+  bytes remain unavailable offline.
 - Provisions the Board account via `provision-board-member.ts`.
 
 The script is **idempotent** — rerunning detects existing tables and rotates

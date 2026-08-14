@@ -109,6 +109,10 @@ export async function POST(request: NextRequest) {
           description: text(body?.description),
           category: text(body?.category),
           visibility: text(body?.visibility) || "members",
+          ownerType: body?.ownerType === "meeting" ? "meeting" : "library",
+          meetingId: text(body?.meetingId),
+          meetingSection: body?.meetingSection,
+          agendaItemId: text(body?.agendaItemId) || null,
         });
         return ok(item);
       }

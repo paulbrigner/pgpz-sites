@@ -32,6 +32,7 @@ export const BOARD_BASE_PATH = "/api/better-auth";
 export const BOARD_DOCUMENTS_TABLE = (process.env.BOARD_DOCUMENTS_TABLE || "PGPZBoardDocuments").trim();
 export const BOARD_AUDIT_TABLE = (process.env.BOARD_AUDIT_TABLE || "PGPZBoardAuditLog").trim();
 export const BOARD_ACCESS_TABLE = (process.env.BOARD_ACCESS_TABLE || "PGPZBoardAccess").trim();
+export const BOARD_MEETINGS_TABLE = (process.env.BOARD_MEETINGS_TABLE || "PGPZBoardMeetings").trim();
 export const BOARD_DOCUMENTS_STAGING_BUCKET = (process.env.BOARD_DOCUMENTS_STAGING_BUCKET || "").trim();
 export const BOARD_DOCUMENTS_RETAINED_BUCKET = (process.env.BOARD_DOCUMENTS_RETAINED_BUCKET || "").trim();
 export const BOARD_AUDIT_ARCHIVE_BUCKET = (process.env.BOARD_AUDIT_ARCHIVE_BUCKET || "").trim();

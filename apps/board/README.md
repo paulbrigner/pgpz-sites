@@ -23,13 +23,13 @@ roster migration, `BOARD_ACCESS_REGISTRY_ENABLED=true` makes
 to allowlists for a missing or deactivated record. UI badges do not replace
 server authorization; routes and repositories enforce current roles.
 
-| Role | Documents | Audit ledger | User management |
-| --- | --- | --- | --- |
-| Director | view | no | no |
-| Board Chair | manage | review | manage |
-| Executive Director | manage | review | manage |
-| Legal Counsel | manage | review | no |
-| Board Support | manage | no | no |
+| Role | Documents | Meetings | Audit ledger | User management |
+| --- | --- | --- | --- | --- |
+| Director | view | view + RSVP | no | no |
+| Board Chair | manage | manage + communicate | review | manage |
+| Executive Director | manage | manage + communicate | review | manage |
+| Legal Counsel | manage | view + meeting documents | review | no |
+| Board Support | manage | prepare drafts and records | no | no |
 
 The stored legacy role `admin` is read as Board Chair so existing access never
 fails during rollout, but current APIs and UI never assign `admin` to a new or
@@ -52,8 +52,8 @@ to overwrite an existing record whose role or status differs from the roster.
 
 ## Governance boundary
 
-Board owns its auth table, document metadata table, audit table, staging bucket,
-retained/Object-Lock bucket, audit archive, access registry, KMS key, and compute role. The
+Board owns its auth table, access registry, meeting table, document metadata table, audit table, staging bucket,
+retained/Object-Lock bucket, audit archive, KMS key, and compute role. The
 `@pgpz/document-vault` and `@pgpz/audit-log` packages provide neutral contracts;
 Board supplies retention, roles, infrastructure, routes, and event semantics.
 
@@ -90,6 +90,39 @@ objects, alter canonical document identity, or break governed brand-package
 relationships. Every mutation retains recent-passkey step-up enforcement and
 appends its normal audit evidence. `/admin/documents` remains only as a
 compatibility redirect to `/documents`.
+
+## Board meetings
+
+`/meetings` is an upcoming-first Board workspace with a retained past-meeting
+archive. Every active portal user can review published meetings, download an
+iCalendar event, and record an RSVP. Board Support can create and prepare draft
+meetings, agendas, attendance, decisions, action items, and draft minutes.
+Only the Board Chair and Executive Director may publish, reschedule, cancel, or
+close a meeting, record minutes approval, or send an official communication.
+
+Meeting lifecycle data is Board-specific and stored in `PGPZBoardMeetings` as
+an optimistic aggregate with retained child records and immutable revisions.
+Important mutations compose the meeting write with the Board hash-chained audit
+append in one DynamoDB transaction. The table is KMS-encrypted, PITR-enabled,
+deletion-protected, `Retain`-protected, has no TTL, and gives web compute no
+`DeleteItem` or `Scan` permission.
+
+Meeting documents use the same governance vault, immutable versions, retained
+objects, checksums, and audited downloads as the general Document Library. A
+sparse ownership index assigns each record to exactly one surface: library
+documents remain in `/documents`; meeting-owned agenda, preparation, minutes,
+resolution, and other records appear only inside their meeting. Changing a
+meeting status never deletes its documents.
+
+Calendar downloads use a stable iCalendar UID and sequence. Board Chair and
+Executive Director users can manually send an invitation, update, materials
+notice, reminder, or cancellation. Messages are delivered one recipient at a
+time through the Board SES identity; that identity remains the calendar
+organizer even when a different authorized officer sends an update. Messages
+contain authenticated portal links rather than confidential attachments and
+persist per-recipient pending/result evidence with safe partial retry. No
+automated scheduler, external calendar OAuth, live ballot,
+transcription, or meeting-platform integration is enabled.
 
 Board's upload adapter permits PDF, ZIP, JSON, Markdown, text, and CSV records.
 The neutral `@pgpz/document-vault` package validates the injected app policy and

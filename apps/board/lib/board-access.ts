@@ -96,6 +96,24 @@ export function roleCanManageBoardUsers(role: BoardAccessRole): boolean {
   return roleHasBoardAdministration(role);
 }
 
+/** Official meeting lifecycle changes are deliberately narrower than
+ * document preparation. Only the Chair (including the legacy admin role) and
+ * Executive Director may publish, reschedule, cancel, or close a meeting. */
+export function roleCanManageBoardMeetings(role: BoardAccessRole): boolean {
+  return roleHasBoardAdministration(role);
+}
+
+/** Board Support may prepare agendas, attendance, decisions, action items,
+ * and draft minutes. Legal Counsel retains governed-document management but
+ * does not implicitly receive authority to operate the meeting lifecycle. */
+export function roleCanPrepareBoardMeetings(role: BoardAccessRole): boolean {
+  return roleCanManageBoardMeetings(role) || role === "board-support";
+}
+
+export function roleCanSendBoardMeetingCommunications(role: BoardAccessRole): boolean {
+  return roleCanManageBoardMeetings(role);
+}
+
 export function roleCanAccessBoardAdministration(role: BoardAccessRole): boolean {
   return roleCanReviewBoardAudit(role) || roleCanManageBoardUsers(role);
 }
