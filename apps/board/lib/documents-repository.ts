@@ -14,9 +14,25 @@ import { BOARD_DOCUMENTS_TABLE } from "@/lib/config";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type VaultDocumentClient = any;
-export type BoardDocumentItem = DocumentItem & Readonly<{ displayName?: string }>;
-type BoardDocumentRecord = DocumentRecord & Readonly<{ displayName?: string }>;
-export type BoardDocumentRepository = DocumentRepository & {
+export const BOARD_MEETING_DOCUMENT_SECTIONS = ["agenda", "preparation", "minutes", "resolution", "other"] as const;
+export type BoardMeetingDocumentSection = (typeof BOARD_MEETING_DOCUMENT_SECTIONS)[number];
+export type BoardDocumentOwnership =
+  | Readonly<{ ownerType: "library" }>
+  | Readonly<{ ownerType: "meeting"; meetingId: string; meetingSection: BoardMeetingDocumentSection; agendaItemId?: string | null }>;
+export type BoardDocumentItem = DocumentItem & Readonly<{
+  displayName?: string;
+  ownerType?: "library" | "meeting";
+  meetingId?: string;
+  meetingSection?: BoardMeetingDocumentSection;
+  agendaItemId?: string | null;
+}>;
+type BoardDocumentRecord = DocumentRecord & Readonly<{ displayName?: string }> & BoardDocumentOwnership;
+export type BoardNewDocumentInput = NewDocumentInput & Readonly<{ ownership?: BoardDocumentOwnership }>;
+export type BoardDocumentRepository = Omit<DocumentRepository, "createDocument" | "getDocument" | "listDocuments"> & {
+  getDocument(documentId: string): Promise<BoardDocumentItem | null>;
+  listDocuments(filter?: DocumentFilter): Promise<readonly BoardDocumentItem[]>;
+  createDocument(input: BoardNewDocumentInput): Promise<BoardDocumentItem>;
+  listMeetingDocuments(meetingId: string): Promise<readonly BoardDocumentItem[]>;
   updateDisplayName(documentId: string, displayName: string, actorId: string | null): Promise<BoardDocumentItem | null>;
 };
 const META_SK = "META";
@@ -47,7 +63,15 @@ function metaRecord(record: BoardDocumentRecord, includeLibrary = false): Row {
     createdAt: record.createdAt,
     updatedBy: record.updatedBy,
     updatedAt: record.updatedAt,
-    ...(includeLibrary ? { libraryPk: LIBRARY_PK } : {}),
+    ...(record.ownerType === "library" && includeLibrary ? { libraryPk: LIBRARY_PK } : {}),
+    ...(record.ownerType === "meeting" ? {
+      ownerType: "meeting",
+      meetingId: record.meetingId,
+      meetingSection: record.meetingSection,
+      ...(record.agendaItemId ? { agendaItemId: record.agendaItemId } : {}),
+      meetingPk: `MEETING#${record.meetingId}`,
+      meetingSort: `${record.meetingSection}#${record.agendaItemId || "_"}#${record.documentId}`,
+    } : { ownerType: "library" }),
   };
 }
 
@@ -70,7 +94,22 @@ function metaToRecord(item: Row | undefined | null): BoardDocumentRecord | null 
     createdAt: String(item.createdAt),
     updatedBy: item.updatedBy == null ? null : String(item.updatedBy),
     updatedAt: String(item.updatedAt),
+    ...(item.ownerType === "meeting" && typeof item.meetingId === "string" &&
+    BOARD_MEETING_DOCUMENT_SECTIONS.includes(item.meetingSection as BoardMeetingDocumentSection)
+      ? {
+          ownerType: "meeting" as const,
+          meetingId: item.meetingId,
+          meetingSection: item.meetingSection as BoardMeetingDocumentSection,
+          agendaItemId: typeof item.agendaItemId === "string" ? item.agendaItemId : null,
+        }
+      : { ownerType: "library" as const }),
   };
+}
+
+function retainOwnership(record: BoardDocumentRecord, next: DocumentRecord): BoardDocumentRecord {
+  return record.ownerType === "meeting"
+    ? { ...next, ownerType: "meeting", meetingId: record.meetingId, meetingSection: record.meetingSection, agendaItemId: record.agendaItemId }
+    : { ...next, ownerType: "library" };
 }
 
 function versionItem(documentId: string, version: DocumentVersion): Row {
@@ -200,13 +239,53 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       return items;
     },
 
+    async listMeetingDocuments(meetingId) {
+      const resolvedMeetingId = meetingId.trim();
+      if (!resolvedMeetingId) throw new Error("meetingId is required");
+      const indexRows: Row[] = [];
+      let exclusiveStartKey: Record<string, unknown> | undefined;
+      do {
+        const result = await client.query({
+          TableName: tableName,
+          IndexName: "MeetingDocuments",
+          KeyConditionExpression: "#meetingPk = :meetingPk",
+          ExpressionAttributeNames: { "#meetingPk": "meetingPk" },
+          ExpressionAttributeValues: { ":meetingPk": `MEETING#${resolvedMeetingId}` },
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        });
+        indexRows.push(...((result.Items || []) as Row[]));
+        exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (exclusiveStartKey);
+      const documents: BoardDocumentItem[] = [];
+      for (const row of indexRows) {
+        const pk = String(row.pk || "");
+        const documentId = String(row.documentId || (pk.startsWith("DOCUMENT#") ? pk.slice("DOCUMENT#".length) : ""));
+        if (!documentId) continue;
+        const record = await getMeta(documentId);
+        if (!record || record.ownerType !== "meeting" || record.meetingId !== resolvedMeetingId) continue;
+        try { documents.push(await toItem(record)); } catch { /* omit broken heads */ }
+      }
+      documents.sort((a, b) => {
+        const section = String(a.meetingSection || "").localeCompare(String(b.meetingSection || ""));
+        if (section) return section;
+        const agenda = String(a.agendaItemId || "").localeCompare(String(b.agendaItemId || ""));
+        return agenda || a.title.localeCompare(b.title) || a.documentId.localeCompare(b.documentId);
+      });
+      return documents;
+    },
+
     async listVersions(documentId) {
       const rows = await listVersionRows(documentId);
       return rows.map(itemToVersion).filter((v): v is DocumentVersion => !!v).sort((a, b) => a.sequence - b.sequence);
     },
 
-    async createDocument(input: NewDocumentInput) {
-      const record: DocumentRecord = {
+    async createDocument(input: BoardNewDocumentInput) {
+      const ownership = input.ownership ?? { ownerType: "library" as const };
+      if (ownership.ownerType === "meeting") {
+        if (!ownership.meetingId.trim()) throw new Error("meetingId is required for meeting documents");
+        if (!BOARD_MEETING_DOCUMENT_SECTIONS.includes(ownership.meetingSection)) throw new Error("meetingSection is invalid");
+      }
+      const record: BoardDocumentRecord = {
         documentId: input.documentId,
         title: input.title,
         description: input.description,
@@ -219,6 +298,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
         createdAt: new Date().toISOString(),
         updatedBy: input.actorId,
         updatedAt: new Date().toISOString(),
+        ...ownership,
       };
       const version = input.version;
       await client.transactWrite({
@@ -238,7 +318,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
         .map(itemToVersion)
         .filter((item): item is DocumentVersion => !!item);
       const version = { ...input.version, sequence: Math.max(0, ...currentVersions.map((item) => item.sequence)) + 1 };
-      const next = acceptUploadVersion(current, version);
+      const next = retainOwnership(current, acceptUploadVersion(current, version));
       try {
         await client.transactWrite({
           TransactItems: [
@@ -256,7 +336,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     async setArchived(documentId, archived, actorId, now) {
       const current = await getMeta(documentId);
       if (!current) return null;
-      const next = setDocumentArchived(current, archived, now, actorId);
+      const next = retainOwnership(current, setDocumentArchived(current, archived, now, actorId));
       await client.update(updateMetaStatement(current, next));
       return toItem(next);
     },
@@ -264,7 +344,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     async updateMetadata(documentId, metadata, actorId) {
       const current = await getMeta(documentId);
       if (!current) return null;
-      const next = updateDocumentMetadata(current, metadata, new Date().toISOString(), actorId);
+      const next = retainOwnership(current, updateDocumentMetadata(current, metadata, new Date().toISOString(), actorId));
       await client.update(updateMetaStatement(current, next));
       return toItem(next);
     },

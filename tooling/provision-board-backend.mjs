@@ -208,11 +208,16 @@ export function main(argv = process.argv.slice(2)) {
     if (outputs.AccessTableName !== plan.accessTableName || outputs.AccessTableArn !== plan.accessTableArn) {
       throw new Error("CloudFormation returned an unexpected Board access registry");
     }
+    if (outputs.MeetingsTableName !== plan.meetingsTableName || outputs.MeetingsTableArn !== plan.meetingsTableArn) {
+      throw new Error("CloudFormation returned an unexpected Board meetings table");
+    }
     const requiredGovernanceOutputs = [
       "DocumentsTableName",
       "AuditTableName",
       "AccessTableName",
       "AccessTableArn",
+      "MeetingsTableName",
+      "MeetingsTableArn",
       "StagingBucket",
       "RetainedBucket",
       "AuditArchiveBucket",
@@ -257,7 +262,7 @@ export function main(argv = process.argv.slice(2)) {
       throw new Error("The deployed Board table did not pass protection checks");
     }
 
-    for (const governanceTableName of [outputs.DocumentsTableName, outputs.AuditTableName, outputs.AccessTableName]) {
+    for (const governanceTableName of [outputs.DocumentsTableName, outputs.AuditTableName, outputs.AccessTableName, outputs.MeetingsTableName]) {
       const governanceTable = parseAwsJson(
         runAws(
           baseArguments,

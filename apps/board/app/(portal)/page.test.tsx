@@ -17,11 +17,10 @@ describe("board dashboard", () => {
     expect(screen.getByText("ada@example.org")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Document library" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Board meetings" })).toBeVisible();
-    expect(screen.getByText("Coming soon")).toBeVisible();
     expect(screen.queryByRole("link", { name: /member directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /sign up/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /administration/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Board meetings/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Board meetings/ })).toHaveAttribute("href", "/meetings");
     expect(screen.queryByRole("link", { name: /Brand & marketing/ })).not.toBeInTheDocument();
     expect(screen.getByRole("list")).toContainElement(screen.getByRole("link", { name: /Document library/ }));
   });
@@ -74,5 +73,14 @@ describe("board dashboard", () => {
   it("nudges users without a passkey toward enrollment", () => {
     render(<BoardDashboard member={{ id: "user-1", name: "Ada", email: "ada@example.org", role: "member", isAdmin: false }} passkeyCount={0} />);
     expect(screen.getByRole("link", { name: "Add a passkey" })).toHaveAttribute("href", "/account/security");
+  });
+
+  it("keeps the next meeting summary compact on the dashboard", () => {
+    render(<BoardDashboard member={{ id: "user-1", name: "Ada", email: "ada@example.org", role: "member", isAdmin: false }} nextMeeting={{
+      id: "meeting-1", title: "September Board meeting", description: "", type: "regular", status: "materials-published",
+      startAt: "2026-09-18T17:00:00.000Z", endAt: "2026-09-18T18:30:00.000Z", timeZone: "America/New_York",
+      location: "Online", virtualUrl: null, version: 3, minutesStatus: "not-started", materialCount: 4,
+    }} />);
+    expect(screen.getByText(/Sep 18, 2026 · 1:00 PM–2:30 PM EDT · Materials published · 4 materials/)).toBeVisible();
   });
 });

@@ -9,8 +9,9 @@
  *   npm run seed:local
  *
  * What this does per app:
- *   board     - creates PGPZBoardNextAuth table and provisions paul@paulbrigner.com
- *               as an email+password account. Admin is decided by the env
+ *   board     - creates the Board auth, access, meetings, and document metadata
+ *               tables and provisions paul@paulbrigner.com as an
+ *               email+password account. Admin is decided by the env
  *               allowlists BOARD_MEMBER_EMAILS + BOARD_ADMIN_EMAILS (see
  *               apps/board/.env.local.example), so make sure his address is on
  *               both before `npm run dev:board`.
@@ -110,6 +111,16 @@ function createBoardAccessTable() {
   run("node", [script, "--region", REGION, "--access-table", "PGPZBoardAccess"]);
 }
 
+function createBoardMeetingsTable() {
+  const script = resolve(ROOT, "apps/board/scripts/setup/create-meetings-table.mjs");
+  run("node", [script, "--region", REGION, "--meetings-table", "PGPZBoardMeetings"]);
+}
+
+function createBoardDocumentsTable() {
+  const script = resolve(ROOT, "apps/board/scripts/setup/create-documents-table.mjs");
+  run("node", [script, "--region", REGION, "--documents-table", "PGPZBoardDocuments"]);
+}
+
 function parseArgs(argv) {
   const out = { app: null, password: null };
   for (let i = 0; i < argv.length; i += 1) {
@@ -146,6 +157,10 @@ function main() {
     createTables("community", BOARD.table);
     console.log("\n[seed] Creating PGPZBoardAccess table...");
     createBoardAccessTable();
+    console.log("\n[seed] Creating PGPZBoardMeetings table...");
+    createBoardMeetingsTable();
+    console.log("\n[seed] Creating PGPZBoardDocuments table and meeting index...");
+    createBoardDocumentsTable();
     console.log("\n[seed] Provisioning board account for paul@paulbrigner.com...");
     provisionBoard(email, password);
   } else {

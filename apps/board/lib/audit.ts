@@ -3,7 +3,15 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { AuditActor, AuditEventInput } from "@pgpz/audit-log";
 import { createBoardAuditLedger } from "@/lib/audit-ledger";
-import { roleCanManageBoardDocuments, roleCanManageBoardUsers, roleCanReviewBoardAudit, type BoardAccessRole } from "@/lib/board-access";
+import {
+  roleCanManageBoardDocuments,
+  roleCanManageBoardMeetings,
+  roleCanManageBoardUsers,
+  roleCanPrepareBoardMeetings,
+  roleCanReviewBoardAudit,
+  roleCanSendBoardMeetingCommunications,
+  type BoardAccessRole,
+} from "@/lib/board-access";
 
 /** The Board's append-only audit ledger (PGPZBoardAuditLog table). */
 export const boardAuditLedger = createBoardAuditLedger();
@@ -14,6 +22,7 @@ export type BoardAuditCategory =
   | "account"
   | "document_read"
   | "document_lifecycle"
+  | "meeting"
   | "audit";
 
 /** Capabilities snapshot for a resolved, authenticated actor. */
@@ -26,6 +35,9 @@ export function authenticatedActor(member: {
   const role = member.role as BoardAccessRole;
   const capabilities = [
     ...(roleCanManageBoardDocuments(role) ? ["manageBoardDocuments"] : []),
+    ...(roleCanPrepareBoardMeetings(role) ? ["prepareBoardMeetings"] : []),
+    ...(roleCanManageBoardMeetings(role) ? ["manageBoardMeetings"] : []),
+    ...(roleCanSendBoardMeetingCommunications(role) ? ["sendBoardMeetingCommunications"] : []),
     ...(roleCanReviewBoardAudit(role) ? ["reviewBoardAudit"] : []),
     ...(roleCanManageBoardUsers(role) ? ["manageBoardUsers"] : []),
   ];

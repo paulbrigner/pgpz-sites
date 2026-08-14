@@ -10,13 +10,23 @@ function createFakeClient() {
     async get({ Key }: { Key: { pk: string; sk: string } }) {
       return { Item: items.get(`${Key.pk}#${Key.sk}`) };
     },
-    async query({ IndexName, ExpressionAttributeValues }: { IndexName?: string; ExpressionAttributeValues: Record<string, unknown> }) {
+    async query({ IndexName, ExpressionAttributeValues, ExclusiveStartKey }: { IndexName?: string; ExpressionAttributeValues: Record<string, unknown>; ExclusiveStartKey?: Record<string, unknown> }) {
       if (IndexName === "Library") {
         const lp = ExpressionAttributeValues[":lp"] as string;
         const rows = [...items.values()]
           .filter((item) => item.libraryPk === lp)
           .map((item) => ({ pk: item.pk, sk: item.sk }));
-        return { Items: rows, LastEvaluatedKey: undefined };
+        const offset = ExclusiveStartKey ? Number(ExclusiveStartKey.offset) : 0;
+        return { Items: rows.slice(offset, offset + 1), LastEvaluatedKey: offset + 1 < rows.length ? { offset: offset + 1 } : undefined };
+      }
+      if (IndexName === "MeetingDocuments") {
+        const meetingPk = ExpressionAttributeValues[":meetingPk"] as string;
+        const rows = [...items.values()]
+          .filter((item) => item.meetingPk === meetingPk)
+          .sort((a, b) => String(a.meetingSort).localeCompare(String(b.meetingSort)))
+          .map((item) => ({ documentId: item.documentId, pk: item.pk, sk: item.sk }));
+        const offset = ExclusiveStartKey ? Number(ExclusiveStartKey.offset) : 0;
+        return { Items: rows.slice(offset, offset + 1), LastEvaluatedKey: offset + 1 < rows.length ? { offset: offset + 1 } : undefined };
       }
       const pk = ExpressionAttributeValues[":pk"] as string;
       const prefix = ExpressionAttributeValues[":prefix"] as string;
@@ -168,5 +178,36 @@ describe("board documents repository", () => {
     });
     expect(updated.currentVersion.sequence).toBe(2);
     expect((await repo.listVersions("policy")).map((item) => item.sequence)).toEqual([1, 2]);
+  });
+
+  it("keeps meeting-owned documents out of the general library while preserving the governed record", async () => {
+    const repo = createBoardDocumentRepository(createFakeClient() as never);
+    await repo.createDocument({
+      documentId: "meeting-agenda",
+      title: "September Agenda",
+      description: "Published agenda",
+      category: "governance",
+      visibility: "members",
+      version: version("meeting-agenda", "v1", 1),
+      actorId: "user-1",
+      ownership: { ownerType: "meeting", meetingId: "meeting-1", meetingSection: "agenda" },
+    });
+    await repo.createDocument({
+      documentId: "meeting-prep",
+      title: "Preparation Packet",
+      description: "Board packet",
+      category: "governance",
+      visibility: "members",
+      version: version("meeting-prep", "v1", 1),
+      actorId: "user-1",
+      ownership: { ownerType: "meeting", meetingId: "meeting-1", meetingSection: "preparation" },
+    });
+
+    await expect(repo.listDocuments()).resolves.toEqual([]);
+    await expect(repo.listMeetingDocuments("meeting-1")).resolves.toMatchObject([
+      { documentId: "meeting-agenda", ownerType: "meeting", meetingId: "meeting-1", meetingSection: "agenda" },
+      { documentId: "meeting-prep", ownerType: "meeting", meetingId: "meeting-1", meetingSection: "preparation" },
+    ]);
+    await expect(repo.getDocument("meeting-agenda")).resolves.toMatchObject({ documentId: "meeting-agenda" });
   });
 });

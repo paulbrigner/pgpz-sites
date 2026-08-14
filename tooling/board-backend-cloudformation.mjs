@@ -5,6 +5,7 @@ export const BOARD_BACKEND = Object.freeze({
   documentsTableName: "PGPZBoardDocuments",
   auditTableName: "PGPZBoardAuditLog",
   accessTableName: "PGPZBoardAccess",
+  meetingsTableName: "PGPZBoardMeetings",
   computeRoleName: "PgpzBoardAmplifyMainCompute",
   auditArchiverRoleName: "PgpzBoardAuditArchiver",
 });
@@ -41,6 +42,15 @@ export const BOARD_AUDIT_ACTIONS = Object.freeze([
 /** Board access registry: indexed reads and conditional/transactional writes.
  * Profiles are mutable, but revisions are immutable by application contract. */
 export const BOARD_ACCESS_ACTIONS = Object.freeze([
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:Query",
+  "dynamodb:TransactWriteItems",
+]);
+
+/** Board meetings: indexed reads and conditional/transactional writes, with
+ * no delete or scan. Revisions and finalized child records are retained. */
+export const BOARD_MEETINGS_ACTIONS = Object.freeze([
   "dynamodb:GetItem",
   "dynamodb:PutItem",
   "dynamodb:Query",
@@ -134,7 +144,7 @@ function objectLockDefault(modeParam, daysParam) {
 export function buildBoardBackendTemplate() {
   return {
     AWSTemplateFormatVersion: "2010-09-09",
-    Description: "Isolated auth, governance-document, and audit backend for the private PGPZ Board portal",
+    Description: "Isolated auth, governance-document, meeting, and audit backend for the private PGPZ Board portal",
     Parameters: {
       BoardObjectLockMode: {
         Type: "String",
@@ -223,6 +233,8 @@ export function buildBoardBackendTemplate() {
             { AttributeName: "updatedAt", AttributeType: "S" },
             { AttributeName: "category", AttributeType: "S" },
             { AttributeName: "status", AttributeType: "S" },
+            { AttributeName: "meetingPk", AttributeType: "S" },
+            { AttributeName: "meetingSort", AttributeType: "S" },
           ],
           KeySchema: [
             { AttributeName: "pk", KeyType: "HASH" },
@@ -253,11 +265,55 @@ export function buildBoardBackendTemplate() {
               ],
               Projection: { ProjectionType: "KEYS_ONLY" },
             },
+            {
+              IndexName: "MeetingDocuments",
+              KeySchema: [
+                { AttributeName: "meetingPk", KeyType: "HASH" },
+                { AttributeName: "meetingSort", KeyType: "RANGE" },
+              ],
+              Projection: { ProjectionType: "INCLUDE", NonKeyAttributes: ["documentId"] },
+            },
           ],
           PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
           DeletionProtectionEnabled: true,
           SSESpecification: { SSEEnabled: true, SSEType: "KMS", KMSMasterKeyId: { Ref: "BoardKmsKey" } },
           // Deliberately no TimeToLiveSpecification: documents are retained.
+          Tags: confidentialTags,
+        },
+      },
+
+      // ---- Board meeting domain: retained aggregate, child records, revisions ----
+      BoardMeetingsTable: {
+        Type: "AWS::DynamoDB::Table",
+        DeletionPolicy: "Retain",
+        UpdateReplacePolicy: "Retain",
+        Properties: {
+          TableName: BOARD_BACKEND.meetingsTableName,
+          BillingMode: "PAY_PER_REQUEST",
+          AttributeDefinitions: [
+            { AttributeName: "pk", AttributeType: "S" },
+            { AttributeName: "sk", AttributeType: "S" },
+            { AttributeName: "timelinePk", AttributeType: "S" },
+            { AttributeName: "timelineSk", AttributeType: "S" },
+          ],
+          KeySchema: [
+            { AttributeName: "pk", KeyType: "HASH" },
+            { AttributeName: "sk", KeyType: "RANGE" },
+          ],
+          GlobalSecondaryIndexes: [
+            {
+              IndexName: "Timeline",
+              KeySchema: [
+                { AttributeName: "timelinePk", KeyType: "HASH" },
+                { AttributeName: "timelineSk", KeyType: "RANGE" },
+              ],
+              Projection: { ProjectionType: "ALL" },
+            },
+          ],
+          PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+          DeletionProtectionEnabled: true,
+          SSESpecification: { SSEEnabled: true, SSEType: "KMS", KMSMasterKeyId: { Ref: "BoardKmsKey" } },
+          // Deliberately no TTL: meeting records are governance evidence.
           Tags: confidentialTags,
         },
       },
@@ -325,7 +381,7 @@ export function buildBoardBackendTemplate() {
         DeletionPolicy: "Retain",
         UpdateReplacePolicy: "Retain",
         Properties: {
-          Description: "Board-only encryption key for governance documents and the audit ledger",
+          Description: "Board-only encryption key for governance documents, meetings, and the audit ledger",
           Enabled: true,
           EnableKeyRotation: true,
           KeyPolicy: {
@@ -673,6 +729,15 @@ export function buildBoardBackendTemplate() {
                     ],
                   },
                   {
+                    Sid: "BoardMeetingsNoDelete",
+                    Effect: "Allow",
+                    Action: [...BOARD_MEETINGS_ACTIONS],
+                    Resource: [
+                      { "Fn::GetAtt": ["BoardMeetingsTable", "Arn"] },
+                      { "Fn::Sub": "${BoardMeetingsTable.Arn}/index/*" },
+                    ],
+                  },
+                  {
                     Sid: "StagingPutGetDelete",
                     Effect: "Allow",
                     Action: ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
@@ -764,6 +829,20 @@ export function buildBoardBackendTemplate() {
           Dimensions: [{ Name: "TableName", Value: BOARD_BACKEND.accessTableName }],
         },
       },
+      BoardMeetingsTableErrorAlarm: {
+        Type: "AWS::CloudWatch::Alarm",
+        Properties: {
+          AlarmName: "PGPZBoardMeetingsTableSystemErrors",
+          ComparisonOperator: "GreaterThanThreshold",
+          EvaluationPeriods: 1,
+          Threshold: 0,
+          MetricName: "SystemErrors",
+          Namespace: "AWS/DynamoDB",
+          Statistic: "Sum",
+          Period: 300,
+          Dimensions: [{ Name: "TableName", Value: BOARD_BACKEND.meetingsTableName }],
+        },
+      },
     },
     Outputs: {
       TableName: { Value: { Ref: "BoardAuthTable" } },
@@ -774,6 +853,8 @@ export function buildBoardBackendTemplate() {
       AuditTableArn: { Value: { "Fn::GetAtt": ["BoardAuditLogTable", "Arn"] } },
       AccessTableName: { Value: { Ref: "BoardAccessTable" } },
       AccessTableArn: { Value: { "Fn::GetAtt": ["BoardAccessTable", "Arn"] } },
+      MeetingsTableName: { Value: { Ref: "BoardMeetingsTable" } },
+      MeetingsTableArn: { Value: { "Fn::GetAtt": ["BoardMeetingsTable", "Arn"] } },
       AuditTableStreamArn: { Value: { "Fn::GetAtt": ["BoardAuditLogTable", "StreamArn"] } },
       StagingBucket: { Value: { Ref: "BoardStagingBucket" } },
       RetainedBucket: { Value: { Ref: "BoardRetainedBucket" } },
@@ -804,6 +885,7 @@ export function buildBoardBackendStackPlan({
     documentsTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.documentsTableName}`,
     auditTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.auditTableName}`,
     accessTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.accessTableName}`,
+    meetingsTableArn: `arn:aws:dynamodb:${region}:${accountId}:table/${BOARD_BACKEND.meetingsTableName}`,
     computeRoleArn: `arn:aws:iam::${accountId}:role/${BOARD_BACKEND.computeRoleName}`,
     auditArchiverRoleArn: `arn:aws:iam::${accountId}:role/${BOARD_BACKEND.auditArchiverRoleName}`,
     template: buildBoardBackendTemplate(),

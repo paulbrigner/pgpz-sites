@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Badge, Container, Surface } from "@pgpz/ui";
 import { ArrowRight, CalendarDays, FileText, KeyRound, ScrollText, Settings } from "lucide-react";
 import type { BoardMember } from "@/lib/session";
+import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel } from "@/components/meetings/meeting-format";
+import type { MeetingSummaryView } from "@/components/meetings/types";
 
 export type { BoardMember };
 
@@ -13,11 +15,10 @@ const memberResources = [
     body: "Governance records, policies, agreements, and version history",
   },
   {
-    href: null,
+    href: "/meetings",
     icon: CalendarDays,
     title: "Board meetings",
-    body: "Scheduling, agendas, preparation materials, and minutes in one place",
-    comingSoon: true,
+    body: "Upcoming meetings, agendas, preparation materials, decisions, and minutes",
   },
   {
     href: "/account/security",
@@ -39,7 +40,7 @@ function canAccessAdministration(member: BoardMember) {
   return ["chair", "admin", "executive-director", "legal-counsel"].includes(member.role);
 }
 
-export function BoardDashboard({ member, passkeyCount = null }: { member: BoardMember; passkeyCount?: number | null }) {
+export function BoardDashboard({ member, passkeyCount = null, nextMeeting = null }: { member: BoardMember; passkeyCount?: number | null; nextMeeting?: (MeetingSummaryView & { materialCount: number }) | null }) {
   return (
     <Container className="py-10 sm:py-14">
       <section>
@@ -70,6 +71,12 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
           <ul className="divide-y divide-[var(--border)]">
             {memberResources.map((resource) => {
               const { href, icon: Icon, title, body } = resource;
+              const meetingDate = title === "Board meetings" && nextMeeting ? formatMeetingDate(nextMeeting.startAt, nextMeeting.endAt, nextMeeting.timeZone) : null;
+              const resourceBody = title === "Board meetings"
+                ? meetingDate && nextMeeting
+                  ? `${formatShortMeetingDate(nextMeeting.startAt, nextMeeting.timeZone)} · ${meetingDate.time} · ${meetingStatusLabel(nextMeeting.status)} · ${nextMeeting.materialCount} ${nextMeeting.materialCount === 1 ? "material" : "materials"}`
+                  : "No upcoming meeting scheduled"
+                : body;
               const content = (
                 <>
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-soft)] text-[var(--primary)]">
@@ -77,13 +84,9 @@ export function BoardDashboard({ member, passkeyCount = null }: { member: BoardM
                   </span>
                   <span className="min-w-0 flex-1">
                     <h3 className="font-semibold tracking-[-0.015em] text-[var(--foreground)]">{title}</h3>
-                    <span className="mt-0.5 block truncate text-sm text-[var(--muted)]">{body}</span>
+                    <span className="mt-0.5 block truncate text-sm text-[var(--muted)]">{resourceBody}</span>
                   </span>
-                  {"comingSoon" in resource && resource.comingSoon ? (
-                    <span className="shrink-0 rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-                      Coming soon
-                    </span>
-                  ) : href === "/account/security" && passkeyCount !== null ? (
+                  {href === "/account/security" && passkeyCount !== null ? (
                     <span className="hidden shrink-0 text-xs font-semibold text-[var(--muted)] sm:inline">
                       {passkeyCount} {passkeyCount === 1 ? "passkey" : "passkeys"}
                     </span>

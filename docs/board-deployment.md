@@ -101,6 +101,7 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `BETTER_AUTH_TRUSTED_ORIGINS` | yes | `https://board.pgpz.org` |
 | `NEXTAUTH_TABLE` | yes | `PGPZBoardNextAuth`; also stores Board passkey rows under physical model `better_auth_passkeys` |
 | `BOARD_ACCESS_TABLE` | yes | `PGPZBoardAccess`; Board-only roles, status, email claims, and immutable revisions |
+| `BOARD_MEETINGS_TABLE` | yes | `PGPZBoardMeetings`; Board-only meetings, agenda, attendance, decisions, action items, minutes state, delivery evidence, and revisions |
 | `BOARD_ACCESS_REGISTRY_ENABLED` | yes | Keep `false` until the roster migration is verified; then `true` makes the registry authoritative |
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
@@ -126,13 +127,13 @@ user requests a magic link on `/signin`, then registers a passkey from
 `/account/security`. Role and status changes take effect immediately and append
 an immutable access revision plus audit event.
 
-| Role | Documents | Audit ledger | User management |
-| --- | --- | --- | --- |
-| Director | view | no | no |
-| Board Chair | manage | review | manage |
-| Executive Director | manage | review | manage |
-| Legal Counsel | manage | review | no |
-| Board Support | manage | no | no |
+| Role | Documents | Meetings | Audit ledger | User management |
+| --- | --- | --- | --- | --- |
+| Director | view | view + RSVP | no | no |
+| Board Chair | manage | manage + communicate | review | manage |
+| Executive Director | manage | manage + communicate | review | manage |
+| Legal Counsel | manage | view + meeting documents | review | no |
+| Board Support | manage | prepare drafts and records | no | no |
 
 Document-management controls live directly in `/documents`; the legacy
 `/admin/documents` location redirects there. Authorized document managers can
@@ -166,8 +167,9 @@ there is no fallback to the legacy allowlists.
    Registration and authentication must both complete WebAuthn user verification.
 4. Verify recovery email ownership and encourage every user to register two
    passkeys. A passkey-authenticated session lasts up to 12 hours. Document
-   mutations, access changes, audit verification/export, and passkey changes
-   require a passkey verification no more than 10 minutes old. Review
+   mutations, meeting preparation/lifecycle changes, meeting communications,
+   access changes, audit verification/export, and passkey changes require a
+   passkey verification no more than 10 minutes old. Review
    `magic_link_sent`, `passkey_registered`, `passkey_updated`,
    `passkey_removed`, and `user_passkeys_reset` in the Board audit ledger.
 5. If a user loses every authenticator, a Board Chair or Executive Director can
@@ -249,6 +251,16 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
   users, roles, access status, or sessions.
 - A `Board Support` user can manage documents but cannot review the audit ledger
   or manage users, roles, access status, or sessions.
+- `/meetings` shows upcoming meetings first and retains a newest-first past
+  archive. Draft meetings remain concealed from roles without preparation access.
+- Meeting-owned documents appear inside their meeting and never as duplicate
+  Document Library rows; downloads retain the normal vault audit behavior.
+- Board Support can prepare draft meetings and records but cannot publish,
+  reschedule, cancel, close, confirm quorum, approve minutes, or send official communications.
+- Board Chair and Executive Director can manually send one-recipient-at-a-time
+  invitations, updates, materials notices, reminders, and cancellations through
+  the Board SES identity. Calendar invitations retain a stable UID, organizer,
+  and sequence; retrying a partial send skips confirmed recipients.
 - Signing in with a non-roster email shows the "not on the board roster" panel.
 - `curl -I` shows `X-Robots-Tag: noindex`, `X-Frame-Options: DENY`, CSP.
 - `https://board.pgpz.org/robots.txt` disallows all crawlers.
@@ -264,8 +276,16 @@ described here because they carry distinct retention and isolation guarantees.
 
 - `PGPZBoardDocuments` — governance-document metadata + immutable per-version
   rows (`PK=DOCUMENT#<id>`, `SK=META` / `SK=VERSION#<seq>#<versionId>`). Query
-  via the `Library`/`ByCategory`/`ByStatus` GSIs — never `Scan`. Web compute IAM
+  via the `Library`/`ByCategory`/`ByStatus`/`MeetingDocuments` GSIs — never `Scan`.
+  Sparse ownership keys keep meeting documents out of the general library while
+  retaining the same governed record and object history. Web compute IAM
   allows read + conditional write but **no `DeleteItem`**.
+- `PGPZBoardMeetings` — retained meeting aggregates and child rows for agenda,
+  attendance/RSVP, decisions, action items, minutes state, per-recipient
+  communication attempts, and immutable revisions. The `Timeline` GSI serves
+  upcoming and past views without `Scan`. The table is `Retain`-protected,
+  KMS-encrypted, PITR-enabled, deletion-protected, has no TTL, and web compute
+  receives no `DeleteItem`, `UpdateItem`, or `Scan` permission.
 - `PGPZBoardAuditLog` — append-only ledger. Web compute IAM allows only
   `GetItem`/`PutItem`/`Query` (no `UpdateItem`/`DeleteItem`/`Scan`), so the
   table is append-only by IAM as well as by application invariant. A DynamoDB
@@ -302,7 +322,7 @@ constants — it lives in the CloudFormation parameters and the deployment recor
 
 ### Environment variables
 
-The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`, `BOARD_ACCESS_TABLE`,
+The stack outputs supply `BOARD_DOCUMENTS_TABLE`, `BOARD_AUDIT_TABLE`, `BOARD_ACCESS_TABLE`, `BOARD_MEETINGS_TABLE`,
 `BOARD_DOCUMENTS_STAGING_BUCKET`, `BOARD_DOCUMENTS_RETAINED_BUCKET`,
 `BOARD_AUDIT_ARCHIVE_BUCKET`, and `BOARD_KMS_KEY_ID`. `write-amplify-env.mjs
 board` materializes them; the build now rejects a deployment when any of these
