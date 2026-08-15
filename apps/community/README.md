@@ -19,6 +19,12 @@ Community owns:
 - app adapters for shared auth, email, jobs, access log, files, notifications,
   admin UI, and policy-update distribution.
 
+Topic Briefings administration keeps scheduled refresh and member publication
+as independent controls. Topics load collapsed, archive removes them from the
+active administrator inventory, and version history is paged. Administrators
+may permanently delete historical versions, but the currently published
+version is protected.
+
 Current central feature switches enable the protected member directory, ZEC
 Shelf, and public files. Letter sign-ons and the document vault remain disabled.
 A package being available in the monorepo does not authorize enabling it here.

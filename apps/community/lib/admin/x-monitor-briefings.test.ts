@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import {
   AdminXMonitorBriefingError,
   createCuratedBriefingTopic,
+  deleteCuratedBriefingVersion,
   listCuratedBriefingTopics,
   normalizeCuratedBriefingDraftInput,
   normalizeCuratedBriefingTopicInput,
@@ -76,6 +77,7 @@ describe("Community Topic Briefings admin boundary", () => {
       refresh_interval_minutes: 1440,
       retrieval_config: { lookback_hours: 720 },
       enabled: true,
+      publication_enabled: false,
     });
 
     const [input, init] = vi.mocked(fetch).mock.calls[0];
@@ -84,14 +86,33 @@ describe("Community Topic Briefings admin boundary", () => {
     expect(JSON.parse(String(init?.body))).toMatchObject({
       slug: "three-z-architecture",
       order: 4,
+      enabled: true,
+      publication_enabled: false,
     });
     expect(JSON.parse(String(init?.body))).not.toHaveProperty("display_order");
+  });
+
+  it("forwards guarded version deletion to the fixed administrator path", async () => {
+    await deleteCuratedBriefingVersion("22222222-2222-4222-8222-222222222222");
+
+    const [input, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(input)).toBe(
+      "https://monitor.example/v1/admin/curated-briefings/versions/22222222-2222-4222-8222-222222222222",
+    );
+    expect(init?.method).toBe("DELETE");
   });
 
   it("bounds topic and immutable editorial revision inputs", () => {
     expect(normalizeCuratedBriefingTopicInput({
       order: 8,
     }, { partial: true })).toEqual({ order: 8 });
+    expect(normalizeCuratedBriefingTopicInput({
+      enabled: false,
+      publication_enabled: true,
+    }, { partial: true })).toEqual({
+      enabled: false,
+      publication_enabled: true,
+    });
     expect(() => normalizeCuratedBriefingTopicInput({
       display_order: 8,
     }, { partial: true })).toThrow("At least one topic field");

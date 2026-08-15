@@ -97,7 +97,7 @@ export function AdminConsole({ initialUpdates, currentAdminId }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-white/85 p-2 shadow-sm">
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;

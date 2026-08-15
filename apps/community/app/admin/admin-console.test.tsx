@@ -38,6 +38,8 @@ describe("admin console Topic Briefings integration", () => {
 
     await user.click(screen.getByRole("button", { name: /Topic Briefings/i }));
     expect(screen.getByText("Briefings editorial panel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /User management/i }).parentElement)
+      .toHaveClass("xl:grid-cols-4");
   });
 
   it("hides the editorial tab while the staged rollout flag is off", () => {

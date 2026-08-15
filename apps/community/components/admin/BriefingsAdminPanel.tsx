@@ -35,7 +35,13 @@ type TopicDraft = {
   lookbackHours: number;
   retrievalConfig: Record<string, unknown>;
   order: number;
-  enabled: boolean;
+  refreshEnabled: boolean;
+  publicationEnabled: boolean;
+};
+
+type AdminBriefingTopic = CuratedBriefingTopic & {
+  publication_enabled?: boolean;
+  archived_at?: string | null;
 };
 
 type VersionDraft = { question: string; answerText: string; keyPoints: string };
@@ -51,6 +57,8 @@ const cadenceOptions = [
   { value: 10080, label: "Weekly" },
 ];
 
+const versionPageSize = 5;
+
 const emptyTopic = (): TopicDraft => ({
   slug: "",
   question: "",
@@ -61,10 +69,11 @@ const emptyTopic = (): TopicDraft => ({
   lookbackHours: 720,
   retrievalConfig: {},
   order: 0,
-  enabled: true,
+  refreshEnabled: true,
+  publicationEnabled: true,
 });
 
-const topicDraft = (topic: CuratedBriefingTopic): TopicDraft => ({
+const topicDraft = (topic: AdminBriefingTopic): TopicDraft => ({
   slug: topic.slug,
   question: topic.question,
   category: topic.category || "",
@@ -74,7 +83,8 @@ const topicDraft = (topic: CuratedBriefingTopic): TopicDraft => ({
   lookbackHours: Number(topic.retrieval_config?.lookback_hours || 720),
   retrievalConfig: topic.retrieval_config || {},
   order: topic.order,
-  enabled: topic.enabled,
+  refreshEnabled: topic.enabled,
+  publicationEnabled: topic.publication_enabled ?? topic.enabled,
 });
 
 const topicPayload = (draft: TopicDraft) => ({
@@ -86,7 +96,8 @@ const topicPayload = (draft: TopicDraft) => ({
   answer_style: draft.answerStyle,
   refresh_interval_minutes: draft.refreshIntervalMinutes,
   order: draft.order,
-  enabled: draft.enabled,
+  enabled: draft.refreshEnabled,
+  publication_enabled: draft.publicationEnabled,
 });
 
 const formatDate = (value: string | null | undefined) => {
@@ -232,28 +243,51 @@ function TopicFields({
           placeholder="Optional guidance for what the generated draft should cover."
         />
       </label>
-      <label className="flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-medium text-[var(--brand-ink)] md:col-span-2">
+      <label className="flex items-start gap-3 rounded-xl border bg-white px-4 py-3 text-sm text-[var(--brand-ink)]">
         <input
           type="checkbox"
-          checked={draft.enabled}
-          onChange={(event) => onChange({ ...draft, enabled: event.target.checked })}
-          className="h-5 w-5 accent-[var(--brand-ink)]"
+          aria-label="Scheduled refresh"
+          checked={draft.refreshEnabled}
+          onChange={(event) => onChange({ ...draft, refreshEnabled: event.target.checked })}
+          className="mt-0.5 h-5 w-5 accent-[var(--brand-ink)]"
         />
-        Enabled for scheduled refresh and member publication
+        <span>
+          <span className="block font-medium">Scheduled refresh</span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">
+            Generate new drafts automatically at the selected cadence. Manual refresh remains available.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-3 rounded-xl border bg-white px-4 py-3 text-sm text-[var(--brand-ink)]">
+        <input
+          type="checkbox"
+          aria-label="Member publication"
+          checked={draft.publicationEnabled}
+          onChange={(event) => onChange({ ...draft, publicationEnabled: event.target.checked })}
+          className="mt-0.5 h-5 w-5 accent-[var(--brand-ink)]"
+        />
+        <span>
+          <span className="block font-medium">Member publication</span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">
+            Allow the currently published version to appear to members, even when scheduled refresh is off.
+          </span>
+        </span>
       </label>
     </div>
   );
 }
 
 export function BriefingsAdminPanel() {
-  const [topics, setTopics] = useState<CuratedBriefingTopic[]>([]);
+  const [topics, setTopics] = useState<AdminBriefingTopic[]>([]);
   const [drafts, setDrafts] = useState<Record<string, TopicDraft>>({});
   const [newTopic, setNewTopic] = useState<TopicDraft>(emptyTopic);
   const [showCreate, setShowCreate] = useState(false);
+  const [expandedSettings, setExpandedSettings] = useState<string | null>(null);
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
   const [versions, setVersions] = useState<Record<string, CuratedBriefingVersion[]>>({});
   const [selectedVersion, setSelectedVersion] = useState<Record<string, string>>({});
   const [versionDrafts, setVersionDrafts] = useState<Record<string, VersionDraft>>({});
+  const [versionPages, setVersionPages] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -268,7 +302,7 @@ export function BriefingsAdminPanel() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api<{ items: CuratedBriefingTopic[] }>("/api/admin/x-monitor/briefings");
+      const response = await api<{ items: AdminBriefingTopic[] }>("/api/admin/x-monitor/briefings");
       setTopics(response.items || []);
       setDrafts(Object.fromEntries((response.items || []).map((topic) => [topic.topic_id, topicDraft(topic)])));
     } catch (loadError) {
@@ -326,7 +360,9 @@ export function BriefingsAdminPanel() {
     void run(`archive:${topic.topic_id}`, async () => {
       await api(`/api/admin/x-monitor/briefings/topics/${topic.topic_id}`, { method: "DELETE" });
       setNotice("Topic archived.");
-      await loadTopics();
+      setTopics((current) => current.filter((item) => item.topic_id !== topic.topic_id));
+      setExpandedSettings((current) => current === topic.topic_id ? null : current);
+      setExpandedTopic((current) => current === topic.topic_id ? null : current);
     });
   };
 
@@ -351,6 +387,7 @@ export function BriefingsAdminPanel() {
       ? preferredVersionId
       : items.find((version) => version.review_status === "draft")?.version_id || items[0]?.version_id;
     if (selected) setSelectedVersion((current) => ({ ...current, [topicId]: selected }));
+    setVersionPages((current) => ({ ...current, [topicId]: 0 }));
   };
 
   const toggleHistory = (topicId: string) => {
@@ -383,7 +420,10 @@ export function BriefingsAdminPanel() {
 
   const publishVersion = (topicId: string, versionId: string) => run(`publish:${versionId}`, async () => {
     await api(`/api/admin/x-monitor/briefings/versions/${versionId}/publish`, { method: "POST" });
-    setNotice("Briefing published to members.");
+    const topic = topics.find((item) => item.topic_id === topicId);
+    setNotice((topic?.publication_enabled ?? topic?.enabled)
+      ? "Briefing published to members."
+      : "Version published. Member visibility remains off until you enable it in topic settings.");
     await Promise.all([loadTopics(), loadVersions(topicId, versionId)]);
   });
 
@@ -411,6 +451,15 @@ export function BriefingsAdminPanel() {
       });
       setNotice("Earlier version restored and published.");
       await Promise.all([loadTopics(), loadVersions(topicId, versionId)]);
+    });
+  };
+
+  const deleteVersion = (topicId: string, version: CuratedBriefingVersion) => {
+    if (!window.confirm(`Permanently delete version ${version.version_number}? This cannot be undone.`)) return;
+    void run(`delete:${version.version_id}`, async () => {
+      await api(`/api/admin/x-monitor/briefings/versions/${version.version_id}`, { method: "DELETE" });
+      setNotice(`Version ${version.version_number} deleted.`);
+      await loadVersions(topicId);
     });
   };
 
@@ -481,6 +530,14 @@ export function BriefingsAdminPanel() {
               const topicVersions = versions[topic.topic_id] || [];
               const selectedId = selectedVersion[topic.topic_id];
               const selected = topicVersions.find((version) => version.version_id === selectedId) || null;
+              const settingsExpanded = expandedSettings === topic.topic_id;
+              const publicationEnabled = topic.publication_enabled ?? topic.enabled;
+              const pageCount = Math.max(1, Math.ceil(topicVersions.length / versionPageSize));
+              const versionPage = Math.min(versionPages[topic.topic_id] || 0, pageCount - 1);
+              const visibleVersions = topicVersions.slice(
+                versionPage * versionPageSize,
+                (versionPage + 1) * versionPageSize,
+              );
               return (
                 <article key={topic.topic_id} className="overflow-hidden rounded-2xl border bg-white">
                   <div className="flex flex-col gap-4 border-b bg-slate-50/70 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
@@ -490,7 +547,10 @@ export function BriefingsAdminPanel() {
                           {topic.category || "Uncategorized"}
                         </span>
                         <span className={cn("rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em]", topic.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-100 text-slate-600")}>
-                          {topic.enabled ? "Enabled" : "Disabled"}
+                          Refresh {topic.enabled ? "on" : "off"}
+                        </span>
+                        <span className={cn("rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em]", publicationEnabled ? "border-sky-200 bg-sky-50 text-sky-800" : "border-slate-200 bg-slate-100 text-slate-600")}>
+                          Member visibility {publicationEnabled ? "on" : "off"}
                         </span>
                         {topic.latest_run ? (
                           <span className="text-xs text-slate-500">Latest run: {topic.latest_run.status}</span>
@@ -507,7 +567,12 @@ export function BriefingsAdminPanel() {
                         <RefreshCcw className={cn("h-4 w-4", busy[`refresh:${topic.topic_id}`] && "animate-spin")} aria-hidden="true" />
                         Refresh now
                       </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => toggleHistory(topic.topic_id)}>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setExpandedSettings((current) => current === topic.topic_id ? null : topic.topic_id)} aria-expanded={settingsExpanded}>
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                        {settingsExpanded ? "Close settings" : "Edit settings"}
+                        <ChevronDown className={cn("h-4 w-4 transition", settingsExpanded && "rotate-180")} aria-hidden="true" />
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => toggleHistory(topic.topic_id)} aria-expanded={expandedTopic === topic.topic_id}>
                         <FileClock className="h-4 w-4" aria-hidden="true" />
                         Review & history
                         <ChevronDown className={cn("h-4 w-4 transition", expandedTopic === topic.topic_id && "rotate-180")} aria-hidden="true" />
@@ -515,23 +580,25 @@ export function BriefingsAdminPanel() {
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <TopicFields
-                      draft={draft}
-                      onChange={(next) => setDrafts((current) => ({ ...current, [topic.topic_id]: next }))}
-                      idPrefix={`topic-${topic.topic_id}`}
-                    />
-                    <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
-                      <Button type="button" variant="outline" className="text-rose-700" onClick={() => archiveTopic(topic)} disabled={busy[`archive:${topic.topic_id}`]}>
-                        <Archive className="h-4 w-4" aria-hidden="true" />
-                        Archive
-                      </Button>
-                      <Button type="button" onClick={() => void saveTopic(topic.topic_id)} disabled={busy[`save:${topic.topic_id}`]}>
-                        {busy[`save:${topic.topic_id}`] ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
-                        Save topic
-                      </Button>
+                  {settingsExpanded ? (
+                    <div className="p-5">
+                      <TopicFields
+                        draft={draft}
+                        onChange={(next) => setDrafts((current) => ({ ...current, [topic.topic_id]: next }))}
+                        idPrefix={`topic-${topic.topic_id}`}
+                      />
+                      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
+                        <Button type="button" variant="outline" className="text-rose-700" onClick={() => archiveTopic(topic)} disabled={busy[`archive:${topic.topic_id}`]}>
+                          <Archive className="h-4 w-4" aria-hidden="true" />
+                          Archive
+                        </Button>
+                        <Button type="button" onClick={() => void saveTopic(topic.topic_id)} disabled={busy[`save:${topic.topic_id}`]}>
+                          {busy[`save:${topic.topic_id}`] ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
+                          Save topic
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   {expandedTopic === topic.topic_id ? (
                     <div className="border-t bg-[var(--brand-ice)]/45 p-5">
@@ -542,7 +609,7 @@ export function BriefingsAdminPanel() {
                       ) : (
                         <div className="grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
                           <div className="space-y-2" aria-label="Briefing version history">
-                            {topicVersions.map((version) => (
+                            {visibleVersions.map((version) => (
                               <button
                                 key={version.version_id}
                                 type="button"
@@ -557,6 +624,35 @@ export function BriefingsAdminPanel() {
                                 <p className="mt-1 text-xs text-slate-500">{version.source_count} sources</p>
                               </button>
                             ))}
+                            {topicVersions.length > versionPageSize ? (
+                              <div className="rounded-xl border bg-white px-3 py-2" aria-label="Version history pagination">
+                                <p className="text-xs text-slate-500">
+                                  Showing {versionPage * versionPageSize + 1}–{Math.min((versionPage + 1) * versionPageSize, topicVersions.length)} of {topicVersions.length}
+                                </p>
+                                <div className="mt-2 flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1"
+                                    disabled={versionPage === 0}
+                                    onClick={() => setVersionPages((current) => ({ ...current, [topic.topic_id]: versionPage - 1 }))}
+                                  >
+                                    Previous
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1"
+                                    disabled={versionPage >= pageCount - 1}
+                                    onClick={() => setVersionPages((current) => ({ ...current, [topic.topic_id]: versionPage + 1 }))}
+                                  >
+                                    Next
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
 
                           {selected ? (
@@ -572,6 +668,19 @@ export function BriefingsAdminPanel() {
                                   ) : null}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
+                                  {selected.version_id !== topic.current_published_version_id ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-rose-700"
+                                      onClick={() => deleteVersion(topic.topic_id, selected)}
+                                      disabled={busy[`delete:${selected.version_id}`]}
+                                    >
+                                      <Archive className="h-4 w-4" aria-hidden="true" />
+                                      Delete version
+                                    </Button>
+                                  ) : null}
                                   {selected.review_status === "draft" ? (
                                     <>
                                       <Button type="button" size="sm" variant="outline" onClick={() => rejectVersion(topic.topic_id, selected.version_id)} disabled={busy[`reject:${selected.version_id}`]}>

@@ -25,6 +25,12 @@ and does not expose Answer Mode or pagination.
 This is an intentional product divergence. `apps/coalition` does not expose X
 Monitor.
 
+Community administrators use a separate server-only `briefings:manage` client
+for the fixed Topic Briefings workflow. Scheduled refresh and member
+publication are independent topic controls. Archive retains provider history
+while removing a topic from active lists; individual non-current versions may
+be permanently deleted through the guarded administrator route.
+
 ## Ownership and trust boundaries
 
 - `packages/x-monitor-core` is a pinned copy of provider-neutral contracts and

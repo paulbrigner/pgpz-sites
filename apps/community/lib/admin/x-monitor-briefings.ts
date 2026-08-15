@@ -20,6 +20,10 @@ type BriefingAdminConfiguration = {
   timeoutMs: number;
 };
 
+type AdminCuratedBriefingTopicInput = CuratedBriefingTopicInput & {
+  publication_enabled?: boolean;
+};
+
 export class AdminXMonitorBriefingError extends Error {
   status: number;
 
@@ -106,7 +110,7 @@ export function normalizeCuratedBriefingTopicInput(
   options: { partial?: boolean } = {},
 ): Partial<CuratedBriefingTopicInput> {
   if (!plainObject(value)) throw new AdminXMonitorBriefingError("A topic payload is required");
-  const output: Partial<CuratedBriefingTopicInput> = {};
+  const output: Partial<AdminCuratedBriefingTopicInput> = {};
   const partial = options.partial === true;
 
   if (value.slug !== undefined || !partial) {
@@ -156,6 +160,12 @@ export function normalizeCuratedBriefingTopicInput(
       throw new AdminXMonitorBriefingError("Enabled must be true or false");
     }
     output.enabled = value.enabled;
+  }
+  if (value.publication_enabled !== undefined) {
+    if (typeof value.publication_enabled !== "boolean") {
+      throw new AdminXMonitorBriefingError("Publication enabled must be true or false");
+    }
+    output.publication_enabled = value.publication_enabled;
   }
   if (value.order !== undefined) {
     const displayOrder = Number(value.order);
@@ -298,6 +308,12 @@ export async function listCuratedBriefingVersions(topicId: string): Promise<Cura
 
 export function getCuratedBriefingVersion(versionId: string): Promise<CuratedBriefingVersion> {
   return adminRequest(`${adminBase}/versions/${assertUuid(versionId, "Version ID")}`);
+}
+
+export function deleteCuratedBriefingVersion(versionId: string) {
+  return adminRequest(`${adminBase}/versions/${assertUuid(versionId, "Version ID")}`, {
+    method: "DELETE",
+  });
 }
 
 export function editCuratedBriefingDraft(versionId: string, value: unknown) {

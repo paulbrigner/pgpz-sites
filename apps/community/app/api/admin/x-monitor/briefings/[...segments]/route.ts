@@ -3,6 +3,7 @@ import { AdminAccessError, requireAdminSession } from "@/lib/admin/auth";
 import {
   AdminXMonitorBriefingError,
   deleteCuratedBriefingTopic,
+  deleteCuratedBriefingVersion,
   editCuratedBriefingDraft,
   getCuratedBriefingVersion,
   listCuratedBriefingVersions,
@@ -77,6 +78,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const segments = await prepare(context);
     if (segments.length === 2 && segments[0] === "topics") {
       return NextResponse.json(await deleteCuratedBriefingTopic(segments[1]));
+    }
+    if (segments.length === 2 && segments[0] === "versions") {
+      return NextResponse.json(await deleteCuratedBriefingVersion(segments[1]));
     }
     throw unsupported();
   } catch (error) {
