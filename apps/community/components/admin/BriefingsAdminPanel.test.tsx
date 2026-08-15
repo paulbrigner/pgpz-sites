@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CuratedBriefingTopic, CuratedBriefingVersion } from "@pgpz/x-monitor-core/contracts";
 import { BriefingsAdminPanel } from "./BriefingsAdminPanel";
 
-const topic: CuratedBriefingTopic = {
+const topic: CuratedBriefingTopic & { publication_enabled: boolean; archived_at: null } = {
   topic_id: "11111111-1111-4111-8111-111111111111",
   slug: "three-z-architecture",
   question: "What is the 3Z architecture and its current status?",
@@ -15,6 +15,8 @@ const topic: CuratedBriefingTopic = {
   answer_style: "detailed",
   refresh_interval_minutes: 1440,
   enabled: true,
+  publication_enabled: true,
+  archived_at: null,
   order: 1,
   next_refresh_at: "2026-07-22T12:00:00.000Z",
   last_scheduled_at: "2026-07-21T12:00:00.000Z",
@@ -68,6 +70,12 @@ describe("Topic Briefings admin panel", () => {
       if (path.endsWith(`/topics/${topic.topic_id}/refresh`) && init?.method === "POST") {
         return Response.json({ run_id: "run-1", status: "queued" }, { status: 202 });
       }
+      if (path.endsWith(`/topics/${topic.topic_id}`) && init?.method === "PATCH") {
+        return Response.json({ ...topic, ...JSON.parse(String(init.body)) });
+      }
+      if (path.endsWith(`/topics/${topic.topic_id}`) && init?.method === "DELETE") {
+        return Response.json({ ...topic, archived: true });
+      }
       if (path === "/api/admin/x-monitor/briefings" && (!init?.method || init.method === "GET")) {
         return Response.json({ items: [topic] });
       }
@@ -77,6 +85,7 @@ describe("Topic Briefings admin panel", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -85,11 +94,15 @@ describe("Topic Briefings admin panel", () => {
     render(<BriefingsAdminPanel />);
 
     expect(await screen.findByRole("heading", { name: topic.question })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Refresh cadence")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Edit settings/i }));
     expect(screen.getByLabelText("Refresh cadence")).toHaveValue("1440");
     expect(screen.getByLabelText("Display order")).toHaveValue(1);
     expect(screen.getByText(/Lower numbers appear first; ties are alphabetical/i)).toBeInTheDocument();
     expect(screen.getByText(/Saved display order changes appear on the member page on its next load/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh now" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Scheduled refresh")).toBeChecked();
+    expect(screen.getByLabelText("Member publication")).toBeChecked();
     expect(screen.queryByText(/member answer prompt/i)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /ask/i })).not.toBeInTheDocument();
 
@@ -114,6 +127,72 @@ describe("Topic Briefings admin panel", () => {
         String(path).endsWith(`/topics/${topic.topic_id}/refresh`) && init?.method === "POST",
       )).toBe(true);
     });
+  });
+
+  it("saves scheduled refresh and member publication independently", async () => {
+    const user = userEvent.setup();
+    render(<BriefingsAdminPanel />);
+
+    await user.click(await screen.findByRole("button", { name: /Edit settings/i }));
+    await user.click(screen.getByLabelText("Scheduled refresh"));
+    await user.click(screen.getByRole("button", { name: "Save topic" }));
+
+    await waitFor(() => {
+      const patchCall = vi.mocked(fetch).mock.calls.find(([path, init]) =>
+        String(path).endsWith(`/topics/${topic.topic_id}`) && init?.method === "PATCH",
+      );
+      expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+        enabled: false,
+        publication_enabled: true,
+      });
+    });
+  });
+
+  it("removes an archived topic from the active list", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<BriefingsAdminPanel />);
+
+    await user.click(await screen.findByRole("button", { name: /Edit settings/i }));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(await screen.findByText("Topic archived.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: topic.question })).not.toBeInTheDocument();
+  });
+
+  it("pages long version history and deletes a non-current version", async () => {
+    const user = userEvent.setup();
+    const history = Array.from({ length: 7 }, (_, index): CuratedBriefingVersion => ({
+      ...version,
+      version_id: `${String(index + 3).padStart(8, "0")}-2222-4222-8222-222222222222`,
+      version_number: 7 - index,
+      review_status: "rejected",
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith(`/topics/${topic.topic_id}/versions`)) {
+        return Response.json({ items: history });
+      }
+      if (path.includes("/versions/") && init?.method === "DELETE") {
+        const deletedId = path.split("/").pop();
+        history.splice(history.findIndex((item) => item.version_id === deletedId), 1);
+        return Response.json({ version_id: deletedId, deleted: true });
+      }
+      if (path === "/api/admin/x-monitor/briefings") return Response.json({ items: [topic] });
+      return Response.json({ error: "Unexpected test request" }, { status: 500 });
+    }));
+
+    render(<BriefingsAdminPanel />);
+    await user.click(await screen.findByRole("button", { name: /Review & history/i }));
+
+    expect(await screen.findByText("Showing 1–5 of 7")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Showing 6–7 of 7")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await user.click(screen.getByRole("button", { name: "Delete version" }));
+    expect(await screen.findByText(/Version 7 deleted/i)).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–5 of 6")).toBeInTheDocument();
   });
 
   it("creates an editable draft from the currently published briefing", async () => {
