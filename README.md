@@ -127,5 +127,8 @@ Community and Coalition histories were imported without squashing. The
 immutable source-tip baseline and verifier are documented in
 [`docs/history-import.md`](docs/history-import.md).
 
-The repository is dual-licensed under MIT or Apache-2.0. See `LICENSE-MIT` and
-`LICENSE-APACHE`.
+The repository as a combined work is licensed under the
+[GNU Affero General Public License, version 3 only](LICENSE)
+(`AGPL-3.0-only`). Historical versions remain available under the terms under
+which they were published. See [`NOTICE.md`](NOTICE.md) for retained notices
+covering earlier contributor work.
