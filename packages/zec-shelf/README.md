@@ -45,5 +45,5 @@ npm run typecheck --workspace=@pgpz/zec-shelf
 
 ## License
 
-This package is available under either the MIT License or the Apache License
-2.0 (`MIT OR Apache-2.0`) under the repository's root license files.
+This package is licensed under the GNU Affero General Public License, version
+3 only (`AGPL-3.0-only`), under the repository's root [`LICENSE`](../../LICENSE).

@@ -34,10 +34,6 @@
         "sha256": "54a2119ff30d7b80ec7137df28d5dea265145c108568a3d113417fe9cbf2d8c7"
       },
       {
-        "path": "LICENSE-APACHE",
-        "sha256": "c95bae1d1ce0235ecccd3560b772ec1efb97f348a79f0fbe0a634f0c2ccefe2c"
-      },
-      {
         "path": "app/admin/page.tsx",
         "sha256": "3650ff005375bb80ce647e3aa88f708a6cd99dac33c983d15a4f61fa2656bd75"
       },
@@ -625,7 +621,6 @@
     "branding-config-variant": [
       ".env.example",
       ".gitignore",
-      "LICENSE-MIT",
       "README.md",
       "amplify.yml",
       "app/admin/layout.tsx",
