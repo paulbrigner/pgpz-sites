@@ -33,6 +33,24 @@ describe("ZcashMe rollout access", () => {
     }).canActivate).toBe(true);
   });
 
+  it("allows any active non-member account when the allowlist contains a wildcard", () => {
+    expect(evaluateZcashMeAccess({ ...user, email: "anyone@example.com" }, {
+      verificationEnabled: true,
+      allowedEmails: "*",
+      adminDryRunEnabled: false,
+    }).canActivate).toBe(true);
+  });
+
+  it("does not let the wildcard bypass account or membership eligibility", () => {
+    const config = {
+      verificationEnabled: true,
+      allowedEmails: "*",
+      adminDryRunEnabled: false,
+    };
+    expect(evaluateZcashMeAccess({ ...user, membershipStatus: "active" }, config).canActivate).toBe(false);
+    expect(evaluateZcashMeAccess({ ...user, accountStatus: "deactivated" }, config).canActivate).toBe(false);
+  });
+
   it("allows an active administrator to dry run without allowing activation", () => {
     expect(evaluateZcashMeAccess({ ...user, isAdmin: true, membershipStatus: "active" }, {
       verificationEnabled: true,

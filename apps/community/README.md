@@ -1,8 +1,8 @@
 # PGPZ Community
 
 Community application for `community.pgpz.org`. It is a Next.js 15 application
-with Better Auth magic-link sign-in, X social-proof membership, and a fail-closed
-canary rollout for ZcashMe social proof. It does not
+with Better Auth magic-link sign-in and fail-closed X and ZcashMe social-proof
+membership. It does not
 use the former NFT, wallet, SIWE, token, allowance, or renewal model.
 
 ## Ownership and capabilities
@@ -10,7 +10,7 @@ use the former NFT, wallet, SIWE, token, allowance, or renewal model.
 Community owns:
 
 - X proof challenge, discovery, verification, rate limits, and membership policy;
-- canary-gated ZcashMe OAuth/PKCE verification plus an administrator no-write dry run;
+- ZcashMe OAuth/PKCE verification with allowlist or wildcard rollout controls plus an administrator no-write dry run;
 - X Monitor and administrator-managed Topic Briefings integration;
 - the Community ZEC Shelf catalog and access policy;
 - referrals, Community copy/branding/legal identity, and Community infrastructure;
