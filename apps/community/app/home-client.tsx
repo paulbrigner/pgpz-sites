@@ -764,7 +764,7 @@ export default function HomeClient({
                           MANUAL APPROVAL
                         </div>
                         <h3 className="text-base font-semibold text-[var(--brand-ink)]">
-                          Prefer not to link X?
+                          Prefer not to link X or ZcashMe?
                         </h3>
                         <p className="text-sm leading-6 text-slate-600">
                           Request manual review and a PGPZ admin will evaluate your membership request.
