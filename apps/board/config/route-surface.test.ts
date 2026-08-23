@@ -60,6 +60,7 @@ describe("private board feature surface", () => {
       "api/admin/users/route.ts",
       "api/better-auth/[...all]/route.ts",
       "api/documents/[id]/download/route.ts",
+      "api/documents/local-upload/[operationId]/route.ts",
       "api/documents/route.ts",
       "api/meetings/[id]/calendar/route.ts",
       "api/meetings/[id]/communications/route.ts",

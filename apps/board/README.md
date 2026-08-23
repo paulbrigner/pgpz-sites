@@ -154,7 +154,11 @@ npm run dev:board
 ```
 
 Board runs at `http://localhost:3002`. Local authentication/admin surfaces work;
-S3/KMS/Object Lock governance persistence does not run in the offline stack.
+the seed creates the local meetings, documents, and append-only audit tables.
+Document bytes are written beneath the ignored `.local/board-documents`
+directory through a same-origin development adapter. This exercises staging,
+versions, checksums, meeting ownership, downloads, and audit behavior, but does
+not emulate production KMS encryption or S3 Object Lock retention enforcement.
 
 ## Emergency password rollback
 

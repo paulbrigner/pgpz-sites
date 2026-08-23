@@ -8,18 +8,21 @@ import type { NextConfig } from "next";
 const buildCpus = process.env.NEXT_BUILD_CPUS
   ? Number(process.env.NEXT_BUILD_CPUS)
   : undefined;
+const isDevelopment = process.env.NODE_ENV === "development";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "connect-src 'self'",
   "font-src 'self' data:",
-  "form-action 'none'",
+  isDevelopment ? "form-action 'self'" : "form-action 'none'",
   "frame-ancestors 'none'",
   "frame-src 'none'",
   "img-src 'self' data:",
   "object-src 'none'",
-  "script-src 'self' 'unsafe-inline'",
+  isDevelopment
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "upgrade-insecure-requests",
 ].join("; ");

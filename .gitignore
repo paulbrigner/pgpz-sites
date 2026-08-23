@@ -22,6 +22,7 @@ lambda-build/
 # Local environments and credentials
 .env*
 !.env.example
+.local/
 .venv/
 *.pem
 

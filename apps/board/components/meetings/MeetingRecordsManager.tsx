@@ -10,6 +10,27 @@ const inputClass = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)
 const detailClass = "group rounded-2xl border border-[var(--border)] bg-white open:border-[var(--border-strong)]";
 const summaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] [&::-webkit-details-marker]:hidden";
 
+export function buildMeetingDocumentCreatePayload(input: {
+  stagingKey: string;
+  fileName: string;
+  title: string;
+  description: string;
+  meetingId: string;
+  meetingSection: string;
+}) {
+  return {
+    action: "create",
+    stagingKey: input.stagingKey,
+    fileName: input.fileName,
+    title: input.title,
+    description: input.description,
+    category: "meeting-records",
+    ownerType: "meeting",
+    meetingId: input.meetingId,
+    meetingSection: input.meetingSection || "preparation",
+  } as const;
+}
+
 export function MeetingRecordsManager({ meeting, agendaCount, materials, canManage, canPrepare, canManageDocuments }: { meeting: MeetingSummaryView; agendaCount: number; materials: MeetingMaterialView[]; canManage: boolean; canPrepare: boolean; canManageDocuments: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
@@ -58,11 +79,14 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
       if (!uploaded.ok) throw new Error("The file could not be uploaded.");
       const created = await fetchWithBoardStepUp("/api/documents", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "create", stagingKey: upload.stagingKey, fileName: file.name,
-          title: String(data.get("title") || ""), description: String(data.get("description") || ""),
-          category: "meeting-records", meetingId: meeting.id, meetingSection: String(data.get("meetingSection") || "preparation"),
-        }),
+        body: JSON.stringify(buildMeetingDocumentCreatePayload({
+          stagingKey: upload.stagingKey,
+          fileName: file.name,
+          title: String(data.get("title") || ""),
+          description: String(data.get("description") || ""),
+          meetingId: meeting.id,
+          meetingSection: String(data.get("meetingSection") || "preparation"),
+        })),
       });
       const result = await created.json().catch(() => ({})) as { error?: string };
       if (!created.ok) throw new Error(result.error || "The meeting document could not be retained.");
