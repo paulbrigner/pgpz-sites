@@ -101,10 +101,13 @@ you do not have to run them individually:
 - Creates `PGPZCommunityNextAuth`, `PGPZCoalitionNextAuth`, and
   `PGPZBoardNextAuth` tables (identical better-auth schema: `pk/sk` +
   GSI1/GSI2 + TTL).
-- Creates the Board-only `PGPZBoardAccess`, `PGPZBoardMeetings`, and
-  `PGPZBoardDocuments` tables, including the meeting timeline and
-  meeting-document indexes used by the local portal. S3-retained document
-  bytes remain unavailable offline.
+- Creates the Board-only `PGPZBoardAccess`, `PGPZBoardAuditLog`,
+  `PGPZBoardMeetings`, and `PGPZBoardDocuments` tables, including the meeting
+  timeline and meeting-document indexes used by the local portal.
+- Stores local document bytes beneath the ignored
+  `apps/board/.local/board-documents` directory. The adapter preserves staging,
+  immutable version keys, SHA-256 verification, and audited application flows;
+  it does not emulate production KMS encryption or S3 Object Lock.
 - Provisions the Board account via `provision-board-member.ts`.
 
 The script is **idempotent** — rerunning detects existing tables and rotates
@@ -121,14 +124,21 @@ npm run seed:local -- --password 'SECRET'       # pin the Board password (>= 12 
 
 ## Resetting local data
 
-DynamoDB Local is in-memory (`-sharedDb`); `docker compose down && docker
-compose up -d` wipes all tables and accounts. Re-run `npm run seed:local`
-afterwards.
+DynamoDB Local runs with `-sharedDb` and without `-inMemory`, so it stores its
+database in the container's writable filesystem. `docker compose restart` and
+ordinary stop/start operations reuse the container and preserve its tables and
+accounts. No host or named volume is mounted, however, so removing or recreating
+the container loses that database. For example, `docker compose down && docker
+compose up -d` creates a fresh empty container. Re-run `npm run seed:local` after
+container removal/recreation or whenever the expected tables are missing.
+
+Local document bytes are intentionally separate; remove
+`apps/board/.local/board-documents` when you also want to reset uploaded files.
 
 ## Tearing the stack down
 
 ```bash
-docker compose down        # stop containers (data lost, it's in-memory)
+docker compose down        # remove containers; local DynamoDB data is lost
 ```
 
 To leave nothing running:

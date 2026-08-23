@@ -35,5 +35,11 @@ export const BOARD_ACCESS_TABLE = (process.env.BOARD_ACCESS_TABLE || "PGPZBoardA
 export const BOARD_MEETINGS_TABLE = (process.env.BOARD_MEETINGS_TABLE || "PGPZBoardMeetings").trim();
 export const BOARD_DOCUMENTS_STAGING_BUCKET = (process.env.BOARD_DOCUMENTS_STAGING_BUCKET || "").trim();
 export const BOARD_DOCUMENTS_RETAINED_BUCKET = (process.env.BOARD_DOCUMENTS_RETAINED_BUCKET || "").trim();
+/** Local-only filesystem root for exercising governed document workflows.
+ * Production deliberately ignores this setting and always uses S3. */
+export const BOARD_DOCUMENTS_LOCAL_STORAGE_PATH =
+  process.env.NODE_ENV === "production"
+    ? ""
+    : (process.env.BOARD_DOCUMENTS_LOCAL_STORAGE_PATH || "").trim();
 export const BOARD_AUDIT_ARCHIVE_BUCKET = (process.env.BOARD_AUDIT_ARCHIVE_BUCKET || "").trim();
 export const BOARD_KMS_KEY_ID = (process.env.BOARD_KMS_KEY_ID || "").trim();

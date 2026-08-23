@@ -9,8 +9,8 @@
  *   npm run seed:local
  *
  * What this does per app:
- *   board     - creates the Board auth, access, meetings, and document metadata
- *               tables and provisions paul@paulbrigner.com as an
+ *   board     - creates the Board auth, access, audit, meetings, and document
+ *               metadata tables and provisions paul@paulbrigner.com as an
  *               email+password account. Admin is decided by the env
  *               allowlists BOARD_MEMBER_EMAILS + BOARD_ADMIN_EMAILS (see
  *               apps/board/.env.local.example), so make sure his address is on
@@ -57,6 +57,11 @@ function awsEnv() {
     AWS_REGION: REGION,
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || DDB_LOCAL_ACCESS_KEY,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || DDB_LOCAL_SECRET_KEY,
+    // The Board seed intentionally provisions one local-only credential so a
+    // developer can bootstrap passkey enrollment. Production remains
+    // passwordless and the guarded provisioner still refuses calls that do not
+    // make this opt-in explicit.
+    BOARD_PASSWORD_AUTH_ENABLED: "true",
   };
 }
 
@@ -116,6 +121,11 @@ function createBoardMeetingsTable() {
   run("node", [script, "--region", REGION, "--meetings-table", "PGPZBoardMeetings"]);
 }
 
+function createBoardAuditTable() {
+  const script = resolve(ROOT, "apps/board/scripts/setup/create-audit-table.mjs");
+  run("node", [script, "--region", REGION, "--audit-table", "PGPZBoardAuditLog"]);
+}
+
 function createBoardDocumentsTable() {
   const script = resolve(ROOT, "apps/board/scripts/setup/create-documents-table.mjs");
   run("node", [script, "--region", REGION, "--documents-table", "PGPZBoardDocuments"]);
@@ -157,6 +167,8 @@ function main() {
     createTables("community", BOARD.table);
     console.log("\n[seed] Creating PGPZBoardAccess table...");
     createBoardAccessTable();
+    console.log("\n[seed] Creating PGPZBoardAuditLog table...");
+    createBoardAuditTable();
     console.log("\n[seed] Creating PGPZBoardMeetings table...");
     createBoardMeetingsTable();
     console.log("\n[seed] Creating PGPZBoardDocuments table and meeting index...");

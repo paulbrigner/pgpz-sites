@@ -8,6 +8,7 @@ import { contentDisposition } from "@pgpz/document-vault/server";
 import { s3Client } from "@/lib/s3";
 import { BOARD_DOCUMENTS_RETAINED_BUCKET } from "@/lib/config";
 import { requireBoardPasskeySession } from "@/lib/api-security";
+import { boardDocumentObjectStore, isLocalBoardDocumentStorageEnabled } from "@/lib/object-store";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,20 @@ export async function GET(request: NextRequest, context: Params) {
     idempotencyKey: `download-${id}-${version.versionId}-${Date.now()}`,
     occurredAt: new Date().toISOString(),
   }).catch(() => {});
+
+  if (isLocalBoardDocumentStorageEnabled) {
+    const stored = await boardDocumentObjectStore.readRetained?.(version.objectKey);
+    if (!stored) return new Response(null, { status: 404 });
+    return new Response(new Uint8Array(stored.bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": version.mimeType,
+        "Content-Length": String(stored.bytes.byteLength),
+        "Content-Disposition": contentDisposition({ mimeType: version.mimeType, originalFileName: version.originalFileName }),
+        "Cache-Control": "private, no-cache, no-store",
+      },
+    });
+  }
 
   if (!BOARD_DOCUMENTS_RETAINED_BUCKET) return new Response(null, { status: 500 });
   const url = await getSignedUrl(

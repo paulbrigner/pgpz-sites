@@ -13,8 +13,10 @@
 # you opt into its isolated server adapter.
 
 services:
-  # Amazon's official DynamoDB Local emulator on the standard port. In-memory
-  # storage; data does not survive a container restart.
+  # Amazon's official DynamoDB Local emulator on the standard port. Without
+  # -inMemory, -sharedDb stores data in the container's writable filesystem.
+  # Ordinary stop/start/restart operations preserve that data, but removing or
+  # recreating the container loses it because no host or named volume is mounted.
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     ports:

@@ -14,7 +14,7 @@ import {
   VaultAuthorizationError,
   VaultValidationError,
 } from "@/lib/vault";
-import { buildStagingKey } from "@/lib/object-store";
+import { buildStagingKey, isLocalBoardDocumentStorageEnabled } from "@/lib/object-store";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client } from "@/lib/s3";
@@ -84,11 +84,13 @@ export async function POST(request: NextRequest) {
       case "prepareUpload": {
         const operationId = randomUUID();
         const stagingKey = buildStagingKey("board", operationId);
-        const uploadUrl = await getSignedUrl(
-          s3Client,
-          new PutObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
-          { expiresIn: 600 },
-        );
+        const uploadUrl = isLocalBoardDocumentStorageEnabled
+          ? `/api/documents/local-upload/${operationId}`
+          : await getSignedUrl(
+              s3Client,
+              new PutObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
+              { expiresIn: 600 },
+            );
         await boardAuditLedger.append({
           category: "document_lifecycle",
           action: "upload_prepared",
