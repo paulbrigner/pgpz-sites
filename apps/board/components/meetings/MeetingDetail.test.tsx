@@ -23,7 +23,7 @@ const detail: MeetingDetailView = {
 
 describe("MeetingDetail", () => {
   it("organizes agenda and governed material under the meeting", () => {
-    render(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: false }} />);
+    render(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: false, canDiscuss: true }} />);
     expect(screen.getByRole("heading", { level: 1, name: "September Board meeting" })).toBeVisible();
     expect(screen.getByText("Treasurer report")).toBeVisible();
     expect(screen.getByRole("link", { name: "Download Board packet" })).toHaveAttribute("href", "/api/documents/packet-1/download");
@@ -32,7 +32,7 @@ describe("MeetingDetail", () => {
   });
 
   it("exposes lifecycle and communication controls only to managers", () => {
-    render(<MeetingDetail detail={detail} capabilities={{ canManage: true, canPrepare: true, canManageDocuments: true }} />);
+    render(<MeetingDetail detail={detail} capabilities={{ canManage: true, canPrepare: true, canManageDocuments: true, canDiscuss: true }} />);
     expect(screen.getByRole("link", { name: "Edit meeting" })).toHaveAttribute("href", "/meetings/meeting-1/edit");
     expect(screen.getByRole("button", { name: "Mark completed" })).toBeVisible();
     expect(screen.getByRole("combobox", { name: "Meeting message" })).toHaveValue("send-materials-ready");
@@ -40,16 +40,16 @@ describe("MeetingDetail", () => {
   });
 
   it("lets Legal Counsel manage governed meeting documents without operating the meeting", () => {
-    render(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: true }} />);
+    render(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: true, canDiscuss: true }} />);
     expect(screen.getAllByText("Meeting document")[0]).toBeVisible();
     expect(screen.queryByText("Agenda item")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark completed" })).not.toBeInTheDocument();
   });
 
   it("lets Board Support edit drafts but not official meetings", () => {
-    const { rerender } = render(<MeetingDetail detail={{ ...detail, meeting: { ...detail.meeting, status: "draft" } }} capabilities={{ canManage: false, canPrepare: true, canManageDocuments: true }} />);
+    const { rerender } = render(<MeetingDetail detail={{ ...detail, meeting: { ...detail.meeting, status: "draft" } }} capabilities={{ canManage: false, canPrepare: true, canManageDocuments: true, canDiscuss: false }} />);
     expect(screen.getByRole("link", { name: "Edit draft" })).toHaveAttribute("href", "/meetings/meeting-1/edit");
-    rerender(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: true, canManageDocuments: true }} />);
+    rerender(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: true, canManageDocuments: true, canDiscuss: false }} />);
     expect(screen.queryByRole("link", { name: "Edit draft" })).not.toBeInTheDocument();
   });
 });

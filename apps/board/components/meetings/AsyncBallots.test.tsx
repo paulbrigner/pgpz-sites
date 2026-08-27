@@ -23,13 +23,13 @@ const meeting: MeetingSummaryView = {
 const openBallot: AsyncBallotView = {
   id: "ballot-1", title: "Approve policy", motion: "Resolved, that the policy is approved.",
   effectiveStatus: "open", eligibleCount: 5, ballotsCast: 3, quorumRequired: 3, approvalRequired: 3,
-  viewerEligible: true, viewerChoice: null, result: null,
+  viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
 
 describe("AsyncBallots", () => {
   it("lets an eligible director cast a vote without exposing live totals", async () => {
     vi.mocked(fetchWithBoardStepUp).mockResolvedValue(new Response(JSON.stringify({ vote: { choice: "yes" } }), { status: 200 }));
-    render(<AsyncBallots meeting={meeting} ballots={[openBallot]} canManage={false} />);
+    render(<AsyncBallots meeting={meeting} ballots={[openBallot]} canManage={false} canDiscuss />);
 
     expect(screen.getByText("3 of 5 responses")).toBeVisible();
     expect(screen.queryByText(/Yes 3/)).not.toBeInTheDocument();
@@ -49,7 +49,7 @@ describe("AsyncBallots", () => {
       ...openBallot, id: "ballot-2", title: "Approve budget", effectiveStatus: "closed", ballotsCast: 5,
       viewerEligible: false, result: { yes: 4, no: 1, abstain: 0, recused: 0, quorumMet: true, outcome: "passed" },
     };
-    render(<AsyncBallots meeting={meeting} ballots={[awaiting, closed]} canManage />);
+    render(<AsyncBallots meeting={meeting} ballots={[awaiting, closed]} canManage canDiscuss />);
     expect(screen.getByRole("button", { name: "Finalize result" })).toBeVisible();
     expect(screen.getByText("Yes 4 · No 1 · Abstain 0")).toBeVisible();
     expect(screen.getByText("passed")).toBeVisible();

@@ -16,6 +16,7 @@ import {
   roleCanManageBoardMeetings,
   roleCanManageBoardUsers,
   roleCanPrepareBoardMeetings,
+  roleCanParticipateBoardDiscussions,
   roleCanReviewBoardAudit,
   roleCanSendBoardMeetingCommunications,
 } from "@/lib/board-access";
@@ -67,6 +68,10 @@ export function canPrepareBoardMeetings(member: BoardMember): boolean {
 
 export function canSendBoardMeetingCommunications(member: BoardMember): boolean {
   return roleCanSendBoardMeetingCommunications(member.role);
+}
+
+export function canParticipateBoardDiscussions(member: BoardMember): boolean {
+  return roleCanParticipateBoardDiscussions(member.role);
 }
 
 export function canAccessBoardAdministration(member: BoardMember): boolean {
