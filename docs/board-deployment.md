@@ -271,6 +271,11 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
   archive. Draft meetings remain concealed from roles without preparation access.
 - Meeting-owned documents appear inside their meeting and never as duplicate
   Document Library rows; downloads retain the normal vault audit behavior.
+- Each opened asynchronous ballot supports a retained discussion thread.
+  Directors, Chair, Executive Director, and Legal Counsel can post and reply;
+  Board Support is read-only. Author edits close after 15 minutes, deletion is
+  unavailable, and the thread becomes read-only with the voting deadline while
+  remaining visible in the historical meeting record.
 - Board Support can prepare draft meetings and records but cannot publish,
   reschedule, cancel, close, confirm quorum, approve minutes, or send official communications.
 - Board Chair and Executive Director can manually send one-recipient-at-a-time

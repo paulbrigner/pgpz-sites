@@ -6,6 +6,7 @@ import { Surface } from "@pgpz/ui";
 import { Bell, Check, Gavel, LoaderCircle, LockKeyhole, Plus } from "lucide-react";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import type { AsyncBallotView, AsyncVoteChoice, MeetingSummaryView } from "./types";
+import { BallotDiscussion } from "./BallotDiscussion";
 
 const fieldClass = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm text-[var(--foreground)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus)]";
 
@@ -18,7 +19,7 @@ const statusLabels: Record<AsyncBallotView["effectiveStatus"], string> = {
   cancelled: "Cancelled",
 };
 
-export function AsyncBallots({ meeting, ballots, canManage }: { meeting: MeetingSummaryView; ballots: AsyncBallotView[]; canManage: boolean }) {
+export function AsyncBallots({ meeting, ballots, canManage, canDiscuss }: { meeting: MeetingSummaryView; ballots: AsyncBallotView[]; canManage: boolean; canDiscuss: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -150,6 +151,8 @@ export function AsyncBallots({ meeting, ballots, canManage }: { meeting: Meeting
                     <p className="mt-2 text-xs text-[var(--muted)]">You may change your response until voting closes. Every submission is retained in the audit history.</p>
                   </form>
                 ) : ballot.viewerEligible && ballot.effectiveStatus === "scheduled" ? <p className="mt-4 rounded-xl bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--muted)]">Voting opens at the beginning of the window shown in Meeting details.</p> : null}
+
+                <BallotDiscussion meetingId={meeting.id} ballot={ballot} canDiscuss={canDiscuss} timeZone={meeting.timeZone} />
 
                 {canManage ? <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
                   {ballot.effectiveStatus === "draft" && meeting.status === "draft" ? <details className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-[var(--foreground)]">Edit draft ballot</summary><form className="grid gap-3 border-t border-[var(--border)] bg-white p-3" onSubmit={(event) => updateBallot(event, ballot)}><label className="text-xs font-semibold">Resolution title<input name="title" required defaultValue={ballot.title} className={fieldClass} /></label><label className="text-xs font-semibold">Exact motion<textarea name="motion" required rows={3} defaultValue={ballot.motion} className={fieldClass} /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-semibold">Quorum<input name="quorumRequired" type="number" min="1" defaultValue={ballot.quorumRequired || ""} className={fieldClass} /></label><label className="text-xs font-semibold">Yes votes required<input name="approvalRequired" type="number" min="1" defaultValue={ballot.approvalRequired || ""} className={fieldClass} /></label></div><button type="submit" disabled={pending !== null} className="w-fit rounded-full bg-[var(--primary)] px-4 py-2 text-xs font-semibold text-white">Save draft</button></form></details> : null}

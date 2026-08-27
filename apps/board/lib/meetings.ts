@@ -108,6 +108,7 @@ export type BoardAsyncBallotStatus = (typeof BOARD_ASYNC_BALLOT_STATUSES)[number
 export const BOARD_ASYNC_VOTE_CHOICES = ["yes", "no", "abstain", "recused"] as const;
 export type BoardAsyncVoteChoice = (typeof BOARD_ASYNC_VOTE_CHOICES)[number];
 export type BoardAsyncBallotEffectiveStatus = BoardAsyncBallotStatus | "scheduled" | "awaiting-finalization";
+export const BOARD_DISCUSSION_EDIT_WINDOW_SECONDS = 15 * 60;
 
 export interface BoardAsyncBallotVoter {
   readonly userId: string;
@@ -157,6 +158,30 @@ export interface BoardAsyncVote {
   readonly choice: BoardAsyncVoteChoice;
   readonly castAt: string;
   readonly updatedAt: string;
+}
+
+export interface BoardAsyncDiscussionMessage {
+  readonly id: string;
+  readonly meetingId: string;
+  readonly ballotId: string;
+  readonly replyToMessageId: string | null;
+  readonly authorUserId: string;
+  readonly authorName: string;
+  readonly authorEmail: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly editedAt: string | null;
+}
+
+export function canEditBoardAsyncDiscussionMessage(
+  message: Pick<BoardAsyncDiscussionMessage, "authorUserId" | "createdAt">,
+  userId: string,
+  now = Date.now(),
+): boolean {
+  return message.authorUserId === userId &&
+    now >= Date.parse(message.createdAt) &&
+    now - Date.parse(message.createdAt) <= BOARD_DISCUSSION_EDIT_WINDOW_SECONDS * 1000;
 }
 
 export function boardAsyncBallotEffectiveStatus(
@@ -221,6 +246,7 @@ export interface BoardMeetingDetail {
   readonly decisions: readonly BoardMeetingDecision[];
   readonly asyncBallots: readonly BoardAsyncBallot[];
   readonly asyncVotes: readonly BoardAsyncVote[];
+  readonly asyncDiscussionMessages: readonly BoardAsyncDiscussionMessage[];
   readonly actionItems: readonly BoardMeetingActionItem[];
   readonly deliveries: readonly BoardMeetingDelivery[];
 }

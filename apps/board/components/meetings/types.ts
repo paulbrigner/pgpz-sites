@@ -62,6 +62,18 @@ export interface DecisionView {
 export type AsyncVoteChoice = "yes" | "no" | "abstain" | "recused";
 export type AsyncBallotEffectiveStatus = "draft" | "scheduled" | "open" | "awaiting-finalization" | "closed" | "cancelled";
 
+export interface DiscussionMessageView {
+  id: string;
+  replyToMessageId: string | null;
+  authorName: string;
+  authorEmail: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  editedAt: string | null;
+  canEdit: boolean;
+}
+
 export interface AsyncBallotView {
   id: string;
   title: string;
@@ -73,6 +85,7 @@ export interface AsyncBallotView {
   approvalRequired: number | null;
   viewerEligible: boolean;
   viewerChoice: AsyncVoteChoice | null;
+  discussionMessages: DiscussionMessageView[];
   result: null | {
     yes: number;
     no: number;
@@ -124,4 +137,5 @@ export interface MeetingCapabilities {
   canManage: boolean;
   canPrepare: boolean;
   canManageDocuments: boolean;
+  canDiscuss: boolean;
 }

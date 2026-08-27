@@ -176,4 +176,48 @@ describe("Board meetings repository", () => {
     await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-10T12:59:59Z" })).rejects.toThrow(/not opened/);
     await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-12T21:00:00Z" })).rejects.toThrow(/deadline/);
   });
+
+  it("retains per-ballot discussion threads, replies, and short-window author edits", async () => {
+    const client = fakeClient();
+    const repo = createBoardMeetingsRepository(client as never, "Meetings");
+    let meeting = await repo.createMeeting(newMeeting({
+      format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z",
+    }));
+    meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Vote", motion: "Resolved.", actorEmail: "chair@pgpz.org" });
+    meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
+    await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: [{ userId: "director-1", name: "Ada", email: "ada@example.org" }], actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z" });
+
+    const root = await repo.createAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", id: "message-1", body: "Should the effective date move?",
+      authorUserId: "director-1", authorName: "Ada", authorEmail: "ADA@example.org", occurredAt: "2026-09-10T13:01:00Z",
+    });
+    await repo.createAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", id: "message-2", replyToMessageId: root.id, body: "I support a later date.",
+      authorUserId: "director-2", authorName: "Grace", authorEmail: "grace@example.org", occurredAt: "2026-09-10T13:02:00Z",
+    });
+    const edited = await repo.editAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", messageId: root.id,
+      body: "Should the effective date move to October?", expectedUpdatedAt: root.updatedAt,
+      authorUserId: "director-1", occurredAt: "2026-09-10T13:10:00Z",
+    });
+
+    expect(edited).toMatchObject({ body: "Should the effective date move to October?", editedAt: "2026-09-10T13:10:00.000Z" });
+    expect((await repo.getMeeting(meeting.id))?.asyncDiscussionMessages).toMatchObject([
+      { id: "message-1", authorEmail: "ada@example.org", replyToMessageId: null },
+      { id: "message-2", replyToMessageId: "message-1" },
+    ]);
+    expect([...client.items.values()].filter((item) => item.entityType === "ASYNC_DISCUSSION_REVISION")).toHaveLength(3);
+    await expect(repo.editAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", messageId: root.id, body: "Unauthorized edit",
+      expectedUpdatedAt: edited.updatedAt, authorUserId: "director-2", occurredAt: "2026-09-10T13:11:00Z",
+    })).rejects.toThrow(/only the author/);
+    await expect(repo.editAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", messageId: root.id, body: "Late edit",
+      expectedUpdatedAt: edited.updatedAt, authorUserId: "director-1", occurredAt: "2026-09-10T13:16:01Z",
+    })).rejects.toThrow(/15 minutes/);
+    await expect(repo.createAsyncDiscussionMessage({
+      meetingId: meeting.id, ballotId: "ballot-1", body: "Too late", authorUserId: "director-1",
+      authorName: "Ada", authorEmail: "ada@example.org", occurredAt: "2026-09-12T21:00:00Z",
+    })).rejects.toThrow(/closed/);
+  });
 });

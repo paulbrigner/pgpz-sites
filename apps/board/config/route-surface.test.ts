@@ -65,6 +65,7 @@ describe("private board feature surface", () => {
       "api/meetings/[id]/calendar/route.ts",
       "api/meetings/[id]/ballots/route.ts",
       "api/meetings/[id]/communications/route.ts",
+      "api/meetings/[id]/discussions/route.ts",
       "api/meetings/route.ts",
     ].sort());
   });

@@ -6,6 +6,7 @@ import {
   canManageBoardMeetings,
   canManageBoardUsers,
   canPrepareBoardMeetings,
+  canParticipateBoardDiscussions,
   canReviewBoardAudit,
   canSendBoardMeetingCommunications,
   resolveBoardMemberState,
@@ -151,6 +152,7 @@ describe("Board role capabilities", () => {
     expect(canAccessBoardAdministration(member)).toBe(false);
     expect(canManageBoardDocuments(member)).toBe(true);
     expect(canPrepareBoardMeetings(member)).toBe(true);
+    expect(canParticipateBoardDiscussions(member)).toBe(false);
     expect(canManageBoardMeetings(member)).toBe(false);
     expect(canSendBoardMeetingCommunications(member)).toBe(false);
     expect(canReviewBoardAudit(member)).toBe(false);
@@ -161,6 +163,7 @@ describe("Board role capabilities", () => {
     const member = memberFor("legal-counsel");
     expect(canManageBoardDocuments(member)).toBe(true);
     expect(canPrepareBoardMeetings(member)).toBe(false);
+    expect(canParticipateBoardDiscussions(member)).toBe(true);
     expect(canManageBoardMeetings(member)).toBe(false);
     expect(canSendBoardMeetingCommunications(member)).toBe(false);
     expect(canReviewBoardAudit(member)).toBe(true);
@@ -171,6 +174,7 @@ describe("Board role capabilities", () => {
     const member = memberFor(role);
     expect(canManageBoardDocuments(member)).toBe(true);
     expect(canPrepareBoardMeetings(member)).toBe(true);
+    expect(canParticipateBoardDiscussions(member)).toBe(true);
     expect(canManageBoardMeetings(member)).toBe(true);
     expect(canSendBoardMeetingCommunications(member)).toBe(true);
     expect(canReviewBoardAudit(member)).toBe(true);

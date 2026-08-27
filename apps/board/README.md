@@ -25,11 +25,11 @@ server authorization; routes and repositories enforce current roles.
 
 | Role | Documents | Meetings | Audit ledger | User management |
 | --- | --- | --- | --- | --- |
-| Director | view | view + RSVP + eligible asynchronous votes | no | no |
-| Board Chair | manage | manage + communicate | review | manage |
-| Executive Director | manage | manage + communicate | review | manage |
-| Legal Counsel | manage | view + meeting documents | review | no |
-| Board Support | manage | prepare drafts and records | no | no |
+| Director | view | view + RSVP + eligible asynchronous votes and discussion | no | no |
+| Board Chair | manage | manage + communicate + discuss | review | manage |
+| Executive Director | manage | manage + communicate + discuss | review | manage |
+| Legal Counsel | manage | view + meeting documents + discuss | review | no |
+| Board Support | manage | prepare drafts and records; discussion read-only | no | no |
 
 The stored legacy role `admin` is read as Board Chair so existing access never
 fails during rollout, but current APIs and UI never assign `admin` to a new or
@@ -124,6 +124,19 @@ The Chair or Executive Director can send a vote reminder only to eligible
 directors who have not responded. The message contains an authenticated portal
 link and deadline, not the motion or confidential attachments. Delivery follows
 the same per-recipient idempotency and audit behavior as other meeting messages.
+
+Every opened written resolution has an asynchronous discussion thread. Active
+Directors, the Board Chair, Executive Director, and Legal Counsel can post and
+reply; Board Support has read-only access. Messages are attributed to the
+passkey-authenticated account, may be edited by their author for 15 minutes,
+and cannot be deleted. The current message plus an immutable revision for every
+post and edit are retained in the meeting partition, and each mutation appends
+the normal hash-chained Board audit event with a content hash. Discussion opens
+with the voting window and becomes read-only when the window closes or the
+ballot is cancelled, while remaining visible in the historical meeting record.
+Discussion does not expose a member's private ballot choice. Threads refresh on
+request; email notifications, unread counts, reactions, attachments, and live
+chat delivery are intentionally outside the initial discussion scope.
 
 Meeting lifecycle data is Board-specific and stored in `PGPZBoardMeetings` as
 an optimistic aggregate with retained child records and immutable revisions.

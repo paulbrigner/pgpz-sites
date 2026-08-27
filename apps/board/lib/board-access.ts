@@ -114,6 +114,14 @@ export function roleCanSendBoardMeetingCommunications(role: BoardAccessRole): bo
   return roleCanManageBoardMeetings(role);
 }
 
+/** Discussion is a governance-participation capability, not an operational
+ * preparation capability. Directors, officers, and counsel may contribute;
+ * Board Support can read the retained meeting record but cannot speak for the
+ * Board in a resolution thread. */
+export function roleCanParticipateBoardDiscussions(role: BoardAccessRole): boolean {
+  return role === "member" || role === "chair" || role === "admin" || role === "executive-director" || role === "legal-counsel";
+}
+
 export function roleCanAccessBoardAdministration(role: BoardAccessRole): boolean {
   return roleCanReviewBoardAudit(role) || roleCanManageBoardUsers(role);
 }

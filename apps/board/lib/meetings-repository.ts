@@ -8,6 +8,7 @@ import {
   BOARD_AGENDA_ITEM_KINDS,
   BOARD_ASYNC_BALLOT_STATUSES,
   BOARD_ASYNC_VOTE_CHOICES,
+  BOARD_DISCUSSION_EDIT_WINDOW_SECONDS,
   BOARD_ATTENDANCE_STATUSES,
   BOARD_DELIVERY_KINDS,
   BOARD_DELIVERY_STATUSES,
@@ -22,6 +23,7 @@ import {
   type BoardAsyncBallotVoter,
   type BoardAsyncVote,
   type BoardAsyncVoteChoice,
+  type BoardAsyncDiscussionMessage,
   type BoardAgendaItem,
   type BoardMeeting,
   type BoardMeetingActionItem,
@@ -89,6 +91,17 @@ export interface OpenBoardAsyncBallotInput {
 export interface CastBoardAsyncVoteInput {
   readonly meetingId: string; readonly ballotId: string; readonly choice: BoardAsyncVoteChoice;
   readonly voter: BoardAsyncBallotVoter; readonly occurredAt?: string;
+}
+export interface CreateBoardAsyncDiscussionMessageInput {
+  readonly meetingId: string; readonly ballotId: string; readonly id?: string;
+  readonly replyToMessageId?: string | null; readonly body: string;
+  readonly authorUserId: string; readonly authorName: string; readonly authorEmail: string;
+  readonly occurredAt?: string;
+}
+export interface EditBoardAsyncDiscussionMessageInput {
+  readonly meetingId: string; readonly ballotId: string; readonly messageId: string;
+  readonly body: string; readonly expectedUpdatedAt: string; readonly authorUserId: string;
+  readonly occurredAt?: string;
 }
 export interface CloseBoardAsyncBallotInput {
   readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
@@ -209,6 +222,20 @@ function toAsyncVote(item: Row): BoardAsyncVote | null {
   };
 }
 
+function toAsyncDiscussionMessage(item: Row | undefined): BoardAsyncDiscussionMessage | null {
+  if (!item || item.entityType !== "ASYNC_DISCUSSION_MESSAGE") return null;
+  const id = String(item.id || "");
+  if (!id) return null;
+  return {
+    id, meetingId: String(item.meetingId || ""), ballotId: String(item.ballotId || ""),
+    replyToMessageId: item.replyToMessageId == null ? null : String(item.replyToMessageId),
+    authorUserId: String(item.authorUserId || ""), authorName: String(item.authorName || ""),
+    authorEmail: String(item.authorEmail || "").toLowerCase(), body: String(item.body || ""),
+    createdAt: String(item.createdAt || ""), updatedAt: String(item.updatedAt || ""),
+    editedAt: item.editedAt == null ? null : String(item.editedAt),
+  };
+}
+
 export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClient = documentClient, tableName = BOARD_MEETINGS_TABLE) {
   const resolvedTable = required(tableName, "BOARD_MEETINGS_TABLE");
   async function getMeta(id: string) {
@@ -235,6 +262,8 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
       asyncVotes: all.map(toAsyncVote).filter((value): value is BoardAsyncVote => Boolean(value))
         .sort((a, b) => a.ballotId.localeCompare(b.ballotId) || a.voterEmail.localeCompare(b.voterEmail)),
+      asyncDiscussionMessages: all.map(toAsyncDiscussionMessage).filter((value): value is BoardAsyncDiscussionMessage => Boolean(value))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
       actionItems: (all.filter((r) => r.entityType === "ACTION_ITEM") as unknown as BoardMeetingActionItem[])
         .sort((a, b) => (a.dueAt || "9999").localeCompare(b.dueAt || "9999") || a.id.localeCompare(b.id)),
       deliveries: (all.filter((r) => r.entityType === "DELIVERY") as unknown as BoardMeetingDelivery[])
@@ -312,6 +341,28 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
   }
   function asyncBallotItem(ballot: BoardAsyncBallot): Row {
     return { pk: meetingPk(ballot.meetingId), sk: entitySk("BALLOT", ballot.id), entityType: "ASYNC_BALLOT", ...ballot };
+  }
+  async function getAsyncDiscussionMessage(meetingId: string, messageId: string) {
+    const result = await client.get({
+      TableName: resolvedTable,
+      Key: { pk: meetingPk(required(meetingId, "meetingId")), sk: entitySk("DISCUSSION", required(messageId, "messageId")) },
+      ConsistentRead: true,
+    });
+    return toAsyncDiscussionMessage(result?.Item as Row | undefined);
+  }
+  function discussionBody(value: string) {
+    const body = required(value, "message");
+    if (body.length > 4000) throw new Error("message must be 4,000 characters or fewer");
+    return body;
+  }
+  function asyncDiscussionItem(message: BoardAsyncDiscussionMessage): Row {
+    return { pk: meetingPk(message.meetingId), sk: entitySk("DISCUSSION", message.id), entityType: "ASYNC_DISCUSSION_MESSAGE", ...message };
+  }
+  function asyncDiscussionRevision(message: BoardAsyncDiscussionMessage, action: "created" | "edited", occurredAt: string): Row {
+    return {
+      pk: meetingPk(message.meetingId), sk: `DISCUSSION_REVISION#${message.ballotId}#${occurredAt}#${randomUUID()}`,
+      entityType: "ASYNC_DISCUSSION_REVISION", action, ...message, occurredAt,
+    };
   }
   return {
     getMeeting, listMeetings,
@@ -458,6 +509,73 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       try { await client.transactWrite({ TransactItems: items }); }
       catch (error) { if (conditional(error)) throw new Error("the ballot changed or the voting window closed; refresh and try again"); throw error; }
       return vote;
+    },
+    async createAsyncDiscussionMessage(input: CreateBoardAsyncDiscussionMessageInput, options?: BoardMeetingMutationOptions) {
+      const meetingId = required(input.meetingId, "meetingId");
+      const ballotId = required(input.ballotId, "ballotId");
+      const meeting = await getMeta(meetingId);
+      if (!meeting || meeting.format !== "asynchronous") throw new Error("asynchronous meeting not found");
+      const ballot = await getAsyncBallot(meetingId, ballotId);
+      if (!ballot || ballot.status !== "open") throw new Error("this discussion is not open");
+      const at = instant(input.occurredAt, "occurredAt");
+      if (at < meeting.startAt) throw new Error("discussion has not opened yet");
+      if (at >= meeting.endAt) throw new Error("discussion has closed");
+      if (!["scheduled", "materials-published"].includes(meeting.status)) throw new Error("this discussion is not open");
+      let replyToMessageId = input.replyToMessageId?.trim() || null;
+      if (replyToMessageId) {
+        const parent = await getAsyncDiscussionMessage(meetingId, replyToMessageId);
+        if (!parent || parent.ballotId !== ballotId) throw new Error("reply target was not found in this discussion");
+        replyToMessageId = parent.replyToMessageId || parent.id;
+      }
+      const message: BoardAsyncDiscussionMessage = {
+        id: required(input.id || randomUUID(), "messageId"), meetingId, ballotId, replyToMessageId,
+        authorUserId: required(input.authorUserId, "authorUserId"),
+        authorName: required(input.authorName, "authorName"),
+        authorEmail: required(input.authorEmail, "authorEmail").toLowerCase(),
+        body: discussionBody(input.body), createdAt: at, updatedAt: at, editedAt: null,
+      };
+      const items: BoardMeetingTransactItem[] = [
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: META_SK }, ConditionExpression: "#format = :asynchronous AND (#status = :scheduled OR #status = :materialsPublished) AND #startAt <= :now AND #endAt > :now", ExpressionAttributeNames: { "#format": "format", "#status": "status", "#startAt": "startAt", "#endAt": "endAt" }, ExpressionAttributeValues: { ":asynchronous": "asynchronous", ":scheduled": "scheduled", ":materialsPublished": "materials-published", ":now": at } } },
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
+        { Put: { TableName: resolvedTable, Item: asyncDiscussionItem(message), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        { Put: { TableName: resolvedTable, Item: asyncDiscussionRevision(message, "created", at), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...(options?.additionalTransactItems || []),
+      ];
+      if (items.length > 100) throw new Error("Board discussion transaction exceeds 100 items");
+      try { await client.transactWrite({ TransactItems: items }); }
+      catch (error) { if (conditional(error)) throw new Error("the discussion changed or closed; refresh and try again"); throw error; }
+      return message;
+    },
+    async editAsyncDiscussionMessage(input: EditBoardAsyncDiscussionMessageInput, options?: BoardMeetingMutationOptions) {
+      const meetingId = required(input.meetingId, "meetingId");
+      const ballotId = required(input.ballotId, "ballotId");
+      const messageId = required(input.messageId, "messageId");
+      const authorUserId = required(input.authorUserId, "authorUserId");
+      const expectedUpdatedAt = instant(input.expectedUpdatedAt, "expectedUpdatedAt");
+      const current = await getAsyncDiscussionMessage(meetingId, messageId);
+      if (!current || current.ballotId !== ballotId) throw new Error("discussion message not found");
+      if (current.authorUserId !== authorUserId) throw new Error("only the author may edit this message");
+      if (current.updatedAt !== expectedUpdatedAt) throw new Error("the message changed; refresh and try again");
+      const meeting = await getMeta(meetingId);
+      const ballot = await getAsyncBallot(meetingId, ballotId);
+      if (!meeting || meeting.format !== "asynchronous" || !ballot || ballot.status !== "open") throw new Error("this discussion is not open");
+      const at = instant(input.occurredAt, "occurredAt");
+      if (at < meeting.startAt || at >= meeting.endAt) throw new Error("discussion is closed");
+      if (at < current.createdAt || Date.parse(at) - Date.parse(current.createdAt) > BOARD_DISCUSSION_EDIT_WINDOW_SECONDS * 1000) {
+        throw new Error("messages can be edited for 15 minutes after posting");
+      }
+      const message: BoardAsyncDiscussionMessage = { ...current, body: discussionBody(input.body), updatedAt: at, editedAt: at };
+      const items: BoardMeetingTransactItem[] = [
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: META_SK }, ConditionExpression: "#format = :asynchronous AND (#status = :scheduled OR #status = :materialsPublished) AND #startAt <= :now AND #endAt > :now", ExpressionAttributeNames: { "#format": "format", "#status": "status", "#startAt": "startAt", "#endAt": "endAt" }, ExpressionAttributeValues: { ":asynchronous": "asynchronous", ":scheduled": "scheduled", ":materialsPublished": "materials-published", ":now": at } } },
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
+        { Put: { TableName: resolvedTable, Item: asyncDiscussionItem(message), ConditionExpression: "#authorUserId = :authorUserId AND #updatedAt = :expectedUpdatedAt", ExpressionAttributeNames: { "#authorUserId": "authorUserId", "#updatedAt": "updatedAt" }, ExpressionAttributeValues: { ":authorUserId": authorUserId, ":expectedUpdatedAt": expectedUpdatedAt } } },
+        { Put: { TableName: resolvedTable, Item: asyncDiscussionRevision(message, "edited", at), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...(options?.additionalTransactItems || []),
+      ];
+      if (items.length > 100) throw new Error("Board discussion transaction exceeds 100 items");
+      try { await client.transactWrite({ TransactItems: items }); }
+      catch (error) { if (conditional(error)) throw new Error("the discussion changed or closed; refresh and try again"); throw error; }
+      return message;
     },
     async closeAsyncBallot(input: CloseBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);

@@ -3,8 +3,8 @@ import { Container } from "@pgpz/ui";
 import { MeetingDetail } from "@/components/meetings/MeetingDetail";
 import type { MeetingDetailView } from "@/components/meetings/types";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
-import { boardAsyncBallotEffectiveStatus } from "@/lib/meetings";
-import { canManageBoardDocuments, canManageBoardMeetings, canPrepareBoardMeetings, requireBoardMember } from "@/lib/session";
+import { boardAsyncBallotEffectiveStatus, canEditBoardAsyncDiscussionMessage } from "@/lib/meetings";
+import { canManageBoardDocuments, canManageBoardMeetings, canParticipateBoardDiscussions, canPrepareBoardMeetings, requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,8 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   ]);
   if (!record || (record.meeting.status === "draft" && !canManageBoardMeetings(member) && !canPrepareBoardMeetings(member))) notFound();
   const canManageMeetings = canManageBoardMeetings(member);
+  const canDiscuss = canParticipateBoardDiscussions(member);
+  const renderedAt = Date.now();
 
   const detail: MeetingDetailView = {
     meeting: {
@@ -50,13 +52,20 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
     asyncBallots: record.asyncBallots.filter((ballot) => canManageMeetings || ballot.status !== "draft").map((ballot) => {
       const votes = record.asyncVotes.filter((vote) => vote.ballotId === ballot.id);
       const viewerVote = votes.find((vote) => vote.voterEmail === member.email);
+      const effectiveStatus = boardAsyncBallotEffectiveStatus(ballot, record.meeting);
       return {
         id: ballot.id, title: ballot.title, motion: ballot.motion,
-        effectiveStatus: boardAsyncBallotEffectiveStatus(ballot, record.meeting),
+        effectiveStatus,
         eligibleCount: ballot.eligibleVoters.length, ballotsCast: votes.length,
         quorumRequired: ballot.quorumRequired, approvalRequired: ballot.approvalRequired,
         viewerEligible: ballot.eligibleVoters.some((voter) => voter.email === member.email),
         viewerChoice: viewerVote?.choice || null,
+        discussionMessages: record.asyncDiscussionMessages.filter((message) => message.ballotId === ballot.id).map((message) => ({
+          id: message.id, replyToMessageId: message.replyToMessageId,
+          authorName: message.authorName, authorEmail: message.authorEmail, body: message.body,
+          createdAt: message.createdAt, updatedAt: message.updatedAt, editedAt: message.editedAt,
+          canEdit: canDiscuss && effectiveStatus === "open" && canEditBoardAsyncDiscussionMessage(message, member.id, renderedAt),
+        })),
         result: ballot.status === "closed" ? ballot.result : null,
       };
     }),
@@ -71,7 +80,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
 
   return (
     <Container className="max-w-[90rem] py-8 sm:px-8 sm:py-12 lg:px-12">
-      <MeetingDetail detail={detail} viewerEmail={member.email} capabilities={{ canManage: canManageMeetings, canPrepare: canPrepareBoardMeetings(member), canManageDocuments: canManageBoardDocuments(member) }} />
+      <MeetingDetail detail={detail} viewerEmail={member.email} capabilities={{ canManage: canManageMeetings, canPrepare: canPrepareBoardMeetings(member), canManageDocuments: canManageBoardDocuments(member), canDiscuss }} />
     </Container>
   );
 }
