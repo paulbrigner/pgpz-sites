@@ -73,7 +73,21 @@ export function computeSha256(bytes: Uint8Array): string {
  * keys with a real SHA-256 stored in object metadata (never the ETag).
  */
 export type BoardDocumentObjectStore = ObjectStore & {
-  readStaged(stagingKey: string): Promise<{ bytes: Buffer; metadata: ObjectMetadata }>;
+  readStaged(stagingKey: string): Promise<{
+    bytes: Buffer;
+    metadata: ObjectMetadata;
+    /** Entity tag for binding a retained copy to the exact bytes that were
+     * read and verified. S3 supplies this; the local adapter does not need it. */
+    eTag?: string;
+  }>;
+  /** Promote bytes that the server has already read, classified, and hashed.
+   * Production uses the ETag as a conditional-copy guard and stores the
+   * server-computed SHA-256 on the immutable retained object. */
+  promoteVerified(
+    sourceKey: string,
+    targetKey: string,
+    verified: { metadata: ObjectMetadata; eTag?: string },
+  ): Promise<ObjectMetadata>;
   /** Present only on the local adapter; browser uploads never receive a raw
    * filesystem path. */
   writeStaged?(stagingKey: string, bytes: Uint8Array, mimeType: string): Promise<ObjectMetadata>;
@@ -92,20 +106,24 @@ const s3BoardDocumentObjectStore: BoardDocumentObjectStore = {
   },
 
   async promote(stagingKey, retainedKey) {
+    const staged = await this.readStaged(stagingKey);
+    return this.promoteVerified(stagingKey, retainedKey, staged);
+  },
+
+  async promoteVerified(stagingKey, retainedKey, verified) {
     if (!BOARD_DOCUMENTS_STAGING_BUCKET || !BOARD_DOCUMENTS_RETAINED_BUCKET) {
       throw new Error("Board document storage is not configured.");
     }
     assertValidStagingKey(stagingKey);
-    const staged = await s3Client.send(
-      new HeadObjectCommand({ Bucket: BOARD_DOCUMENTS_STAGING_BUCKET, Key: stagingKey }),
-    );
-    const meta = metadataOf(staged);
-    if (!meta.sha256) throw new Error("Staged object is missing its SHA-256 metadata.");
+    assertValidRetainedKey(retainedKey);
+    const meta = verified.metadata;
+    if (!meta.sha256) throw new Error("Verified staged object is missing its SHA-256 digest.");
     await s3Client.send(
       new CopyObjectCommand({
         Bucket: BOARD_DOCUMENTS_RETAINED_BUCKET,
         Key: retainedKey,
         CopySource: `${BOARD_DOCUMENTS_STAGING_BUCKET}/${stagingKey}`,
+        CopySourceIfMatch: verified.eTag,
         MetadataDirective: "REPLACE",
         Metadata: { sha256: meta.sha256 },
         ContentType: meta.mimeType,
@@ -130,7 +148,11 @@ const s3BoardDocumentObjectStore: BoardDocumentObjectStore = {
     );
     const bytes = await streamToBuffer(result.Body);
     const meta = metadataOf(result as never);
-    return { bytes, metadata: { ...meta, sha256: computeSha256(bytes) } };
+    return {
+      bytes,
+      metadata: { ...meta, sha256: computeSha256(bytes) },
+      eTag: result.ETag,
+    };
   },
 };
 
@@ -198,6 +220,20 @@ export function createLocalBoardDocumentObjectStore(rootPath: string): BoardDocu
       assertValidStagingKey(stagingKey);
       assertValidRetainedKey(retainedKey);
       const staged = await readStored(stagingKey);
+      await writeStored(retainedKey, staged.bytes, staged.metadata.mimeType, true);
+      return staged.metadata;
+    },
+    async promoteVerified(stagingKey, retainedKey, verified) {
+      assertValidStagingKey(stagingKey);
+      assertValidRetainedKey(retainedKey);
+      const staged = await readStored(stagingKey);
+      if (
+        staged.metadata.sha256 !== verified.metadata.sha256 ||
+        staged.metadata.byteLength !== verified.metadata.byteLength ||
+        staged.metadata.mimeType !== verified.metadata.mimeType
+      ) {
+        throw new Error("Staged object changed after server verification.");
+      }
       await writeStored(retainedKey, staged.bytes, staged.metadata.mimeType, true);
       return staged.metadata;
     },

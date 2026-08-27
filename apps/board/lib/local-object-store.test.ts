@@ -63,6 +63,21 @@ describe("local Board document object store", () => {
     );
   });
 
+  it("refuses to promote bytes that changed after server verification", async () => {
+    const { store } = await localStore();
+    const stagingKey = buildStagingKey("board", "11111111-1111-4111-8111-111111111111");
+    const retainedKey = buildObjectKey("board", "22222222-2222-4222-8222-222222222222", "version-1");
+    await store.writeStaged?.(stagingKey, new TextEncoder().encode("verified"), "text/plain");
+    const verified = await store.readStaged(stagingKey);
+
+    await store.writeStaged?.(stagingKey, new TextEncoder().encode("different"), "text/plain");
+
+    await expect(store.promoteVerified(stagingKey, retainedKey, verified)).rejects.toThrow(
+      "Staged object changed after server verification.",
+    );
+    await expect(store.readRetained?.(retainedKey)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("rejects traversal and non-Board object keys", async () => {
     const { root, store } = await localStore();
     await expect(store.readStaged("board/staging/../../secret")).rejects.toThrow("invalid staging key");
