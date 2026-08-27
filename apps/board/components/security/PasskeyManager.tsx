@@ -1,13 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, Plus } from "lucide-react";
 import { buttonStyles } from "@pgpz/ui";
 import { betterAuthClient } from "@/lib/auth-client";
 import { verifyBoardPasskey } from "@/lib/step-up-client";
-import Link from "next/link";
 
-export function PasskeyManager({ verificationRequired = false }: { verificationRequired?: boolean }) {
+export function PasskeyManager({
+  verificationRequired = false,
+  continueTo = "/",
+}: {
+  verificationRequired?: boolean;
+  continueTo?: string;
+}) {
+  const router = useRouter();
   const passkeys = betterAuthClient.useListPasskeys();
   const [addedPasskeys, setAddedPasskeys] = useState<Array<NonNullable<typeof passkeys.data>[number]>>([]);
   const [removedPasskeyIds, setRemovedPasskeyIds] = useState<string[]>([]);
@@ -71,7 +78,9 @@ export function PasskeyManager({ verificationRequired = false }: { verificationR
     try {
       await verifyBoardPasskey();
       setVerified(true);
-      setMessage("Passkey verified. You can continue to the Board portal.");
+      setMessage("Passkey verified. Opening the Board portal…");
+      router.replace(continueTo);
+      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Passkey verification was not completed.");
     } finally {
@@ -94,9 +103,6 @@ export function PasskeyManager({ verificationRequired = false }: { verificationR
       {message ? <p role="status" className="text-sm">{message}</p> : null}
       {visiblePasskeys.length > 0 && !verified ? (
         <button type="button" onClick={() => void verifyAndContinue()} disabled={busy} className={buttonStyles({ className: "w-fit" })}>Verify passkey to continue</button>
-      ) : null}
-      {visiblePasskeys.length > 0 && verified ? (
-        <Link href="/" className={buttonStyles({ variant: "outline", className: "w-fit" })}>Continue to the Board portal</Link>
       ) : null}
     </div>
   );

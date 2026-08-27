@@ -157,8 +157,9 @@ export async function requireBoardMember(callbackPath = "/"): Promise<BoardMembe
   }
   if (state.status !== "member") return null;
   if (callbackPath !== "/account/security") {
-    if (!(await hasBoardPasskey(state.member.id))) redirect("/account/security?enrollment=required");
-    if (!(await hasBoardPasskeySession(await headers(), state.member.id))) redirect("/account/security?verification=required");
+    const safeCallback = encodeURIComponent(resolveSafeCallbackUrl(callbackPath));
+    if (!(await hasBoardPasskey(state.member.id))) redirect(`/account/security?enrollment=required&callbackUrl=${safeCallback}`);
+    if (!(await hasBoardPasskeySession(await headers(), state.member.id))) redirect(`/account/security?verification=required&callbackUrl=${safeCallback}`);
   }
   return state.member;
 }

@@ -249,6 +249,8 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
 - Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification.
 - A magic-link session can reach `/account/security` but is redirected there
   from every private Board-content route until a passkey is registered and verified.
+- Successful recovery verification automatically returns the user to the
+  validated local Board route that originally required passkey authentication.
 - `/account/security` supports passkey registration/removal, recommends two
   authenticators, and prevents removal of the final passkey.
 - A passkey-authenticated session expires after 12 hours; sensitive mutations
