@@ -77,7 +77,7 @@ describe("board dashboard", () => {
 
   it("keeps the next meeting summary compact on the dashboard", () => {
     render(<BoardDashboard member={{ id: "user-1", name: "Ada", email: "ada@example.org", role: "member", isAdmin: false }} nextMeeting={{
-      id: "meeting-1", title: "September Board meeting", description: "", type: "regular", status: "materials-published",
+      id: "meeting-1", title: "September Board meeting", description: "", type: "regular", format: "live", status: "materials-published",
       startAt: "2026-09-18T17:00:00.000Z", endAt: "2026-09-18T18:30:00.000Z", timeZone: "America/New_York",
       location: "Online", virtualUrl: null, version: 3, minutesStatus: "not-started", materialCount: 4,
     }} />);

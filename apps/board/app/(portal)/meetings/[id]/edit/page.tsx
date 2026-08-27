@@ -22,7 +22,7 @@ export default async function EditBoardMeetingPage({ params }: { params: Promise
       <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--muted)]">Update scheduling details. Calendar updates can be sent after the changes are saved.</p>
       <Surface className="mt-7 p-6 sm:p-8">
         <MeetingForm meeting={{
-          id: meeting.id, title: meeting.title, description: meeting.description, type: meeting.type,
+          id: meeting.id, title: meeting.title, description: meeting.description, type: meeting.type, format: meeting.format,
           status: meeting.status, startAt: meeting.startAt, endAt: meeting.endAt, timeZone: meeting.timeZone,
           location: meeting.location || null, virtualUrl: meeting.virtualUrl, version: meeting.version,
           minutesStatus: meeting.minutesStatus,

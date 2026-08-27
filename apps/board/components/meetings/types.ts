@@ -9,12 +9,14 @@ export type MeetingStatus =
 export type MinutesStatus = "not-started" | "draft" | "pending-approval" | "approved" | "amended";
 
 export type MeetingType = "regular" | "special" | "annual" | "committee" | "other";
+export type MeetingFormat = "live" | "asynchronous";
 
 export interface MeetingSummaryView {
   id: string;
   title: string;
   description: string;
   type: MeetingType;
+  format: MeetingFormat;
   status: MeetingStatus;
   startAt: string;
   endAt: string;
@@ -57,6 +59,30 @@ export interface DecisionView {
   recused: number;
 }
 
+export type AsyncVoteChoice = "yes" | "no" | "abstain" | "recused";
+export type AsyncBallotEffectiveStatus = "draft" | "scheduled" | "open" | "awaiting-finalization" | "closed" | "cancelled";
+
+export interface AsyncBallotView {
+  id: string;
+  title: string;
+  motion: string;
+  effectiveStatus: AsyncBallotEffectiveStatus;
+  eligibleCount: number;
+  ballotsCast: number;
+  quorumRequired: number | null;
+  approvalRequired: number | null;
+  viewerEligible: boolean;
+  viewerChoice: AsyncVoteChoice | null;
+  result: null | {
+    yes: number;
+    no: number;
+    abstain: number;
+    recused: number;
+    quorumMet: boolean;
+    outcome: "passed" | "failed" | "no-quorum";
+  };
+}
+
 export interface ActionItemView {
   id: string;
   title: string;
@@ -89,6 +115,7 @@ export interface MeetingDetailView {
   materials: MeetingMaterialView[];
   attendance: AttendanceView[];
   decisions: DecisionView[];
+  asyncBallots: AsyncBallotView[];
   actionItems: ActionItemView[];
   deliveries: DeliveryView[];
 }

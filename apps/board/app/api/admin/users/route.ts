@@ -4,10 +4,11 @@ import { boardAccessRepository } from "@/lib/board-access-repository";
 import { isBoardAssignableAccessRole, type BoardAccessRecord, type BoardAccessRole } from "@/lib/board-access";
 import { boardAuditLedger } from "@/lib/audit";
 import { documentClient, TABLE_NAME } from "@/lib/dynamodb";
-import { anonymousClaimedActor, authenticatedActor, recordAccessDenied } from "@/lib/audit";
+import { anonymousClaimedActor, auditBestEffort, authenticatedActor, recordAccessDenied } from "@/lib/audit";
 import { canManageBoardUsers, resolveBoardMemberState, type BoardMember } from "@/lib/session";
 import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
 import { sendBoardPasskeySecurityNotice } from "@/lib/passkey-notification";
+import { sendBoardWelcomeEmail } from "@/lib/welcome-email";
 
 export const dynamic = "force-dynamic";
 
@@ -186,7 +187,28 @@ export async function POST(request: NextRequest) {
         ...audit,
       ],
     });
-    return NextResponse.json({ user: responseUser(user) }, { status: 201 });
+    let welcomeEmailSent = false;
+    try {
+      await sendBoardWelcomeEmail({ name: user.name, email: user.email, role: user.role });
+      welcomeEmailSent = true;
+    } catch (error) {
+      console.error("[board] welcome email delivery failed", error);
+    }
+    await auditBestEffort({
+      category: "account",
+      action: "welcome_email_delivery",
+      outcome: welcomeEmailSent ? "success" : "failure",
+      reason: welcomeEmailSent ? undefined : "delivery_failed",
+      actor: actorForAudit(admin),
+      target: { type: "board-access", id: user.id, version: String(user.version) },
+    });
+    return NextResponse.json({
+      user: responseUser(user),
+      welcomeEmailSent,
+      message: welcomeEmailSent
+        ? `Welcome email sent to ${user.email}.`
+        : `${user.email} was added, but the welcome email could not be delivered. They can still request a sign-in link from the Board sign-in page.`,
+    }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to add the Board user.";
     const conflict = /conditional|exists|transaction/i.test(message);

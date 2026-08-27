@@ -25,7 +25,7 @@ server authorization; routes and repositories enforce current roles.
 
 | Role | Documents | Meetings | Audit ledger | User management |
 | --- | --- | --- | --- | --- |
-| Director | view | view + RSVP | no | no |
+| Director | view | view + RSVP + eligible asynchronous votes | no | no |
 | Board Chair | manage | manage + communicate | review | manage |
 | Executive Director | manage | manage + communicate | review | manage |
 | Legal Counsel | manage | view + meeting documents | review | no |
@@ -95,10 +95,35 @@ compatibility redirect to `/documents`.
 
 `/meetings` is an upcoming-first Board workspace with a retained past-meeting
 archive. Every active portal user can review published meetings, download an
-iCalendar event, and record an RSVP. Board Support can create and prepare draft
-meetings, agendas, attendance, decisions, action items, and draft minutes.
+iCalendar event, and record an RSVP for a live meeting. Board Support can create
+and prepare draft meetings, agendas, attendance, decisions, action items, and
+draft minutes.
 Only the Board Chair and Executive Director may publish, reschedule, cancel, or
 close a meeting, record minutes approval, or send an official communication.
+
+A meeting can be `live` or an `asynchronous` written-resolution workspace. The
+Chair or Executive Director prepares exact motions while the meeting is a
+private draft, schedules a voting window, and opens each ballot. Opening takes
+an immutable snapshot of active Director and Board Chair records; staff roles
+do not acquire a vote. Each ballot fixes its eligible roster hash, quorum count,
+and required yes-vote count. Unspecified thresholds default to the meeting
+quorum (or a majority of eligible directors) and a majority of eligible
+directors, and the UI directs the officer to confirm them against the bylaws.
+
+Eligible directors cast `yes`, `no`, `abstain`, or `recused` using their
+passkey-authenticated account and recent step-up verification. They may change
+their response until the deadline; the current ballot and every prior response
+are retained. Voting closes automatically at the deadline. While voting is
+open, the site shows response progress but hides live totals and all individual
+choices. After the deadline, the Chair or Executive Director finalizes the automatically computed
+quorum and approval result. Only the final aggregate totals are shown in the
+meeting record. The finalized ballot also creates the retained meeting decision;
+the meeting cannot be completed while a ballot remains draft or open.
+
+The Chair or Executive Director can send a vote reminder only to eligible
+directors who have not responded. The message contains an authenticated portal
+link and deadline, not the motion or confidential attachments. Delivery follows
+the same per-recipient idempotency and audit behavior as other meeting messages.
 
 Meeting lifecycle data is Board-specific and stored in `PGPZBoardMeetings` as
 an optimistic aggregate with retained child records and immutable revisions.
@@ -116,12 +141,12 @@ meeting status never deletes its documents.
 
 Calendar downloads use a stable iCalendar UID and sequence. Board Chair and
 Executive Director users can manually send an invitation, update, materials
-notice, reminder, or cancellation. Messages are delivered one recipient at a
+notice, reminder, vote reminder, or cancellation. Messages are delivered one recipient at a
 time through the Board SES identity; that identity remains the calendar
 organizer even when a different authorized officer sends an update. Messages
 contain authenticated portal links rather than confidential attachments and
 persist per-recipient pending/result evidence with safe partial retry. No
-automated scheduler, external calendar OAuth, live ballot,
+automated scheduler, external calendar OAuth,
 transcription, or meeting-platform integration is enabled.
 
 Board's upload adapter permits PDF, ZIP, JSON, Markdown, text, and CSV records.
@@ -163,6 +188,10 @@ not emulate production KMS encryption or S3 Object Lock retention enforcement.
 ## Emergency password rollback
 
 Normal accounts are created through `/admin/users` and use passwordless sign-in.
+Creating a user sends a Board welcome email with the assigned role, sign-in
+link, and passkey-enrollment instructions. Access creation remains successful
+if email delivery is temporarily unavailable; the administrator sees the
+delivery outcome and the audit ledger records success or failure.
 The old credential provisioner is retained only for controlled rollback and
 refuses to run unless password auth is explicitly enabled:
 

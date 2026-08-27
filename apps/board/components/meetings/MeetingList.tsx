@@ -37,7 +37,7 @@ export function MeetingList({
         </nav>
         {canPrepare ? (
           <Link href="/meetings/new" className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
-            <Plus className="h-4 w-4" aria-hidden="true" /> {canManage ? "Schedule meeting" : "Create meeting draft"}
+            <Plus className="h-4 w-4" aria-hidden="true" /> {canManage ? "Create meeting" : "Create meeting draft"}
           </Link>
         ) : null}
       </div>
@@ -62,7 +62,7 @@ export function MeetingList({
         <ol className="mt-5 grid gap-4">
           {meetings.map((meeting) => {
             const date = formatMeetingDate(meeting.startAt, meeting.endAt, meeting.timeZone);
-            const location = meeting.location || (meeting.virtualUrl ? "Online" : "Location to be confirmed");
+            const location = meeting.format === "asynchronous" ? "Authenticated written vote" : meeting.location || (meeting.virtualUrl ? "Online" : "Location to be confirmed");
             return (
               <li key={meeting.id}>
                 <Surface className={`p-0 ${meeting.id === nextMeetingId ? "border-[var(--accent-border)]" : ""}`}>
@@ -74,7 +74,7 @@ export function MeetingList({
                     <span className="min-w-0">
                       <span className="flex flex-wrap items-center gap-2">
                         {meeting.id === nextMeetingId ? <Badge tone="accent">Next meeting</Badge> : null}
-                        <span className="text-xs font-semibold text-[var(--muted)]">{meetingTypeLabel(meeting.type)} · {meetingStatusLabel(meeting.status)}</span>
+                        <span className="text-xs font-semibold text-[var(--muted)]">{meeting.format === "asynchronous" ? "Asynchronous resolution" : meetingTypeLabel(meeting.type)} · {meetingStatusLabel(meeting.status)}</span>
                       </span>
                       <span className="mt-2 block text-lg font-semibold tracking-[-0.02em] text-[var(--foreground)]">{meeting.title}</span>
                       {meeting.description ? <span className="mt-1 line-clamp-2 block text-sm leading-6 text-[var(--muted)]">{meeting.description}</span> : null}

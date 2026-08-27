@@ -101,7 +101,7 @@ Set these on the Amplify app (also documented in `apps/board/.env.example`):
 | `BETTER_AUTH_TRUSTED_ORIGINS` | yes | `https://board.pgpz.org` |
 | `NEXTAUTH_TABLE` | yes | `PGPZBoardNextAuth`; also stores Board passkey rows under physical model `better_auth_passkeys` |
 | `BOARD_ACCESS_TABLE` | yes | `PGPZBoardAccess`; Board-only roles, status, email claims, and immutable revisions |
-| `BOARD_MEETINGS_TABLE` | yes | `PGPZBoardMeetings`; Board-only meetings, agenda, attendance, decisions, action items, minutes state, delivery evidence, and revisions |
+| `BOARD_MEETINGS_TABLE` | yes | `PGPZBoardMeetings`; Board-only meetings, agenda, attendance, asynchronous ballots and immutable vote revisions, decisions, action items, minutes state, delivery evidence, and revisions |
 | `BOARD_ACCESS_REGISTRY_ENABLED` | yes | Keep `false` until the roster migration is verified; then `true` makes the registry authoritative |
 | `REGION_AWS` | yes | table/region |
 | `BOARD_MEMBER_EMAILS` | yes | comma- or whitespace-separated allowlist of current directors' emails |
@@ -122,14 +122,17 @@ overlaps the member roster fails configuration instead of holding a dual role.
 ## 4. Provisioning users and assigning roles
 
 Accounts cannot self-register. A Board Chair or Executive Director creates a
-user through `/admin/users`, assigns a current role, and sends no password. The
-user requests a magic link on `/signin`, then registers a passkey from
+user through `/admin/users`, assigns a current role, and sends no password. A
+welcome email provides the assigned role, `/signin` link, and passkey-enrollment
+instructions. Delivery success or failure is reported to the administrator and
+recorded in the audit ledger without rolling back valid access. The user then
+requests a magic link on `/signin` and registers a passkey from
 `/account/security`. Role and status changes take effect immediately and append
 an immutable access revision plus audit event.
 
 | Role | Documents | Meetings | Audit ledger | User management |
 | --- | --- | --- | --- | --- |
-| Director | view | view + RSVP | no | no |
+| Director | view | view + RSVP + eligible asynchronous votes | no | no |
 | Board Chair | manage | manage + communicate | review | manage |
 | Executive Director | manage | manage + communicate | review | manage |
 | Legal Counsel | manage | view + meeting documents | review | no |
@@ -141,6 +144,17 @@ add records, publish versions, change presentation-only display names, and
 archive or restore records without entering a separate administration
 interface. Display-name changes preserve canonical document and retained-object
 identity and are recorded as `display_name_updated` audit events.
+
+Asynchronous written resolutions use the existing retained meetings table and
+Board audit ledger; no additional AWS resource or environment variable is
+required. Opening a ballot snapshots active `member`, `chair`, and legacy
+`admin` access records as eligible directors. Executive Director, Board
+Support, and Legal Counsel records are not voting members. Current votes and an
+immutable revision for every submission are retained under the meeting
+partition. The deadline rejects further submissions without a scheduler; the
+Chair or Executive Director then persists the computed aggregate result. Vote
+reminders use the existing Board SES permission and are restricted to eligible
+directors who have not responded.
 
 The legacy stored role `admin` remains readable as Board Chair for safe rollout,
 but current APIs do not assign it. Another full-administration user can change a

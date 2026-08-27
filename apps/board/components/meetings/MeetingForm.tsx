@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
-import type { MeetingSummaryView, MeetingType } from "./types";
+import type { MeetingFormat, MeetingSummaryView, MeetingType } from "./types";
 
 function localDateTimeValue(value: string | undefined) {
   if (!value) return "";
@@ -19,6 +19,7 @@ export function MeetingForm({ meeting }: { meeting?: MeetingSummaryView }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [format, setFormat] = useState<MeetingFormat>(meeting?.format || "live");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +32,7 @@ export function MeetingForm({ meeting }: { meeting?: MeetingSummaryView }) {
       title: String(form.get("title") || ""),
       description: String(form.get("description") || ""),
       type: String(form.get("type") || "regular") as MeetingType,
+      format: String(form.get("format") || "live") as MeetingFormat,
       startAt: new Date(startValue).toISOString(),
       endAt: new Date(endValue).toISOString(),
       timeZone: String(form.get("timeZone") || "America/New_York"),
@@ -73,16 +75,24 @@ export function MeetingForm({ meeting }: { meeting?: MeetingSummaryView }) {
         </label>
       </div>
       <label className="text-sm font-semibold text-[var(--foreground)]">
+        Meeting format
+        <select name="format" value={format} onChange={(event) => setFormat(event.target.value as MeetingFormat)} className={fieldClass}>
+          <option value="live">Live meeting</option>
+          <option value="asynchronous">Asynchronous written resolution</option>
+        </select>
+        <span className="mt-2 block text-xs font-normal leading-5 text-[var(--muted)]">{format === "asynchronous" ? "Directors review materials and cast authenticated votes during a defined window; no video or physical meeting is required." : "Directors convene at a scheduled time, in person or online."}</span>
+      </label>
+      <label className="text-sm font-semibold text-[var(--foreground)]">
         Purpose or description
         <textarea name="description" rows={3} maxLength={1200} defaultValue={meeting?.description} placeholder="What the Board will cover and what members should prepare for" className={fieldClass} />
       </label>
       <label className="text-sm font-semibold text-[var(--foreground)]">
-        Directors required for quorum <span className="font-normal text-[var(--muted)]">(optional)</span>
+        {format === "asynchronous" ? "Default participating directors required for quorum" : "Directors required for quorum"} <span className="font-normal text-[var(--muted)]">(optional)</span>
         <input name="quorumRequired" type="number" min="1" max="100" defaultValue={meeting?.quorumRequired || ""} placeholder="Set from the bylaws" className={fieldClass} />
       </label>
       <div className="grid gap-5 sm:grid-cols-2">
-        <label className="text-sm font-semibold text-[var(--foreground)]">Starts<input name="startAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.startAt)} className={fieldClass} /></label>
-        <label className="text-sm font-semibold text-[var(--foreground)]">Ends<input name="endAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.endAt)} className={fieldClass} /></label>
+        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Voting opens" : "Starts"}<input name="startAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.startAt)} className={fieldClass} /></label>
+        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Voting closes" : "Ends"}<input name="endAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.endAt)} className={fieldClass} /></label>
       </div>
       <label className="text-sm font-semibold text-[var(--foreground)]">
         Time zone
@@ -90,10 +100,10 @@ export function MeetingForm({ meeting }: { meeting?: MeetingSummaryView }) {
           <option value="America/New_York">Eastern time</option><option value="America/Chicago">Central time</option><option value="America/Denver">Mountain time</option><option value="America/Los_Angeles">Pacific time</option><option value="UTC">UTC</option>
         </select>
       </label>
-      <div className="grid gap-5 sm:grid-cols-2">
+      {format === "live" ? <div className="grid gap-5 sm:grid-cols-2">
         <label className="text-sm font-semibold text-[var(--foreground)]">Location<input name="location" maxLength={240} defaultValue={meeting?.location || ""} placeholder="Office, conference room, or online" className={fieldClass} /></label>
         <label className="text-sm font-semibold text-[var(--foreground)]">Video meeting link<input name="virtualUrl" type="url" maxLength={500} defaultValue={meeting?.virtualUrl || ""} placeholder="https://…" className={fieldClass} /></label>
-      </div>
+      </div> : null}
       <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-6">
         <button type="submit" disabled={pending} className="inline-flex items-center gap-2 rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
           {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}{meeting ? "Save changes" : "Create draft meeting"}
