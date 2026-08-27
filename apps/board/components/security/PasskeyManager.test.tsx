@@ -10,6 +10,15 @@ const authMocks = vi.hoisted(() => ({
   verifyBoardPasskey: vi.fn(),
 }));
 
+const navigationMocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigationMocks,
+}));
+
 vi.mock("@/lib/auth-client", () => ({
   betterAuthClient: {
     useListPasskeys: authMocks.useListPasskeys,
@@ -30,6 +39,8 @@ beforeEach(() => {
   authMocks.deletePasskey.mockReset();
   authMocks.verifyBoardPasskey.mockReset();
   authMocks.verifyBoardPasskey.mockResolvedValue(undefined);
+  navigationMocks.replace.mockReset();
+  navigationMocks.refresh.mockReset();
 });
 
 afterEach(() => cleanup());
@@ -60,7 +71,7 @@ describe("PasskeyManager", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Passkey registered.");
   });
 
-  it("requires a passkey ceremony before continuing from a recovery session", async () => {
+  it("automatically returns to the requested portal route after recovery verification", async () => {
     authMocks.useListPasskeys.mockReturnValue({
       data: [{
         id: "passkey-1",
@@ -76,12 +87,13 @@ describe("PasskeyManager", () => {
       isPending: false,
     });
 
-    render(<PasskeyManager verificationRequired />);
-    expect(screen.queryByRole("link", { name: "Continue to the Board portal" })).not.toBeInTheDocument();
+    render(<PasskeyManager verificationRequired continueTo="/meetings/meeting-1" />);
     fireEvent.click(screen.getByRole("button", { name: "Verify passkey to continue" }));
 
     await waitFor(() => expect(authMocks.verifyBoardPasskey).toHaveBeenCalledOnce());
-    expect(screen.getByRole("link", { name: "Continue to the Board portal" })).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("Passkey verified");
+    expect(navigationMocks.replace).toHaveBeenCalledWith("/meetings/meeting-1");
+    expect(navigationMocks.refresh).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: "Continue to the Board portal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Passkey verified. Opening the Board portal");
   });
 });

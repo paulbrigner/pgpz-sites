@@ -218,7 +218,9 @@ within the preceding 10 minutes.
 Ten-minute, single-use hashed magic links are limited to initial onboarding and
 controlled recovery. A magic link can open `/account/security`, but it cannot
 open Board content. Users must register and then verify a passkey before
-continuing. Users manage passkeys at `/account/security`; two passkeys are
+continuing. Successful verification automatically returns the user to the
+protected Board route they originally requested. Users manage passkeys at
+`/account/security`; two passkeys are
 recommended, and the final passkey cannot be removed. Board Chair and Executive
 Director users can perform an audited passkey reset for a user who has lost all
 authenticators. The user then uses a magic link to enroll a replacement.
