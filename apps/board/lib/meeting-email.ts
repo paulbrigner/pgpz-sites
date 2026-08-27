@@ -12,7 +12,9 @@ export type MeetingEmailInput = {
   kind: MeetingCommunicationKind;
   meetingId: string;
   meetingTitle: string;
+  meetingFormat?: "live" | "asynchronous";
   startsAt: string | Date;
+  deadlineAt?: string | Date | null;
   timeZone: string;
   portalUrl: string;
   recipient: { email: string; name?: string | null };
@@ -97,6 +99,7 @@ const copy: Record<MeetingCommunicationKind, { prefix: string; opening: string }
     opening: "The agenda and preparation materials are ready for the upcoming PGPZ Board meeting.",
   },
   reminder: { prefix: "Reminder", opening: "This is a reminder about the upcoming PGPZ Board meeting." },
+  "vote-reminder": { prefix: "Vote reminder", opening: "Your vote is still needed for this PGPZ Board asynchronous meeting." },
   update: { prefix: "Updated", opening: "The details for this PGPZ Board meeting have been updated." },
   cancellation: { prefix: "Cancelled", opening: "This PGPZ Board meeting has been cancelled." },
 };
@@ -139,40 +142,53 @@ export function buildBoardMeetingEmail(input: MeetingEmailInput): MeetingEmail {
   const portalUrl = requireSafeUrl(input.portalUrl, "portalUrl");
   const virtualUrl = input.virtualUrl ? requireSafeUrl(input.virtualUrl, "virtualUrl") : null;
   const when = formatMeetingTime(startsAt, timeZone);
+  const deadline = input.deadlineAt ? formatMeetingTime(parseInstant(input.deadlineAt), timeZone) : null;
+  if (input.kind === "vote-reminder" && !deadline) throw new Error("deadlineAt is required for a vote reminder");
+  if (input.meetingFormat === "asynchronous" && !deadline) throw new Error("deadlineAt is required for an asynchronous meeting message");
   const greeting = input.recipient.name?.trim() ? `Hello ${input.recipient.name.trim()},` : "Hello,";
   const location = input.location?.trim();
   const message = copy[input.kind];
+  const opening = input.meetingFormat === "asynchronous" && input.kind !== "vote-reminder"
+    ? {
+        invitation: "You are invited to participate in a PGPZ Board asynchronous written resolution.",
+        "materials-ready": "The materials and written resolutions are ready for Board review and voting.",
+        reminder: "This is a reminder about the current PGPZ Board asynchronous written resolution.",
+        update: "The voting window or materials for this PGPZ Board asynchronous written resolution have been updated.",
+        cancellation: "This PGPZ Board asynchronous written resolution has been cancelled.",
+      }[input.kind] ?? message.opening
+    : message.opening;
 
   const details = [
     title,
-    when,
+    input.kind === "vote-reminder" ? `Voting deadline: ${deadline}` : input.meetingFormat === "asynchronous" ? `Voting opens: ${when}` : when,
+    input.meetingFormat === "asynchronous" && input.kind !== "vote-reminder" ? `Voting closes: ${deadline}` : null,
     location ? `Location: ${location}` : null,
     virtualUrl ? `Meeting link: ${virtualUrl}` : null,
   ].filter((value): value is string => Boolean(value));
   const text = [
     greeting,
     "",
-    message.opening,
+    opening,
     "",
     ...details,
     "",
     `Open the meeting in the Board portal: ${portalUrl}`,
     "",
-    "Preparation materials remain in the authenticated Board portal and are not attached to this email.",
+    input.kind === "vote-reminder" ? "Open the authenticated Board portal to review the motion and submit or update your vote before the deadline." : "Preparation materials remain in the authenticated Board portal and are not attached to this email.",
   ].join("\n");
 
   const htmlDetails = details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("");
   const html = [
     `<p>${escapeHtml(greeting)}</p>`,
-    `<p>${escapeHtml(message.opening)}</p>`,
+    `<p>${escapeHtml(opening)}</p>`,
     `<ul>${htmlDetails}</ul>`,
     `<p><a href="${escapeHtml(portalUrl)}">Open this meeting in the Board portal</a></p>`,
-    "<p>Preparation materials remain in the authenticated Board portal and are not attached to this email.</p>",
+    input.kind === "vote-reminder" ? "<p>Open the authenticated Board portal to review the motion and submit or update your vote before the deadline.</p>" : "<p>Preparation materials remain in the authenticated Board portal and are not attached to this email.</p>",
   ].join("");
 
   return {
     to,
-    subject: `${message.prefix}: ${title} — ${when}`,
+    subject: `${message.prefix}: ${title} — ${input.kind === "vote-reminder" ? deadline : when}`,
     text,
     html,
     ...(input.calendar ? { calendarAttachment: input.calendar } : {}),

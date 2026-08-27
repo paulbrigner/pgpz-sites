@@ -11,14 +11,14 @@ afterEach(() => cleanup());
 const detail: MeetingDetailView = {
   meeting: {
     id: "meeting-1", title: "September Board meeting", description: "Quarterly governance review.",
-    type: "regular", status: "materials-published", startAt: "2026-09-18T17:00:00.000Z",
+    type: "regular", format: "live", status: "materials-published", startAt: "2026-09-18T17:00:00.000Z",
     endAt: "2026-09-18T18:30:00.000Z", timeZone: "America/New_York", location: "Online",
     virtualUrl: "https://meet.example.org/board", version: 3, minutesStatus: "not-started",
   },
   agendaItems: [{ id: "agenda-1", title: "Treasurer report", description: "Review the quarter.", kind: "discussion", order: 0, presenter: "Treasurer", durationMinutes: 20 }],
   materials: [{ id: "packet-1", title: "Board packet", description: "Meeting packet", section: "preparation", downloadHref: "/api/documents/packet-1/download", versionLabel: "v2", updatedAt: "2026-09-10T12:00:00.000Z" }],
   attendance: [{ id: "director-1", name: "Ada Director", email: "ada@example.org", status: "accepted" }],
-  decisions: [], actionItems: [], deliveries: [],
+  decisions: [], asyncBallots: [], actionItems: [], deliveries: [],
 };
 
 describe("MeetingDetail", () => {

@@ -63,6 +63,7 @@ describe("private board feature surface", () => {
       "api/documents/local-upload/[operationId]/route.ts",
       "api/documents/route.ts",
       "api/meetings/[id]/calendar/route.ts",
+      "api/meetings/[id]/ballots/route.ts",
       "api/meetings/[id]/communications/route.ts",
       "api/meetings/route.ts",
     ].sort());

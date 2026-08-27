@@ -130,4 +130,50 @@ describe("Board meetings repository", () => {
     const approved = await repo.setMinutes({ meetingId: meeting.id, expectedVersion: pending.version, status: "approved", documentId: "minutes-1", actorEmail: "chair@pgpz.org" });
     await expect(repo.changeStatus({ id: meeting.id, expectedVersion: approved.version, status: "closed", actorEmail: "chair@pgpz.org" })).resolves.toMatchObject({ status: "closed" });
   });
+
+  it("runs an asynchronous ballot with a fixed roster, changeable votes, and final aggregate result", async () => {
+    const client = fakeClient();
+    const repo = createBoardMeetingsRepository(client as never, "Meetings");
+    let meeting = await repo.createMeeting(newMeeting({
+      format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z",
+      location: "Ignored", virtualUrl: "https://meet.example.org/ignored",
+    }));
+    expect(meeting).toMatchObject({ format: "asynchronous", location: "", virtualUrl: null });
+    meeting = await repo.upsertAsyncBallot({
+      meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1",
+      title: "Approve the policy", motion: "Resolved, that the policy is approved.",
+      actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z",
+    });
+    meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
+    const voters = [
+      { userId: "director-1", name: "Ada", email: "ADA@example.org" },
+      { userId: "director-2", name: "Grace", email: "grace@example.org" },
+    ];
+    meeting = await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: voters, actorEmail: "chair@pgpz.org", occurredAt: "2026-09-02T12:00:00Z" });
+    let detail = await repo.getMeeting(meeting.id);
+    expect(detail?.asyncBallots[0]).toMatchObject({ status: "open", quorumRequired: 2, approvalRequired: 2 });
+
+    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter: { ...voters[0], email: "ada@example.org" }, occurredAt: "2026-09-10T14:00:00Z" });
+    await expect(repo.closeAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", actorEmail: "chair@pgpz.org", occurredAt: "2026-09-10T15:00:00Z" })).rejects.toThrow(/after the voting deadline/);
+    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "no", voter: voters[1], occurredAt: "2026-09-10T14:05:00Z" });
+    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter: voters[1], occurredAt: "2026-09-10T14:10:00Z" });
+    meeting = await repo.closeAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", actorEmail: "chair@pgpz.org", occurredAt: "2026-09-12T21:00:00Z" });
+
+    detail = await repo.getMeeting(meeting.id);
+    expect(detail?.asyncVotes).toHaveLength(2);
+    expect(detail?.asyncBallots[0]).toMatchObject({ status: "closed", result: { yes: 2, no: 0, ballotsCast: 2, quorumMet: true, outcome: "passed" } });
+    expect(detail?.decisions[0]).toMatchObject({ id: "async-ballot-1", outcome: "passed", yes: 2 });
+    expect([...client.items.values()].filter((item) => item.entityType === "ASYNC_VOTE_REVISION")).toHaveLength(3);
+  });
+
+  it("rejects asynchronous votes outside the retained voting window", async () => {
+    const repo = createBoardMeetingsRepository(fakeClient() as never, "Meetings");
+    let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z" }));
+    meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Vote", motion: "Resolved.", actorEmail: "chair@pgpz.org" });
+    meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
+    const voter = { userId: "director-1", name: "Ada", email: "ada@example.org" };
+    await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: [voter], actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z" });
+    await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-10T12:59:59Z" })).rejects.toThrow(/not opened/);
+    await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-12T21:00:00Z" })).rejects.toThrow(/deadline/);
+  });
 });

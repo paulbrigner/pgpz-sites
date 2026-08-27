@@ -18,7 +18,7 @@ export default async function BoardHomePage() {
   const next = upcoming.meetings.find((meeting) => meeting.status !== "cancelled" && (meeting.status !== "draft" || maySeeDrafts)) || null;
   const materialCount = next ? (await boardDocumentRepository.listMeetingDocuments(next.id)).filter((document) => document.status === "active").length : 0;
   const nextMeeting = next ? {
-    id: next.id, title: next.title, description: next.description, type: next.type, status: next.status,
+    id: next.id, title: next.title, description: next.description, type: next.type, format: next.format, status: next.status,
     startAt: next.startAt, endAt: next.endAt, timeZone: next.timeZone, location: next.location || null,
     virtualUrl: next.virtualUrl, version: next.version, minutesStatus: next.minutesStatus, materialCount,
     quorumRequired: next.quorumRequired, quorumConfirmedAt: next.quorumConfirmedAt, quorumConfirmedBy: next.quorumConfirmedBy,

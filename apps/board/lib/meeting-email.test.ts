@@ -34,6 +34,30 @@ describe("Board meeting email", () => {
     expect(email.html).not.toContain("Quarterly <Review>");
   });
 
+  it("builds a deadline-specific vote reminder without exposing materials", () => {
+    const email = buildBoardMeetingEmail({
+      ...base,
+      kind: "vote-reminder",
+      deadlineAt: "2026-09-12T21:00:00Z",
+    });
+    expect(email.subject).toContain("Vote reminder:");
+    expect(email.text).toContain("Voting deadline: Saturday, September 12, 2026 at 5:00 PM EDT");
+    expect(email.text).toContain("submit or update your vote");
+    expect(email.text).not.toContain("not attached");
+  });
+
+  it("describes the full voting window for asynchronous invitations", () => {
+    const email = buildBoardMeetingEmail({
+      ...base,
+      kind: "invitation",
+      meetingFormat: "asynchronous",
+      deadlineAt: "2026-09-12T21:00:00Z",
+    });
+    expect(email.text).toContain("asynchronous written resolution");
+    expect(email.text).toContain("Voting opens: Thursday, September 10, 2026 at 1:00 PM EDT");
+    expect(email.text).toContain("Voting closes: Saturday, September 12, 2026 at 5:00 PM EDT");
+  });
+
   it("returns the individual calendar artifact for an invitation", () => {
     const calendar = buildMeetingCalendar({
       meetingId: base.meetingId,

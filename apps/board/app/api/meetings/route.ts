@@ -14,6 +14,7 @@ import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
   BOARD_ATTENDANCE_STATUSES,
+  BOARD_MEETING_FORMATS,
   BOARD_MEETING_STATUSES,
   BOARD_MEETING_TYPES,
   BOARD_MINUTES_STATUSES,
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         title: text(body?.title),
         description: text(body?.description),
         type: memberOf(body?.type, BOARD_MEETING_TYPES, "regular"),
+        format: memberOf(body?.format, BOARD_MEETING_FORMATS, "live"),
         startAt: text(body?.startAt),
         endAt: text(body?.endAt),
         timeZone: text(body?.timeZone) || "America/New_York",
@@ -142,6 +144,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "rsvp") {
+      const current = await boardMeetingsRepository.getMeeting(meetingId);
+      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Asynchronous meetings use authenticated ballots rather than attendance responses." }, { status: 409 });
       const status = memberOf(body?.status, ["accepted", "declined", "tentative"] as const, "accepted");
       const audit = await auditItems(member, {
         action: "meeting_rsvp_recorded",
@@ -166,9 +170,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "update") {
+      const current = await boardMeetingsRepository.getMeeting(meetingId);
+      if (!current) return NextResponse.json({ error: "Meeting not found." }, { status: 404 });
+      if (body?.format !== undefined && body.format !== current.meeting.format) {
+        if (current.meeting.status !== "draft") return NextResponse.json({ error: "The meeting format cannot change after scheduling." }, { status: 409 });
+        if (current.asyncBallots.length > 0) return NextResponse.json({ error: "The meeting format cannot change after a written resolution has been prepared." }, { status: 409 });
+      }
       if (!canManageBoardMeetings(member)) {
-        const current = await boardMeetingsRepository.getMeeting(meetingId);
-        if (!current || current.meeting.status !== "draft") {
+        if (current.meeting.status !== "draft") {
           return NextResponse.json({ error: "Only the Chair or Executive Director may change a published meeting." }, { status: 403 });
         }
       }
@@ -180,6 +189,7 @@ export async function POST(request: NextRequest) {
         ...(body?.title !== undefined ? { title: text(body.title) } : {}),
         ...(body?.description !== undefined ? { description: text(body.description) } : {}),
         ...(body?.type !== undefined ? { type: memberOf(body.type, BOARD_MEETING_TYPES, "regular") } : {}),
+        ...(body?.format !== undefined ? { format: memberOf(body.format, BOARD_MEETING_FORMATS, "live") } : {}),
         ...(body?.startAt !== undefined ? { startAt: text(body.startAt) } : {}),
         ...(body?.endAt !== undefined ? { endAt: text(body.endAt) } : {}),
         ...(body?.timeZone !== undefined ? { timeZone: text(body.timeZone) } : {}),
@@ -192,6 +202,11 @@ export async function POST(request: NextRequest) {
 
     if (action === "setStatus") {
       const status = memberOf(body?.status, BOARD_MEETING_STATUSES, "draft") as BoardMeetingStatus;
+      if (status === "completed") {
+        const current = await boardMeetingsRepository.getMeeting(meetingId);
+        const unfinished = current?.meeting.format === "asynchronous" && current.asyncBallots.some((ballot) => ballot.status === "draft" || ballot.status === "open");
+        if (unfinished) return NextResponse.json({ error: "Finalize or cancel every asynchronous ballot before completing the meeting." }, { status: 409 });
+      }
       const audit = await auditItems(member, {
         action: status === "cancelled" ? "meeting_cancelled" : `meeting_${status.replaceAll("-", "_")}`,
         meetingId,
@@ -209,6 +224,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "confirmQuorum") {
+      const current = await boardMeetingsRepository.getMeeting(meetingId);
+      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Quorum is calculated separately for each asynchronous ballot." }, { status: 409 });
       const confirmed = body?.confirmed !== false;
       const audit = await auditItems(member, {
         action: confirmed ? "meeting_quorum_confirmed" : "meeting_quorum_cleared",
@@ -245,6 +262,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "recordAttendance") {
+      const current = await boardMeetingsRepository.getMeeting(meetingId);
+      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Asynchronous meetings do not use attendance records." }, { status: 409 });
       const attendeeEmail = text(body?.email).toLowerCase();
       const audit = await auditItems(member, { action: "attendance_recorded", meetingId, version: expectedVersion + 1 });
       const meeting = await boardMeetingsRepository.recordAttendance({
@@ -267,6 +286,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "recordDecision") {
+      const current = await boardMeetingsRepository.getMeeting(meetingId);
+      if (current?.meeting.format === "asynchronous") {
+        return NextResponse.json({ error: "Asynchronous decisions must be finalized from their authenticated ballots." }, { status: 409 });
+      }
       const decisionId = text(body?.decisionId) || randomUUID();
       const audit = await auditItems(member, { action: "decision_recorded", meetingId, version: expectedVersion + 1 });
       const meeting = await boardMeetingsRepository.recordDecision({

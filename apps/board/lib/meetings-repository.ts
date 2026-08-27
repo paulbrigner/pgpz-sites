@@ -1,19 +1,27 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { documentClient } from "@/lib/dynamodb";
 import { BOARD_MEETINGS_TABLE } from "@/lib/config";
 import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
+  BOARD_ASYNC_BALLOT_STATUSES,
+  BOARD_ASYNC_VOTE_CHOICES,
   BOARD_ATTENDANCE_STATUSES,
   BOARD_DELIVERY_KINDS,
   BOARD_DELIVERY_STATUSES,
   BOARD_DECISION_OUTCOMES,
   BOARD_MEETING_STATUSES,
+  BOARD_MEETING_FORMATS,
   BOARD_MEETING_TYPES,
   BOARD_MINUTES_STATUSES,
   BoardMeetingVersionConflictError,
+  tallyBoardAsyncBallot,
+  type BoardAsyncBallot,
+  type BoardAsyncBallotVoter,
+  type BoardAsyncVote,
+  type BoardAsyncVoteChoice,
   type BoardAgendaItem,
   type BoardMeeting,
   type BoardMeetingActionItem,
@@ -32,12 +40,12 @@ export interface BoardMeetingMutationOptions { readonly additionalTransactItems?
 
 export interface CreateBoardMeetingInput {
   readonly id?: string; readonly title: string; readonly description?: string;
-  readonly type: BoardMeeting["type"]; readonly startAt: string; readonly endAt: string;
+  readonly type: BoardMeeting["type"]; readonly format?: BoardMeeting["format"]; readonly startAt: string; readonly endAt: string;
   readonly timeZone: string; readonly location?: string; readonly virtualUrl?: string | null;
   readonly quorumRequired?: number | null;
   readonly actorEmail: string; readonly occurredAt?: string;
 }
-export interface UpdateBoardMeetingInput extends Partial<Pick<BoardMeeting, "title" | "description" | "type" | "startAt" | "endAt" | "timeZone" | "location" | "virtualUrl" | "quorumRequired">> {
+export interface UpdateBoardMeetingInput extends Partial<Pick<BoardMeeting, "title" | "description" | "type" | "format" | "startAt" | "endAt" | "timeZone" | "location" | "virtualUrl" | "quorumRequired">> {
   readonly id: string; readonly expectedVersion: number; readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface ChangeBoardMeetingStatusInput {
@@ -66,6 +74,29 @@ export interface SetBoardMinutesInput {
 }
 export interface RecordBoardDeliveryInput extends Omit<BoardMeetingDelivery, "meetingId" | "occurredAt" | "actorEmail"> {
   readonly meetingId: string; readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface UpsertBoardAsyncBallotInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly id: string;
+  readonly agendaItemId?: string | null; readonly title: string; readonly motion: string;
+  readonly quorumRequired?: number | null; readonly approvalRequired?: number | null;
+  readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface OpenBoardAsyncBallotInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
+  readonly eligibleVoters: readonly BoardAsyncBallotVoter[];
+  readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface CastBoardAsyncVoteInput {
+  readonly meetingId: string; readonly ballotId: string; readonly choice: BoardAsyncVoteChoice;
+  readonly voter: BoardAsyncBallotVoter; readonly occurredAt?: string;
+}
+export interface CloseBoardAsyncBallotInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
+  readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface CancelBoardAsyncBallotInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
+  readonly reason: string; readonly actorEmail: string; readonly occurredAt?: string;
 }
 
 const META_SK = "META";
@@ -109,7 +140,16 @@ const member = <T extends readonly string[]>(value: unknown, values: T, field: s
 const assertVersion = (value: number) => {
   if (!Number.isInteger(value) || value < 1) throw new Error("expectedVersion must be a positive integer");
 };
+const optionalPositiveInteger = (value: number | null | undefined, field: string) => {
+  if (value == null) return null;
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${field} must be a positive integer or null`);
+  return value;
+};
 const conditional = (error: unknown) => ["ConditionalCheckFailedException", "TransactionCanceledException"].includes(String((error as { name?: unknown })?.name));
+const voterKey = (email: string) => createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+const rosterHash = (voters: readonly BoardAsyncBallotVoter[]) => createHash("sha256")
+  .update(voters.map((voter) => voter.email.trim().toLowerCase()).sort().join("\n"))
+  .digest("hex");
 
 function meetingItem(meeting: BoardMeeting): Row {
   return { pk: meetingPk(meeting.id), sk: META_SK, entityType: "MEETING", ...meeting, timelinePk: TIMELINE_PK, timelineSk: timelineSk(meeting) };
@@ -118,11 +158,12 @@ function toMeeting(item: Row | undefined): BoardMeeting | null {
   if (!item || item.entityType !== "MEETING") return null;
   const status = member(item.status, BOARD_MEETING_STATUSES, "status");
   const type = member(item.type, BOARD_MEETING_TYPES, "type");
+  const format = member(item.format || "live", BOARD_MEETING_FORMATS, "format");
   const minutesStatus = member(item.minutesStatus, BOARD_MINUTES_STATUSES, "minutesStatus");
   const id = String(item.id || "");
   if (!id) return null;
   return {
-    id, title: String(item.title || ""), description: String(item.description || ""), type, status,
+    id, title: String(item.title || ""), description: String(item.description || ""), type, format, status,
     startAt: String(item.startAt || ""), endAt: String(item.endAt || ""), timeZone: String(item.timeZone || "UTC"),
     location: String(item.location || ""), virtualUrl: item.virtualUrl == null ? null : String(item.virtualUrl),
     version: Number(item.version), minutesStatus, minutesDocumentId: item.minutesDocumentId == null ? null : String(item.minutesDocumentId),
@@ -132,6 +173,39 @@ function toMeeting(item: Row | undefined): BoardMeeting | null {
     quorumConfirmedBy: item.quorumConfirmedBy == null ? null : String(item.quorumConfirmedBy),
     createdAt: String(item.createdAt || ""), createdBy: String(item.createdBy || ""),
     updatedAt: String(item.updatedAt || ""), updatedBy: String(item.updatedBy || ""),
+  };
+}
+
+function toAsyncBallot(item: Row): BoardAsyncBallot | null {
+  if (item.entityType !== "ASYNC_BALLOT") return null;
+  const status = member(item.status, BOARD_ASYNC_BALLOT_STATUSES, "ballot status");
+  const eligibleVoters = Array.isArray(item.eligibleVoters)
+    ? item.eligibleVoters.map((value) => value as BoardAsyncBallotVoter)
+    : [];
+  return {
+    id: String(item.id || ""), meetingId: String(item.meetingId || ""),
+    agendaItemId: item.agendaItemId == null ? null : String(item.agendaItemId),
+    title: String(item.title || ""), motion: String(item.motion || ""), status,
+    eligibleVoters, rosterHash: item.rosterHash == null ? null : String(item.rosterHash),
+    quorumRequired: item.quorumRequired == null ? null : Number(item.quorumRequired),
+    approvalRequired: item.approvalRequired == null ? null : Number(item.approvalRequired),
+    openedAt: item.openedAt == null ? null : String(item.openedAt), openedBy: item.openedBy == null ? null : String(item.openedBy),
+    closedAt: item.closedAt == null ? null : String(item.closedAt), closedBy: item.closedBy == null ? null : String(item.closedBy),
+    cancellationReason: item.cancellationReason == null ? null : String(item.cancellationReason),
+    result: item.result == null ? null : item.result as BoardAsyncBallot["result"],
+    createdAt: String(item.createdAt || ""), createdBy: String(item.createdBy || ""),
+    updatedAt: String(item.updatedAt || ""), updatedBy: String(item.updatedBy || ""),
+  };
+}
+
+function toAsyncVote(item: Row): BoardAsyncVote | null {
+  if (item.entityType !== "ASYNC_VOTE") return null;
+  return {
+    meetingId: String(item.meetingId || ""), ballotId: String(item.ballotId || ""),
+    voterUserId: String(item.voterUserId || ""), voterName: String(item.voterName || ""),
+    voterEmail: String(item.voterEmail || "").toLowerCase(),
+    choice: member(item.choice, BOARD_ASYNC_VOTE_CHOICES, "vote choice"),
+    castAt: String(item.castAt || ""), updatedAt: String(item.updatedAt || ""),
   };
 }
 
@@ -157,6 +231,10 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         .sort((a, b) => a.name.localeCompare(b.name) || a.userId.localeCompare(b.userId)),
       decisions: (all.filter((r) => r.entityType === "DECISION") as unknown as BoardMeetingDecision[])
         .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt) || a.id.localeCompare(b.id)),
+      asyncBallots: all.map(toAsyncBallot).filter((value): value is BoardAsyncBallot => Boolean(value))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+      asyncVotes: all.map(toAsyncVote).filter((value): value is BoardAsyncVote => Boolean(value))
+        .sort((a, b) => a.ballotId.localeCompare(b.ballotId) || a.voterEmail.localeCompare(b.voterEmail)),
       actionItems: (all.filter((r) => r.entityType === "ACTION_ITEM") as unknown as BoardMeetingActionItem[])
         .sort((a, b) => (a.dueAt || "9999").localeCompare(b.dueAt || "9999") || a.id.localeCompare(b.id)),
       deliveries: (all.filter((r) => r.entityType === "DELIVERY") as unknown as BoardMeetingDelivery[])
@@ -174,7 +252,23 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       ExpressionAttributeValues: { ":timelinePk": TIMELINE_PK, ":boundary": now },
       ScanIndexForward: upcoming, Limit: limit, ...(options.cursor ? { ExclusiveStartKey: options.cursor } : {}),
     });
-    return { meetings: (result.Items || []).map((r: Row) => toMeeting(r)).filter(Boolean) as BoardMeeting[], cursor: result.LastEvaluatedKey || null };
+    let meetings = (result.Items || []).map((r: Row) => toMeeting(r)).filter(Boolean) as BoardMeeting[];
+    if (upcoming && !options.cursor) {
+      // The Timeline index is keyed by start time, so also recover meetings
+      // whose start has passed but whose live or voting window is still open.
+      const activeResult = await client.query({
+        TableName: resolvedTable, IndexName: "Timeline",
+        KeyConditionExpression: "#timelinePk = :timelinePk AND #timelineSk < :boundary",
+        ExpressionAttributeNames: { "#timelinePk": "timelinePk", "#timelineSk": "timelineSk" },
+        ExpressionAttributeValues: { ":timelinePk": TIMELINE_PK, ":boundary": now },
+        ScanIndexForward: false, Limit: 100,
+      });
+      const active: BoardMeeting[] = ((activeResult.Items || []) as Row[]).map((r) => toMeeting(r)).filter((meeting): meeting is BoardMeeting => meeting !== null && meeting.endAt >= now);
+      meetings = [...active, ...meetings].sort((a, b) => a.startAt.localeCompare(b.startAt)).slice(0, limit);
+    } else if (!upcoming) {
+      meetings = meetings.filter((meeting) => meeting.endAt < now).slice(0, limit);
+    }
+    return { meetings, cursor: result.LastEvaluatedKey || null };
   }
   function revision(meeting: BoardMeeting, action: string, actorEmail: string, occurredAt: string, detail: unknown): Row {
     return { pk: meetingPk(meeting.id), sk: `REVISION#${occurredAt}#${randomUUID()}`, entityType: "MEETING_REVISION", meetingId: meeting.id, version: meeting.version, action, actorEmail, occurredAt, detail };
@@ -208,6 +302,17 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     const at = instant(occurredAt, "occurredAt");
     return { previous, at, actor: required(actorEmail, "actorEmail") };
   }
+  async function getAsyncBallot(meetingId: string, ballotId: string) {
+    const result = await client.get({
+      TableName: resolvedTable,
+      Key: { pk: meetingPk(required(meetingId, "meetingId")), sk: entitySk("BALLOT", required(ballotId, "ballotId")) },
+      ConsistentRead: true,
+    });
+    return result?.Item ? toAsyncBallot(result.Item as Row) : null;
+  }
+  function asyncBallotItem(ballot: BoardAsyncBallot): Row {
+    return { pk: meetingPk(ballot.meetingId), sk: entitySk("BALLOT", ballot.id), entityType: "ASYNC_BALLOT", ...ballot };
+  }
   return {
     getMeeting, listMeetings,
     async createMeeting(input: CreateBoardMeetingInput, options?: BoardMeetingMutationOptions) {
@@ -215,7 +320,8 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       const actor = required(input.actorEmail, "actorEmail"); const startAt = instant(input.startAt, "startAt"); const endAt = instant(input.endAt, "endAt");
       if (endAt <= startAt) throw new Error("endAt must be after startAt");
       if (input.quorumRequired != null && (!Number.isInteger(input.quorumRequired) || input.quorumRequired < 1)) throw new Error("quorumRequired must be a positive integer");
-      const meeting: BoardMeeting = { id, title: required(input.title, "title"), description: input.description?.trim() || "", type: member(input.type, BOARD_MEETING_TYPES, "type"), status: "draft", startAt, endAt, timeZone: timeZone(input.timeZone), location: input.location?.trim() || "", virtualUrl: optionalMeetingUrl(input.virtualUrl), version: 1, minutesStatus: "not-started", minutesDocumentId: null, cancellationReason: null, quorumRequired: input.quorumRequired ?? null, quorumConfirmedAt: null, quorumConfirmedBy: null, createdAt: at, createdBy: actor, updatedAt: at, updatedBy: actor };
+      const format = member(input.format || "live", BOARD_MEETING_FORMATS, "format");
+      const meeting: BoardMeeting = { id, title: required(input.title, "title"), description: input.description?.trim() || "", type: member(input.type, BOARD_MEETING_TYPES, "type"), format, status: "draft", startAt, endAt, timeZone: timeZone(input.timeZone), location: format === "asynchronous" ? "" : input.location?.trim() || "", virtualUrl: format === "asynchronous" ? null : optionalMeetingUrl(input.virtualUrl), version: 1, minutesStatus: "not-started", minutesDocumentId: null, cancellationReason: null, quorumRequired: input.quorumRequired ?? null, quorumConfirmedAt: null, quorumConfirmedBy: null, createdAt: at, createdBy: actor, updatedAt: at, updatedBy: actor };
       const items: BoardMeetingTransactItem[] = [
         { Put: { TableName: resolvedTable, Item: meetingItem(meeting), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
         { Put: { TableName: resolvedTable, Item: revision(meeting, "created", actor, at, meeting), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
@@ -228,7 +334,8 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     async updateMeeting(input: UpdateBoardMeetingInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.id, input.expectedVersion, input.actorEmail, input.occurredAt);
       if (input.quorumRequired !== undefined && input.quorumRequired !== null && (!Number.isInteger(input.quorumRequired) || input.quorumRequired < 1)) throw new Error("quorumRequired must be a positive integer or null");
-      const next: BoardMeeting = { ...previous, ...(input.title !== undefined ? { title: required(input.title, "title") } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.type !== undefined ? { type: member(input.type, BOARD_MEETING_TYPES, "type") } : {}), ...(input.startAt !== undefined ? { startAt: instant(input.startAt, "startAt") } : {}), ...(input.endAt !== undefined ? { endAt: instant(input.endAt, "endAt") } : {}), ...(input.timeZone !== undefined ? { timeZone: timeZone(input.timeZone) } : {}), ...(input.location !== undefined ? { location: input.location.trim() } : {}), ...(input.virtualUrl !== undefined ? { virtualUrl: optionalMeetingUrl(input.virtualUrl) } : {}), ...(input.quorumRequired !== undefined ? { quorumRequired: input.quorumRequired } : {}), version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      const format = input.format === undefined ? previous.format : member(input.format, BOARD_MEETING_FORMATS, "format");
+      const next: BoardMeeting = { ...previous, ...(input.title !== undefined ? { title: required(input.title, "title") } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.type !== undefined ? { type: member(input.type, BOARD_MEETING_TYPES, "type") } : {}), format, ...(input.startAt !== undefined ? { startAt: instant(input.startAt, "startAt") } : {}), ...(input.endAt !== undefined ? { endAt: instant(input.endAt, "endAt") } : {}), ...(input.timeZone !== undefined ? { timeZone: timeZone(input.timeZone) } : {}), location: format === "asynchronous" ? "" : input.location !== undefined ? input.location.trim() : previous.location, virtualUrl: format === "asynchronous" ? null : input.virtualUrl !== undefined ? optionalMeetingUrl(input.virtualUrl) : previous.virtualUrl, ...(input.quorumRequired !== undefined ? { quorumRequired: input.quorumRequired } : {}), version: previous.version + 1, updatedAt: at, updatedBy: actor };
       if (next.endAt <= next.startAt) throw new Error("endAt must be after startAt");
       return commit(previous, next, "updated", actor, at, input, undefined, options);
     },
@@ -273,6 +380,123 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       const child: BoardMeetingDecision = { meetingId: previous.id, id: required(input.id, "id"), agendaItemId: input.agendaItemId, title: required(input.title, "title"), motion: required(input.motion, "motion"), mover: input.mover, seconder: input.seconder, yes: input.yes, no: input.no, abstain: input.abstain, recused: input.recused, outcome: member(input.outcome, BOARD_DECISION_OUTCOMES, "outcome"), supersedesDecisionId: input.supersedesDecisionId, recordedAt: at, recordedBy: actor };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, "decision-recorded", actor, at, child, { item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", child.id), entityType: "DECISION", ...child }, immutable: true }, options);
+    },
+    async upsertAsyncBallot(input: UpsertBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
+      if (previous.status !== "draft") throw new Error("ballots can be prepared only while the meeting is a draft");
+      const existing = await getAsyncBallot(previous.id, input.id);
+      if (existing && existing.status !== "draft") throw new Error("an opened ballot cannot be edited");
+      const quorumRequired = optionalPositiveInteger(input.quorumRequired, "quorumRequired");
+      const approvalRequired = optionalPositiveInteger(input.approvalRequired, "approvalRequired");
+      const ballot: BoardAsyncBallot = {
+        id: required(input.id, "ballotId"), meetingId: previous.id,
+        agendaItemId: input.agendaItemId?.trim() || null,
+        title: required(input.title, "title"), motion: required(input.motion, "motion"), status: "draft",
+        eligibleVoters: [], rosterHash: null, quorumRequired, approvalRequired,
+        openedAt: null, openedBy: null, closedAt: null, closedBy: null,
+        cancellationReason: null, result: null,
+        createdAt: existing?.createdAt || at, createdBy: existing?.createdBy || actor,
+        updatedAt: at, updatedBy: actor,
+      };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, existing ? "async-ballot-updated" : "async-ballot-created", actor, at, { ballotId: ballot.id, title: ballot.title }, { item: asyncBallotItem(ballot) }, options);
+    },
+    async openAsyncBallot(input: OpenBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
+      if (!["scheduled", "materials-published"].includes(previous.status)) throw new Error("schedule the asynchronous meeting before opening ballots");
+      if (at >= previous.endAt) throw new Error("the voting deadline has already passed");
+      const existing = await getAsyncBallot(previous.id, input.ballotId);
+      if (!existing) throw new Error("ballot not found");
+      if (existing.status !== "draft") throw new Error("only a draft ballot can be opened");
+      const byEmail = new Map<string, BoardAsyncBallotVoter>();
+      for (const voter of input.eligibleVoters) {
+        const email = required(voter.email, "voter email").toLowerCase();
+        byEmail.set(email, { userId: required(voter.userId, "voter userId"), name: required(voter.name, "voter name"), email });
+      }
+      const eligibleVoters = [...byEmail.values()].sort((a, b) => a.email.localeCompare(b.email));
+      if (eligibleVoters.length === 0) throw new Error("at least one active director is required");
+      const quorumRequired = existing.quorumRequired ?? previous.quorumRequired ?? Math.floor(eligibleVoters.length / 2) + 1;
+      const approvalRequired = existing.approvalRequired ?? Math.floor(eligibleVoters.length / 2) + 1;
+      if (quorumRequired > eligibleVoters.length) throw new Error("quorumRequired cannot exceed eligible directors");
+      if (approvalRequired > eligibleVoters.length) throw new Error("approvalRequired cannot exceed eligible directors");
+      const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired, approvalRequired, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "async-ballot-opened", actor, at, { ballotId: ballot.id, eligibleCount: eligibleVoters.length, rosterHash: ballot.rosterHash, quorumRequired, approvalRequired }, { item: asyncBallotItem(ballot) }, options);
+    },
+    async castAsyncVote(input: CastBoardAsyncVoteInput, options?: BoardMeetingMutationOptions) {
+      const meetingId = required(input.meetingId, "meetingId");
+      const ballotId = required(input.ballotId, "ballotId");
+      const meeting = await getMeta(meetingId);
+      if (!meeting || meeting.format !== "asynchronous") throw new Error("asynchronous meeting not found");
+      const ballot = await getAsyncBallot(meetingId, ballotId);
+      if (!ballot || ballot.status !== "open") throw new Error("this ballot is not open");
+      const at = instant(input.occurredAt, "occurredAt");
+      if (at < meeting.startAt) throw new Error("voting has not opened yet");
+      if (at >= meeting.endAt) throw new Error("the voting deadline has passed");
+      const email = required(input.voter.email, "voter email").toLowerCase();
+      const eligible = ballot.eligibleVoters.find((voter) => voter.email === email);
+      if (!eligible) throw new Error("the current user is not eligible for this ballot");
+      const choice = member(input.choice, BOARD_ASYNC_VOTE_CHOICES, "vote choice");
+      const currentKey = { pk: meetingPk(meetingId), sk: `BALLOT_VOTE#${ballotId}#${voterKey(email)}` };
+      const currentResult = await client.get({ TableName: resolvedTable, Key: currentKey, ConsistentRead: true });
+      const current = currentResult?.Item ? toAsyncVote(currentResult.Item as Row) : null;
+      const vote: BoardAsyncVote = {
+        meetingId, ballotId, voterUserId: eligible.userId,
+        voterName: eligible.name, voterEmail: eligible.email, choice,
+        castAt: current?.castAt || at, updatedAt: at,
+      };
+      const items: BoardMeetingTransactItem[] = [
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: META_SK }, ConditionExpression: "#format = :asynchronous AND (#status = :scheduled OR #status = :materialsPublished) AND #startAt <= :now AND #endAt > :now", ExpressionAttributeNames: { "#format": "format", "#status": "status", "#startAt": "startAt", "#endAt": "endAt" }, ExpressionAttributeValues: { ":asynchronous": "asynchronous", ":scheduled": "scheduled", ":materialsPublished": "materials-published", ":now": at } } },
+        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
+        { Put: { TableName: resolvedTable, Item: { ...currentKey, entityType: "ASYNC_VOTE", ...vote } } },
+        { Put: { TableName: resolvedTable, Item: { pk: meetingPk(meetingId), sk: `BALLOT_VOTE_REVISION#${ballotId}#${at}#${randomUUID()}`, entityType: "ASYNC_VOTE_REVISION", ...vote }, ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...(options?.additionalTransactItems || []),
+      ];
+      if (items.length > 100) throw new Error("Board vote transaction exceeds 100 items");
+      try { await client.transactWrite({ TransactItems: items }); }
+      catch (error) { if (conditional(error)) throw new Error("the ballot changed or the voting window closed; refresh and try again"); throw error; }
+      return vote;
+    },
+    async closeAsyncBallot(input: CloseBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
+      if (previous.status !== "scheduled" && previous.status !== "materials-published") throw new Error("ballots can be finalized only for an active asynchronous meeting");
+      const detail = await getMeeting(previous.id);
+      const ballot = detail?.asyncBallots.find((candidate) => candidate.id === input.ballotId);
+      if (!ballot || ballot.status !== "open") throw new Error("only an open ballot can be finalized");
+      const votes = detail?.asyncVotes.filter((vote) => vote.ballotId === ballot.id) || [];
+      if (at < previous.endAt) throw new Error("the ballot can be finalized only after the voting deadline");
+      const result = tallyBoardAsyncBallot(ballot, votes);
+      const closed: BoardAsyncBallot = { ...ballot, status: "closed", result, closedAt: at, closedBy: actor, updatedAt: at, updatedBy: actor };
+      const decision: BoardMeetingDecision = {
+        id: `async-${ballot.id}`, meetingId: previous.id, agendaItemId: ballot.agendaItemId,
+        title: ballot.title, motion: ballot.motion, mover: null, seconder: null,
+        yes: result.yes, no: result.no, abstain: result.abstain, recused: result.recused,
+        outcome: result.outcome, recordedAt: at, recordedBy: actor, supersedesDecisionId: null,
+      };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      const items: BoardMeetingTransactItem[] = [
+        { Put: { TableName: resolvedTable, Item: meetingItem(next), ConditionExpression: "#version = :expectedVersion", ExpressionAttributeNames: { "#version": "version" }, ExpressionAttributeValues: { ":expectedVersion": previous.version } } },
+        { Put: { TableName: resolvedTable, Item: asyncBallotItem(closed), ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
+        { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        { Put: { TableName: resolvedTable, Item: revision(next, "async-ballot-closed", actor, at, { ballotId: ballot.id, rosterHash: ballot.rosterHash, result }), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...(options?.additionalTransactItems || []),
+      ];
+      if (items.length > 100) throw new Error("Board ballot finalization transaction exceeds 100 items");
+      try { await client.transactWrite({ TransactItems: items }); }
+      catch (error) { if (conditional(error)) throw new BoardMeetingVersionConflictError(previous.id); throw error; }
+      return next;
+    },
+    async cancelAsyncBallot(input: CancelBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      const existing = await getAsyncBallot(previous.id, input.ballotId);
+      if (!existing || existing.status === "closed" || existing.status === "cancelled") throw new Error("only a draft or open ballot can be cancelled");
+      const reason = required(input.reason, "cancellation reason");
+      const ballot: BoardAsyncBallot = { ...existing, status: "cancelled", cancellationReason: reason, updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "async-ballot-cancelled", actor, at, { ballotId: ballot.id, reason }, { item: asyncBallotItem(ballot) }, options);
     },
     async recordActionItem(input: RecordBoardActionItemInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);

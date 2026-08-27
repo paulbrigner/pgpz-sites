@@ -11,7 +11,7 @@ import {
   deliverBoardMeetingEmail,
   type MeetingCommunicationKind,
 } from "@/lib/meeting-email";
-import { BOARD_DELIVERY_KINDS } from "@/lib/meetings";
+import { BOARD_DELIVERY_KINDS, boardAsyncBallotEffectiveStatus } from "@/lib/meetings";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { canSendBoardMeetingCommunications, resolveBoardMemberState } from "@/lib/session";
@@ -23,6 +23,7 @@ const actionKinds: Record<string, MeetingCommunicationKind> = {
   "send-invitation": "invitation",
   "send-materials-ready": "materials-ready",
   "send-reminder": "reminder",
+  "send-vote-reminder": "vote-reminder",
   "send-update": "update",
   "send-cancellation": "cancellation",
 };
@@ -35,7 +36,7 @@ function normalizeRequestedRecipients(value: unknown) {
 function communicationAllowed(kind: MeetingCommunicationKind, status: string) {
   if (kind === "cancellation") return status === "cancelled";
   if (kind === "materials-ready") return status === "materials-published";
-  if (kind === "reminder" || kind === "invitation" || kind === "update") {
+  if (kind === "reminder" || kind === "vote-reminder" || kind === "invitation" || kind === "update") {
     return status === "scheduled" || status === "materials-published";
   }
   return false;
@@ -105,7 +106,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const roster = await boardAccessRepository.list({ status: "active", limit: 250 });
   const requestedRecipients = normalizeRequestedRecipients(body?.recipientEmails);
+  const ballotId = typeof body?.ballotId === "string" ? body.ballotId.trim() : "";
+  const ballot = requestedKind === "vote-reminder"
+    ? detail.asyncBallots.find((candidate) => candidate.id === ballotId)
+    : null;
+  if (requestedKind === "vote-reminder") {
+    if (meeting.format !== "asynchronous" || !ballot || boardAsyncBallotEffectiveStatus(ballot, meeting) !== "open") {
+      return NextResponse.json({ error: "Vote reminders are available only while this ballot is accepting votes." }, { status: 409 });
+    }
+  }
+  const voted = new Set(detail.asyncVotes.filter((vote) => vote.ballotId === ballot?.id).map((vote) => vote.voterEmail));
+  const eligible = ballot ? new Set(ballot.eligibleVoters.map((voter) => voter.email)) : null;
   const recipients = roster.records
+    .filter((record) => !eligible || (eligible.has(record.email) && !voted.has(record.email)))
     .filter((record) => !requestedRecipients || requestedRecipients.has(record.email))
     .map((record) => ({ email: record.email, name: record.name }))
     .sort((a, b) => a.email.localeCompare(b.email));
@@ -181,7 +194,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         kind: requestedKind,
         meetingId: meeting.id,
         meetingTitle: meeting.title,
+        meetingFormat: meeting.format,
         startsAt: meeting.startAt,
+        deadlineAt: meeting.format === "asynchronous" ? meeting.endAt : requestedKind === "vote-reminder" ? meeting.endAt : null,
         timeZone: meeting.timeZone,
         portalUrl,
         recipient,

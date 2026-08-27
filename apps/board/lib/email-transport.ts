@@ -37,19 +37,40 @@ export function buildBoardSesTransport(region: string) {
   };
 }
 
-function buildSmtpTransport() {
-  if (EMAIL_SERVER_HOST) {
+export function buildBoardSmtpTransport(input: {
+  host: string;
+  port?: string;
+  secure?: string;
+  user?: string;
+  password?: string;
+  server?: string;
+}) {
+  if (input.host) {
+    const secure = input.secure === "true";
+    const loopback = input.host === "localhost" || input.host === "127.0.0.1" || input.host === "::1";
     return {
-      host: EMAIL_SERVER_HOST,
-      port: EMAIL_SERVER_PORT ? Number(EMAIL_SERVER_PORT) : 1025,
-      secure: EMAIL_SERVER_SECURE === "true",
+      host: input.host,
+      port: input.port ? Number(input.port) : 1025,
+      secure,
+      ...(loopback && !secure ? { ignoreTLS: true } : {}),
       auth:
-        EMAIL_SERVER_USER && EMAIL_SERVER_PASSWORD
-          ? { user: EMAIL_SERVER_USER, pass: EMAIL_SERVER_PASSWORD }
+        input.user && input.password
+          ? { user: input.user, pass: input.password }
           : undefined,
     };
   }
-  return EMAIL_SERVER.includes("://") ? EMAIL_SERVER : null;
+  return input.server?.includes("://") ? input.server : null;
+}
+
+function buildSmtpTransport() {
+  return buildBoardSmtpTransport({
+    host: EMAIL_SERVER_HOST,
+    port: EMAIL_SERVER_PORT,
+    secure: EMAIL_SERVER_SECURE,
+    user: EMAIL_SERVER_USER,
+    password: EMAIL_SERVER_PASSWORD,
+    server: EMAIL_SERVER,
+  });
 }
 
 export function buildBoardEmailTransport() {

@@ -148,8 +148,7 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
         <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{canPrepare ? "Add working records here. Official lifecycle changes remain with the Chair or Executive Director." : "Add and update governed documents associated only with this meeting."}</p>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-2">
-        {canPrepare ? <>
-        <details className={detailClass}>
+        {canPrepare && meeting.format === "live" ? <details className={detailClass}>
           <summary className={summaryClass}>Agenda item <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
           <form className="border-t border-[var(--border)] p-4" onSubmit={(event) => submitMeetingAction(event, "upsertAgendaItem", (data) => ({
             title: String(data.get("title") || ""), description: String(data.get("description") || ""), kind: String(data.get("kind") || "discussion"), presenter: String(data.get("presenter") || ""), allottedMinutes: Number(data.get("allottedMinutes") || 0) || null, order: agendaCount,
@@ -160,8 +159,7 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
             <label className="mt-3 block text-xs font-semibold">Lead or presenter<input name="presenter" maxLength={160} className={inputClass} /></label>
             {submitButton("Add agenda item", "upsertAgendaItem")}
           </form>
-        </details>
-        </> : null}
+        </details> : null}
         {canManageDocuments ? <>
         <details className={detailClass}>
           <summary className={summaryClass}>Meeting document <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
@@ -185,7 +183,7 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
         ) : null}
         </> : null}
         {canPrepare ? <>
-        <details className={detailClass}>
+        {meeting.format === "live" ? <details className={detailClass}>
           <summary className={summaryClass}>Attendance <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
           <form className="border-t border-[var(--border)] p-4" onSubmit={(event) => submitMeetingAction(event, "recordAttendance", (data) => ({ name: String(data.get("name") || ""), email: String(data.get("email") || ""), status: String(data.get("status") || "attended"), quorumEligible: data.get("quorumEligible") === "on" }))}>
             <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Name<input name="name" required className={inputClass} /></label><label className="text-xs font-semibold">Email<input name="email" type="email" required className={inputClass} /></label></div>
@@ -193,9 +191,9 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
             <label className="mt-3 flex items-center gap-2 text-xs font-semibold"><input name="quorumEligible" type="checkbox" defaultChecked /> Eligible for quorum</label>
             {submitButton("Record attendance", "recordAttendance")}
           </form>
-        </details>
+        </details> : null}
 
-        {canManage ? <details className={detailClass}>
+        {canManage && meeting.format === "live" ? <details className={detailClass}>
           <summary className={summaryClass}>Decision or vote <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
           <form className="border-t border-[var(--border)] p-4" onSubmit={(event) => submitMeetingAction(event, "recordDecision", (data) => ({ title: String(data.get("title") || ""), motion: String(data.get("motion") || ""), outcome: String(data.get("outcome") || "passed"), yes: Number(data.get("yes") || 0), no: Number(data.get("no") || 0), abstain: Number(data.get("abstain") || 0), recused: Number(data.get("recused") || 0) }))}>
             <label className="text-xs font-semibold">Decision title<input name="title" required className={inputClass} /></label>

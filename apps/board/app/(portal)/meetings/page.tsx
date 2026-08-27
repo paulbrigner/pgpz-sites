@@ -23,6 +23,7 @@ export default async function BoardMeetingsPage({ searchParams }: { searchParams
       title: meeting.title,
       description: meeting.description,
       type: meeting.type,
+      format: meeting.format,
       status: meeting.status,
       startAt: meeting.startAt,
       endAt: meeting.endAt,
@@ -39,7 +40,7 @@ export default async function BoardMeetingsPage({ searchParams }: { searchParams
       <section className="max-w-3xl">
         <Badge tone="accent">Board calendar</Badge>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">Board meetings</h1>
-        <p className="mt-3 text-base leading-7 text-[var(--muted)]">Prepare for upcoming meetings and review the Board&apos;s retained meeting records.</p>
+        <p className="mt-3 text-base leading-7 text-[var(--muted)]">Prepare for live meetings and asynchronous written resolutions, then review the Board&apos;s retained meeting records.</p>
       </section>
       <MeetingList meetings={meetings} scope={scope} canManage={canManage} canPrepare={canPrepare} />
     </Container>

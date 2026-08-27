@@ -106,7 +106,7 @@ export function BoardUserManager({
       setUsers((current) => [body.user, ...current.filter((user) => user.id !== body.user.id)]);
       setCreateForm({ email: "", name: "", role: "member" });
       setCreating(false);
-      setNotice(`${body.user.email} can now request a passwordless sign-in link.`);
+      setNotice(body?.message || `${body.user.email} was added. They can now request a passwordless sign-in link.`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unable to add the Board user.");
     } finally {

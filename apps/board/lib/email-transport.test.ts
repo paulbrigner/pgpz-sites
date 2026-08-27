@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
-import { buildBoardSesTransport, resolveBoardEmailTransportMode } from "@/lib/email-transport";
+import { buildBoardSesTransport, buildBoardSmtpTransport, resolveBoardEmailTransportMode } from "@/lib/email-transport";
 
 describe("Board email transport", () => {
   it("requires SES in production", () => {
@@ -17,5 +17,12 @@ describe("Board email transport", () => {
     const config = buildBoardSesTransport("us-east-1");
     expect(config.SES.sesClient).toBeInstanceOf(SESv2Client);
     expect(config.SES.SendEmailCommand).toBe(SendEmailCommand);
+  });
+
+  it("disables opportunistic TLS only for local MailHog", () => {
+    expect(buildBoardSmtpTransport({ host: "localhost", port: "1025", secure: "false" })).toMatchObject({
+      host: "localhost", port: 1025, secure: false, ignoreTLS: true,
+    });
+    expect(buildBoardSmtpTransport({ host: "smtp.example.org", port: "587", secure: "false" })).not.toHaveProperty("ignoreTLS");
   });
 });

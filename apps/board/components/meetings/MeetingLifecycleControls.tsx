@@ -34,6 +34,10 @@ export function MeetingLifecycleControls({ meeting, capabilities, deliveryCount,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting.status]);
   const transition = nextStatus[meeting.status];
+  const asyncTransitionLabels: Partial<Record<MeetingStatus, string>> = { scheduled: "Publish voting materials", "materials-published": "Complete written resolutions", completed: "Close meeting record", draft: "Schedule voting window" };
+  const transitionLabel = meeting.format === "asynchronous" && transition
+    ? asyncTransitionLabels[meeting.status] || transition.label
+    : transition?.label;
 
   async function post(body: Record<string, unknown>, success: string) {
     setPending(String(body.action));
@@ -44,7 +48,8 @@ export function MeetingLifecycleControls({ meeting, capabilities, deliveryCount,
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error("The update could not be saved.");
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "The update could not be saved.");
       setMessage(success);
       router.refresh();
     } catch (error) {
@@ -88,8 +93,8 @@ export function MeetingLifecycleControls({ meeting, capabilities, deliveryCount,
       <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Meeting tools</h2>
       <div className="mt-4 grid gap-2">
         {capabilities.canManage && transition ? (
-          <button type="button" disabled={pending !== null} onClick={() => post({ action: "setStatus", meetingId: meeting.id, status: transition.value, expectedVersion: meeting.version }, `${transition.label} complete.`)} className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
-            {pending === "setStatus" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}{transition.label}
+          <button type="button" disabled={pending !== null} onClick={() => post({ action: "setStatus", meetingId: meeting.id, status: transition.value, expectedVersion: meeting.version }, `${transitionLabel} complete.`)} className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--primary-strong)] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
+            {pending === "setStatus" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}{transitionLabel}
           </button>
         ) : null}
         {capabilities.canManage && communicationOptions.length > 0 ? (
@@ -103,7 +108,7 @@ export function MeetingLifecycleControls({ meeting, capabilities, deliveryCount,
             </button>
           </div>
         ) : null}
-        {capabilities.canManage && meeting.quorumRequired ? (
+        {capabilities.canManage && meeting.format === "live" && meeting.quorumRequired ? (
           <button type="button" disabled={pending !== null || (!meeting.quorumConfirmedAt && quorumEligibleAttended < meeting.quorumRequired)} onClick={() => post({ action: "confirmQuorum", meetingId: meeting.id, confirmed: !meeting.quorumConfirmedAt, expectedVersion: meeting.version }, meeting.quorumConfirmedAt ? "Quorum confirmation cleared." : "Quorum confirmed.")} className="rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
             {meeting.quorumConfirmedAt ? "Clear quorum confirmation" : `Confirm quorum (${quorumEligibleAttended}/${meeting.quorumRequired})`}
           </button>
