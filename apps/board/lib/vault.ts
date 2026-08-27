@@ -118,7 +118,7 @@ export async function createDocument(input: {
   const documentId = newDocumentId();
   const versionId = newVersionId();
   const finalKey = buildObjectKey(BOARD_DOCUMENT_PREFIX, documentId, versionId);
-  await boardDocumentObjectStore.promote(input.stagedKey, finalKey);
+  await boardDocumentObjectStore.promoteVerified(input.stagedKey, finalKey, staged);
   await boardDocumentObjectStore.deleteStaging(input.stagedKey).catch(() => {});
 
   const version: DocumentVersion = {
@@ -192,7 +192,7 @@ export async function addVersion(input: {
 
   const versionId = newVersionId();
   const finalKey = buildObjectKey(BOARD_DOCUMENT_PREFIX, input.documentId, versionId);
-  await boardDocumentObjectStore.promote(input.stagedKey, finalKey);
+  await boardDocumentObjectStore.promoteVerified(input.stagedKey, finalKey, staged);
   await boardDocumentObjectStore.deleteStaging(input.stagedKey).catch(() => {});
 
   const version: DocumentVersion = {
