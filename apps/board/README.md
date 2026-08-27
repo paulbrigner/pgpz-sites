@@ -167,6 +167,12 @@ The neutral `@pgpz/document-vault` package validates the injected app policy and
 file signatures; ZIP bundles are delivered as attachments rather than rendered
 by the Board site.
 
+Production uploads use a ten-minute presigned `PUT` to the Board staging bucket.
+The response CSP derives one exact `connect-src` origin from
+`BOARD_DOCUMENTS_STAGING_BUCKET` and `REGION_AWS`; it does not permit wildcard
+AWS or general external connections. The bucket independently restricts CORS to
+the canonical Board origin. Local filesystem uploads remain same-origin.
+
 The guarded importer is dry-run by default and is idempotent by the current
 vault SHA-256. It requires live Board backend environment values and an existing
 actor with document-management access:
