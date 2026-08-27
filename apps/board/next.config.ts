@@ -10,22 +10,56 @@ const buildCpus = process.env.NEXT_BUILD_CPUS
   : undefined;
 const isDevelopment = process.env.NODE_ENV === "development";
 
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "connect-src 'self'",
-  "font-src 'self' data:",
-  isDevelopment ? "form-action 'self'" : "form-action 'none'",
-  "frame-ancestors 'none'",
-  "frame-src 'none'",
-  "img-src 'self' data:",
-  "object-src 'none'",
-  isDevelopment
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-    : "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "upgrade-insecure-requests",
-].join("; ");
+const DNS_SAFE_BUCKET = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
+const AWS_REGION = /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/;
+
+export function boardStagingUploadOrigin(
+  bucketValue: string | undefined,
+  regionValue: string | undefined,
+): string | null {
+  const bucket = bucketValue?.trim() || "";
+  if (!bucket) return null;
+  const region = regionValue?.trim() || "";
+  if (!DNS_SAFE_BUCKET.test(bucket)) {
+    throw new Error("BOARD_DOCUMENTS_STAGING_BUCKET must be a DNS-safe bucket name");
+  }
+  if (!AWS_REGION.test(region)) {
+    throw new Error("REGION_AWS must be a valid AWS region when Board S3 uploads are enabled");
+  }
+  return `https://${bucket}.s3.${region}.amazonaws.com`;
+}
+
+export function buildBoardContentSecurityPolicy(input: {
+  isDevelopment: boolean;
+  stagingUploadOrigin: string | null;
+}): string {
+  const connectSources = ["'self'", ...(input.stagingUploadOrigin ? [input.stagingUploadOrigin] : [])];
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    `connect-src ${connectSources.join(" ")}`,
+    "font-src 'self' data:",
+    input.isDevelopment ? "form-action 'self'" : "form-action 'none'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "img-src 'self' data:",
+    "object-src 'none'",
+    input.isDevelopment
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+      : "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
+const stagingUploadOrigin = boardStagingUploadOrigin(
+  process.env.BOARD_DOCUMENTS_STAGING_BUCKET,
+  process.env.REGION_AWS || process.env.AWS_REGION || "us-east-1",
+);
+const contentSecurityPolicy = buildBoardContentSecurityPolicy({
+  isDevelopment,
+  stagingUploadOrigin,
+});
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(process.cwd(), "../.."),

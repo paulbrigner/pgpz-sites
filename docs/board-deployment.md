@@ -271,6 +271,10 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
   archive. Draft meetings remain concealed from roles without preparation access.
 - Meeting-owned documents appear inside their meeting and never as duplicate
   Document Library rows; downloads retain the normal vault audit behavior.
+- A document or meeting-material upload completes its direct presigned `PUT` to
+  the exact staging-bucket origin allowed by CSP; arbitrary external connection
+  origins remain blocked, and the staging bucket accepts CORS only from
+  `https://board.pgpz.org`.
 - Each opened asynchronous ballot supports a retained discussion thread.
   Directors, Chair, Executive Director, and Legal Counsel can post and reply;
   Board Support is read-only. Author edits close after 15 minutes, deletion is
