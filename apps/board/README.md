@@ -60,6 +60,17 @@ Board supplies retention, roles, infrastructure, routes, and event semantics.
 The document vault and audit ledger fail closed when required resources are
 unset. Reference examples must never attach Board data or credentials.
 
+All active portal users can open `/governance-safeguards` from the dashboard or
+footer for a plain-language explanation of role-scoped access, preserved
+document versions, integrity verification, and recorded activity. The page
+describes these controls as support for governance and record-retention
+obligations, not as a legal or regulatory certification. Board Chair,
+Executive Director, and Legal Counsel roles additionally see a concise
+technical architecture overview; infrastructure identifiers and operational
+secrets are never exposed. The dashboard shows a dismissible first-use notice,
+while the Document Library and Board Meetings surfaces provide small contextual
+links without duplicating records or management interfaces.
+
 Authorized reviewers see audit events newest-first in `/admin/audit`, 25 per
 page, with explicit refresh and newer/older navigation. Pagination affects only
 the presentation query; the integrity indicator continues to verify the entire

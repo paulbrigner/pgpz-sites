@@ -155,6 +155,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
 
           <Surface id="minutes" className="p-5 sm:p-6">
             <SectionHeading icon={FileText} title="Minutes" detail={minutesStatusLabel(meeting.minutesStatus)} />
+            <p className="mb-4 text-xs leading-5 text-[var(--muted)]">Minutes and later amendments remain with this meeting&apos;s preserved record.</p>
             {minutes.length === 0 ? <EmptySection>{meeting.status === "draft" || meeting.status === "scheduled" || meeting.status === "materials-published" ? "Minutes will be added after the meeting." : "Draft minutes have not been added yet."}</EmptySection> : (
               <ul className="grid gap-3">
                 {minutes.map((material) => <li key={material.id}><a href={material.downloadHref} className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] p-4 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><span>{material.title}<span className="mt-1 block text-xs font-normal text-[var(--muted)]">{material.versionLabel}</span></span><Download className="h-4 w-4" aria-hidden="true" /></a></li>)}

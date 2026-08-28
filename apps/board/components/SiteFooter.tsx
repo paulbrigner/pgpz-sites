@@ -20,7 +20,8 @@ export async function SiteFooter() {
           </div>
         </div>
         {signedIn ? (
-          <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm" aria-label="Legal navigation">
+          <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm" aria-label="Portal information">
+            <Link className="footer-link" href="/governance-safeguards">How records are protected</Link>
             <Link className="footer-link" href={boardSiteConfig.legal.termsUrl}>Terms</Link>
             <Link className="footer-link" href={boardSiteConfig.legal.privacyUrl}>Privacy</Link>
           </nav>
