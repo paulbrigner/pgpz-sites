@@ -11,6 +11,9 @@ describe("governance safeguards overview", () => {
 
     expect(screen.getByRole("heading", { name: "How Board records are protected" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Preserved history" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Hosted for secure preservation" })).toBeVisible();
+    expect(screen.getByText(/dedicated set of AWS resources and permissions/i)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Retention-protected documents" })).toBeVisible();
     expect(screen.getByText(/not, by themselves, a certification/i)).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Preservation architecture" })).not.toBeInTheDocument();
   });

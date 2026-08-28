@@ -3,10 +3,13 @@ import { Surface } from "@pgpz/ui";
 import {
   BookLock,
   CheckCircle2,
+  CloudCog,
+  DatabaseBackup,
   FileClock,
   Fingerprint,
   History,
   KeyRound,
+  LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
 
@@ -60,6 +63,40 @@ export function GovernanceSafeguardsOverview({ showTechnicalDetails }: { showTec
               <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{body}</p>
             </section>
           ))}
+        </div>
+      </Surface>
+
+      <Surface className="overflow-hidden p-0">
+        <div className="border-b border-[var(--border)] bg-[var(--primary)] px-6 py-7 text-white sm:px-8">
+          <div className="flex items-start gap-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-white">
+              <CloudCog className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-white/65">AWS hosting</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">Hosted for secure preservation</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-white/75">
+                The Board portal operates through a dedicated set of AWS resources and permissions separated from PGPZ&apos;s other applications. Its storage, encryption, access, and recovery controls are configured specifically for Board records.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-px bg-[var(--border)] md:grid-cols-3">
+          <section className="bg-white px-6 py-6 sm:px-8">
+            <LockKeyhole className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold text-[var(--foreground)]">Encrypted and isolated</h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Connections use HTTPS, and Board data is encrypted at rest with Board-specific encryption and role-based access controls.</p>
+          </section>
+          <section className="bg-white px-6 py-6 sm:px-8">
+            <BookLock className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold text-[var(--foreground)]">Retention-protected documents</h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Retained files use versioned AWS object storage with retention safeguards. The portal&apos;s normal operating role cannot delete retained versions.</p>
+          </section>
+          <section className="bg-white px-6 py-6 sm:px-8">
+            <DatabaseBackup className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold text-[var(--foreground)]">Protected records and recovery</h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Meeting and access records use protected AWS databases with recovery, deletion protection, and preserved revision history.</p>
+          </section>
         </div>
       </Surface>
 
