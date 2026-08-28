@@ -62,11 +62,14 @@ unset. Reference examples must never attach Board data or credentials.
 
 All active portal users can open `/governance-safeguards` from the dashboard or
 footer for a plain-language explanation of role-scoped access, preserved
-document versions, integrity verification, and recorded activity. The page
-describes these controls as support for governance and record-retention
-obligations, not as a legal or regulatory certification. Board Chair,
-Executive Director, and Legal Counsel roles additionally see a concise
-technical architecture overview; infrastructure identifiers and operational
+document versions, integrity verification, recorded activity, and the
+Board-specific AWS hosting boundary. The all-member architecture overview
+describes HTTPS transport, encryption at rest, versioned retention-protected
+object storage, and protected databases with recovery and deletion safeguards.
+It describes these controls as support for governance and record-retention
+obligations, not as a legal or regulatory certification. Board Chair, Executive
+Director, and Legal Counsel roles additionally see a more detailed technical
+overview; account and resource identifiers, IAM policy details, and operational
 secrets are never exposed. The dashboard shows a dismissible first-use notice,
 while the Document Library and Board Meetings surfaces provide small contextual
 links without duplicating records or management interfaces.
