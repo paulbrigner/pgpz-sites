@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Badge, Container } from "@pgpz/ui";
+import { ShieldCheck } from "lucide-react";
 import { DocumentLibrary } from "@/components/documents/DocumentLibrary";
 import { buildDocumentLibrary } from "@/lib/document-library";
 import { canManageBoardDocuments, requireBoardMember } from "@/lib/session";
@@ -46,6 +48,11 @@ export default async function BoardDocumentsPage({
           <span className="font-semibold text-[var(--foreground)]">{member.email}</span>.
         </p>
       </section>
+
+      <aside className="mt-5 flex max-w-6xl items-start gap-3 rounded-2xl border border-[var(--border)] bg-white/65 px-4 py-3 text-sm leading-6 text-[var(--muted)]">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
+        <p>New versions preserve earlier files and their integrity evidence. <Link href="/governance-safeguards" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">How records are protected</Link></p>
+      </aside>
 
       <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} canManage={canManage} />
     </Container>

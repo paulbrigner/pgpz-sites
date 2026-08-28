@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Badge, Container } from "@pgpz/ui";
+import { ShieldCheck } from "lucide-react";
 import { MeetingList } from "@/components/meetings/MeetingList";
 import type { MeetingSummaryView } from "@/components/meetings/types";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
@@ -42,6 +44,10 @@ export default async function BoardMeetingsPage({ searchParams }: { searchParams
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">Board meetings</h1>
         <p className="mt-3 text-base leading-7 text-[var(--muted)]">Prepare for live meetings and asynchronous written resolutions, then review the Board&apos;s retained meeting records.</p>
       </section>
+      <aside className="mt-5 flex max-w-3xl items-start gap-3 rounded-2xl border border-[var(--border)] bg-white/65 px-4 py-3 text-sm leading-6 text-[var(--muted)]">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
+        <p>Meeting materials, decisions, votes, and minutes remain with their meeting record. <Link href="/governance-safeguards" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Learn about record safeguards</Link></p>
+      </aside>
       <MeetingList meetings={meetings} scope={scope} canManage={canManage} canPrepare={canPrepare} />
     </Container>
   );

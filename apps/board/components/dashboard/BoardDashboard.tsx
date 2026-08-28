@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { ArrowRight, CalendarDays, FileText, KeyRound, ScrollText, Settings } from "lucide-react";
+import { ArrowRight, CalendarDays, FileText, KeyRound, ScrollText, Settings, ShieldCheck } from "lucide-react";
 import type { BoardMember } from "@/lib/session";
 import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel } from "@/components/meetings/meeting-format";
 import type { MeetingSummaryView } from "@/components/meetings/types";
+import { GovernanceSafeguardsNotice } from "@/components/governance/GovernanceSafeguardsNotice";
 
 export type { BoardMember };
 
@@ -25,6 +26,12 @@ const memberResources = [
     icon: KeyRound,
     title: "Sign-in security",
     body: "Passkeys and account recovery",
+  },
+  {
+    href: "/governance-safeguards",
+    icon: ShieldCheck,
+    title: "Governance safeguards",
+    body: "How Board records are preserved, verified, and protected",
   },
 ] as const;
 
@@ -64,6 +71,8 @@ export function BoardDashboard({ member, passkeyCount = null, nextMeeting = null
           <Link href="/account/security" className="mt-4 inline-flex shrink-0 rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white sm:mt-0">Add a passkey</Link>
         </Surface>
       ) : null}
+
+      <GovernanceSafeguardsNotice />
 
       <section className="mt-10" aria-labelledby="board-resources-heading">
         <h2 id="board-resources-heading" className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">Board resources</h2>

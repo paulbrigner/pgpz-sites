@@ -17,10 +17,12 @@ describe("board dashboard", () => {
     expect(screen.getByText("ada@example.org")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Document library" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Board meetings" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Governance safeguards" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /member directory/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /sign up/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /administration/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Board meetings/ })).toHaveAttribute("href", "/meetings");
+    expect(screen.getByRole("link", { name: /Governance safeguards/ })).toHaveAttribute("href", "/governance-safeguards");
     expect(screen.queryByRole("link", { name: /Brand & marketing/ })).not.toBeInTheDocument();
     expect(screen.getByRole("list")).toContainElement(screen.getByRole("link", { name: /Document library/ }));
   });
