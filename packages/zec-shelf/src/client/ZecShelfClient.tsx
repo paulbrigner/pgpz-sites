@@ -223,16 +223,18 @@ function ResourceForm({
 
 export function ZecShelfClient({
   initialResources,
+  initialCategory = "",
   isAdmin,
   config,
 }: {
   initialResources: ZecShelfResource[];
+  initialCategory?: string;
   isAdmin: boolean;
   config: ZecShelfClientConfig;
 }) {
   const [resources, setResources] = useState(initialResources);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All resources");
+  const [requestedCategory, setRequestedCategory] = useState(initialCategory);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ZecShelfResource | null>(null);
   const [checking, setChecking] = useState<string | "all" | null>(null);
@@ -252,6 +254,25 @@ export function ZecShelfClient({
     () => ["All resources", ...Array.from(new Set(resources.map((item) => item.category)))],
     [resources],
   );
+
+  const category = categories.find((item) => item.toLowerCase() === requestedCategory.trim().toLowerCase()) || "All resources";
+
+  useEffect(() => {
+    const syncCategory = () => setRequestedCategory(new URLSearchParams(window.location.search).get("category") || "");
+    syncCategory();
+    window.addEventListener("popstate", syncCategory);
+    return () => window.removeEventListener("popstate", syncCategory);
+  }, [initialCategory]);
+
+  function selectCategory(nextCategory: string) {
+    setRequestedCategory(nextCategory);
+    const url = new URL(window.location.href);
+    if (nextCategory === "All resources") url.searchParams.delete("category");
+    else url.searchParams.set("category", nextCategory);
+    if (url.href !== window.location.href) {
+      window.history.pushState(null, "", url);
+    }
+  }
 
   const updateCategoryScroll = useCallback(() => {
     const scroller = categoryScrollerRef.current;
@@ -491,7 +512,7 @@ export function ZecShelfClient({
                       ? "border-[var(--zec-shelf-ink)] bg-[var(--zec-shelf-ink)] text-white"
                       : "border-slate-200 bg-white text-slate-600 hover:border-[var(--zec-shelf-accent)] hover:text-[var(--zec-shelf-secondary)]",
                   )}
-                  onClick={() => setCategory(item)}
+                  onClick={() => selectCategory(item)}
                   aria-pressed={item === category}
                 >
                   {item}

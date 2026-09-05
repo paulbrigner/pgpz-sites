@@ -29,6 +29,11 @@ Current central feature switches enable the protected member directory, ZEC
 Shelf, and public files. Letter sign-ons and the document vault remain disabled.
 A package being available in the monorepo does not authorize enabling it here.
 
+ZEC Shelf category views can be shared with links such as
+`https://community.pgpz.org/zec-shelf?category=Learning`. Category selection
+updates the browser URL and survives sign-in; existing member access rules
+still apply. Text search remains local to the current view.
+
 ZEC Shelf's administrator **Check for updates** action checks resources one at
 a time with visible progress. `/api/zec-shelf/check` requires a single resource
 ID and administrator access; catalog-wide work is split across requests to

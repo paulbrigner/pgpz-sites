@@ -41,9 +41,16 @@ function MembershipRequired() {
   );
 }
 
-export default async function ZecShelfPage() {
+export default async function ZecShelfPage({ searchParams }: {
+  searchParams?: Promise<{ category?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const initialCategory = Array.isArray(params?.category) ? params.category[0] : params?.category;
+  const callbackParams = new URLSearchParams();
+  if (initialCategory) callbackParams.set("category", initialCategory);
+  const callbackUrl = `/zec-shelf${callbackParams.size ? `?${callbackParams}` : ""}`;
   const access = await getMemberAccess();
-  if (!access.authenticated) redirect(`/signin?callbackUrl=${encodeURIComponent("/zec-shelf")}`);
+  if (!access.authenticated) redirect(`/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   const viewAsMember = await isMemberPreviewRequest();
   const effectiveUser = access.user
     ? {
@@ -57,6 +64,7 @@ export default async function ZecShelfPage() {
   return (
     <ZecShelfClient
       initialResources={resources}
+      initialCategory={initialCategory}
       isAdmin={canManageZecShelf(effectiveUser)}
       config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG}
     />
