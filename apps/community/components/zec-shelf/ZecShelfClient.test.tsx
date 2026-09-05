@@ -1,11 +1,14 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { reorderClientResources, ZecShelfClient, type ZecShelfResource } from "@pgpz/zec-shelf/client";
 import { COMMUNITY_ZEC_SHELF_CLIENT_CONFIG } from "@/lib/zec-shelf-config";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const RESOURCE: ZecShelfResource = {
   id: "zcash-community",
@@ -26,6 +29,24 @@ const RESOURCE: ZecShelfResource = {
 };
 
 describe("ZecShelfClient permissions", () => {
+  it("sends one-resource checks to the Community adapter and reloads saved results", async () => {
+    const resources = [RESOURCE, { ...RESOURCE, id: "second", title: "Second resource" }];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ results: [{ id: RESOURCE.id, ok: true }] }))
+      .mockResolvedValueOnce(Response.json({ results: [{ id: "second", ok: true }] }))
+      .mockResolvedValueOnce(Response.json({ resources }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ZecShelfClient initialResources={resources} isAdmin config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Check for updates/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Check for updates/i })).toBeEnabled());
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.body])).toEqual([
+      ["/api/zec-shelf/check", JSON.stringify({ id: RESOURCE.id })],
+      ["/api/zec-shelf/check", JSON.stringify({ id: "second" })],
+      ["/api/zec-shelf/resources", undefined],
+    ]);
+  });
   it("shows freshness but no administrative controls to members", () => {
     render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
 

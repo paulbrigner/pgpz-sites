@@ -10,6 +10,27 @@ import type { ZecShelfRepository } from "./repository";
 
 type AddressResolver = (hostname: string) => Promise<string[]>;
 const MAX_PAGE_BYTES = 400_000;
+const PAGE_TIMEOUT_MS = 12_000;
+const CHECK_TIMEOUT_MS = 20_000;
+
+// Bound the entire operation, including DNS, redirects, and response bodies.
+// Aborting transport alone does not bound a pending DNS lookup.
+async function withinTimeout<T>(milliseconds: number, message: string, operation: (signal: AbortSignal) => Promise<T>) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(message);
+      reject(error);
+      controller.abort(error);
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 export type ZecShelfResolvedPage = {
   url: URL;
@@ -176,16 +197,18 @@ export function createZecShelfChecker({
     return { url, ...resolved[0]! };
   }
 
-  async function fetchPublicPage(value: string) {
+  async function fetchPublicPage(value: string, signal: AbortSignal) {
     let target = await resolvePublicHttpsUrl(value);
     for (let redirect = 0; redirect <= 5; redirect += 1) {
+      signal.throwIfAborted();
       const response = await pageFetchImpl(target, {
         headers: {
           Accept: "text/html,application/xhtml+xml",
           "User-Agent": `${userAgentPrefix}-Link-Checker/1.0`,
         },
-        signal: AbortSignal.timeout(12_000),
+        signal,
       });
+      signal.throwIfAborted();
       if (![301, 302, 303, 307, 308].includes(response.status)) return response;
       const location = response.headers.get("location");
       if (!location || redirect === 5) throw new Error("The site redirected too many times.");
@@ -215,7 +238,7 @@ export function createZecShelfChecker({
       .digest("hex");
   }
 
-  async function capturePreview(value: string) {
+  async function capturePreview(value: string, signal: AbortSignal) {
     const apiKey = microlinkApiKey?.trim();
     const endpoint = new URL(apiKey ? "https://pro.microlink.io/" : "https://api.microlink.io/");
     endpoint.searchParams.set("url", value);
@@ -231,7 +254,7 @@ export function createZecShelfChecker({
         "User-Agent": `${userAgentPrefix}-Preview/1.0`,
         ...(apiKey ? { "x-api-key": apiKey } : {}),
       },
-      signal: AbortSignal.timeout(20_000),
+      signal,
       cache: "no-store",
     });
     const result = await response.json().catch(() => ({})) as {
@@ -248,10 +271,14 @@ export function createZecShelfChecker({
 
   async function checkOne(resource: ZecShelfResource): Promise<ZecShelfCheckResult> {
     const checkedAt = now();
+    const startedAt = Date.now();
     try {
-      const response = await fetchPublicPage(resource.url);
-      if (!response.ok) throw new Error(`The site returned ${response.status}.`);
-      const signature = await responseFingerprint(response);
+      const { response, signature } = await withinTimeout(PAGE_TIMEOUT_MS, "The site took too long to respond.", async (signal) => {
+        const response = await fetchPublicPage(resource.url, signal);
+        if (!response.ok) throw new Error(`The site returned ${response.status}.`);
+        const signature = await responseFingerprint(response);
+        return { response, signature };
+      });
       const firstCheck = !resource.contentSignature;
       const changed = Boolean(resource.contentSignature && resource.contentSignature !== signature);
       let previewUrl = resource.previewUrl;
@@ -260,7 +287,11 @@ export function createZecShelfChecker({
       let previewError: string | null = null;
       if (firstCheck || changed || !previewUrl) {
         try {
-          previewUrl = await capturePreview(resource.url);
+          previewUrl = await withinTimeout(
+            Math.max(1, CHECK_TIMEOUT_MS - (Date.now() - startedAt)),
+            "The preview service took too long to respond.",
+            (signal) => capturePreview(resource.url, signal),
+          );
           previewUpdatedAt = checkedAt;
           previewRefreshed = true;
         } catch (error) {

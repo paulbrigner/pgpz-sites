@@ -36,6 +36,16 @@ A Next.js application consuming the client must:
 The application must also own the routes that call the repository/checker and
 enforce its membership and administrator policy before invoking them.
 
+The administrator client checks the catalog one resource per request, reports
+progress, continues after individual failures, and reloads the persisted
+results at the end. A consuming check route must accept `{ id }` and return
+`{ results: [result] }` from `checker.checkOne(resource)`. It must reject requests
+without an ID instead of checking the entire catalog within one HTTP request.
+The checker limits page work (including DNS and all redirects) to 12 seconds
+and page plus preview work to 20 seconds, leaving time for the app's session,
+repository, and response handling. Preview failures preserve successful page
+checks and the previous preview, and are reported to the administrator.
+
 Run the package contracts from the monorepo root:
 
 ```bash
