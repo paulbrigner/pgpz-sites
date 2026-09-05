@@ -47,6 +47,12 @@ describe("ZecShelfClient permissions", () => {
       ["/api/zec-shelf/resources", undefined],
     ]);
   });
+  it("uses the Community bundled preview when a saved capture fails", () => {
+    const { container } = render(<ZecShelfClient initialResources={[{ ...RESOURCE, previewUrl: "/expired.jpg" }]} isAdmin={false} config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("zec-shelf%2Fzcash-community");
+  });
+
   it("shows freshness but no administrative controls to members", () => {
     render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={COMMUNITY_ZEC_SHELF_CLIENT_CONFIG} />);
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZecShelfResource } from "../domain";
 import { createZecShelfChecker, type ZecShelfResolvedPage } from "./checker";
@@ -111,7 +112,8 @@ describe("ZEC Shelf checker contract", () => {
       expect(target).toMatchObject({ address: "93.184.216.34", family: 4 });
       return new Response("<html><body>Stable page</body></html>", { status: 200 });
     });
-    const previewFetchImpl = vi.fn(async () => {
+    const previewFetchImpl = vi.fn(async (_url, init) => {
+      if (init?.method === "HEAD") return new Response(null, { headers: { "content-type": "image/jpeg" } });
       return Response.json({ data: { screenshot: { url: "https://cdn.microlink.io/preview.jpg" } } });
     }) as typeof fetch;
     const checker = createZecShelfChecker({
@@ -136,7 +138,101 @@ describe("ZEC Shelf checker contract", () => {
       previewUrl: "https://cdn.microlink.io/preview.jpg",
     }));
     expect(pageFetchImpl).toHaveBeenCalledOnce();
-    expect(previewFetchImpl).toHaveBeenCalledOnce();
+    expect(previewFetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+
+  it("keeps an unchanged page's healthy preview without calling the capture API", async () => {
+    const previewFetchImpl = vi.fn(async () => new Response(null, { headers: { "content-type": "image/jpeg" } }));
+    const checker = createZecShelfChecker({
+      repository: repositoryWithSave(),
+      resolve4: async () => ["93.184.216.34"],
+      resolve6: async () => [],
+      pageFetchImpl: async () => new Response("stable"),
+      previewFetchImpl,
+    });
+    await expect(checker.checkOne({
+      ...RESOURCE,
+      contentSignature: createHash("sha256").update("||stable").digest("hex"),
+      previewUrl: "https://cdn.microlink.io/healthy.jpg",
+    })).resolves.toMatchObject({ ok: true, state: "same", previewRefreshed: false, previewError: null });
+    expect(previewFetchImpl).toHaveBeenCalledExactlyOnceWith("https://cdn.microlink.io/healthy.jpg", expect.objectContaining({
+      method: "HEAD", redirect: "manual", cache: "no-store",
+    }));
+  });
+
+  it.each([403, 404, 302])("repairs a missing preview (%s) even when its page is unchanged", async (status) => {
+    const saveCheckResult = vi.fn();
+    const previewFetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status, headers: { Location: "http://localhost/private" } }))
+      .mockResolvedValueOnce(Response.json({ data: { screenshot: { url: "https://iad.microlink.io/fresh.jpg" } } }))
+      .mockResolvedValueOnce(new Response(null, { headers: { "content-type": "image/jpeg" } }));
+    const checker = createZecShelfChecker({
+      repository: repositoryWithSave(saveCheckResult),
+      resolve4: async () => ["93.184.216.34"],
+      resolve6: async () => [],
+      pageFetchImpl: async () => new Response("stable"),
+      previewFetchImpl,
+      microlinkApiKey: "test-api-key",
+      now: () => "2026-09-05T12:00:00.000Z",
+    });
+    await expect(checker.checkOne({
+      ...RESOURCE,
+      contentSignature: createHash("sha256").update("||stable").digest("hex"),
+      previewUrl: "https://cdn.microlink.io/expired.jpg",
+    })).resolves.toMatchObject({ ok: true, state: "same", previewRefreshed: true, previewError: null });
+    expect(previewFetchImpl).toHaveBeenCalledTimes(3);
+    const [endpoint, init] = previewFetchImpl.mock.calls[1];
+    expect(endpoint.origin).toBe("https://pro.microlink.io");
+    expect(endpoint.searchParams.get("force")).toBe("true");
+    expect(init.headers["x-api-key"]).toBe("test-api-key");
+    for (const index of [0, 2]) {
+      expect(previewFetchImpl.mock.calls[index][1]).toMatchObject({ method: "HEAD", redirect: "manual" });
+      expect(previewFetchImpl.mock.calls[index][1].headers).not.toHaveProperty("x-api-key");
+    }
+    expect(saveCheckResult).toHaveBeenCalledWith(expect.objectContaining({
+      checkState: "same", previewUrl: "https://iad.microlink.io/fresh.jpg", previewUpdatedAt: "2026-09-05T12:00:00.000Z",
+    }));
+  });
+
+  it.each([
+    [403, "application/xml"],
+    [200, "text/html"],
+    [302, "image/jpeg"],
+  ])("does not save an unusable replacement image (%s, %s)", async (status, contentType) => {
+    const saveCheckResult = vi.fn();
+    const previewFetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 403 }))
+      .mockResolvedValueOnce(Response.json({ data: { screenshot: { url: "https://iad.microlink.io/unavailable.jpg" } } }))
+      .mockResolvedValueOnce(new Response(null, { status, headers: { "content-type": contentType } }));
+    const checker = createZecShelfChecker({
+      repository: repositoryWithSave(saveCheckResult),
+      resolve4: async () => ["93.184.216.34"],
+      resolve6: async () => [],
+      pageFetchImpl: async () => new Response("stable"),
+      previewFetchImpl,
+    });
+    const oldPreview = { previewUrl: "https://cdn.microlink.io/old.jpg", previewUpdatedAt: "2026-07-17T00:00:00.000Z" };
+    await expect(checker.checkOne({ ...RESOURCE, ...oldPreview })).resolves.toMatchObject({
+      ok: true, previewRefreshed: false, previewError: "The preview service returned an unavailable image.",
+    });
+    expect(saveCheckResult).toHaveBeenCalledWith(expect.objectContaining(oldPreview));
+  });
+
+  it("does not probe a saved preview outside the HTTPS Microlink allowlist", async () => {
+    const previewFetchImpl = vi.fn()
+      .mockResolvedValueOnce(Response.json({ data: { screenshot: { url: "https://iad.microlink.io/fresh.jpg" } } }))
+      .mockResolvedValueOnce(new Response(null, { headers: { "content-type": "image/jpeg" } }));
+    const checker = createZecShelfChecker({
+      repository: repositoryWithSave(),
+      resolve4: async () => ["93.184.216.34"],
+      resolve6: async () => [],
+      pageFetchImpl: async () => new Response("stable"),
+      previewFetchImpl,
+    });
+    await expect(checker.checkOne({ ...RESOURCE, previewUrl: "https://localhost/private" })).resolves.toMatchObject({ previewRefreshed: true });
+    expect(previewFetchImpl).toHaveBeenCalledTimes(2);
+    expect(previewFetchImpl.mock.calls[0][0].hostname).toBe("api.microlink.io");
   });
 
   it("rejects hostnames resolving to private addresses before fetching", async () => {

@@ -45,6 +45,12 @@ The checker limits page work (including DNS and all redirects) to 12 seconds
 and page plus preview work to 20 seconds, leaving time for the app's session,
 repository, and response handling. Preview failures preserve successful page
 checks and the previous preview, and are reported to the administrator.
+Each check also probes the saved preview with a bounded, redirect-free image
+request. Unavailable previews trigger a fresh capture even when page content
+is unchanged; newly captured images must be reachable before being saved.
+These probes and captures share the existing 20-second budget. If an image
+fails in the browser, the client tries the app's URL-matched bundled fallback
+and then displays the resource initial. A later refreshed preview is retried.
 
 Run the package contracts from the monorepo root:
 
