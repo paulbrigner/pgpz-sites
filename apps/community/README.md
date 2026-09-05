@@ -29,6 +29,12 @@ Current central feature switches enable the protected member directory, ZEC
 Shelf, and public files. Letter sign-ons and the document vault remain disabled.
 A package being available in the monorepo does not authorize enabling it here.
 
+ZEC Shelf's administrator **Check for updates** action checks resources one at
+a time with visible progress. `/api/zec-shelf/check` requires a single resource
+ID and administrator access; catalog-wide work is split across requests to
+stay within Amplify's request timeout. Individual site or preview failures are
+reported after the catalog finishes, with successful checks retained.
+
 `/members` and `/members/[slug]` authorize an active Community member before
 reading any profile. Profiles are off by default, use a sparse
 `GSI1` projection plus an app-local conditional slug claim, and never expose

@@ -1,6 +1,6 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZecShelfClientConfig, ZecShelfResource } from "../domain";
 import { ZecShelfClient } from "./ZecShelfClient";
 
@@ -52,6 +52,11 @@ const RESOURCE: ZecShelfResource = {
   updatedAt: "2026-07-17T00:00:00.000Z",
 };
 
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
 describe("ZecShelfClient contract", () => {
   it("renders app-provided copy and URL-matched previews without member management controls", () => {
     const { container } = render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={CONFIG} />);
@@ -85,5 +90,67 @@ describe("ZecShelfClient contract", () => {
     expect(screen.getByRole("button", { name: /^Remove$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Move Resource to top/i })).toBeInTheDocument();
     expect(screen.getByText("No change")).toBeInTheDocument();
+  });
+
+  it("checks the full catalog one request at a time, with progress and a final reload", async () => {
+    const resources = [RESOURCE, { ...RESOURCE, id: "second", title: "Second resource" }];
+    let finishFirst!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValueOnce(Response.json({ results: [{ id: "second", ok: true }] }))
+      .mockResolvedValueOnce(Response.json({ resources: resources.map((resource) => ({ ...resource, checkState: "changed" })) }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ZecShelfClient initialResources={resources} isAdmin config={CONFIG} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Check for updates/i }));
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking sites… 0/2");
+    expect(screen.getByRole("button", { name: /Checking sites/i })).toBeDisabled();
+    await act(async () => finishFirst(Response.json({ results: [{ id: "resource", ok: true }] })));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Check for updates/i })).toBeEnabled());
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/api/catalog/check", "POST", JSON.stringify({ id: "resource" })],
+      ["/api/catalog/check", "POST", JSON.stringify({ id: "second" })],
+      ["/api/catalog/resources", "GET", undefined],
+    ]);
+    expect(screen.getAllByText("Updated")).toHaveLength(2);
+  });
+
+  it.each([
+    ["empty gateway timeout", () => new Response(null, { status: 504 }), "The request timed out"],
+    ["HTML error page", () => new Response("<html>unavailable</html>", { status: 503 }), "The request failed (503)"],
+    ["empty successful response", () => new Response(null), "empty or invalid response"],
+    ["failed site check", () => Response.json({ results: [{ id: "resource", ok: false, error: "The site returned 403." }] }), "The site returned 403"],
+    ["failed preview", () => Response.json({ results: [{ id: "resource", ok: true, previewError: "Preview service unavailable." }] }), "page checked, but its preview could not be refreshed"],
+  ])("reports an %s and continues checking the remaining resources", async (_label, response, message) => {
+    const resources = [RESOURCE, { ...RESOURCE, id: "second", title: "Second resource" }];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response())
+      .mockResolvedValueOnce(Response.json({ results: [{ id: "second", ok: true }] }))
+      .mockResolvedValueOnce(Response.json({ resources }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ZecShelfClient initialResources={resources} isAdmin config={CONFIG} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Check for updates/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Check for updates/i })).toBeEnabled());
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.getByText(message, { exact: false })).toHaveTextContent(/^Resource:/);
+    expect(screen.queryByText(/Unexpected end of JSON/i)).not.toBeInTheDocument();
+  });
+
+  it("checks only the selected resource from its row", async () => {
+    const resources = [RESOURCE, { ...RESOURCE, id: "second", title: "Second resource" }];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ results: [{ id: "second", ok: true }] }))
+      .mockResolvedValueOnce(Response.json({ resources }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ZecShelfClient initialResources={resources} isAdmin config={CONFIG} />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^Check$/ })[1]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ id: "second" }));
   });
 });

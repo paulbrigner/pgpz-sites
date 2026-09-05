@@ -12,16 +12,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const input = await request.json().catch(() => ({})) as { id?: string };
-    const requestedResource = input.id
-      ? await communityZecShelfRepository.getResource(input.id)
-      : null;
-    const resources = input.id
-      ? requestedResource ? [requestedResource] : []
-      : await communityZecShelfRepository.getResources();
-    if (!resources.length) return Response.json({ error: "No matching resources were found." }, { status: 404 });
-    const results = await communityZecShelfChecker.checkMany(resources);
-    return Response.json({ results });
+    const input = await request.json().catch(() => null) as { id?: unknown } | null;
+    if (typeof input?.id !== "string" || !input.id.trim()) {
+      return Response.json({ error: "Choose one resource to check. Refresh the page to check the full catalog." }, { status: 400 });
+    }
+    const resource = await communityZecShelfRepository.getResource(input.id);
+    if (!resource) return Response.json({ error: "No matching resources were found." }, { status: 404 });
+    const result = await communityZecShelfChecker.checkOne(resource);
+    return Response.json({ results: [result] });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Update check failed" }, { status: 500 });
   }

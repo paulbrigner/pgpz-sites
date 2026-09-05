@@ -219,6 +219,7 @@ export function ZecShelfClient({
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ZecShelfResource | null>(null);
   const [checking, setChecking] = useState<string | "all" | null>(null);
+  const [checkProgress, setCheckProgress] = useState({ completed: 0, total: 0 });
   const [error, setError] = useState("");
   const categoryScrollerRef = useRef<HTMLDivElement>(null);
   const previousCategoriesRef = useRef<HTMLButtonElement>(null);
@@ -300,8 +301,19 @@ export function ZecShelfClient({
       ...init,
       headers: { "Content-Type": "application/json", ...(init.headers || {}) },
     });
-    const data = await response.json() as { resources?: ZecShelfResource[]; error?: string };
-    if (!response.ok) throw new Error(data.error || "That change could not be saved.");
+    const data = await response.json().catch(() => null) as {
+      resources?: ZecShelfResource[];
+      results?: { id: string; ok: boolean; error?: string; previewError?: string | null }[];
+      error?: string;
+    } | null;
+    if (!response.ok) {
+      throw new Error(data?.error || ([502, 504].includes(response.status)
+        ? "The request timed out. Please try again."
+        : `The request failed (${response.status}). Please try again.`));
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("The server returned an empty or invalid response. Please try again.");
+    }
     return data;
   }
 
@@ -361,14 +373,32 @@ export function ZecShelfClient({
   }
 
   async function checkForUpdates(id?: string) {
+    const targets = id ? resources.filter((resource) => resource.id === id) : resources;
     setChecking(id || "all");
+    setCheckProgress({ completed: 0, total: targets.length });
     setError("");
+    const issues: string[] = [];
     try {
-      await request(`${apiBasePath}/check`, { method: "POST", body: JSON.stringify(id ? { id } : {}) });
+      for (const [index, resource] of targets.entries()) {
+        try {
+          const data = await request(`${apiBasePath}/check`, {
+            method: "POST",
+            body: JSON.stringify({ id: resource.id }),
+          });
+          const result = data.results?.find((result) => result.id === resource.id);
+          if (!result) throw new Error("The server did not return a check result. Please try again.");
+          if (!result.ok) throw new Error(result.error || "The site could not be checked.");
+          if (result.previewError) issues.push(`${resource.title}: page checked, but its preview could not be refreshed. ${result.previewError}`);
+        } catch (caught) {
+          issues.push(`${resource.title}: ${caught instanceof Error ? caught.message : "The update check could not finish."}`);
+        }
+        setCheckProgress({ completed: index + 1, total: targets.length });
+      }
       await reload();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The update check could not finish.");
+      issues.push(caught instanceof Error ? caught.message : "The resource list could not be refreshed.");
     } finally {
+      setError(issues.join(" "));
       setChecking(null);
     }
   }
@@ -413,7 +443,9 @@ export function ZecShelfClient({
           {isAdmin ? (
             <FeatureButton variant="outline" title="Check page content and refresh previews when needed" onClick={() => void checkForUpdates()} disabled={checking !== null || resources.length === 0}>
               <RefreshCw className={cn("h-4 w-4", checking === "all" && "animate-spin")} aria-hidden="true" />
-              {checking === "all" ? "Checking sites…" : "Check for updates"}
+              <span role={checking === "all" ? "status" : undefined}>
+                {checking === "all" ? `Checking sites… ${checkProgress.completed}/${checkProgress.total}` : "Check for updates"}
+              </span>
             </FeatureButton>
           ) : null}
         </div>

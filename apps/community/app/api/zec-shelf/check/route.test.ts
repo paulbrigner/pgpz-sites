@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   resolveAppSession: vi.fn(),
   getResource: vi.fn(),
   getResources: vi.fn(),
-  checkMany: vi.fn(),
+  checkOne: vi.fn(),
 }));
 
 vi.mock("@/lib/app-session", () => ({
@@ -17,7 +17,7 @@ vi.mock("@/lib/zec-shelf-server", () => ({
     getResources: mocks.getResources,
   },
   communityZecShelfChecker: {
-    checkMany: mocks.checkMany,
+    checkOne: mocks.checkOne,
   },
 }));
 
@@ -41,7 +41,7 @@ async function post(body: Record<string, unknown> = {}) {
 function expectNoCheckWork() {
   expect(mocks.getResource).not.toHaveBeenCalled();
   expect(mocks.getResources).not.toHaveBeenCalled();
-  expect(mocks.checkMany).not.toHaveBeenCalled();
+  expect(mocks.checkOne).not.toHaveBeenCalled();
 }
 
 describe("ZEC Shelf update-check route", () => {
@@ -49,7 +49,7 @@ describe("ZEC Shelf update-check route", () => {
     vi.clearAllMocks();
     mocks.getResource.mockResolvedValue(resource);
     mocks.getResources.mockResolvedValue([resource]);
-    mocks.checkMany.mockResolvedValue([{ id: "resource-1", ok: true, state: "same" }]);
+    mocks.checkOne.mockResolvedValue({ id: "resource-1", ok: true, state: "same" });
   });
 
   it("returns 401 to an unauthenticated caller", async () => {
@@ -76,18 +76,24 @@ describe("ZEC Shelf update-check route", () => {
     expectNoCheckWork();
   });
 
-  it("checks the complete catalog for an administrator regardless of membership status", async () => {
+  it.each([{}, { id: "" }, { id: " " }, { id: 123 }, { id: ["resource-1"] }])(
+    "rejects a request without a valid single id: %j",
+    async (body) => {
+      session("none", true);
+      expect((await post(body)).status).toBe(400);
+      expectNoCheckWork();
+    },
+  );
+
+  it("checks one resource for an administrator regardless of membership status", async () => {
     session("none", true);
-
-    const response = await post();
-
+    const response = await post({ id: "resource-1" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       results: [{ id: "resource-1", ok: true, state: "same" }],
     });
-    expect(mocks.getResources).toHaveBeenCalledOnce();
-    expect(mocks.getResource).not.toHaveBeenCalled();
-    expect(mocks.checkMany).toHaveBeenCalledWith([resource]);
+    expect(mocks.checkOne).toHaveBeenCalledWith(resource);
+    expect(mocks.getResources).not.toHaveBeenCalled();
   });
 
   it("checks only the requested resource for an administrator", async () => {
@@ -98,7 +104,7 @@ describe("ZEC Shelf update-check route", () => {
     expect(response.status).toBe(200);
     expect(mocks.getResource).toHaveBeenCalledWith("resource-1");
     expect(mocks.getResources).not.toHaveBeenCalled();
-    expect(mocks.checkMany).toHaveBeenCalledWith([resource]);
+    expect(mocks.checkOne).toHaveBeenCalledWith(resource);
   });
 
   it("returns 404 without running a check when an id is missing", async () => {
@@ -108,6 +114,6 @@ describe("ZEC Shelf update-check route", () => {
     const response = await post({ id: "missing" });
 
     expect(response.status).toBe(404);
-    expect(mocks.checkMany).not.toHaveBeenCalled();
+    expect(mocks.checkOne).not.toHaveBeenCalled();
   });
 });
