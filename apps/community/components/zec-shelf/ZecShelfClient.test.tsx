@@ -7,6 +7,7 @@ import { COMMUNITY_ZEC_SHELF_CLIENT_CONFIG } from "@/lib/zec-shelf-config";
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
 });
 

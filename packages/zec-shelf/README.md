@@ -36,6 +36,13 @@ A Next.js application consuming the client must:
 The application must also own the routes that call the repository/checker and
 enforce its membership and administrator policy before invoking them.
 
+Category filters use the `category` URL parameter (for example,
+`/zec-shelf?category=Learning`). Selecting a category updates the current URL;
+“All resources” removes that parameter. Browser Back/Forward restores the
+selection. Matching ignores case, and unknown categories show all resources.
+Apps may pass `initialCategory` for filtered server rendering and must preserve
+the category in their own sign-in callback URL. Text search remains local.
+
 The administrator client checks the catalog one resource per request, reports
 progress, continues after individual failures, and reloads the persisted
 results at the end. A consuming check route must accept `{ id }` and return

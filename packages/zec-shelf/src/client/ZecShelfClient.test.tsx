@@ -54,10 +54,61 @@ const RESOURCE: ZecShelfResource = {
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
 });
 
 describe("ZecShelfClient contract", () => {
+  it("opens a shared category link case-insensitively and hides other categories", () => {
+    window.history.replaceState(null, "", "/zec-shelf?category=learning");
+    render(<ZecShelfClient initialResources={[RESOURCE, { ...RESOURCE, id: "learn", title: "Learning guide", category: "Learning" }]} isAdmin={false} config={CONFIG} />);
+    expect(screen.getByRole("button", { name: "Learning" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "Learning guide" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Resource" })).not.toBeInTheDocument();
+  });
+
+  it("updates shareable category URLs and clears the filter while preserving other URL state", () => {
+    window.history.replaceState({ existing: true }, "", "/zec-shelf?source=email#collection");
+    render(<ZecShelfClient initialResources={[{ ...RESOURCE, category: "Research & Media" }]} isAdmin={false} config={CONFIG} />);
+    fireEvent.click(screen.getByRole("button", { name: "Research & Media" }));
+    expect(new URLSearchParams(window.location.search).get("category")).toBe("Research & Media");
+    expect(new URLSearchParams(window.location.search).get("source")).toBe("email");
+    expect(window.location.hash).toBe("#collection");
+    fireEvent.click(screen.getByRole("button", { name: "All resources" }));
+    expect(new URLSearchParams(window.location.search).has("category")).toBe(false);
+    expect(new URLSearchParams(window.location.search).get("source")).toBe("email");
+  });
+
+  it("restores the selected category on browser history navigation", () => {
+    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={CONFIG} />);
+    act(() => {
+      window.history.replaceState(null, "", "/zec-shelf?category=Policy");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByRole("button", { name: "Policy" })).toHaveAttribute("aria-pressed", "true");
+    act(() => {
+      window.history.replaceState(null, "", "/zec-shelf");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByRole("button", { name: "All resources" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("resyncs the filter when client navigation supplies a new server category", () => {
+    const resources = [RESOURCE, { ...RESOURCE, id: "learning", title: "Learning guide", category: "Learning" }];
+    const { rerender } = render(<ZecShelfClient initialResources={resources} isAdmin={false} config={CONFIG} />);
+    window.history.replaceState(null, "", "/zec-shelf?category=Learning");
+    rerender(<ZecShelfClient initialResources={resources} initialCategory="Learning" isAdmin={false} config={CONFIG} />);
+    expect(screen.getByRole("button", { name: "Learning" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("link", { name: "Resource" })).not.toBeInTheDocument();
+  });
+
+  it("shows all resources for an unknown category link", () => {
+    window.history.replaceState(null, "", "/zec-shelf?category=removed-category");
+    render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={CONFIG} />);
+    expect(screen.getByRole("button", { name: "All resources" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "Resource" })).toBeInTheDocument();
+  });
+
   it("renders app-provided copy and URL-matched previews without member management controls", () => {
     const { container } = render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin={false} config={CONFIG} />);
 
