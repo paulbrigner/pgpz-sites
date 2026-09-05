@@ -34,6 +34,9 @@ a time with visible progress. `/api/zec-shelf/check` requires a single resource
 ID and administrator access; catalog-wide work is split across requests to
 stay within Amplify's request timeout. Individual site or preview failures are
 reported after the catalog finishes, with successful checks retained.
+Checks also regenerate unavailable preview images independently of page
+changes. Failed browser image loads use a matching bundled preview when
+available, then the resource initial.
 
 `/members` and `/members/[slug]` authorize an active Community member before
 reading any profile. Profiles are off by default, use a sparse

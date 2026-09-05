@@ -12,6 +12,7 @@ type AddressResolver = (hostname: string) => Promise<string[]>;
 const MAX_PAGE_BYTES = 400_000;
 const PAGE_TIMEOUT_MS = 12_000;
 const CHECK_TIMEOUT_MS = 20_000;
+const PREVIEW_PROBE_TIMEOUT_MS = 3_000;
 
 // Bound the entire operation, including DNS, redirects, and response bodies.
 // Aborting transport alone does not bound a pending DNS lookup.
@@ -79,7 +80,8 @@ function publicAddress(value: string) {
 function isMicrolinkAsset(value: string) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && (url.hostname === "microlink.io" || url.hostname.endsWith(".microlink.io"));
+    return url.protocol === "https:" && !url.username && !url.password && !url.port
+      && (url.hostname === "microlink.io" || url.hostname.endsWith(".microlink.io"));
   } catch {
     return false;
   }
@@ -238,7 +240,21 @@ export function createZecShelfChecker({
       .digest("hex");
   }
 
-  async function capturePreview(value: string, signal: AbortSignal) {
+  async function previewAvailable(value: string, signal: AbortSignal) {
+    signal.throwIfAborted();
+    if (!isMicrolinkAsset(value)) return false;
+    const response = await previewFetchImpl(value, {
+      method: "HEAD",
+      headers: { Accept: "image/*", "User-Agent": `${userAgentPrefix}-Preview/1.0` },
+      signal,
+      redirect: "manual",
+      cache: "no-store",
+    });
+    const type = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+    return response.ok && ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"].includes(type || "");
+  }
+
+  async function capturePreview(value: string, signal: AbortSignal, force: boolean) {
     const apiKey = microlinkApiKey?.trim();
     const endpoint = new URL(apiKey ? "https://pro.microlink.io/" : "https://api.microlink.io/");
     endpoint.searchParams.set("url", value);
@@ -247,6 +263,7 @@ export function createZecShelfChecker({
     endpoint.searchParams.set("viewport.height", "600");
     endpoint.searchParams.set("viewport.deviceScaleFactor", "1");
     endpoint.searchParams.set("meta", "false");
+    if (force) endpoint.searchParams.set("force", "true");
 
     const response = await previewFetchImpl(endpoint, {
       headers: {
@@ -266,12 +283,16 @@ export function createZecShelfChecker({
     if (!previewUrl || !isMicrolinkAsset(previewUrl)) {
       throw new Error("Preview capture did not return a usable image.");
     }
+    if (!await previewAvailable(previewUrl, signal)) {
+      throw new Error("The preview service returned an unavailable image.");
+    }
     return previewUrl;
   }
 
   async function checkOne(resource: ZecShelfResource): Promise<ZecShelfCheckResult> {
     const checkedAt = now();
     const startedAt = Date.now();
+    const remainingTime = () => Math.max(1, CHECK_TIMEOUT_MS - (Date.now() - startedAt));
     try {
       const { response, signature } = await withinTimeout(PAGE_TIMEOUT_MS, "The site took too long to respond.", async (signal) => {
         const response = await fetchPublicPage(resource.url, signal);
@@ -285,12 +306,18 @@ export function createZecShelfChecker({
       let previewUpdatedAt = resource.previewUpdatedAt;
       let previewRefreshed = false;
       let previewError: string | null = null;
-      if (firstCheck || changed || !previewUrl) {
+      // A saved CDN URL can disappear independently of the source page.
+      const repairPreview = previewUrl ? !await withinTimeout(
+        Math.min(PREVIEW_PROBE_TIMEOUT_MS, remainingTime()),
+        "The preview image took too long to respond.",
+        (signal) => previewAvailable(previewUrl!, signal),
+      ).catch(() => false) : false;
+      if (firstCheck || changed || !previewUrl || repairPreview) {
         try {
           previewUrl = await withinTimeout(
-            Math.max(1, CHECK_TIMEOUT_MS - (Date.now() - startedAt)),
+            remainingTime(),
             "The preview service took too long to respond.",
-            (signal) => capturePreview(resource.url, signal),
+            (signal) => capturePreview(resource.url, signal, repairPreview),
           );
           previewUpdatedAt = checkedAt;
           previewRefreshed = true;

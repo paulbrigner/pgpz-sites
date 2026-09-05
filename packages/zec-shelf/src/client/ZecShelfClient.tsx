@@ -84,6 +84,23 @@ function fallbackPreview(resource: ZecShelfResource, config: ZecShelfClientConfi
   return fallback && canonicalUrl(fallback.url) === canonicalUrl(resource.url) ? fallback.src : null;
 }
 
+function ResourcePreview({ primary, fallback, title }: { primary: string | null; fallback: string | null; title: string }) {
+  const [failedSources, setFailedSources] = useState<string[]>([]);
+  const preview = [primary, fallback].find((source) => source && !failedSources.includes(source));
+  return preview ? (
+    <Image
+      src={preview}
+      alt=""
+      fill
+      sizes="(min-width: 768px) 208px, 100vw"
+      className="object-cover transition duration-300 group-hover:scale-[1.02]"
+      onError={() => setFailedSources((failed) => [...failed, preview])}
+    />
+  ) : (
+    <span className="flex h-full items-center justify-center bg-[linear-gradient(145deg,var(--zec-shelf-ink),var(--zec-shelf-secondary))] text-4xl font-semibold text-[var(--zec-shelf-accent-soft)]" aria-hidden="true">{title.slice(0, 1).toUpperCase()}</span>
+  );
+}
+
 function FeatureButton({
   variant = "default",
   size = "default",
@@ -532,7 +549,6 @@ export function ZecShelfClient({
           <div className="mt-5 space-y-4">
             {visible.map((resource) => {
               const actualIndex = resources.findIndex((item) => item.id === resource.id);
-              const preview = resource.previewUrl || fallbackPreview(resource, config);
               const state = STATE_COPY[resource.checkState];
               return (
                 <article
@@ -556,11 +572,12 @@ export function ZecShelfClient({
                   ) : null}
 
                   <a href={resource.url} target="_blank" rel="noreferrer" className="group relative block aspect-[8/5] overflow-hidden rounded-xl border border-slate-200 bg-[var(--zec-shelf-ice)]" aria-label={`Open ${resource.title}`}>
-                    {preview ? (
-                      <Image src={preview} alt="" fill sizes="(min-width: 768px) 208px, 100vw" className="object-cover transition duration-300 group-hover:scale-[1.02]" />
-                    ) : (
-                      <span className="flex h-full items-center justify-center bg-[linear-gradient(145deg,var(--zec-shelf-ink),var(--zec-shelf-secondary))] text-4xl font-semibold text-[var(--zec-shelf-accent-soft)]" aria-hidden="true">{resource.title.slice(0, 1).toUpperCase()}</span>
-                    )}
+                    <ResourcePreview
+                      key={JSON.stringify([resource.url, resource.previewUrl, resource.previewUpdatedAt])}
+                      primary={resource.previewUrl}
+                      fallback={fallbackPreview(resource, config)}
+                      title={resource.title}
+                    />
                   </a>
 
                   <div className="min-w-0 self-center">

@@ -81,6 +81,37 @@ describe("ZecShelfClient contract", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
+
+  it("falls back from a failed capture to the matching bundled preview, then to an initial", () => {
+    const { container } = render(<ZecShelfClient initialResources={[{ ...RESOURCE, previewUrl: "/expired.jpg" }]} isAdmin={false} config={CONFIG} />);
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("expired.jpg");
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("previews%2Fresource.png");
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("R")).toBeInTheDocument();
+  });
+
+  it("does not show a bundled image for a different URL after a capture fails", () => {
+    const { container } = render(<ZecShelfClient initialResources={[{ ...RESOURCE, url: "https://changed.example/", previewUrl: "/expired.jpg" }]} isAdmin={false} config={CONFIG} />);
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("R")).toBeInTheDocument();
+  });
+
+  it("retries the capture after a refresh even when the service reuses its URL", async () => {
+    const resource = { ...RESOURCE, previewUrl: "/capture.jpg" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ results: [{ id: RESOURCE.id, ok: true, previewRefreshed: true }] }))
+      .mockResolvedValueOnce(Response.json({ resources: [{ ...resource, previewUpdatedAt: "2026-09-05T12:00:00.000Z" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(<ZecShelfClient initialResources={[resource]} isAdmin config={CONFIG} />);
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("previews%2Fresource.png");
+    fireEvent.click(screen.getByRole("button", { name: /^Check$/ }));
+    await waitFor(() => expect(container.querySelector("img")?.getAttribute("src")).toContain("capture.jpg"));
+  });
+
   it("shows all maintenance controls to administrators", () => {
     render(<ZecShelfClient initialResources={[RESOURCE]} isAdmin config={CONFIG} />);
 
