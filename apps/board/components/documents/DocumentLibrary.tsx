@@ -171,7 +171,7 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
   const router = useRouter();
   const focusedDocument = categories.flatMap((category) => category.documents).find((document) => document.documentId === focusDocumentId);
   const focusedCategory = categories.find((category) => category.documents.some((document) => document.documentId === focusDocumentId));
-  const defaultOpen = focusedCategory?.key ?? categories.find((category) => category.key === "brand-trademark")?.key ?? categories[0]?.key ?? "";
+  const defaultOpen = focusedCategory?.key ?? "";
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"active" | "archived">(focusedDocument?.status ?? "active");

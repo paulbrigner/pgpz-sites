@@ -325,6 +325,51 @@ events at a time. Its refresh control repeats the server read without mutating
 the ledger. The integrity status is not page-scoped: every render verifies the
 complete ascending chain and cross-checks it against the stored head.
 
+### Executive-session storage and release
+
+Restricted executive sessions use additive record types in the existing
+`PGPZBoardMeetings` table. No table, GSI, bucket, or backfill is required.
+`EXECUTIVE_SESSION#<id>` partitions retain `META`, immutable
+`REVISION#<version>`, `PARTICIPANT#<access-id>` admission grants,
+`MESSAGE#<time>#<id>`, and `MATERIAL#<time>#<id>` rows. Authorization reads only
+the current viewer's admission grant before loading private metadata.
+Only opaque `EXECUTIVE_SESSION#<id>` pointers and explicitly published
+`EXECUTIVE_REPORT#<id>` summaries live in the ordinary `MEETING#<id>` partition.
+The normal meeting aggregate ignores these private pointers. Private file
+metadata never enters `PGPZBoardDocuments` or its library/meeting indexes.
+Retained bytes use the existing `board/objects/` Object Lock boundary; uploads
+use server-owned staging keys that are never returned to the browser.
+
+Before an explicitly authorized production release, verify current Board
+Amplify variables and compute-role permissions using this runbook's existing
+preflight. Confirm `BOARD_ACCESS_REGISTRY_ENABLED=true`, Board-owned access,
+meetings and audit tables, and Board staging/retained buckets. Before deploying
+the application, apply the reviewed Board backend template through the guarded
+provisioning workflow below: its `ExecutiveSessionReadGuards` statement adds
+`dynamodb:ConditionCheckItem` on only the Board access and meetings tables.
+This read permission lets each transaction reject a concurrently revoked
+actor or changed parent meeting, as described in the
+[AWS transaction IAM documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html).
+No additional write/delete privileges are granted. Verify the live compute
+policy before releasing the app; without this grant session mutations fail
+closed. There is no data migration `--apply` step. Do not send production
+mail as part of validation; this workflow does not generate session email.
+
+Verify admitted director and invited-counsel reads, excluded director and staff
+404s on document/RSC/API requests, authenticated file downloads, closed-session
+write rejection, roster revocation, and explicit reviewed-outcome publication.
+Check that public meeting pages and the document library expose no private
+title, purpose, participant list, discussion, filename, or attachment. The audit
+surface may show opaque identifiers, actor, and action evidence only.
+
+Rollback to an earlier application build hides this workflow while preserving
+all records and objects. Earlier builds have no private material metadata in
+their ordinary vault tables to resolve into download URLs. Restore the feature
+to regain session access; never move private records into ordinary meeting or
+library entities as a rollback workaround. Published outcomes remain retained,
+although older builds do not render them. Infrastructure retention and
+operator permissions remain unchanged; this is a portal authorization boundary.
+
 ### Storage boundaries
 
 - **Staging** — short-lived upload landing zone; lifecycle-expired

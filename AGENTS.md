@@ -74,6 +74,53 @@ tasks. They are evidence or artifacts, not current architecture.
 - Never claim a deployment, migration, or production state from documentation;
   verify the live system in the current task.
 
+## Independent PR review
+
+Every PR, including documentation-only changes, requires review by a separate
+agent before recommending, enabling, or performing a merge. This is an agent
+workflow requirement alongside the validation matrix and CI; it does not
+configure GitHub enforcement or authorize commits, pushes, merges, or deployments.
+
+1. **Prepare the review.** Complete implementation and scope-appropriate checks.
+   Record the PR URL, target branch, and immutable base and head commit SHAs.
+   Delegate to a reviewer that did not author the change, with fresh context
+   and no inherited implementation conversation (`fork_turns: "none"` when
+   using the sub-agent tool). Supply the user's requirements and accepted
+   clarifications, applicable repository guidance, the revisions to compare,
+   and validation results, including failures and skipped checks.
+2. **Review independently.** The reviewer inspects the diff, relevant callers,
+   contracts, and tests against the requirements. Check correctness,
+   regressions, security/privacy, architecture, deployment implications, and
+   missing coverage. Preserve app isolation and intentional parity boundaries.
+   Scale depth to the change; distinguish defects from optional improvements.
+   The reviewer must not edit source, switch the shared worktree, commit, push,
+   merge, deploy, or send production email. Inspect pinned revisions or use an
+   isolated checkout for checks that would interfere with the author's work.
+3. **Return evidence.** Report reviewed base/head SHAs, scope, checks performed,
+   limitations, and findings with severity, file/line references, impact, and
+   supporting evidence. Mark each finding as merge-blocking or advisory, and
+   give an explicit outcome: ready, changes required, or incomplete. Confirmed
+   consequential correctness, regression, security/privacy, or deployment
+   defects block merging. A timeout, unavailable reviewer, partial review, or
+   silence is incomplete, never a passing review.
+4. **Resolve findings.** The author validates findings, fixes confirmed defects,
+   and reruns affected checks. Return fixes and reasoned responses to the
+   reviewer for verification; do not dismiss blocking findings unilaterally.
+   Bring unresolved disagreements or proposed acceptance of a blocking risk
+   to the user. Record advisory items and their disposition without expanding
+   implementation scope automatically.
+5. **Verify the final revisions.** After any head or target-base change, have
+   the reviewer inspect the updated revisions and affected interactions before
+   declaring the PR ready. Immediately before enabling or performing a merge,
+   verify the live PR still matches the reviewed base/head SHAs, required checks
+   pass, and no blocking findings remain unresolved. If a revision changes,
+   repeat this step; do not bypass it with auto-merge or a direct push.
+6. **Report readiness.** Include the reviewer identity, final reviewed SHAs,
+   findings and resolutions, validation results, and remaining limitations in
+   the handoff. Keep this evidence in the task; include it on the PR when
+   authorized. If independent review cannot finish, complete other authorized
+   work and report the merge blocker without claiming readiness.
+
 ## Validation matrix
 
 Run the narrowest checks while iterating, then the required final gate:

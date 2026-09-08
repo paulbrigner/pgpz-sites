@@ -45,9 +45,11 @@ const categories: LibraryCategory[] = [
 ];
 
 describe("DocumentLibrary", () => {
-  it("opens the brand folder but keeps its collections collapsed by default", () => {
+  it("keeps the brand folder and its collections collapsed until opened", () => {
     render(<DocumentLibrary categories={categories} />);
-    expect(screen.getByRole("button", { name: /Brand & Trademark/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Brand & Trademark/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /PGPZ Brand v4/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Brand & Trademark/ }));
     expect(screen.getByRole("button", { name: /PGPZ Brand v4/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("link", { name: "PGPZ Brand Package Checksums — Version 4" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /PGPZ Brand v4/ }));
