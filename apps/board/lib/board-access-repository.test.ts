@@ -99,8 +99,8 @@ describe("Board access repository", () => {
     });
     await repository.execute(mutation, { additionalTransactItems: [{ Put: { TableName: "AuditTable" } }] });
     const transaction = fake.calls.find((call) => call.method === "transactWrite")?.input.TransactItems as unknown[];
-    expect(transaction).toHaveLength(4);
-    expect(transaction[3]).toEqual({ Put: { TableName: "AuditTable" } });
+    expect(transaction).toHaveLength(5);
+    expect(transaction[4]).toEqual({ Put: { TableName: "AuditTable" } });
   });
 
   it("lists through the roster index without scanning", async () => {

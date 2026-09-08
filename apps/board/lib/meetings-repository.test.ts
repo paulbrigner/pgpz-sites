@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BoardMeetingVersionConflictError } from "./meetings";
+import type { BoardAccessRecord } from "./board-access";
 import { createBoardMeetingsRepository } from "./meetings-repository";
 
 type Row = Record<string, unknown>;
@@ -26,7 +27,10 @@ function fakeClient() {
     async transactWrite({ TransactItems }: { TransactItems: Array<Record<string, { Item?: Row; Key?: Row; ConditionExpression?: string; ExpressionAttributeValues?: Row }>> }) {
       for (const entry of TransactItems) {
         const check = entry.ConditionCheck;
-        if (check && !items.has(keyOf(check.Key || {}))) throw { name: "TransactionCanceledException" };
+        if (check) {
+          const current = items.get(keyOf(check.Key || {}));
+          if (!current || (check.ExpressionAttributeValues?.[":revision"] !== undefined && current.revision !== check.ExpressionAttributeValues[":revision"]) || (check.ExpressionAttributeValues?.[":version"] !== undefined && (current.version !== check.ExpressionAttributeValues[":version"] || current.status !== "active"))) throw { name: "TransactionCanceledException" };
+        }
         const put = entry.Put;
         if (!put?.Item) continue;
         const key = keyOf(put.Item);
@@ -39,6 +43,27 @@ function fakeClient() {
       for (const entry of TransactItems) if (entry.Put?.Item) items.set(keyOf(entry.Put.Item), entry.Put.Item);
     },
   };
+}
+
+function rosterFor(client: ReturnType<typeof fakeClient>, voters: { userId: string; name: string; email: string }[]) {
+  const roster = { revision: "roster-1", ready: true, directors: voters.map((voter) => ({ ...voter, status: "active" })) };
+  client.items.set("DIRECTOR_ROSTER#STATE", roster);
+  for (const voter of voters) client.items.set(`ACCESS#${voter.userId}#PROFILE`, { id: voter.userId, name: voter.name, email: voter.email, role: "member", status: "active", version: 1 });
+  return roster;
+}
+async function consentFixture() {
+  const client = fakeClient(), repo = createBoardMeetingsRepository(client, "Meetings");
+  let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z" }));
+  meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Adopt bylaws", motion: "Resolved, the attached bylaws are adopted.", attachments: [{ documentId: "bylaws", versionId: "v3", sequence: 3, title: "Bylaws", fileName: "bylaws.pdf", sha256: "a".repeat(64) }], actorEmail: "chair@pgpz.org" });
+  meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
+  const voters = Array.from({ length: 5 }, (_, i) => ({ userId: `director-${i}`, name: `Director ${i}`, email: `director${i}@example.org` }));
+  const roster = rosterFor(client, voters);
+  meeting = await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: voters, roster, rosterConfirmed: true, actorEmail: "chair@pgpz.org", occurredAt: "2026-09-09T12:00:00Z" });
+  async function sign(i: number, action: "consent" | "withdraw" = "consent", overrides: Partial<Parameters<typeof repo.signAsyncConsent>[0]> = {}) {
+    const detail = (await repo.getMeeting(meeting.id))!;
+    return repo.signAsyncConsent({ meetingId: meeting.id, ballotId: "ballot-1", expectedVersion: detail.meeting.version, contentHash: detail.asyncBallots[0].consent!.contentHash, action, signatureName: voters[i].name, intent: true, accessRecord: client.items.get(`ACCESS#director-${i}#PROFILE`) as unknown as BoardAccessRecord, authenticatedUserId: `auth-${i}`, roster, occurredAt: "2026-09-10T14:00:00Z", ...overrides });
+  }
+  return { client, repo, roster, meeting, sign };
 }
 
 function newMeeting(overrides: Record<string, unknown> = {}) {
@@ -131,50 +156,85 @@ describe("Board meetings repository", () => {
     await expect(repo.changeStatus({ id: meeting.id, expectedVersion: approved.version, status: "closed", actorEmail: "chair@pgpz.org" })).resolves.toMatchObject({ status: "closed" });
   });
 
-  it("runs an asynchronous ballot with a fixed roster, changeable votes, and final aggregate result", async () => {
-    const client = fakeClient();
-    const repo = createBoardMeetingsRepository(client as never, "Meetings");
-    let meeting = await repo.createMeeting(newMeeting({
-      format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z",
-      location: "Ignored", virtualUrl: "https://meet.example.org/ignored",
-    }));
-    expect(meeting).toMatchObject({ format: "asynchronous", location: "", virtualUrl: null });
-    meeting = await repo.upsertAsyncBallot({
-      meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1",
-      title: "Approve the policy", motion: "Resolved, that the policy is approved.",
-      actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z",
-    });
-    meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
-    const voters = [
-      { userId: "director-1", name: "Ada", email: "ADA@example.org" },
-      { userId: "director-2", name: "Grace", email: "grace@example.org" },
-    ];
-    meeting = await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: voters, actorEmail: "chair@pgpz.org", occurredAt: "2026-09-02T12:00:00Z" });
-    let detail = await repo.getMeeting(meeting.id);
-    expect(detail?.asyncBallots[0]).toMatchObject({ status: "open", quorumRequired: 2, approvalRequired: 2 });
-
-    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter: { ...voters[0], email: "ada@example.org" }, occurredAt: "2026-09-10T14:00:00Z" });
-    await expect(repo.closeAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", actorEmail: "chair@pgpz.org", occurredAt: "2026-09-10T15:00:00Z" })).rejects.toThrow(/after the voting deadline/);
-    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "no", voter: voters[1], occurredAt: "2026-09-10T14:05:00Z" });
-    await repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter: voters[1], occurredAt: "2026-09-10T14:10:00Z" });
-    meeting = await repo.closeAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", actorEmail: "chair@pgpz.org", occurredAt: "2026-09-12T21:00:00Z" });
-
-    detail = await repo.getMeeting(meeting.id);
-    expect(detail?.asyncVotes).toHaveLength(2);
-    expect(detail?.asyncBallots[0]).toMatchObject({ status: "closed", result: { yes: 2, no: 0, ballotsCast: 2, quorumMet: true, outcome: "passed" } });
-    expect(detail?.decisions[0]).toMatchObject({ id: "async-ballot-1", outcome: "passed", yes: 2 });
-    expect([...client.items.values()].filter((item) => item.entityType === "ASYNC_VOTE_REVISION")).toHaveLength(3);
+  it("requires five signed consents, retains withdrawals, and adopts atomically on the final signature", async () => {
+    const { repo, client, roster, sign, meeting } = await consentFixture();
+    for (let i = 0; i < 4; i++) await sign(i);
+    expect((await repo.getMeeting(meeting.id))?.decisions).toHaveLength(0);
+    await sign(0, "withdraw");
+    await sign(4);
+    expect((await repo.getMeeting(meeting.id))?.asyncBallots[0].status).toBe("open");
+    const result = await sign(0);
+    expect(result.adopted).toBe(true);
+    const detail = await repo.getMeeting(meeting.id);
+    expect(detail?.asyncBallots[0]).toMatchObject({ status: "closed", approvalRequired: 5, result: { yes: 5, outcome: "passed" } });
+    expect(detail?.decisions).toHaveLength(1);
+    expect(await repo.listConsentReceipts(meeting.id, "ballot-1")).toHaveLength(7);
+    await expect(sign(0, "withdraw")).rejects.toThrow(/completed actions cannot be withdrawn/);
+    await expect(repo.cancelAsyncBallot({ meetingId: meeting.id, ballotId: "ballot-1", expectedVersion: detail!.meeting.version, reason: "Cannot undo adoption", actorEmail: "chair@pgpz.org" })).rejects.toThrow(/only a draft or open/);
+    expect(client.items.get("DIRECTOR_ROSTER#STATE")?.revision).toBe(roster.revision);
   });
 
-  it("rejects asynchronous votes outside the retained voting window", async () => {
-    const repo = createBoardMeetingsRepository(fakeClient() as never, "Meetings");
-    let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z" }));
-    meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Vote", motion: "Resolved.", actorEmail: "chair@pgpz.org" });
-    meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
-    const voter = { userId: "director-1", name: "Ada", email: "ada@example.org" };
-    await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: [voter], actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z" });
-    await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-10T12:59:59Z" })).rejects.toThrow(/not opened/);
-    await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter, occurredAt: "2026-09-12T21:00:00Z" })).rejects.toThrow(/deadline/);
+  it("preserves a legacy draft's identity and contents and requires a new resolution ID", async () => {
+    const { repo, client, meeting } = await consentFixture();
+    const key = `MEETING#${meeting.id}#BALLOT#ballot-1`;
+    const legacy: Row = { ...client.items.get(key), status: "draft" };
+    delete legacy.consentMode; delete legacy.consent; delete legacy.attachments;
+    client.items.set(key, legacy);
+    const input = { meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Replacement", motion: "Replacement", actorEmail: "chair@pgpz.org" };
+    await expect(repo.upsertAsyncBallot(input)).rejects.toThrow(/Legacy ballots are historical/);
+    expect(client.items.get(key)).toEqual(legacy);
+    await repo.upsertAsyncBallot({ ...input, id: "fresh-consent" });
+    expect((await repo.getAsyncBallot(meeting.id, "fresh-consent"))?.consentMode).toBe("unanimous-v1");
+    expect((await repo.getAsyncBallot(meeting.id, "ballot-1"))?.consentMode).toBeUndefined();
+  });
+
+  it("rejects stale signatures and competing final-signature or withdrawal transactions", async () => {
+    const { repo, sign, meeting } = await consentFixture();
+    for (let i = 0; i < 4; i++) await sign(i);
+    const version = (await repo.getMeeting(meeting.id))!.meeting.version;
+    const results = await Promise.allSettled([sign(4, "consent", { expectedVersion: version }), sign(0, "withdraw", { expectedVersion: version })]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const detail = (await repo.getMeeting(meeting.id))!;
+    const current = detail.asyncBallots[0].consent!.receipts.filter((receipt) => receipt.action === "consent");
+    expect(detail.decisions.length).toBe(current.length === 5 ? 1 : 0);
+  });
+
+  it("does not substitute ordinary votes, lower thresholds, mismatched text, or non-directors for signatures", async () => {
+    const { repo, sign, meeting, roster, client } = await consentFixture();
+    await expect(sign(0, "consent", { intent: false })).rejects.toThrow(/intent/);
+    await expect(sign(0, "consent", { contentHash: "different" })).rejects.toThrow(/resolution changed/);
+    const accessRecord = client.items.get("ACCESS#director-0#PROFILE") as unknown as BoardAccessRecord;
+    await expect(sign(0, "consent", { accessRecord: { ...accessRecord, role: "executive-director" } })).rejects.toThrow(/currently active director/);
+    await expect(sign(0, "consent", { accessRecord: { ...accessRecord, id: "outsider" } })).rejects.toThrow(/retained roster/);
+    await expect(repo.castAsyncVote({ meetingId: meeting.id, ballotId: "ballot-1", choice: "yes", voter: roster.directors[0] })).rejects.toThrow(/retired/);
+    await expect(repo.closeAsyncBallot({ meetingId: meeting.id, ballotId: "ballot-1", expectedVersion: meeting.version, actorEmail: "chair@pgpz.org" })).rejects.toThrow(/automatically/);
+    await expect(repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "lowered", title: "Bad", motion: "Bad", quorumRequired: 1, approvalRequired: 1, actorEmail: "chair@pgpz.org" })).rejects.toThrow(/custom thresholds/);
+    await expect(repo.updateMeeting({ id: meeting.id, expectedVersion: meeting.version, format: "live", actorEmail: "chair@pgpz.org" })).rejects.toThrow(/fixed/);
+    await expect(repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Changed", motion: "Changed", actorEmail: "chair@pgpz.org" })).rejects.toThrow(/cannot be edited/);
+  });
+
+  it("pauses signatures when a director is added or removed but permits withdrawal", async () => {
+    const { sign, roster, client } = await consentFixture();
+    await sign(0);
+    client.items.set("DIRECTOR_ROSTER#STATE", { ...roster, revision: "new-roster" });
+    await expect(sign(1)).rejects.toThrow(/updated by another/);
+    await expect(sign(1, "consent", { roster: { ...roster, revision: "new-roster" } })).rejects.toThrow(/roster changed/);
+    await expect(sign(0, "withdraw")).resolves.toMatchObject({ adopted: false, receipt: { action: "withdraw" } });
+  });
+
+  it("enforces the collection window, permits late withdrawal before completion, and never finalizes a majority", async () => {
+    const { repo, sign, meeting } = await consentFixture();
+    await expect(sign(0, "consent", { occurredAt: "2026-09-10T12:59:59Z" })).rejects.toThrow(/window is closed/);
+    await sign(0);
+    await expect(sign(1, "consent", { occurredAt: "2026-09-12T21:00:00Z" })).rejects.toThrow(/window is closed/);
+    await expect(sign(0, "withdraw", { occurredAt: "2026-09-13T00:00:00Z" })).resolves.toMatchObject({ adopted: false });
+    let current = (await repo.getMeeting(meeting.id))!.meeting;
+    await expect(repo.changeStatus({ id: meeting.id, expectedVersion: current.version, status: "completed", actorEmail: "chair@pgpz.org" })).rejects.toThrow(/outstanding resolution/);
+    current = await repo.cancelAsyncBallot({ meetingId: meeting.id, ballotId: "ballot-1", expectedVersion: current.version, reason: "No unanimous consent", actorEmail: "chair@pgpz.org" });
+    current = await repo.changeStatus({ id: meeting.id, expectedVersion: current.version, status: "completed", actorEmail: "chair@pgpz.org" });
+    await expect(repo.recordDecision({ meetingId: meeting.id, expectedVersion: current.version, id: "bypass", agendaItemId: null, title: "Majority", motion: "Approve", mover: null, seconder: null, yes: 4, no: 0, abstain: 1, recused: 0, outcome: "passed", supersedesDecisionId: null, actorEmail: "chair@pgpz.org" })).rejects.toThrow(/automatically/);
+    expect((await repo.getMeeting(meeting.id))?.decisions).toHaveLength(0);
   });
 
   it("retains per-ballot discussion threads, replies, and short-window author edits", async () => {
@@ -185,7 +245,7 @@ describe("Board meetings repository", () => {
     }));
     meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Vote", motion: "Resolved.", actorEmail: "chair@pgpz.org" });
     meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
-    await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: [{ userId: "director-1", name: "Ada", email: "ada@example.org" }], actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z" });
+    await repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, ballotId: "ballot-1", eligibleVoters: [{ userId: "director-1", name: "Ada", email: "ada@example.org" }], roster: rosterFor(client, [{ userId: "director-1", name: "Ada", email: "ada@example.org" }]), rosterConfirmed: true, actorEmail: "chair@pgpz.org", occurredAt: "2026-09-01T12:00:00Z" });
 
     const root = await repo.createAsyncDiscussionMessage({
       meetingId: meeting.id, ballotId: "ballot-1", id: "message-1", body: "Should the effective date move?",

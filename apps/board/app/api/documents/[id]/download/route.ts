@@ -9,6 +9,7 @@ import { s3Client } from "@/lib/s3";
 import { BOARD_DOCUMENTS_RETAINED_BUCKET } from "@/lib/config";
 import { requireBoardPasskeySession } from "@/lib/api-security";
 import { boardDocumentObjectStore, isLocalBoardDocumentStorageEnabled } from "@/lib/object-store";
+import { boardMeetingsRepository } from "@/lib/meetings-repository";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,16 @@ export async function GET(request: NextRequest, context: Params) {
   const requestedVersion = request.nextUrl.searchParams.get("version");
 
   const item = await boardDocumentRepository.getDocument(id);
-  if (!item || (item.status === "archived" && !canManageBoardDocuments(member))) {
+  // An incorporated version remains accessible as part of its consent record
+  // even if the library head is archived after circulation or adoption.
+  let incorporatedVersion = false;
+  const consentMeeting = request.nextUrl.searchParams.get("consentMeeting");
+  const consentBallot = request.nextUrl.searchParams.get("consentBallot");
+  if (item?.status === "archived" && requestedVersion && consentMeeting && consentBallot) {
+    const ballot = await boardMeetingsRepository.getAsyncBallot(consentMeeting, consentBallot);
+    incorporatedVersion = Boolean(ballot?.consent && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion));
+  }
+  if (!item || (item.status === "archived" && !canManageBoardDocuments(member) && !incorporatedVersion)) {
     return new Response(null, { status: 404 });
   }
 

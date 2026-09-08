@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { readDirectorRoster } from "@/lib/director-roster";
 import { boardAccessRepository } from "@/lib/board-access-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
 import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
@@ -112,10 +113,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     : null;
   if (requestedKind === "vote-reminder") {
     if (meeting.format !== "asynchronous" || !ballot || boardAsyncBallotEffectiveStatus(ballot, meeting) !== "open") {
-      return NextResponse.json({ error: "Vote reminders are available only while this ballot is accepting votes." }, { status: 409 });
+      return NextResponse.json({ error: "Consent reminders are available only while this resolution is accepting consents." }, { status: 409 });
     }
   }
-  const voted = new Set(detail.asyncVotes.filter((vote) => vote.ballotId === ballot?.id).map((vote) => vote.voterEmail));
+  if (ballot && (!ballot.consent || (await readDirectorRoster())?.revision !== ballot.consent.rosterRevision)) {
+    return NextResponse.json({ error: "Consent reminders are paused because this collection is legacy or its director roster changed." }, { status: 409 });
+  }
+  const voted = new Set(ballot?.consent?.receipts.filter((receipt) => receipt.action === "consent").map((receipt) => receipt.email) || []);
   const eligible = ballot ? new Set(ballot.eligibleVoters.map((voter) => voter.email)) : null;
   const recipients = roster.records
     .filter((record) => !eligible || (eligible.has(record.email) && !voted.has(record.email)))

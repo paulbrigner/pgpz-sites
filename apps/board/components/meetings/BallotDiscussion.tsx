@@ -116,7 +116,7 @@ export function BallotDiscussion({
         </div>
         <button type="button" onClick={() => router.refresh()} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--muted)]"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Refresh</button>
       </div>
-      <p className="mt-2 text-xs leading-5 text-[var(--muted)]">Messages and edits are retained as governance records. Discussion is separate from the private ballot.</p>
+      <p className="mt-2 text-xs leading-5 text-[var(--muted)]">Messages and edits are retained as governance records. Discussion does not constitute a signed consent.</p>
 
       {roots.length ? (
         <div className="mt-3 divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-4">
@@ -138,7 +138,7 @@ export function BallotDiscussion({
           </button>
         </form>
       ) : discussionOpen ? <p className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--muted)]">Your role has read-only access to this discussion.</p>
-        : <p className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--muted)]">{ballot.effectiveStatus === "scheduled" ? "Discussion opens with the voting window." : "Discussion is closed and preserved with the meeting record."}</p>}
+        : <p className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--muted)]">{ballot.effectiveStatus === "scheduled" ? "Discussion opens with the consent collection window." : "Discussion is closed and preserved with the meeting record."}</p>}
       {notice ? <p role="status" className="mt-3 text-xs font-semibold text-[var(--foreground)]">{notice}</p> : null}
     </section>
   );

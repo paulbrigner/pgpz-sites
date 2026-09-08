@@ -127,6 +127,9 @@ export interface BoardAsyncBallotResult {
 }
 
 export interface BoardAsyncBallot {
+  readonly consentMode?: "unanimous-v1";
+  readonly attachments?: readonly import("./written-consents").ConsentAttachment[];
+  readonly consent?: import("./written-consents").WrittenConsent | null;
   readonly id: string;
   readonly meetingId: string;
   readonly agendaItemId: string | null;
@@ -190,8 +193,8 @@ export function boardAsyncBallotEffectiveStatus(
   now = new Date().toISOString(),
 ): BoardAsyncBallotEffectiveStatus {
   if (ballot.status !== "open") return ballot.status;
-  if (now < meeting.startAt) return "scheduled";
-  if (now >= meeting.endAt) return "awaiting-finalization";
+  if (now < (ballot.consent?.startAt || meeting.startAt)) return "scheduled";
+  if (now >= (ballot.consent?.endAt || meeting.endAt)) return "awaiting-finalization";
   return "open";
 }
 

@@ -78,21 +78,21 @@ export function MeetingForm({ meeting }: { meeting?: MeetingSummaryView }) {
         Meeting format
         <select name="format" value={format} onChange={(event) => setFormat(event.target.value as MeetingFormat)} className={fieldClass}>
           <option value="live">Live meeting</option>
-          <option value="asynchronous">Asynchronous written resolution</option>
+          <option value="asynchronous">Asynchronous unanimous written consent</option>
         </select>
-        <span className="mt-2 block text-xs font-normal leading-5 text-[var(--muted)]">{format === "asynchronous" ? "Directors review materials and cast authenticated votes during a defined window; no video or physical meeting is required." : "Directors convene at a scheduled time, in person or online."}</span>
+        <span className="mt-2 block text-xs font-normal leading-5 text-[var(--muted)]">{format === "asynchronous" ? "Action without a meeting: every director must electronically sign and deliver consent to each resolution. Discussion or agreement to the process does not adopt an action." : "Directors convene at a scheduled time, in person or online."}</span>
       </label>
       <label className="text-sm font-semibold text-[var(--foreground)]">
         Purpose or description
         <textarea name="description" rows={3} maxLength={1200} defaultValue={meeting?.description} placeholder="What the Board will cover and what members should prepare for" className={fieldClass} />
       </label>
-      <label className="text-sm font-semibold text-[var(--foreground)]">
-        {format === "asynchronous" ? "Default participating directors required for quorum" : "Directors required for quorum"} <span className="font-normal text-[var(--muted)]">(optional)</span>
+      {format === "live" && <label className="text-sm font-semibold text-[var(--foreground)]">
+        Directors required for quorum <span className="font-normal text-[var(--muted)]">(optional)</span>
         <input name="quorumRequired" type="number" min="1" max="100" defaultValue={meeting?.quorumRequired || ""} placeholder="Set from the bylaws" className={fieldClass} />
-      </label>
+      </label>}
       <div className="grid gap-5 sm:grid-cols-2">
-        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Voting opens" : "Starts"}<input name="startAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.startAt)} className={fieldClass} /></label>
-        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Voting closes" : "Ends"}<input name="endAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.endAt)} className={fieldClass} /></label>
+        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Consent collection opens" : "Starts"}<input name="startAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.startAt)} className={fieldClass} /></label>
+        <label className="text-sm font-semibold text-[var(--foreground)]">{format === "asynchronous" ? "Consent collection closes" : "Ends"}<input name="endAt" type="datetime-local" required defaultValue={localDateTimeValue(meeting?.endAt)} className={fieldClass} /></label>
       </div>
       <label className="text-sm font-semibold text-[var(--foreground)]">
         Time zone

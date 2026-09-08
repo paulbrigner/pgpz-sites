@@ -34,7 +34,7 @@ export function MeetingLifecycleControls({ meeting, capabilities, deliveryCount,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting.status]);
   const transition = nextStatus[meeting.status];
-  const asyncTransitionLabels: Partial<Record<MeetingStatus, string>> = { scheduled: "Publish voting materials", "materials-published": "Complete written resolutions", completed: "Close meeting record", draft: "Schedule voting window" };
+  const asyncTransitionLabels: Partial<Record<MeetingStatus, string>> = { scheduled: "Publish consent materials", "materials-published": "Complete consent workspace", completed: "Close meeting record", draft: "Schedule consent collection" };
   const transitionLabel = meeting.format === "asynchronous" && transition
     ? asyncTransitionLabels[meeting.status] || transition.label
     : transition?.label;
