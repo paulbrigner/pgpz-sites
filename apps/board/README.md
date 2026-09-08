@@ -372,6 +372,34 @@ Production email uses the Board-specific SES identity through the Amplify
 compute role. Local development uses MailHog SMTP; no production SMTP password
 or static AWS credential is supported.
 
+## Individual conflict disclosures
+
+`/disclosures` provides Board-owned annual and matter-specific forms, individual
+passkey-backed electronic signatures, private drafts, immutable signed
+amendments, and a completion register. The Chair assigns requests to directors,
+the Executive Director, or other covered portal users; active users can also
+start their own request. Invited users may be assigned and emailed before their
+first login. The subject, explicitly assigned reviewing director, and invited
+counsel are the only readers of submitted content; administrative roles have no
+override. Only the subject sees drafts. A director must record completion of
+review, and nobody can review their own disclosure.
+
+`lib/disclosures-service.ts` checks current access and content-free admission
+before loading private records. `lib/disclosures-repository.ts` stores them in
+separate retained Board meetings-table partitions, outside ordinary meeting and
+document-library indexes. Mutations guard the current request and access-record
+versions and atomically append audit evidence without private text. Signed
+records bind the exact policy version, canonical form, acknowledgment,
+authenticated identity, delivery timestamp, and previous signed digest. Policy
+downloads and printable/JSON exports require current admission. Amendments and
+review notes are retained; reassignment revokes removed reviewers and resets
+review status. Manual reminders use the Board email transport with persisted
+attempt/result records and no sensitive contents or attachments.
+
+Read [Board disclosures](../../docs/board-disclosures.md) for the Chair and
+signer steps, private review, recusal routing, and records handling. The flow
+does not approve conflicted transactions or automatically gate meetings.
+
 ## Validation and deployment
 
 ```bash

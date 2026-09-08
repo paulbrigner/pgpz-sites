@@ -1,0 +1,22 @@
+import { NextRequest } from "next/server";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { contentDisposition } from "@pgpz/document-vault/server";
+import { disclosureApi } from "@/lib/disclosures-api";
+import { requireDisclosureAccess } from "@/lib/disclosures-service";
+import { DisclosureError } from "@/lib/disclosures";
+import { boardDocumentRepository } from "@/lib/vault";
+import { boardDocumentObjectStore, computeSha256 } from "@/lib/object-store";
+import { s3Client } from "@/lib/s3";
+import { BOARD_DOCUMENTS_RETAINED_BUCKET } from "@/lib/config";
+type Context = { params: Promise<{ id: string }> };
+export const runtime = "nodejs";
+export const GET = (request: NextRequest, context: Context) => disclosureApi(request, false, async (member) => {
+  const id = (await context.params).id;
+  const { request: disclosure } = await requireDisclosureAccess(member, id);
+  const version = (await boardDocumentRepository.listVersions(disclosure.policy.documentId)).find((candidate) => candidate.versionId === disclosure.policy.versionId);
+  if (!version || version.sha256 !== disclosure.policy.sha256) throw new DisclosureError(409, "The incorporated policy version could not be verified.");
+  const bytes = boardDocumentObjectStore.readRetained ? (await boardDocumentObjectStore.readRetained(version.objectKey)).bytes : await (await s3Client.send(new GetObjectCommand({ Bucket: BOARD_DOCUMENTS_RETAINED_BUCKET, Key: version.objectKey }))).Body!.transformToByteArray();
+  if (computeSha256(bytes) !== disclosure.policy.sha256) throw new DisclosureError(409, "The policy failed integrity verification.");
+  await requireDisclosureAccess(member, id);
+  return new Response(new Uint8Array(bytes), { headers: { "Content-Type": version.mimeType, "Content-Disposition": contentDisposition({ mimeType: version.mimeType, originalFileName: version.originalFileName }), "Cache-Control": "private, no-store", Vary: "Cookie", "X-Content-Type-Options": "nosniff" } });
+});

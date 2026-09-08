@@ -405,6 +405,48 @@ failures are retried by the DynamoDB event-source mapping. The Amplify compute
 role cannot read from or write to this archive.
 
 
+## Disclosure storage and release
+
+The Board-specific disclosure flow is additive within the existing retained
+Board meetings table. `DISCLOSURE#<id>` partitions contain content-free
+`ADMISSION`, immutable `REVISION#` snapshots of admission/status, a replaceable
+subject-only `DRAFT`, and immutable `EVENT#` signed submissions/review/routing/
+notification records. `DISCLOSURE_REGISTER` and `ACCESS_DISCLOSURES#<access-id>`
+contain opaque request IDs only. Stale personal pointers never grant admission.
+`DISCLOSURE_ANNUAL#<access-id>#<year>` enforces one annual request per policy
+document/version. No disclosure rows enter meeting, timeline, library, or
+document search indexes. No new table, GSI, TTL, environment variable, S3
+retention rule, or IAM privilege is required. Drafts may be overwritten;
+submitted forms and private review history have no deletion path.
+
+The access registry must be enabled. Current identity/status and reviewer roles
+are checked on reads and transactionally guarded on writes. The admission
+version serializes drafting, signing, review, routing, and reminder claims.
+Audit appends are in the same transaction and contain only action, authenticated
+actor, opaque request ID, and integrity reference, never answers, private matter
+text, review notes, or recipient lists. The signed content and policy use
+canonical hashes; no new legal-document retention settings are introduced.
+
+Before deployment, obtain explicit release authorization and complete the
+normal independent review and live Board account/branch/environment preflight.
+Verify the retained meetings/access/audit resources and Board compute role are
+the intended ones; follow the existing guarded infrastructure process if any
+drift requires a change. No production migration or data backfill is needed.
+Do not seed, sign, review, or send real disclosure reminders during validation.
+
+Run Board tests/typecheck/build, repository checks, infrastructure tests, and
+targeted local browser checks for subject, reviewing director, invited counsel,
+excluded director, Chair without admission, and Executive Director. Verify
+denial before private content loads, subject-only drafts, signature integrity,
+retained amendments, stale request/access guards, independent routing, status-only
+registers, archived policy access, and escaped restricted exports. Exercise
+email only against local MailHog or mocked delivery. After an authorized release,
+verify the deployed revision and authenticated `/disclosures` entry without
+creating synthetic production records. Older app versions will not surface the
+new partitions; a rollback must not discard retained disclosure rows.
+
+See [the workflow guide](board-disclosures.md) for actual assignments and use.
+
 ## Unanimous written consent release
 
 This additive Board-only schema introduces `DIRECTOR_ROSTER / STATE` in the
