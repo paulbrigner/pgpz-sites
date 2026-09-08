@@ -14,6 +14,7 @@ export type LibraryDocument = Readonly<{
   collectionLabel: string | null;
   role: LibraryDocumentRole;
   typeLabel: string;
+  fileType: string;
   versionLabel: string;
   updatedAt: string;
   byteLength: number;
@@ -68,8 +69,11 @@ function roleForTitle(title: string): LibraryDocumentRole {
 
 function typeLabel(document: DocumentItem, role: LibraryDocumentRole) {
   if (role !== "document") return role.charAt(0).toUpperCase() + role.slice(1);
-  const extension = document.currentVersion.originalFileName.split(".").pop();
-  return extension ? extension.toUpperCase() : "File";
+  return fileType(document);
+}
+
+function fileType(document: DocumentItem) {
+  return document.currentVersion.originalFileName.match(/\.([^.]+)$/)?.[1].toUpperCase() ?? "Other";
 }
 
 function versionLabel(document: DocumentItem) {
@@ -99,6 +103,7 @@ export function buildDocumentLibrary(
       collectionLabel: collection?.label ?? null,
       role,
       typeLabel: typeLabel(document, role),
+      fileType: fileType(document),
       versionLabel: versionLabel(document),
       updatedAt: document.updatedAt,
       byteLength: document.currentVersion.byteLength,
