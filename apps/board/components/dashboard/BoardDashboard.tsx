@@ -22,6 +22,12 @@ const memberResources = [
     body: "Upcoming meetings, agendas, preparation materials, decisions, and minutes",
   },
   {
+    href: "/disclosures",
+    icon: ShieldCheck,
+    title: "Conflict disclosures",
+    body: "Individual acknowledgments, private disclosures, and restricted review",
+  },
+  {
     href: "/account/security",
     icon: KeyRound,
     title: "Sign-in security",

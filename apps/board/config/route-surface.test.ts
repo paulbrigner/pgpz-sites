@@ -51,7 +51,7 @@ describe("private board feature surface", () => {
     expect(existsSync(path.join(appRoot, "api", "admin", "audit", "route.ts"))).toBe(true);
   });
 
-  it("exposes only the Better Auth, administration, document vault, and meeting API routes", () => {
+  it("exposes only the Better Auth, administration, document vault, disclosures, and meeting API routes", () => {
     const routes = findRouteHandlers(apiRoot).map((route) =>
       path.relative(appRoot, route).split(path.sep).join("/"),
     );
@@ -63,6 +63,11 @@ describe("private board feature surface", () => {
       "api/documents/[id]/download/route.ts",
       "api/documents/local-upload/[operationId]/route.ts",
       "api/documents/route.ts",
+      "api/disclosures/route.ts",
+      "api/disclosures/[id]/route.ts",
+      "api/disclosures/[id]/record/route.ts",
+      "api/disclosures/[id]/policy/route.ts",
+      "api/disclosures/[id]/reminder/route.ts",
       "api/meetings/[id]/calendar/route.ts",
       "api/meetings/[id]/ballots/[ballotId]/record/route.ts",
       "api/meetings/[id]/ballots/route.ts",
