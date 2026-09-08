@@ -91,7 +91,13 @@ The full `/documents` surface groups records into Board-owned category folders
 and uses the curated brand registry to present packages, guidelines, manifests,
 and checksums as related document collections. Category folders and collections
 start collapsed; a direct link to a document opens its containing folder and
-collection, and search expands matching results. These relationships are presentation metadata
+collection. Search and category, collection, or file-type filters expand matching
+results. Filters combine with keyword search, show a matching document count,
+and can be cleared back to the active library. File type reflects the current
+retained file, independently of its display name or brand-package role.
+Active documents are the default. Document managers can choose Active, Archived,
+or All documents; directors continue to receive active records only, including
+in filter options and counts. These relationships are presentation metadata
 only; every row still downloads the authoritative retained vault record and
 generates the same audited read event.
 

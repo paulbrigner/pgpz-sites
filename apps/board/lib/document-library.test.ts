@@ -27,6 +27,18 @@ describe("Board document library presentation", () => {
     expect(brand?.documents.find((item) => item.documentId === "checksums")?.role).toBe("checksum");
   });
 
+  it("derives file formats from the current retained filename independently of display names and roles", () => {
+    const packageDocument = document({ documentId: "package", title: "PGPZ Brand Package — Symbol as Z — Version 4", displayName: "Identity assets.pdf", category: "brand-trademark" });
+    const noExtension = document({ documentId: "other", title: "Notes", category: "governance" });
+    const categories = buildDocumentLibrary([
+      { ...packageDocument, currentVersion: { ...packageDocument.currentVersion, originalFileName: "identity.bundle.ZiP" } },
+      { ...noExtension, currentVersion: { ...noExtension.currentVersion, originalFileName: "README" } },
+    ]);
+    const items = categories.flatMap((category) => category.documents);
+    expect(items.find((item) => item.documentId === "package")).toMatchObject({ fileType: "ZIP", typeLabel: "Package", collectionId: "pgpz-brand-v4" });
+    expect(items.find((item) => item.documentId === "other")?.fileType).toBe("Other");
+  });
+
   it("keeps unknown app-owned categories visible with a readable label", () => {
     const categories = buildDocumentLibrary([document({ documentId: "minutes", title: "August minutes", category: "meeting-minutes" })]);
     expect(categories[0]).toMatchObject({ key: "meeting-minutes", label: "Meeting Minutes" });

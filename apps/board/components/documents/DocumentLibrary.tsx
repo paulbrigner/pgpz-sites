@@ -21,7 +21,7 @@ function formatDate(value: string) {
 }
 
 function includesQuery(document: LibraryDocument, query: string) {
-  return [document.title, document.description, document.categoryLabel, document.collectionLabel ?? "", document.role, document.typeLabel]
+  return [document.title, document.description, document.categoryLabel, document.collectionLabel ?? "", document.role, document.typeLabel, document.fileType]
     .join(" ").toLowerCase().includes(query);
 }
 
@@ -148,7 +148,7 @@ function DocumentRow({
   );
 }
 
-function CategoryDocuments({ documents, focusDocumentId, showFocusedHistory, searchActive, management }: { documents: ReadonlyArray<LibraryDocument>; focusDocumentId?: string; showFocusedHistory: boolean; searchActive: boolean; management?: ManagementActions }) {
+function CategoryDocuments({ documents, focusDocumentId, showFocusedHistory, expandMatches, management }: { documents: ReadonlyArray<LibraryDocument>; focusDocumentId?: string; showFocusedHistory: boolean; expandMatches: boolean; management?: ManagementActions }) {
   const collectionIds = ([...new Set(documents.map((document) => document.collectionId).filter(Boolean))] as string[]).sort();
   const focusedCollection = documents.find((document) => document.documentId === focusDocumentId)?.collectionId;
   const [openCollections, setOpenCollections] = useState<Set<string>>(() => new Set(focusedCollection ? [focusedCollection] : []));
@@ -160,11 +160,27 @@ function CategoryDocuments({ documents, focusDocumentId, showFocusedHistory, sea
     <div className="border-t border-[var(--border)] bg-[var(--primary-soft)]/20 pb-3">
       <div className="hidden grid-cols-[minmax(22rem,1fr)_9rem_6rem_6rem_7rem_5rem_4.5rem] gap-4 px-9 py-3 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--muted)] lg:grid"><span>Name</span><span>Collection</span><span>Type</span><span>Versions</span><span>Updated</span><span>Size</span><span className="sr-only">Actions</span></div>
       <ul className="space-y-2 px-3">
-        {collectionIds.map((collectionId) => { const bundled = documents.filter((document) => document.collectionId === collectionId).sort((left, right) => roleOrder[left.role] - roleOrder[right.role]); const isOpen = searchActive || openCollections.has(collectionId); const panelId = `document-collection-${collectionId}`; return <li key={collectionId} className="overflow-hidden rounded-xl border border-[var(--border)] bg-white/75"><button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggleCollection(collectionId)} className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-5"><Package className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" /><span className="flex-1"><span className="block font-semibold text-[var(--foreground)]">{bundled[0]?.collectionLabel}</span><span className="block text-xs text-[var(--muted)]">{bundled.length} related files</span></span><ChevronDown className={`h-4 w-4 text-[var(--primary)] transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" /></button>{isOpen ? <ul id={panelId} className="ml-4 border-l-2 border-[var(--accent-border)] sm:ml-7">{bundled.map((document) => <DocumentRow key={document.documentId} document={document} nested focused={document.documentId === focusDocumentId} showHistory={showFocusedHistory} management={management} />)}</ul> : null}</li>; })}
+        {collectionIds.map((collectionId) => { const bundled = documents.filter((document) => document.collectionId === collectionId).sort((left, right) => roleOrder[left.role] - roleOrder[right.role]); const isOpen = expandMatches || openCollections.has(collectionId); const panelId = `document-collection-${collectionId}`; return <li key={collectionId} className="overflow-hidden rounded-xl border border-[var(--border)] bg-white/75"><button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggleCollection(collectionId)} className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-5"><Package className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" /><span className="flex-1"><span className="block font-semibold text-[var(--foreground)]">{bundled[0]?.collectionLabel}</span><span className="block text-xs text-[var(--muted)]">{bundled.length} related files</span></span><ChevronDown className={`h-4 w-4 text-[var(--primary)] transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" /></button>{isOpen ? <ul id={panelId} className="ml-4 border-l-2 border-[var(--accent-border)] sm:ml-7">{bundled.map((document) => <DocumentRow key={document.documentId} document={document} nested focused={document.documentId === focusDocumentId} showHistory={showFocusedHistory} management={management} />)}</ul> : null}</li>; })}
         {standalone.length > 0 ? <li className="overflow-hidden rounded-xl border border-[var(--border)]"><ul>{standalone.map((document) => <DocumentRow key={document.documentId} document={document} focused={document.documentId === focusDocumentId} showHistory={showFocusedHistory} management={management} />)}</ul></li> : null}
       </ul>
     </div>
   );
+}
+
+function LibraryFilter({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}) {
+  return <label className="relative block min-w-0">
+    <span className="sr-only">{label}</span>
+    <Filter className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" />
+    <select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[var(--border-strong)] bg-white/90 pl-11 pr-10 text-sm font-semibold text-[var(--foreground)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus)]">
+      {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+    <ChevronDown className="pointer-events-none absolute right-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" />
+  </label>;
 }
 
 export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistory = false, canManage = false }: { categories: ReadonlyArray<LibraryCategory>; focusDocumentId?: string; showFocusedHistory?: boolean; canManage?: boolean }) {
@@ -174,13 +190,45 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
   const defaultOpen = focusedCategory?.key ?? "";
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"active" | "archived">(focusedDocument?.status ?? "active");
+  const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">(focusedDocument?.status ?? "active");
+  const [collectionFilter, setCollectionFilter] = useState("all");
+  const [fileTypeFilter, setFileTypeFilter] = useState("all");
   const [showNewDocument, setShowNewDocument] = useState(false);
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => new Set(defaultOpen ? [defaultOpen] : []));
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleCategories = useMemo(() => categories.filter((category) => categoryFilter === "all" || category.key === categoryFilter).map((category) => ({ ...category, documents: category.documents.filter((document) => (!canManage || document.status === statusFilter) && (!normalizedQuery || includesQuery(document, normalizedQuery))) })).filter((category) => category.documents.length > 0), [canManage, categories, categoryFilter, normalizedQuery, statusFilter]);
+  // The server also excludes archived records for non-managers. Keep filter
+  // options and result counts within that same visibility boundary.
+  const accessibleCategories = useMemo(() => categories.map((category) => ({
+    ...category,
+    documents: category.documents.filter((document) => canManage || document.status === "active"),
+  })).filter((category) => category.documents.length > 0), [canManage, categories]);
+  const accessibleDocuments = useMemo(() => accessibleCategories.flatMap((category) => category.documents), [accessibleCategories]);
+  const collections = useMemo(() => [...new Map(accessibleDocuments
+    .filter((document) => document.collectionId !== null)
+    .map((document) => [document.collectionId!, document.collectionLabel ?? document.collectionId!])).entries()]
+    .sort(([, left], [, right]) => left.localeCompare(right)), [accessibleDocuments]);
+  // Retain a selected format if a version refresh leaves it with no matches.
+  const fileTypes = useMemo(() => [...new Set([
+    ...accessibleDocuments.map((document) => document.fileType),
+    ...(fileTypeFilter === "all" ? [] : [fileTypeFilter]),
+  ])].sort(), [accessibleDocuments, fileTypeFilter]);
+  const expandMatches = Boolean(normalizedQuery) || categoryFilter !== "all" || collectionFilter !== "all" || fileTypeFilter !== "all";
+  const hasFilters = expandMatches || (canManage && statusFilter !== "active");
+  const visibleCategories = useMemo(() => accessibleCategories
+    .filter((category) => categoryFilter === "all" || category.key === categoryFilter)
+    .map((category) => ({ ...category, documents: category.documents.filter((document) =>
+      (!canManage || statusFilter === "all" || document.status === statusFilter)
+      && (collectionFilter === "all" || (collectionFilter === "none" ? document.collectionId === null : document.collectionId === collectionFilter))
+      && (fileTypeFilter === "all" || document.fileType === fileTypeFilter)
+      && (!normalizedQuery || includesQuery(document, normalizedQuery))) }))
+    .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, normalizedQuery, statusFilter]);
+  const resultCount = visibleCategories.reduce((total, category) => total + category.documents.length, 0);
+
+  function clearFilters() {
+    setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active");
+  }
 
   async function uploadToStaging(file: File) {
     const prepared = await documentMutation({ action: "prepareUpload" }) as { stagingKey: string; uploadUrl: string };
@@ -230,12 +278,34 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
       {canManage ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white/72 px-4 py-3 sm:px-5"><div><p className="text-sm font-semibold text-[var(--foreground)]">Document management</p><p className="text-xs text-[var(--muted)]">Your role can add documents, publish versions, and manage archived records.</p></div><button type="button" aria-expanded={showNewDocument} onClick={() => setShowNewDocument((current) => !current)} className={buttonStyles({ size: "sm" })}><Plus className="h-4 w-4" aria-hidden="true" />Add document</button></div> : null}
       {canManage && showNewDocument ? <NewDocumentPanel busy={busyDocumentId === "new"} onCreate={createDocument} /> : null}
       {message ? <p role="status" className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--foreground)]">{message}</p> : null}
-      <div className={`mt-3 grid gap-3 ${canManage ? "md:grid-cols-[minmax(0,1fr)_13rem_11rem]" : "md:grid-cols-[minmax(0,1fr)_15rem]"}`}>
+      <div className={`mt-3 grid gap-3 ${canManage ? "md:grid-cols-[minmax(0,1fr)_15rem]" : ""}`}>
         <label className="relative block"><span className="sr-only">Search documents</span><Search className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents by name, keyword, or description" className="h-11 w-full rounded-xl border border-[var(--border-strong)] bg-white/90 pl-11 pr-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus)]" /></label>
-        <label className="relative block"><span className="sr-only">Filter by category</span><Filter className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" /><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-11 w-full appearance-none rounded-xl border border-[var(--border-strong)] bg-white/90 pl-11 pr-10 text-sm font-semibold text-[var(--foreground)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus)]"><option value="all">All categories</option>{categories.map((category) => <option key={category.key} value={category.key}>{category.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" /></label>
-        {canManage ? <label className="relative block"><span className="sr-only">Filter by document status</span><Archive className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "active" | "archived")} className="h-11 w-full appearance-none rounded-xl border border-[var(--border-strong)] bg-white/90 pl-11 pr-10 text-sm font-semibold text-[var(--foreground)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--focus)]"><option value="active">Active documents</option><option value="archived">Archived documents</option></select><ChevronDown className="pointer-events-none absolute right-4 top-3.5 h-4 w-4 text-[var(--muted)]" aria-hidden="true" /></label> : null}
+        {canManage ? <LibraryFilter label="Filter by document status" value={statusFilter} onChange={(value) => setStatusFilter(value as typeof statusFilter)} options={[
+          { value: "active", label: "Active documents" },
+          { value: "archived", label: "Archived documents" },
+          { value: "all", label: "All documents" },
+        ]} /> : null}
       </div>
-      {visibleCategories.length === 0 ? <div className="mt-4 rounded-2xl border border-[var(--border)] bg-white/82 p-8 text-center"><Search className="mx-auto h-6 w-6 text-[var(--muted)]" aria-hidden="true" /><p className="mt-3 font-semibold text-[var(--foreground)]">{canManage && statusFilter === "archived" ? "No archived documents." : "No documents match these filters."}</p><button type="button" onClick={() => { setQuery(""); setCategoryFilter("all"); setStatusFilter("active"); }} className="mt-2 text-sm font-semibold text-[var(--primary)] underline underline-offset-4">Clear filters</button></div> : <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-white/82 shadow-[0_26px_70px_-52px_rgba(15,23,42,0.5)]">{visibleCategories.map((category) => { const Icon = categoryIcons[category.key as keyof typeof categoryIcons] ?? Folder; const isOpen = normalizedQuery.length > 0 || openCategories.has(category.key); const panelId = `library-category-${category.key}`; return <section key={category.key} className="border-t border-[var(--border)] first:border-t-0"><button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggleCategory(category.key)} className="flex w-full items-center gap-4 px-4 py-2.5 text-left transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-6"><Icon className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden="true" /><span className="min-w-0 flex-1"><span className="block font-semibold text-[var(--foreground)]">{category.label}</span><span className="block text-xs leading-5 text-[var(--muted)] sm:text-sm">{category.description}</span></span><span className="shrink-0 text-xs text-[var(--muted)] sm:text-sm">{category.documents.length} {category.documents.length === 1 ? "document" : "documents"}</span><ChevronDown className={`h-4 w-4 shrink-0 text-[var(--primary)] transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" /></button>{isOpen ? <div id={panelId}><CategoryDocuments documents={category.documents} focusDocumentId={focusDocumentId} showFocusedHistory={showFocusedHistory} searchActive={normalizedQuery.length > 0} management={management} /></div> : null}</section>; })}</div>}
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <LibraryFilter label="Filter by category" value={categoryFilter} onChange={setCategoryFilter} options={[
+          { value: "all", label: "All categories" },
+          ...accessibleCategories.map((category) => ({ value: category.key, label: category.label })),
+        ]} />
+        <LibraryFilter label="Filter by collection" value={collectionFilter} onChange={setCollectionFilter} options={[
+          { value: "all", label: "All collections" },
+          { value: "none", label: "No collection" },
+          ...collections.map(([value, label]) => ({ value, label })),
+        ]} />
+        <LibraryFilter label="Filter by file type" value={fileTypeFilter} onChange={setFileTypeFilter} options={[
+          { value: "all", label: "All file types" },
+          ...fileTypes.map((value) => ({ value, label: value })),
+        ]} />
+      </div>
+      <div className="mt-3 flex min-h-6 items-center justify-between gap-3 text-sm">
+        <p role="status" className="text-[var(--muted)]">{resultCount} {resultCount === 1 ? "document" : "documents"} shown</p>
+        {hasFilters ? <button type="button" onClick={clearFilters} className="font-semibold text-[var(--primary)] underline underline-offset-4 focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Clear filters</button> : null}
+      </div>
+      {visibleCategories.length === 0 ? <div className="mt-4 rounded-2xl border border-[var(--border)] bg-white/82 p-8 text-center"><Search className="mx-auto h-6 w-6 text-[var(--muted)]" aria-hidden="true" /><p className="mt-3 font-semibold text-[var(--foreground)]">No documents match these filters.</p><p className="mt-2 text-sm text-[var(--muted)]">Try a different search or clear the filters to return to active documents.</p></div> : <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-white/82 shadow-[0_26px_70px_-52px_rgba(15,23,42,0.5)]">{visibleCategories.map((category) => { const Icon = categoryIcons[category.key as keyof typeof categoryIcons] ?? Folder; const isOpen = expandMatches || openCategories.has(category.key); const panelId = `library-category-${category.key}`; return <section key={category.key} className="border-t border-[var(--border)] first:border-t-0"><button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggleCategory(category.key)} className="flex w-full items-center gap-4 px-4 py-2.5 text-left transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-6"><Icon className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden="true" /><span className="min-w-0 flex-1"><span className="block font-semibold text-[var(--foreground)]">{category.label}</span><span className="block text-xs leading-5 text-[var(--muted)] sm:text-sm">{category.description}</span></span><span className="shrink-0 text-xs text-[var(--muted)] sm:text-sm">{category.documents.length} {category.documents.length === 1 ? "document" : "documents"}</span><ChevronDown className={`h-4 w-4 shrink-0 text-[var(--primary)] transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" /></button>{isOpen ? <div id={panelId}><CategoryDocuments documents={category.documents} focusDocumentId={focusDocumentId} showFocusedHistory={showFocusedHistory} expandMatches={expandMatches} management={management} /></div> : null}</section>; })}</div>}
     </div>
   );
 }
