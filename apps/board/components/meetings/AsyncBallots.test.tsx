@@ -4,54 +4,59 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AsyncBallots } from "./AsyncBallots";
 import type { AsyncBallotView, MeetingSummaryView } from "./types";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
-
+import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT } from "@/lib/written-consents";
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/step-up-client", () => ({ fetchWithBoardStepUp: vi.fn() }));
-
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-});
-
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const meeting: MeetingSummaryView = {
   id: "meeting-1", title: "Written consent", description: "", type: "special", format: "asynchronous",
   status: "materials-published", startAt: "2026-09-10T13:00:00.000Z", endAt: "2026-09-12T21:00:00.000Z",
   timeZone: "America/New_York", location: null, virtualUrl: null, version: 5, minutesStatus: "not-started",
 };
-
 const openBallot: AsyncBallotView = {
   id: "ballot-1", title: "Approve policy", motion: "Resolved, that the policy is approved.",
-  effectiveStatus: "open", eligibleCount: 5, ballotsCast: 3, quorumRequired: 3, approvalRequired: 3,
+  consentMode: "unanimous-v1", consent: { contentHash: "fixed-hash", startAt: meeting.startAt, endAt: meeting.endAt,
+    statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT, directors: [], viewerReceipt: null, rosterChanged: false, adoptedAt: null },
+  effectiveStatus: "open", eligibleCount: 5, ballotsCast: 4, quorumRequired: 5, approvalRequired: 5,
   viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
-
 describe("AsyncBallots", () => {
-  it("lets an eligible director cast a vote without exposing live totals", async () => {
-    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(new Response(JSON.stringify({ vote: { choice: "yes" } }), { status: 200 }));
-    render(<AsyncBallots meeting={meeting} ballots={[openBallot]} canManage={false} canDiscuss />);
-
-    expect(screen.getByText("3 of 5 responses")).toBeVisible();
-    expect(screen.queryByText(/Yes 3/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "yes" }));
-    fireEvent.click(screen.getByRole("button", { name: "Submit vote" }));
-
-    await waitFor(() => expect(fetchWithBoardStepUp).toHaveBeenCalledWith(
-      "/api/meetings/meeting-1/ballots",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "castVote", ballotId: "ballot-1", choice: "yes" }) }),
-    ));
-    expect(await screen.findByText("Your vote was cast and retained.")).toBeVisible();
+  it("does not offer in-place editing or collection for a legacy draft", () => {
+    render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "draft", consentMode: undefined, consent: null }]} canManage canDiscuss />);
+    expect(screen.queryByText("Edit draft resolution")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open consent collection" })).not.toBeInTheDocument();
+    expect(screen.getByText("Add written resolution")).toBeVisible();
   });
-
-  it("shows final aggregate results and manager finalization controls only when appropriate", () => {
-    const awaiting = { ...openBallot, effectiveStatus: "awaiting-finalization" as const };
-    const closed: AsyncBallotView = {
-      ...openBallot, id: "ballot-2", title: "Approve budget", effectiveStatus: "closed", ballotsCast: 5,
-      viewerEligible: false, result: { yes: 4, no: 1, abstain: 0, recused: 0, quorumMet: true, outcome: "passed" },
-    };
-    render(<AsyncBallots meeting={meeting} ballots={[awaiting, closed]} canManage canDiscuss />);
-    expect(screen.getByRole("button", { name: "Finalize result" })).toBeVisible();
-    expect(screen.getByText("Yes 4 · No 1 · Abstain 0")).toBeVisible();
-    expect(screen.getByText("passed")).toBeVisible();
+  it("requires an explicit signature and delivers consent to the displayed resolution hash", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ adopted: true }));
+    render(<AsyncBallots meeting={meeting} ballots={[openBallot]} canManage={false} canDiscuss />);
+    expect(screen.getByText(/4 of 5 directors have delivered consent/)).toBeVisible();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Sign and deliver consent" });
+    fireEvent.click(button);
+    expect(fetchWithBoardStepUp).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Full name as electronic signature"), { target: { value: "Director Five" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /I intend to electronically sign/ }));
+    fireEvent.click(button);
+    await waitFor(() => expect(fetchWithBoardStepUp).toHaveBeenCalled());
+    const body = JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string);
+    expect(body).toEqual({ expectedVersion: 5, action: "signConsent", ballotId: "ballot-1", contentHash: "fixed-hash", signatureName: "Director Five", intent: true });
+    expect(await screen.findByText(/This resolution is now adopted/)).toBeVisible();
+  });
+  it("does not expose majority finalization or signature controls on expired or legacy ballots", () => {
+    render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "awaiting-finalization" }, { ...openBallot, id: "legacy", consentMode: undefined, consent: null }]} canManage canDiscuss />);
+    expect(screen.queryByRole("button", { name: /Finalize|Sign and deliver consent/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Collection ended · not adopted")).toBeVisible();
+    expect(screen.getByText(/historical ballot is not a signed written consent/)).toBeVisible();
+  });
+  it("blocks consent when the roster changed and presents withdrawal only before adoption", () => {
+    const receipt = { id: "receipt", meetingId: "meeting-1", ballotId: "ballot-1", contentHash: "fixed-hash", accessId: "d1", authenticatedUserId: "auth1", email: "director@example.invalid", name: "Director", signatureName: "Director", action: "consent" as const, statement: CONSENT_STATEMENT, receivedAt: "2026-09-10T14:00:00Z", supersedesReceiptId: null };
+    const { rerender } = render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, consent: { ...openBallot.consent!, rosterChanged: true } }]} canManage={false} canDiscuss />);
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
+    rerender(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "awaiting-finalization", consent: { ...openBallot.consent!, viewerReceipt: receipt } }]} canManage={false} canDiscuss />);
+    expect(screen.getByText("Withdraw my consent before adoption")).toBeVisible();
+    rerender(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "closed", consent: { ...openBallot.consent!, viewerReceipt: receipt, adoptedAt: receipt.receivedAt } }]} canManage={false} canDiscuss />);
+    expect(screen.queryByText("Withdraw my consent before adoption")).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,10 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { documentClient } from "@/lib/dynamodb";
 import { BOARD_MEETINGS_TABLE } from "@/lib/config";
+import { consentDigest, consentPayload } from "@/lib/written-consent-integrity";
+import type { BoardAccessRecord } from "@/lib/board-access";
+import { accessRecordGuard, directorRosterGuard, isVotingDirector, type DirectorRoster } from "@/lib/director-roster";
+import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION, type ConsentAttachment, type ConsentReceipt } from "@/lib/written-consents";
 import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
@@ -18,7 +22,6 @@ import {
   BOARD_MEETING_TYPES,
   BOARD_MINUTES_STATUSES,
   BoardMeetingVersionConflictError,
-  tallyBoardAsyncBallot,
   type BoardAsyncBallot,
   type BoardAsyncBallotVoter,
   type BoardAsyncVote,
@@ -81,11 +84,13 @@ export interface UpsertBoardAsyncBallotInput {
   readonly meetingId: string; readonly expectedVersion: number; readonly id: string;
   readonly agendaItemId?: string | null; readonly title: string; readonly motion: string;
   readonly quorumRequired?: number | null; readonly approvalRequired?: number | null;
+  readonly attachments?: readonly ConsentAttachment[];
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface OpenBoardAsyncBallotInput {
   readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
   readonly eligibleVoters: readonly BoardAsyncBallotVoter[];
+  readonly roster: DirectorRoster; readonly rosterConfirmed: boolean;
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface CastBoardAsyncVoteInput {
@@ -153,13 +158,7 @@ const member = <T extends readonly string[]>(value: unknown, values: T, field: s
 const assertVersion = (value: number) => {
   if (!Number.isInteger(value) || value < 1) throw new Error("expectedVersion must be a positive integer");
 };
-const optionalPositiveInteger = (value: number | null | undefined, field: string) => {
-  if (value == null) return null;
-  if (!Number.isInteger(value) || value < 1) throw new Error(`${field} must be a positive integer or null`);
-  return value;
-};
 const conditional = (error: unknown) => ["ConditionalCheckFailedException", "TransactionCanceledException"].includes(String((error as { name?: unknown })?.name));
-const voterKey = (email: string) => createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 const rosterHash = (voters: readonly BoardAsyncBallotVoter[]) => createHash("sha256")
   .update(voters.map((voter) => voter.email.trim().toLowerCase()).sort().join("\n"))
   .digest("hex");
@@ -196,6 +195,7 @@ function toAsyncBallot(item: Row): BoardAsyncBallot | null {
     ? item.eligibleVoters.map((value) => value as BoardAsyncBallotVoter)
     : [];
   return {
+    ...(item.consentMode === "unanimous-v1" ? { consentMode: "unanimous-v1" as const, attachments: (item.attachments || []) as ConsentAttachment[], consent: item.consent as BoardAsyncBallot["consent"] } : {}),
     id: String(item.id || ""), meetingId: String(item.meetingId || ""),
     agendaItemId: item.agendaItemId == null ? null : String(item.agendaItemId),
     title: String(item.title || ""), motion: String(item.motion || ""), status,
@@ -243,8 +243,14 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     return toMeeting(result?.Item);
   }
   async function rows(id: string): Promise<Row[]> {
-    const result = await client.query({ TableName: resolvedTable, KeyConditionExpression: "#pk = :pk", ExpressionAttributeNames: { "#pk": "pk" }, ExpressionAttributeValues: { ":pk": meetingPk(id) } });
-    return (result.Items || []) as Row[];
+    const all: Row[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const result = await client.query({ TableName: resolvedTable, KeyConditionExpression: "#pk = :pk", ExpressionAttributeNames: { "#pk": "pk" }, ExpressionAttributeValues: { ":pk": meetingPk(id) }, ConsistentRead: true, ...(cursor ? { ExclusiveStartKey: cursor } : {}) });
+      all.push(...(result.Items || []));
+      cursor = result.LastEvaluatedKey;
+    } while (cursor);
+    return all;
   }
   async function getMeeting(id: string): Promise<BoardMeetingDetail | null> {
     const all = await rows(required(id, "meetingId"));
@@ -365,7 +371,11 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     };
   }
   return {
-    getMeeting, listMeetings,
+    getMeeting, listMeetings, getAsyncBallot,
+    async listConsentReceipts(meetingId: string, ballotId: string): Promise<ConsentReceipt[]> {
+      return (await rows(meetingId)).filter((row) => row.entityType === "CONSENT_RECEIPT" && row.ballotId === ballotId)
+        .map((row) => row.receipt as ConsentReceipt).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
+    },
     async createMeeting(input: CreateBoardMeetingInput, options?: BoardMeetingMutationOptions) {
       const id = required(input.id || randomUUID(), "id"); const at = instant(input.occurredAt, "occurredAt");
       const actor = required(input.actorEmail, "actorEmail"); const startAt = instant(input.startAt, "startAt"); const endAt = instant(input.endAt, "endAt");
@@ -387,6 +397,10 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (input.quorumRequired !== undefined && input.quorumRequired !== null && (!Number.isInteger(input.quorumRequired) || input.quorumRequired < 1)) throw new Error("quorumRequired must be a positive integer or null");
       const format = input.format === undefined ? previous.format : member(input.format, BOARD_MEETING_FORMATS, "format");
       const next: BoardMeeting = { ...previous, ...(input.title !== undefined ? { title: required(input.title, "title") } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.type !== undefined ? { type: member(input.type, BOARD_MEETING_TYPES, "type") } : {}), format, ...(input.startAt !== undefined ? { startAt: instant(input.startAt, "startAt") } : {}), ...(input.endAt !== undefined ? { endAt: instant(input.endAt, "endAt") } : {}), ...(input.timeZone !== undefined ? { timeZone: timeZone(input.timeZone) } : {}), location: format === "asynchronous" ? "" : input.location !== undefined ? input.location.trim() : previous.location, virtualUrl: format === "asynchronous" ? null : input.virtualUrl !== undefined ? optionalMeetingUrl(input.virtualUrl) : previous.virtualUrl, ...(input.quorumRequired !== undefined ? { quorumRequired: input.quorumRequired } : {}), version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      if ((format !== previous.format || next.startAt !== previous.startAt || next.endAt !== previous.endAt) &&
+        (await getMeeting(previous.id))?.asyncBallots.some((ballot) => ballot.status !== "draft")) {
+        throw new Error("The format and collection window are fixed after a resolution opens. Create a new workspace for a different window.");
+      }
       if (next.endAt <= next.startAt) throw new Error("endAt must be after startAt");
       return commit(previous, next, "updated", actor, at, input, undefined, options);
     },
@@ -400,6 +414,10 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         completed: ["closed"], closed: [], cancelled: ["draft", "scheduled"],
       };
       if (status !== previous.status && !transitions[previous.status].includes(status)) throw new Error(`invalid meeting status transition: ${previous.status} to ${status}`);
+      if (previous.format === "asynchronous" && ["draft", "completed", "closed", "cancelled"].includes(status) &&
+        (await getMeeting(previous.id))?.asyncBallots.some((ballot) => ballot.status === "open")) {
+        throw new Error("Close or cancel every outstanding resolution before changing the workspace status.");
+      }
       if (status === "closed" && previous.minutesStatus !== "approved") throw new Error("approved minutes are required before a meeting can be closed");
       const next = { ...previous, status, cancellationReason: status === "cancelled" ? required(input.cancellationReason, "cancellationReason") : null, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, "status-changed", actor, at, { from: previous.status, to: status }, undefined, options);
@@ -425,6 +443,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     },
     async recordDecision(input: RecordBoardDecisionInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (previous.format === "asynchronous") throw new Error("Async decisions are recorded automatically from unanimous signed consents.");
       if (previous.status !== "completed") throw new Error("decisions can be finalized only after the meeting is completed");
       if (previous.quorumRequired != null && !previous.quorumConfirmedAt) throw new Error("quorum must be confirmed before decisions are finalized");
       for (const count of [input.yes, input.no, input.abstain, input.recused]) if (!Number.isInteger(count) || count < 0) throw new Error("vote counts must be non-negative integers");
@@ -435,12 +454,16 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     async upsertAsyncBallot(input: UpsertBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
       if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
-      if (previous.status !== "draft") throw new Error("ballots can be prepared only while the meeting is a draft");
+      if (!["draft", "scheduled", "materials-published"].includes(previous.status)) throw new Error("Resolutions can be prepared only in an active workspace.");
       const existing = await getAsyncBallot(previous.id, input.id);
+      if (existing && existing.consentMode !== "unanimous-v1") throw new Error("Legacy ballots are historical records. Create a new resolution instead of editing this ballot.");
       if (existing && existing.status !== "draft") throw new Error("an opened ballot cannot be edited");
-      const quorumRequired = optionalPositiveInteger(input.quorumRequired, "quorumRequired");
-      const approvalRequired = optionalPositiveInteger(input.approvalRequired, "approvalRequired");
+      if (input.quorumRequired != null || input.approvalRequired != null) throw new Error("Written consent requires every director; custom thresholds are not permitted.");
+      if (input.title.trim().length > 200 || input.motion.trim().length > 16000) throw new Error("Resolution title or text is too long.");
+      if ((input.attachments?.length || 0) > 20) throw new Error("A resolution may reference at most 20 documents.");
+      const quorumRequired = null; const approvalRequired = null;
       const ballot: BoardAsyncBallot = {
+        consentMode: "unanimous-v1", attachments: [...(input.attachments || [])], consent: null,
         id: required(input.id, "ballotId"), meetingId: previous.id,
         agendaItemId: input.agendaItemId?.trim() || null,
         title: required(input.title, "title"), motion: required(input.motion, "motion"), status: "draft",
@@ -468,47 +491,65 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       }
       const eligibleVoters = [...byEmail.values()].sort((a, b) => a.email.localeCompare(b.email));
       if (eligibleVoters.length === 0) throw new Error("at least one active director is required");
-      const quorumRequired = existing.quorumRequired ?? previous.quorumRequired ?? Math.floor(eligibleVoters.length / 2) + 1;
-      const approvalRequired = existing.approvalRequired ?? Math.floor(eligibleVoters.length / 2) + 1;
-      if (quorumRequired > eligibleVoters.length) throw new Error("quorumRequired cannot exceed eligible directors");
-      if (approvalRequired > eligibleVoters.length) throw new Error("approvalRequired cannot exceed eligible directors");
-      const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired, approvalRequired, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor };
+      if (existing.consentMode !== "unanimous-v1") throw new Error("Prepare a new written consent; legacy ballots cannot collect signatures.");
+      if (!input.rosterConfirmed || !input.roster.ready) throw new Error("Confirm the full current director roster and authority to act without a meeting.");
+      if (input.roster.directors.some((director) => director.status !== "active")) throw new Error("Every listed director must have active access before consent collection opens.");
+      if (eligibleVoters.length > 30) throw new Error("This consent workflow supports at most 30 directors.");
+      if (JSON.stringify(eligibleVoters) !== JSON.stringify(input.roster.directors.map(({ userId, name, email }) => ({ userId, name, email })).sort((a, b) => a.email.localeCompare(b.email)))) throw new Error("The director roster changed. Refresh and try again.");
+      const contentHash = consentDigest(consentPayload({ ...existing, eligibleVoters }, { rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT }));
+      const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired: eligibleVoters.length, approvalRequired: eligibleVoters.length, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor,
+        consent: { schema: 1, contentHash, rosterRevision: input.roster.revision, rosterConfirmation: ROSTER_CONFIRMATION, confirmedBy: actor, confirmedAt: at, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT, receipts: [] } };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      return commit(previous, next, "async-ballot-opened", actor, at, { ballotId: ballot.id, eligibleCount: eligibleVoters.length, rosterHash: ballot.rosterHash, quorumRequired, approvalRequired }, { item: asyncBallotItem(ballot) }, options);
+      return commit(previous, next, "written-consent-opened", actor, at, { ballotId: ballot.id, contentHash, eligibleCount: eligibleVoters.length }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [directorRosterGuard(input.roster), ...(options?.additionalTransactItems || [])] });
     },
-    async castAsyncVote(input: CastBoardAsyncVoteInput, options?: BoardMeetingMutationOptions) {
-      const meetingId = required(input.meetingId, "meetingId");
-      const ballotId = required(input.ballotId, "ballotId");
-      const meeting = await getMeta(meetingId);
-      if (!meeting || meeting.format !== "asynchronous") throw new Error("asynchronous meeting not found");
-      const ballot = await getAsyncBallot(meetingId, ballotId);
-      if (!ballot || ballot.status !== "open") throw new Error("this ballot is not open");
-      const at = instant(input.occurredAt, "occurredAt");
-      if (at < meeting.startAt) throw new Error("voting has not opened yet");
-      if (at >= meeting.endAt) throw new Error("the voting deadline has passed");
-      const email = required(input.voter.email, "voter email").toLowerCase();
-      const eligible = ballot.eligibleVoters.find((voter) => voter.email === email);
-      if (!eligible) throw new Error("the current user is not eligible for this ballot");
-      const choice = member(input.choice, BOARD_ASYNC_VOTE_CHOICES, "vote choice");
-      const currentKey = { pk: meetingPk(meetingId), sk: `BALLOT_VOTE#${ballotId}#${voterKey(email)}` };
-      const currentResult = await client.get({ TableName: resolvedTable, Key: currentKey, ConsistentRead: true });
-      const current = currentResult?.Item ? toAsyncVote(currentResult.Item as Row) : null;
-      const vote: BoardAsyncVote = {
-        meetingId, ballotId, voterUserId: eligible.userId,
-        voterName: eligible.name, voterEmail: eligible.email, choice,
-        castAt: current?.castAt || at, updatedAt: at,
-      };
-      const items: BoardMeetingTransactItem[] = [
-        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: META_SK }, ConditionExpression: "#format = :asynchronous AND (#status = :scheduled OR #status = :materialsPublished) AND #startAt <= :now AND #endAt > :now", ExpressionAttributeNames: { "#format": "format", "#status": "status", "#startAt": "startAt", "#endAt": "endAt" }, ExpressionAttributeValues: { ":asynchronous": "asynchronous", ":scheduled": "scheduled", ":materialsPublished": "materials-published", ":now": at } } },
-        { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
-        { Put: { TableName: resolvedTable, Item: { ...currentKey, entityType: "ASYNC_VOTE", ...vote } } },
-        { Put: { TableName: resolvedTable, Item: { pk: meetingPk(meetingId), sk: `BALLOT_VOTE_REVISION#${ballotId}#${at}#${randomUUID()}`, entityType: "ASYNC_VOTE_REVISION", ...vote }, ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
-        ...(options?.additionalTransactItems || []),
-      ];
-      if (items.length > 100) throw new Error("Board vote transaction exceeds 100 items");
-      try { await client.transactWrite({ TransactItems: items }); }
-      catch (error) { if (conditional(error)) throw new Error("the ballot changed or the voting window closed; refresh and try again"); throw error; }
-      return vote;
+    async castAsyncVote(_input: CastBoardAsyncVoteInput, _options?: BoardMeetingMutationOptions): Promise<BoardAsyncVote> {
+      void _input; void _options; // Retained API surface rejects all legacy callers.
+      throw new Error("Ordinary async voting has been retired. Sign and deliver a written consent for each resolution.");
+    },
+    async signAsyncConsent(input: {
+      meetingId: string; ballotId: string; expectedVersion: number; contentHash: string;
+      action: "consent" | "withdraw"; signatureName: string; intent: boolean;
+      accessRecord: BoardAccessRecord; authenticatedUserId: string; roster: DirectorRoster | null; occurredAt?: string;
+    }, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.accessRecord.email, input.occurredAt);
+      const ballot = await getAsyncBallot(previous.id, input.ballotId);
+      if (!ballot?.consent || ballot.status !== "open" || previous.format !== "asynchronous") throw new Error("This written consent is not open; completed actions cannot be withdrawn.");
+      if (!["scheduled", "materials-published"].includes(previous.status)) throw new Error("The consent workspace is not active.");
+      if (!input.intent || !["consent", "withdraw"].includes(input.action)) throw new Error("Explicit electronic-signature intent is required.");
+      const signatureName = required(input.signatureName, "signature name");
+      if (signatureName.length > 200 || /[\x00-\x1f\x7f]/.test(signatureName)) throw new Error("Enter a valid full name of at most 200 characters.");
+      if (!input.authenticatedUserId || input.accessRecord.status !== "active" || !isVotingDirector(input.accessRecord.role)) throw new Error("Only a currently active director may sign.");
+      const director = ballot.eligibleVoters.find((voter) => voter.userId === input.accessRecord.id && voter.email === actor);
+      if (!director) throw new Error("You are not a director on this resolution's retained roster.");
+      if (input.contentHash !== ballot.consent.contentHash) throw new Error("The resolution changed. Refresh and review it before signing.");
+      if (consentDigest(consentPayload(ballot, ballot.consent)) !== ballot.consent.contentHash) throw new Error("The retained resolution integrity check failed. Contact the Chair before signing.");
+      const oldReceipt = ballot.consent.receipts.find((receipt) => receipt.accessId === director.userId);
+      if (input.action === "consent") {
+        if (at < ballot.consent.startAt || at >= ballot.consent.endAt) throw new Error("The consent collection window is closed.");
+        if (!input.roster?.ready || input.roster.revision !== ballot.consent.rosterRevision) throw new Error("The director roster changed. Cancel this collection and prepare a new resolution for the full current board.");
+        if (oldReceipt?.action === "consent") throw new Error("Your signed consent has already been delivered.");
+      } else if (oldReceipt?.action !== "consent") throw new Error("You have no current consent to withdraw.");
+      const receipt: ConsentReceipt = { id: randomUUID(), meetingId: previous.id, ballotId: ballot.id, contentHash: ballot.consent.contentHash, accessId: director.userId, authenticatedUserId: input.authenticatedUserId, email: actor, name: director.name, signatureName, action: input.action, statement: input.action === "consent" ? ballot.consent.statement : ballot.consent.withdrawalStatement, receivedAt: at, supersedesReceiptId: oldReceipt?.id || null };
+      const receipts = [...ballot.consent.receipts.filter((entry) => entry.accessId !== director.userId), receipt].sort((a, b) => a.email.localeCompare(b.email));
+      const complete = ballot.eligibleVoters.every((voter) => receipts.some((entry) => entry.accessId === voter.userId && entry.action === "consent"));
+      const result = complete ? { yes: ballot.eligibleVoters.length, no: 0, abstain: 0, recused: 0, ballotsCast: ballot.eligibleVoters.length, quorumMet: true, outcome: "passed" as const } : null;
+      const updated: BoardAsyncBallot = { ...ballot, consent: { ...ballot.consent, receipts }, status: complete ? "closed" : "open", result, closedAt: complete ? at : null, closedBy: complete ? actor : null, updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      const decision: BoardMeetingDecision | null = result ? { id: `async-${ballot.id}`, meetingId: previous.id, agendaItemId: ballot.agendaItemId, title: ballot.title, motion: ballot.motion, mover: null, seconder: null, ...result, recordedAt: at, recordedBy: actor, supersedesDecisionId: null } : null;
+      const immutable = { ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" };
+      // Every consent, revocation, cancellation and lifecycle mutation advances
+      // the same meeting version. A stale read can never complete an action.
+      await commit(previous, next, complete ? "written-consent-adopted" : `written-consent-${input.action}`, actor, at,
+        { ballotId: ballot.id, receiptId: receipt.id, contentHash: receipt.contentHash }, { item: asyncBallotItem(updated) }, {
+          additionalTransactItems: [
+            accessRecordGuard(input.accessRecord),
+            ...(input.action === "consent" && input.roster ? [directorRosterGuard(input.roster)] : []),
+            { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: `CONSENT_RECEIPT#${ballot.id}#${at}#${receipt.id}`, entityType: "CONSENT_RECEIPT", ballotId: ballot.id, receipt }, ...immutable } },
+            ...(decision ? [{ Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ...immutable } }] : []),
+            ...(options?.additionalTransactItems || []),
+          ],
+        });
+      return { receipt, adopted: complete, meeting: next };
     },
     async createAsyncDiscussionMessage(input: CreateBoardAsyncDiscussionMessageInput, options?: BoardMeetingMutationOptions) {
       const meetingId = required(input.meetingId, "meetingId");
@@ -577,35 +618,9 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       catch (error) { if (conditional(error)) throw new Error("the discussion changed or closed; refresh and try again"); throw error; }
       return message;
     },
-    async closeAsyncBallot(input: CloseBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
-      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
-      if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
-      if (previous.status !== "scheduled" && previous.status !== "materials-published") throw new Error("ballots can be finalized only for an active asynchronous meeting");
-      const detail = await getMeeting(previous.id);
-      const ballot = detail?.asyncBallots.find((candidate) => candidate.id === input.ballotId);
-      if (!ballot || ballot.status !== "open") throw new Error("only an open ballot can be finalized");
-      const votes = detail?.asyncVotes.filter((vote) => vote.ballotId === ballot.id) || [];
-      if (at < previous.endAt) throw new Error("the ballot can be finalized only after the voting deadline");
-      const result = tallyBoardAsyncBallot(ballot, votes);
-      const closed: BoardAsyncBallot = { ...ballot, status: "closed", result, closedAt: at, closedBy: actor, updatedAt: at, updatedBy: actor };
-      const decision: BoardMeetingDecision = {
-        id: `async-${ballot.id}`, meetingId: previous.id, agendaItemId: ballot.agendaItemId,
-        title: ballot.title, motion: ballot.motion, mover: null, seconder: null,
-        yes: result.yes, no: result.no, abstain: result.abstain, recused: result.recused,
-        outcome: result.outcome, recordedAt: at, recordedBy: actor, supersedesDecisionId: null,
-      };
-      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      const items: BoardMeetingTransactItem[] = [
-        { Put: { TableName: resolvedTable, Item: meetingItem(next), ConditionExpression: "#version = :expectedVersion", ExpressionAttributeNames: { "#version": "version" }, ExpressionAttributeValues: { ":expectedVersion": previous.version } } },
-        { Put: { TableName: resolvedTable, Item: asyncBallotItem(closed), ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
-        { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
-        { Put: { TableName: resolvedTable, Item: revision(next, "async-ballot-closed", actor, at, { ballotId: ballot.id, rosterHash: ballot.rosterHash, result }), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
-        ...(options?.additionalTransactItems || []),
-      ];
-      if (items.length > 100) throw new Error("Board ballot finalization transaction exceeds 100 items");
-      try { await client.transactWrite({ TransactItems: items }); }
-      catch (error) { if (conditional(error)) throw new BoardMeetingVersionConflictError(previous.id); throw error; }
-      return next;
+    async closeAsyncBallot(_input: CloseBoardAsyncBallotInput, _options?: BoardMeetingMutationOptions): Promise<BoardMeeting> {
+      void _input; void _options; // No administrative adoption path remains.
+      throw new Error("A written consent is adopted automatically when every director signs. Incomplete collections may be cancelled without adoption.");
     },
     async cancelAsyncBallot(input: CancelBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);

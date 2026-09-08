@@ -1,125 +1,102 @@
 import { randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { roleCanManageBoardMeetings } from "@/lib/board-access";
+import { ExecutiveSessionError } from "@/lib/executive-sessions";
 import { boardAccessRepository } from "@/lib/board-access-repository";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
 import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
 import { canManageBoardMeetings, resolveBoardMemberState } from "@/lib/session";
-import { BOARD_ASYNC_VOTE_CHOICES, type BoardAsyncVoteChoice } from "@/lib/meetings";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
+import { boardDocumentRepository } from "@/lib/vault";
+import { accessRecordGuard, readDirectorRoster } from "@/lib/director-roster";
+import { executiveJson as json, executiveJsonBody } from "@/lib/executive-session-api";
+import { SITE_URL } from "@/lib/config";
+import type { ConsentAttachment } from "@/lib/written-consents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function text(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function positiveInteger(value: unknown) {
-  if (value == null || value === "") return null;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error("Voting requirements must be positive whole numbers.");
-  return parsed;
-}
-
-async function auditItems(input: {
-  member: Parameters<typeof authenticatedActor>[0];
-  action: string;
-  meetingId: string;
-  ballotId: string;
-  meetingVersion: number;
-}) {
-  return (await boardAuditLedger.buildAppendItems({
-    category: "meeting",
-    action: input.action,
-    outcome: "success",
-    actor: authenticatedActor(input.member),
-    target: { type: "meeting-ballot", id: input.ballotId, version: String(input.meetingVersion) },
-    metadata: new Map([["meetingId", input.meetingId]]),
-    idempotencyKey: randomUUID(),
-    occurredAt: new Date().toISOString(),
-  })).TransactItems as Record<string, unknown>[];
-}
+const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const state = await resolveBoardMemberState(request.headers);
-  if (state.status !== "member") return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  if (state.status !== "member") return json({ error: "Authentication required." }, 401);
   const assurance = await requireBoardPasskeySession(request.headers, state.member);
   if (assurance) return assurance;
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(SITE_URL).origin) return json({ error: "Invalid request origin." }, 403);
   const verification = await requireBoardStepUp(request.headers, state.member);
   if (verification) return verification;
 
-  const { id: meetingId } = await context.params;
-  const body = await request.json().catch(() => ({}));
-  const action = text(body?.action);
-  const ballotId = text(body?.ballotId) || randomUUID();
-  const expectedVersion = Number(body?.expectedVersion);
-  const managerAction = action !== "castVote";
-  if (managerAction && !canManageBoardMeetings(state.member)) {
-    return NextResponse.json({ error: "Only the Board Chair or Executive Director may manage an official ballot." }, { status: 403 });
-  }
-
   try {
+    const { id: meetingId } = await context.params;
+    const body = await executiveJsonBody(request);
+    const action = text(body.action);
+    const ballotId = text(body.ballotId) || randomUUID();
+    if (ballotId.length > 200 || /[#\x00-\x1f]/.test(ballotId)) return json({ error: "Invalid resolution identifier." }, 400);
+    const expectedVersion = Number(body.expectedVersion);
+    const accessRecord = await boardAccessRepository.getByEmail(state.member.email);
+    if (!accessRecord || accessRecord.status !== "active") return json({ error: "Active Board access is required." }, 403);
+    if (!["signConsent", "withdrawConsent"].includes(action) && (!canManageBoardMeetings(state.member) || !roleCanManageBoardMeetings(accessRecord.role))) {
+      return json({ error: "Only the Board Chair or Executive Director may manage written resolutions." }, 403);
+    }
+    if (["castVote", "finalizeBallot"].includes(action)) return json({ error: "Ordinary async voting is retired. Each resolution requires every director's signed consent." }, 409);
+    const audit = await boardAuditLedger.buildAppendItems({
+      category: "meeting", action: `written_consent_${action}`, outcome: "success",
+      actor: authenticatedActor(state.member), target: { type: "meeting-ballot", id: ballotId, version: String(expectedVersion + 1) },
+      metadata: new Map([["meetingId", meetingId]]), idempotencyKey: randomUUID(), occurredAt: new Date().toISOString(),
+    });
+    const options = { additionalTransactItems: audit.TransactItems as Record<string, unknown>[] };
+
     if (action === "saveBallot") {
-      const audit = await auditItems({ member: state.member, action: "async_ballot_saved", meetingId, ballotId, meetingVersion: expectedVersion + 1 });
-      const meeting = await boardMeetingsRepository.upsertAsyncBallot({
-        meetingId, expectedVersion, id: ballotId,
-        agendaItemId: text(body?.agendaItemId) || null,
-        title: text(body?.title), motion: text(body?.motion),
-        quorumRequired: positiveInteger(body?.quorumRequired),
-        approvalRequired: positiveInteger(body?.approvalRequired),
-        actorEmail: state.member.email,
-      }, { additionalTransactItems: audit });
-      return NextResponse.json({ meeting, ballotId });
-    }
-
-    if (action === "openBallot") {
-      const roster = await boardAccessRepository.list({ status: "active", limit: 250 });
-      const eligibleVoters = roster.records
-        .filter((record) => record.role === "member" || record.role === "chair" || record.role === "admin")
-        .map((record) => ({ userId: record.id, name: record.name, email: record.email }));
-      const audit = await auditItems({ member: state.member, action: "async_ballot_opened", meetingId, ballotId, meetingVersion: expectedVersion + 1 });
-      const meeting = await boardMeetingsRepository.openAsyncBallot({
-        meetingId, expectedVersion, ballotId, eligibleVoters, actorEmail: state.member.email,
-      }, { additionalTransactItems: audit });
-      return NextResponse.json({ meeting });
-    }
-
-    if (action === "castVote") {
-      const choice = text(body?.choice) as BoardAsyncVoteChoice;
-      if (!BOARD_ASYNC_VOTE_CHOICES.includes(choice)) {
-        return NextResponse.json({ error: "Select yes, no, abstain, or recused." }, { status: 400 });
+      if (body.quorumRequired != null || body.approvalRequired != null) return json({ error: "Every director must consent; custom thresholds are not permitted." }, 400);
+      const refs = body.attachments ?? [];
+      if (!Array.isArray(refs) || refs.length > 20) return json({ error: "Select at most 20 document versions." }, 400);
+      const attachments: ConsentAttachment[] = [];
+      for (const ref of refs) {
+        const documentId = text(ref?.documentId), versionId = text(ref?.versionId);
+        if (!documentId || !versionId || attachments.some((item) => item.documentId === documentId)) throw new Error("Select each document once with its exact version.");
+        const document = await boardDocumentRepository.getDocument(documentId);
+        if (!document || document.status !== "active" || (document.ownerType === "meeting" && document.meetingId !== meetingId)) throw new Error("Select an active library document or a document in this workspace.");
+        if (document.currentVersion.versionId !== versionId) throw new Error("A selected document changed. Refresh and review the current version before saving.");
+        const version = document.currentVersion;
+        attachments.push({ documentId, versionId, title: document.displayName || document.title, fileName: version.originalFileName, sequence: version.sequence, sha256: version.sha256 });
       }
-      const detail = await boardMeetingsRepository.getMeeting(meetingId);
-      const ballot = detail?.asyncBallots.find((candidate) => candidate.id === ballotId);
-      const voter = ballot?.eligibleVoters.find((candidate) => candidate.email === state.member.email);
-      if (!voter) return NextResponse.json({ error: "You are not eligible for this ballot." }, { status: 403 });
-      const audit = await auditItems({ member: state.member, action: "async_vote_cast", meetingId, ballotId, meetingVersion: detail?.meeting.version || 0 });
-      const vote = await boardMeetingsRepository.castAsyncVote({
-        meetingId, ballotId, choice, voter, occurredAt: new Date().toISOString(),
-      }, { additionalTransactItems: audit });
-      return NextResponse.json({ vote: { choice: vote.choice, updatedAt: vote.updatedAt } });
+      const meeting = await boardMeetingsRepository.upsertAsyncBallot({
+        meetingId, expectedVersion, id: ballotId, agendaItemId: text(body.agendaItemId) || null,
+        title: text(body.title), motion: text(body.motion), attachments, actorEmail: state.member.email,
+      }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
+      return json({ meeting, ballotId });
     }
-
-    if (action === "finalizeBallot") {
-      const audit = await auditItems({ member: state.member, action: "async_ballot_finalized", meetingId, ballotId, meetingVersion: expectedVersion + 1 });
-      const meeting = await boardMeetingsRepository.closeAsyncBallot({
-        meetingId, expectedVersion, ballotId, actorEmail: state.member.email,
-      }, { additionalTransactItems: audit });
-      return NextResponse.json({ meeting });
+    if (action === "openBallot") {
+      const roster = await readDirectorRoster();
+      if (!roster?.ready) return json({ error: "Consent collection needs the director-roster initialization described in the Board deployment runbook." }, 409);
+      if (body.rosterRevision !== roster.revision) return json({ error: "The roster changed. Refresh and review every director before opening." }, 409);
+      const meeting = await boardMeetingsRepository.openAsyncBallot({
+        meetingId, expectedVersion, ballotId, roster, rosterConfirmed: body.rosterConfirmed === true,
+        eligibleVoters: roster.directors.map(({ userId, name, email }) => ({ userId, name, email })), actorEmail: state.member.email,
+      }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
+      return json({ meeting });
     }
-
+    if (action === "signConsent" || action === "withdrawConsent") {
+      const result = await boardMeetingsRepository.signAsyncConsent({
+        meetingId, expectedVersion, ballotId, action: action === "signConsent" ? "consent" : "withdraw",
+        signatureName: text(body.signatureName), intent: body.intent === true, contentHash: text(body.contentHash),
+        accessRecord, authenticatedUserId: state.member.id, roster: await readDirectorRoster(),
+      }, options);
+      return json(result);
+    }
     if (action === "cancelBallot") {
-      const audit = await auditItems({ member: state.member, action: "async_ballot_cancelled", meetingId, ballotId, meetingVersion: expectedVersion + 1 });
-      const meeting = await boardMeetingsRepository.cancelAsyncBallot({
-        meetingId, expectedVersion, ballotId, reason: text(body?.reason), actorEmail: state.member.email,
-      }, { additionalTransactItems: audit });
-      return NextResponse.json({ meeting });
+      const meeting = await boardMeetingsRepository.cancelAsyncBallot({ meetingId, expectedVersion, ballotId, reason: text(body.reason), actorEmail: state.member.email }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
+      return json({ meeting });
     }
-
-    return NextResponse.json({ error: "Select a valid ballot action." }, { status: 400 });
+    return json({ error: "Select a valid written-consent action." }, 400);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The ballot action could not be completed.";
-    const conflict = /updated by another|changed or the voting window|Conditional|Transaction/i.test(message);
-    return NextResponse.json({ error: message }, { status: conflict ? 409 : 400 });
+    if (error instanceof ExecutiveSessionError) return json({ error: error.message }, error.status);
+    // Expected validation messages contain no provider details or signature text.
+    if (error instanceof Error && !/Exception$/.test(error.name)) {
+      const status = /updated by another|changed|initialize/.test(error.message) ? 409 : 400;
+      return json({ error: error.message }, status);
+    }
+    return json({ error: "The record changed or could not be saved. Refresh and verify your receipt before retrying." }, 409);
   }
 }

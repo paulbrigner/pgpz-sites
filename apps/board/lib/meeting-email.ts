@@ -99,7 +99,7 @@ const copy: Record<MeetingCommunicationKind, { prefix: string; opening: string }
     opening: "The agenda and preparation materials are ready for the upcoming PGPZ Board meeting.",
   },
   reminder: { prefix: "Reminder", opening: "This is a reminder about the upcoming PGPZ Board meeting." },
-  "vote-reminder": { prefix: "Vote reminder", opening: "Your vote is still needed for this PGPZ Board asynchronous meeting." },
+  "vote-reminder": { prefix: "Consent reminder", opening: "Your signed consent is still outstanding for a PGPZ Board resolution. Every director must consent for that action to be adopted." },
   update: { prefix: "Updated", opening: "The details for this PGPZ Board meeting have been updated." },
   cancellation: { prefix: "Cancelled", opening: "This PGPZ Board meeting has been cancelled." },
 };
@@ -151,17 +151,17 @@ export function buildBoardMeetingEmail(input: MeetingEmailInput): MeetingEmail {
   const opening = input.meetingFormat === "asynchronous" && input.kind !== "vote-reminder"
     ? {
         invitation: "You are invited to participate in a PGPZ Board asynchronous written resolution.",
-        "materials-ready": "The materials and written resolutions are ready for Board review and voting.",
+        "materials-ready": "The materials and written resolutions are ready for Board review and unanimous written consent.",
         reminder: "This is a reminder about the current PGPZ Board asynchronous written resolution.",
-        update: "The voting window or materials for this PGPZ Board asynchronous written resolution have been updated.",
+        update: "The collection window or materials for this PGPZ Board asynchronous written resolution have been updated.",
         cancellation: "This PGPZ Board asynchronous written resolution has been cancelled.",
       }[input.kind] ?? message.opening
     : message.opening;
 
   const details = [
     title,
-    input.kind === "vote-reminder" ? `Voting deadline: ${deadline}` : input.meetingFormat === "asynchronous" ? `Voting opens: ${when}` : when,
-    input.meetingFormat === "asynchronous" && input.kind !== "vote-reminder" ? `Voting closes: ${deadline}` : null,
+    input.kind === "vote-reminder" ? `Consent deadline: ${deadline}` : input.meetingFormat === "asynchronous" ? `Consent collection opens: ${when}` : when,
+    input.meetingFormat === "asynchronous" && input.kind !== "vote-reminder" ? `Consent collection closes: ${deadline}` : null,
     location ? `Location: ${location}` : null,
     virtualUrl ? `Meeting link: ${virtualUrl}` : null,
   ].filter((value): value is string => Boolean(value));
@@ -174,7 +174,7 @@ export function buildBoardMeetingEmail(input: MeetingEmailInput): MeetingEmail {
     "",
     `Open the meeting in the Board portal: ${portalUrl}`,
     "",
-    input.kind === "vote-reminder" ? "Open the authenticated Board portal to review the motion and submit or update your vote before the deadline." : "Preparation materials remain in the authenticated Board portal and are not attached to this email.",
+    input.kind === "vote-reminder" ? "Open the authenticated Board portal to review the exact resolution and document versions. If you approve, sign and deliver your consent before the deadline. You may withdraw it before all directors have consented." : "Preparation materials remain in the authenticated Board portal and are not attached to this email.",
   ].join("\n");
 
   const htmlDetails = details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("");
@@ -183,7 +183,7 @@ export function buildBoardMeetingEmail(input: MeetingEmailInput): MeetingEmail {
     `<p>${escapeHtml(opening)}</p>`,
     `<ul>${htmlDetails}</ul>`,
     `<p><a href="${escapeHtml(portalUrl)}">Open this meeting in the Board portal</a></p>`,
-    input.kind === "vote-reminder" ? "<p>Open the authenticated Board portal to review the motion and submit or update your vote before the deadline.</p>" : "<p>Preparation materials remain in the authenticated Board portal and are not attached to this email.</p>",
+    input.kind === "vote-reminder" ? "<p>Open the authenticated Board portal to review the exact resolution and document versions. If you approve, sign and deliver your consent before the deadline. You may withdraw it before all directors have consented.</p>" : "<p>Preparation materials remain in the authenticated Board portal and are not attached to this email.</p>",
   ].join("");
 
   return {

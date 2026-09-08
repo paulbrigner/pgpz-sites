@@ -10,6 +10,7 @@ import { ExecutiveSessions } from "@/components/meetings/ExecutiveSessions";
 import { executiveAccessRecord, listExecutiveCandidates, visibleExecutiveSessions } from "@/lib/executive-session-access";
 import { canCreateExecutiveSession, isDirectorRole } from "@/lib/executive-sessions";
 import { executiveSessionsRepository } from "@/lib/executive-sessions-repository";
+import { readDirectorRoster } from "@/lib/director-roster";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Meeting", robots: { index: false, follow: false, nocache: true } };
@@ -25,6 +26,9 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   if (!record || (record.meeting.status === "draft" && !canManageBoardMeetings(member) && !canPrepareBoardMeetings(member))) notFound();
   const canManageMeetings = canManageBoardMeetings(member);
   const canDiscuss = canParticipateBoardDiscussions(member);
+  const [directorRoster, libraryDocuments] = record.meeting.format === "asynchronous"
+    ? await Promise.all([readDirectorRoster(), canManageMeetings ? boardDocumentRepository.listDocuments({ status: "active" }) : Promise.resolve([])])
+    : [null, []];
   const renderedAt = Date.now();
   const [executiveSessions, executiveReports, accessRecord] = await Promise.all([
     visibleExecutiveSessions(member, id), executiveSessionsRepository.reports(id), executiveAccessRecord(member),
@@ -34,6 +38,11 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
     ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
 
   const detail: MeetingDetailView = {
+    directorRoster: canManageMeetings ? directorRoster : null,
+    consentDocumentChoices: [...libraryDocuments, ...meetingDocuments.filter((doc) => doc.status === "active")].map((doc) => ({
+      documentId: doc.documentId, versionId: doc.currentVersion.versionId, title: doc.displayName || doc.title,
+      sequence: doc.currentVersion.sequence, fileName: doc.currentVersion.originalFileName, sha256: doc.currentVersion.sha256,
+    })),
     meeting: {
       id: record.meeting.id, title: record.meeting.title, description: record.meeting.description,
       type: record.meeting.type, format: record.meeting.format, status: record.meeting.status, startAt: record.meeting.startAt,
@@ -64,11 +73,21 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       const viewerVote = votes.find((vote) => vote.voterEmail === member.email);
       const effectiveStatus = boardAsyncBallotEffectiveStatus(ballot, record.meeting);
       return {
+        consentMode: ballot.consentMode,
+        attachments: ballot.attachments,
+        consent: ballot.consent ? {
+          contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,
+          statement: ballot.consent.statement, withdrawalStatement: ballot.consent.withdrawalStatement,
+          directors: ballot.eligibleVoters,
+          viewerReceipt: ballot.consent.receipts.find((receipt) => receipt.email === member.email && receipt.accessId === accessRecord?.id) || null,
+          rosterChanged: directorRoster?.revision !== ballot.consent.rosterRevision,
+          adoptedAt: ballot.closedAt,
+        } : null,
         id: ballot.id, title: ballot.title, motion: ballot.motion,
         effectiveStatus,
-        eligibleCount: ballot.eligibleVoters.length, ballotsCast: votes.length,
+        eligibleCount: ballot.eligibleVoters.length, ballotsCast: ballot.consent ? ballot.consent.receipts.filter((receipt) => receipt.action === "consent").length : votes.length,
         quorumRequired: ballot.quorumRequired, approvalRequired: ballot.approvalRequired,
-        viewerEligible: ballot.eligibleVoters.some((voter) => voter.email === member.email),
+        viewerEligible: accessRecord?.status === "active" && isDirectorRole(accessRecord.role) && ballot.eligibleVoters.some((voter) => voter.email === member.email && voter.userId === accessRecord.id),
         viewerChoice: viewerVote?.choice || null,
         discussionMessages: record.asyncDiscussionMessages.filter((message) => message.ballotId === ballot.id).map((message) => ({
           id: message.id, replyToMessageId: message.replyToMessageId,

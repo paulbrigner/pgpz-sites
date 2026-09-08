@@ -403,3 +403,62 @@ Lambda subscribed to the audit-table stream. It copies every stream record to
 the Object-Locked archive under `events/<date>/<event-id>.json`; partial batch
 failures are retried by the DynamoDB event-source mapping. The Amplify compute
 role cannot read from or write to this archive.
+
+
+## Unanimous written consent release
+
+This additive Board-only schema introduces `DIRECTOR_ROSTER / STATE` in the
+access table and versioned consent packets and immutable `CONSENT_RECEIPT#`
+items in the meetings table. Existing ordinary ballots are retained, never
+backfilled as signatures. No table/index/IAM/TTL/Object Lock changes are needed.
+The current production application must be deployed before initializing the
+roster, so every director mutation participates in the roster revision guard.
+Do not roll back to writers that omit that guard while consents are open.
+
+Before any production mutation, obtain explicit release authorization, complete
+the normal independent review and deployment preflight, verify the live Board
+account/region/tables and deployed revision, and inspect all director profiles.
+Confirm with the Chair that active/invited director records match the actual
+board. A deactivated portal user may still legally hold office; resolve that
+mismatch before opening a collection. Do not change access merely to reduce
+the required number of signatures.
+
+The initialization tool uses a paginated, strongly consistent **operator-only**
+scan of access profiles. Its final manifest write and audit append are atomic
+and condition on the revision read before the scan. A concurrent director
+mutation aborts initialization; rerun the dry run and review the plan. An
+already initialized roster is a read-only no-op, not an overwrite or reconcile.
+This needs the operator's DescribeTable/Scan and transaction permissions, never
+Scan permission on the website compute role.
+
+Run from the repository root with the verified Board profile and table settings.
+The command defaults to read-only; placeholders must be replaced with verified
+values. Explicit environment values are used; the tool does not load an app's
+`.env.local` automatically.
+
+```sh
+AWS_PROFILE=<verified-board-profile> REGION_AWS=<verified-region> \
+BOARD_ACCESS_TABLE=<verified-access-table> BOARD_AUDIT_TABLE=<verified-audit-table> \
+NODE_OPTIONS=--conditions=react-server npm exec --workspace=apps/board -- \
+  tsx scripts/initialize-director-roster.ts \
+  --expected-account <verified-account-id> --expected-table <verified-access-table> \
+  --actor-email <authorized-operator-email>
+```
+
+After the dry-run roster and live table ARN have been reviewed and the release
+is authorized, repeat the same command with
+`--apply --confirm INITIALIZE_BOARD_DIRECTOR_ROSTER`. It creates no meeting,
+resolution, consent, signature, or email. Verify the manifest is `ready: true`,
+contains the complete expected board, and the audit append is present. Then
+verify the Chair's consent-opening screen displays that same full roster.
+Run signature/withdrawal/concurrency tests only against isolated synthetic
+local records, never by signing on behalf of a real director.
+
+For the first organizational action: keep separate final policy documents in
+the library; prepare one resolution per decision; select their exact versions;
+use the restricted executive-session workspace for compensation deliberations;
+record only its reviewed outcome in the ordinary workspace. Each formal action
+requires all directors' own signed consents. An outstanding signature at the
+deadline means not adopted, and completing the workspace does not supply it.
+The Board should retain the adopted resolution's printable/JSON record together
+with its incorporated versions in its permanent corporate records.

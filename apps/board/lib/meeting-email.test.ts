@@ -40,9 +40,9 @@ describe("Board meeting email", () => {
       kind: "vote-reminder",
       deadlineAt: "2026-09-12T21:00:00Z",
     });
-    expect(email.subject).toContain("Vote reminder:");
-    expect(email.text).toContain("Voting deadline: Saturday, September 12, 2026 at 5:00 PM EDT");
-    expect(email.text).toContain("submit or update your vote");
+    expect(email.subject).toContain("Consent reminder:");
+    expect(email.text).toContain("Consent deadline: Saturday, September 12, 2026 at 5:00 PM EDT");
+    expect(email.text).toContain("sign and deliver your consent");
     expect(email.text).not.toContain("not attached");
   });
 
@@ -54,8 +54,8 @@ describe("Board meeting email", () => {
       deadlineAt: "2026-09-12T21:00:00Z",
     });
     expect(email.text).toContain("asynchronous written resolution");
-    expect(email.text).toContain("Voting opens: Thursday, September 10, 2026 at 1:00 PM EDT");
-    expect(email.text).toContain("Voting closes: Saturday, September 12, 2026 at 5:00 PM EDT");
+    expect(email.text).toContain("Consent collection opens: Thursday, September 10, 2026 at 1:00 PM EDT");
+    expect(email.text).toContain("Consent collection closes: Saturday, September 12, 2026 at 5:00 PM EDT");
   });
 
   it("returns the individual calendar artifact for an invitation", () => {

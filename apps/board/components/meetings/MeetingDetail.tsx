@@ -114,7 +114,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
             )}
           </Surface>
 
-          {meeting.format === "asynchronous" ? <AsyncBallots meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} /> : null}
+          {meeting.format === "asynchronous" ? <AsyncBallots meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
 
           <div className="grid gap-6 xl:grid-cols-2">
             {meeting.format === "live" ? <Surface className="p-5 sm:p-6">
@@ -171,8 +171,8 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
           <Surface className="p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Meeting details</h2>
             <dl className="mt-4 grid gap-4 text-sm">
-              <div className="flex gap-3"><CalendarPlus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">{meeting.format === "asynchronous" ? "Voting opens" : "Date"}</dt><dd className="font-semibold text-[var(--foreground)]">{meeting.format === "asynchronous" ? `Voting opens ${date.date}` : date.date}</dd></div></div>
-              <div className="flex gap-3"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">{meeting.format === "asynchronous" ? "Voting window" : "Time"}</dt><dd className="text-[var(--muted)]">{date.time}</dd></div></div>
+              <div className="flex gap-3"><CalendarPlus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">{meeting.format === "asynchronous" ? "Consent collection opens" : "Date"}</dt><dd className="font-semibold text-[var(--foreground)]">{meeting.format === "asynchronous" ? `Consent collection opens ${date.date}` : date.date}</dd></div></div>
+              <div className="flex gap-3"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">{meeting.format === "asynchronous" ? "Consent collection window" : "Time"}</dt><dd className="text-[var(--muted)]">{date.time}</dd></div></div>
               {meeting.format === "live" ? <div className="flex gap-3"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Location</dt><dd className="text-[var(--muted)]">{meeting.location || "Location to be confirmed"}</dd></div></div> : null}
               {meeting.virtualUrl ? <div className="flex gap-3"><Video className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Online meeting</dt><dd><a href={meeting.virtualUrl} rel="noreferrer" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Open meeting link</a></dd></div></div> : null}
               {meeting.format === "live" ? <div className="flex gap-3"><Users className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Attendance</dt><dd className="text-[var(--muted)]">{attended > 0 ? `${attended} recorded as attended` : `${detail.attendance.length} invited`}{meeting.quorumRequired ? <span className="mt-1 block text-xs font-semibold text-[var(--foreground)]">{meeting.quorumConfirmedAt ? "Quorum confirmed" : `${quorumEligibleAttended} of ${meeting.quorumRequired} required for quorum`}</span> : null}</dd></div></div> : null}

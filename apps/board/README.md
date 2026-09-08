@@ -25,7 +25,7 @@ server authorization; routes and repositories enforce current roles.
 
 | Role | Documents | Meetings | Audit ledger | User management |
 | --- | --- | --- | --- | --- |
-| Director | view | view + RSVP + eligible asynchronous votes and discussion | no | no |
+| Director | view | view + RSVP + eligible electronic consents and discussion | no | no |
 | Board Chair | manage | manage + communicate + discuss | review | manage |
 | Executive Director | manage | manage + communicate + discuss | review | manage |
 | Legal Counsel | manage | view + meeting documents + discuss | review | no |
@@ -116,29 +116,64 @@ draft minutes.
 Only the Board Chair and Executive Director may publish, reschedule, cancel, or
 close a meeting, record minutes approval, or send an official communication.
 
-A meeting can be `live` or an `asynchronous` written-resolution workspace. The
-Chair or Executive Director prepares exact motions while the meeting is a
-private draft, schedules a voting window, and opens each ballot. Opening takes
-an immutable snapshot of active Director and Board Chair records; staff roles
-do not acquire a vote. Each ballot fixes its eligible roster hash, quorum count,
-and required yes-vote count. Unspecified thresholds default to the meeting
-quorum (or a majority of eligible directors) and a majority of eligible
-directors, and the UI directs the officer to confirm them against the bylaws.
+A meeting can be `live` or an `asynchronous` workspace for **action without a
+meeting by unanimous written consent**. Async discussion is not a legally
+convened meeting, and agreement to use the portal does not approve an action.
+Each resolution has its own electronic consent record; an omnibus resolution
+or an uploaded signature PDF is unnecessary.
 
-Eligible directors cast `yes`, `no`, `abstain`, or `recused` using their
-passkey-authenticated account and recent step-up verification. They may change
-their response until the deadline; the current ballot and every prior response
-are retained. Voting closes automatically at the deadline. While voting is
-open, the site shows response progress but hides live totals and all individual
-choices. After the deadline, the Chair or Executive Director finalizes the automatically computed
-quorum and approval result. Only the final aggregate totals are shown in the
-meeting record. The finalized ballot also creates the retained meeting decision;
-the meeting cannot be completed while a ballot remains draft or open.
+The Chair or Executive Director prepares the exact resolution text and selects
+specific versions of active library or workspace documents. The opening officer
+confirms the displayed roster contains every director currently in office and
+that the action is permitted without a meeting under applicable law and the
+articles/bylaws, including any conflict requirements. All directors must have
+active portal access. The app fixes the full director roster, resolution text,
+incorporated document IDs, version IDs and SHA-256 digests, declarations, and
+collection window. Edits require a new resolution with fresh signatures. The
+collection window and workspace format cannot change after a resolution opens.
 
-The Chair or Executive Director can send a vote reminder only to eligible
-directors who have not responded. The message contains an authenticated portal
-link and deadline, not the motion or confidential attachments. Delivery follows
-the same per-recipient idempotency and audit behavior as other meeting messages.
+Each director reviews the exact record, types their full name, explicitly
+confirms electronic-signature intent, and submits through their own passkey
+session with recent step-up verification. The server binds the receipt to the
+authenticated user and director access record and records delivery time. An
+ordinary yes vote, abstention, recusal, or silence is never a signed consent.
+No threshold controls, excluded-director subset, manual majority finalization,
+or manual async decision entry can adopt an action.
+
+The transaction delivering the last required unrevoked consent automatically
+adopts that resolution and appends its decision, without waiting for the window
+to end. Until adoption a director can deliver a signed withdrawal, including
+after the collection deadline. A completed action cannot be withdrawn, cancelled,
+or rewritten. Conditions in the resolution (such as funding prerequisites)
+continue to govern the action's implementation. An incomplete collection is not
+adopted at its deadline; the officer may cancel it and use a new consent or an
+appropriate live meeting. Resolve conflict/recusal exceptions with counsel;
+this workflow always requires every director and cannot lower that requirement.
+
+Current receipts and immutable receipt history are retained in the Board
+meetings table without TTL. The authenticated per-resolution record endpoint
+`/api/meetings/[id]/ballots/[ballotId]/record` provides printable HTML and
+`?format=json`. Before adoption the export reveals only the viewer's own receipts;
+after adoption it includes all signatures and withdrawal history. Incorporated
+versions remain available through that record even if their library head is
+later archived. The general audit ledger records action/resolution identifiers,
+not signature text. Legacy ordinary ballots remain historical records and
+cannot be relabeled or finalized as signed consents.
+
+A strongly consistent director-roster manifest is transactionally maintained by
+access-registry mutations. Director additions, removals, role/status changes,
+and session revocations invalidate unfinished collections; completed records
+keep their original roster. Initialization is an explicit guarded operation in
+[the Board deployment runbook](../../docs/board-deployment.md#unanimous-written-consent-release).
+Collection fails closed until initialization. The website needs no Scan or
+additional IAM permission. Officers must still verify that access records
+match the legal board; removing portal access does not itself remove a director.
+
+The Chair or Executive Director can send consent reminders only to eligible
+directors without a current consent. The message contains a portal link and
+deadline, not the motion, signatures or attachments. A changed roster pauses
+reminders. Delivery retains the existing per-recipient idempotency and audit
+behavior.
 
 Every opened written resolution has an asynchronous discussion thread. Active
 Directors, the Board Chair, Executive Director, and Legal Counsel can post and
@@ -147,9 +182,9 @@ passkey-authenticated account, may be edited by their author for 15 minutes,
 and cannot be deleted. The current message plus an immutable revision for every
 post and edit are retained in the meeting partition, and each mutation appends
 the normal hash-chained Board audit event with a content hash. Discussion opens
-with the voting window and becomes read-only when the window closes or the
-ballot is cancelled, while remaining visible in the historical meeting record.
-Discussion does not expose a member's private ballot choice. Threads refresh on
+with the collection window and becomes read-only when the window closes or the
+resolution is adopted or cancelled, while remaining visible in the historical meeting record.
+Discussion does not constitute an electronic signature or consent. Threads refresh on
 request; email notifications, unread counts, reactions, attachments, and live
 chat delivery are intentionally outside the initial discussion scope.
 
@@ -221,7 +256,7 @@ meeting status never deletes its documents.
 
 Calendar downloads use a stable iCalendar UID and sequence. Board Chair and
 Executive Director users can manually send an invitation, update, materials
-notice, reminder, vote reminder, or cancellation. Messages are delivered one recipient at a
+notice, reminder, consent reminder, or cancellation. Messages are delivered one recipient at a
 time through the Board SES identity; that identity remains the calendar
 organizer even when a different authorized officer sends an update. Messages
 contain authenticated portal links rather than confidential attachments and

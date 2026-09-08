@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { documentClient } from "@/lib/dynamodb";
 import { BOARD_ACCESS_TABLE } from "@/lib/config";
+import { DIRECTOR_ROSTER_KEY, directorRosterCondition, isVotingDirector, nextDirectorRoster, readDirectorRoster } from "@/lib/director-roster";
 import {
   isBoardAccessRole,
   isBoardAccessStatus,
@@ -397,8 +398,15 @@ export function createBoardAccessRepository(
   }
 
   async function execute(mutation: BuiltBoardAccessMutation, options: BoardAccessMutationOptions = {}) {
+    const affectsDirectors = isVotingDirector(mutation.record.role) || isVotingDirector(mutation.revision.previousRole || "");
+    const previousRoster = affectsDirectors ? await readDirectorRoster(client, resolvedTableName) : null;
+    const rosterItems = affectsDirectors ? [{ Put: {
+      TableName: resolvedTableName,
+      Item: { ...DIRECTOR_ROSTER_KEY, ...nextDirectorRoster(previousRoster, mutation.record) },
+      ...directorRosterCondition(previousRoster),
+    } }] : [];
     await client.transactWrite({
-      TransactItems: [...mutation.transactItems, ...(options.additionalTransactItems || [])],
+      TransactItems: [...mutation.transactItems, ...rosterItems, ...(options.additionalTransactItems || [])],
     });
     return mutation.record;
   }

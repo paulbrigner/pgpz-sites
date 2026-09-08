@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "rsvp") {
       const current = await boardMeetingsRepository.getMeeting(meetingId);
-      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Asynchronous meetings use authenticated ballots rather than attendance responses." }, { status: 409 });
+      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Async actions require signed consents for each resolution." }, { status: 409 });
       const status = memberOf(body?.status, ["accepted", "declined", "tentative"] as const, "accepted");
       const audit = await auditItems(member, {
         action: "meeting_rsvp_recorded",
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
       if (status === "completed") {
         const current = await boardMeetingsRepository.getMeeting(meetingId);
         const unfinished = current?.meeting.format === "asynchronous" && current.asyncBallots.some((ballot) => ballot.status === "draft" || ballot.status === "open");
-        if (unfinished) return NextResponse.json({ error: "Finalize or cancel every asynchronous ballot before completing the meeting." }, { status: 409 });
+        if (unfinished) return NextResponse.json({ error: "Every resolution must be adopted unanimously or cancelled before completing the workspace." }, { status: 409 });
       }
       const audit = await auditItems(member, {
         action: status === "cancelled" ? "meeting_cancelled" : `meeting_${status.replaceAll("-", "_")}`,
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "confirmQuorum") {
       const current = await boardMeetingsRepository.getMeeting(meetingId);
-      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Quorum is calculated separately for each asynchronous ballot." }, { status: 409 });
+      if (current?.meeting.format === "asynchronous") return NextResponse.json({ error: "Every director must sign each async resolution; a quorum cannot replace unanimity." }, { status: 409 });
       const confirmed = body?.confirmed !== false;
       const audit = await auditItems(member, {
         action: confirmed ? "meeting_quorum_confirmed" : "meeting_quorum_cleared",

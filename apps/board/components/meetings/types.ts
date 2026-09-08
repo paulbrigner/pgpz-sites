@@ -75,6 +75,17 @@ export interface DiscussionMessageView {
 }
 
 export interface AsyncBallotView {
+  consentMode?: "unanimous-v1";
+  attachments?: readonly import("@/lib/written-consents").ConsentAttachment[];
+  consent?: {
+    contentHash: string;
+    startAt: string; endAt: string;
+    statement: string; withdrawalStatement: string;
+    directors: readonly { userId: string; name: string; email: string }[];
+    viewerReceipt: import("@/lib/written-consents").ConsentReceipt | null;
+    rosterChanged: boolean;
+    adoptedAt: string | null;
+  } | null;
   id: string;
   title: string;
   motion: string;
@@ -123,6 +134,8 @@ export interface DeliveryView {
 }
 
 export interface MeetingDetailView {
+  consentDocumentChoices?: readonly import("@/lib/written-consents").ConsentAttachment[];
+  directorRoster?: { revision: string; ready: boolean; directors: { userId: string; name: string; email: string; status: string }[] } | null;
   meeting: MeetingSummaryView;
   agendaItems: AgendaItemView[];
   materials: MeetingMaterialView[];
