@@ -67,6 +67,10 @@ describe("private board feature surface", () => {
       "api/meetings/[id]/ballots/route.ts",
       "api/meetings/[id]/communications/route.ts",
       "api/meetings/[id]/discussions/route.ts",
+      "api/meetings/[id]/executive-sessions/[sessionId]/materials/[materialId]/route.ts",
+      "api/meetings/[id]/executive-sessions/[sessionId]/materials/route.ts",
+      "api/meetings/[id]/executive-sessions/[sessionId]/route.ts",
+      "api/meetings/[id]/executive-sessions/route.ts",
       "api/meetings/route.ts",
     ].sort());
   });

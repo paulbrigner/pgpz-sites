@@ -6,6 +6,10 @@ import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { boardAsyncBallotEffectiveStatus, canEditBoardAsyncDiscussionMessage } from "@/lib/meetings";
 import { canManageBoardDocuments, canManageBoardMeetings, canParticipateBoardDiscussions, canPrepareBoardMeetings, requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
+import { ExecutiveSessions } from "@/components/meetings/ExecutiveSessions";
+import { executiveAccessRecord, listExecutiveCandidates, visibleExecutiveSessions } from "@/lib/executive-session-access";
+import { canCreateExecutiveSession, isDirectorRole } from "@/lib/executive-sessions";
+import { executiveSessionsRepository } from "@/lib/executive-sessions-repository";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Meeting", robots: { index: false, follow: false, nocache: true } };
@@ -22,6 +26,12 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   const canManageMeetings = canManageBoardMeetings(member);
   const canDiscuss = canParticipateBoardDiscussions(member);
   const renderedAt = Date.now();
+  const [executiveSessions, executiveReports, accessRecord] = await Promise.all([
+    visibleExecutiveSessions(member, id), executiveSessionsRepository.reports(id), executiveAccessRecord(member),
+  ]);
+  const candidates = accessRecord?.status === "active" && canCreateExecutiveSession(accessRecord.role) &&
+    ["scheduled", "materials-published"].includes(record.meeting.status)
+    ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
 
   const detail: MeetingDetailView = {
     meeting: {
@@ -81,6 +91,15 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   return (
     <Container className="max-w-[90rem] py-8 sm:px-8 sm:py-12 lg:px-12">
       <MeetingDetail detail={detail} viewerEmail={member.email} capabilities={{ canManage: canManageMeetings, canPrepare: canPrepareBoardMeetings(member), canManageDocuments: canManageBoardDocuments(member), canDiscuss }} />
+      {executiveReports.length > 0 && <section className="mt-8 rounded-2xl border border-[var(--border)] bg-white p-5 sm:p-7">
+        <h2 className="text-xl font-semibold">Reviewed executive-session outcomes</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">Published summaries for all Board portal users. These reports do not constitute formal votes or consents.</p>
+        {executiveReports.map((report) => <article key={report.id} className="mt-4 border-t border-[var(--border)] pt-4">
+          <p className="text-xs text-[var(--muted)]">Published by {report.publishedBy} on {new Date(report.publishedAt).toLocaleString()}</p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm">{report.summary}</p>
+        </article>)}
+      </section>}
+      <ExecutiveSessions meetingId={id} sessions={executiveSessions.map((s) => ({ id: s.id, title: s.title, status: s.status }))} candidates={candidates} />
     </Container>
   );
 }

@@ -89,8 +89,9 @@ download audit events therefore stay on the same governance-vault records.
 
 The full `/documents` surface groups records into Board-owned category folders
 and uses the curated brand registry to present packages, guidelines, manifests,
-and checksums as related document collections. Collections are collapsed until
-opened. These relationships are presentation metadata
+and checksums as related document collections. Category folders and collections
+start collapsed; a direct link to a document opens its containing folder and
+collection, and search expands matching results. These relationships are presentation metadata
 only; every row still downloads the authoritative retained vault record and
 generates the same audited read event.
 
@@ -158,6 +159,58 @@ Important mutations compose the meeting write with the Board hash-chained audit
 append in one DynamoDB transaction. The table is KMS-encrypted, PITR-enabled,
 deletion-protected, `Retain`-protected, has no TTL, and gives web compute no
 `DeleteItem` or `Scan` permission.
+
+### Restricted executive sessions
+
+The Chair (including the legacy `admin` role) can open an executive session
+inside a scheduled or materials-published meeting. This is a Board-specific
+authorization boundary implemented by `lib/executive-session-access.ts`,
+`lib/executive-sessions-repository.ts`, and the nested `executive-sessions`
+page/API routes. The access registry must be enabled; allowlists alone do not
+grant executive-session access.
+
+The Chair explicitly selects active directors, may explicitly invite active
+Legal Counsel, and appoints one selected director as facilitator. The fixed
+snapshot records each participant's registry ID, email, name, and director or
+counsel capacity. Every request rechecks current active status and role against
+that snapshot. Staff, unselected directors, uninvited counsel, and an excluded
+Chair cannot list, read, download, or mutate the session. No general admin or
+document-management capability overrides this check. Counsel can read and
+contribute but cannot facilitate or acquire a vote through the invitation.
+Use a new session when the participant group or facilitator must change.
+Authorization first reads only the viewer's immutable admission grant; private
+session metadata is never fetched for an excluded viewer, including during
+development server-component promise tracing.
+
+Selected participants can post immutable contributions; corrections are new
+messages. The facilitator can retain private materials and permanently close
+deliberation. Files support the Board upload types with a 4 MiB limit, are
+validated and hashed before retention, and have session-owned metadata only.
+They never enter the ordinary Document Library, meeting-material index, or
+generic vault version/download routes. Downloads pass through authenticated
+session authorization with `private, no-store` responses, integrity verification,
+and no reusable presigned download URL. Files and messages remain readable to
+authorized participants after closure. A failed concurrent close/revocation
+can leave an unreferenced retained object, which is never exposed or deleted.
+
+Closure does not constitute a vote or consent. After closure, the facilitator
+may preview and explicitly publish one reviewed outcome to the ordinary meeting.
+Only that text, publication time, and publisher name are released to all active
+portal users, including staff. No private title, purpose, participant list,
+discussion, or attachment is copied automatically. Formal resolutions, recusal
+records, and required signed consents must be handled separately. Previously
+shared library or ordinary meeting materials remain shared; uploading a private
+copy does not revoke earlier access.
+
+Participants find sessions on the ordinary meeting page and refresh to load new
+contributions. Opening or posting does not send email; existing ordinary meeting
+communications contain no executive-session content. Session mutations include
+an atomic audit append, optimistic session version, and current roster guards.
+The ordinary audit ledger contains opaque session/material identifiers, actor,
+and action evidence, never private text, filenames, or participant lists. This
+is portal access control, not cryptographic exclusion of infrastructure operators.
+See the [deployment runbook](../../docs/board-deployment.md#executive-session-storage-and-release)
+for the additive record layout, release checks, and rollback behavior.
 
 Meeting documents use the same governance vault, immutable versions, retained
 objects, checksums, and audited downloads as the general Document Library. A

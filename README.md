@@ -89,6 +89,9 @@ npm run test:e2e
 
 Use focused checks during development. Before closing a cross-workspace change,
 run the final gate described in [Testing](docs/testing.md).
+Every PR also requires [independent agent review](AGENTS.md#independent-pr-review)
+of the final revisions before merge, with blocking findings resolved and
+required checks passing.
 
 ## Architectural rules
 

@@ -12,7 +12,7 @@ const PORTAL_MARKERS = [
 
 test.describe("board portal privacy boundary", () => {
   test("anonymous document requests redirect to sign-in without portal payload", async ({ request }) => {
-    for (const path of ["/", "/terms", "/privacy", "/admin"]) {
+    for (const path of ["/", "/terms", "/privacy", "/admin", "/meetings/m/executive-sessions/s"]) {
       const response = await request.get(path, { maxRedirects: 0 });
 
       expect(response.status(), path).toBe(307);
@@ -24,6 +24,18 @@ test.describe("board portal privacy boundary", () => {
       for (const marker of PORTAL_MARKERS) {
         expect(body, `${path} leaked ${marker} in an anonymous body`).not.toContain(marker);
       }
+    }
+  });
+
+  test("anonymous executive-session requests cannot read or mutate private records", async ({ request }) => {
+    const session = "/api/meetings/m/executive-sessions/s";
+    for (const path of ["/api/meetings/m/executive-sessions", session, `${session}/materials/material`]) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(401);
+    }
+    for (const path of ["/api/meetings/m/executive-sessions", session, `${session}/materials`]) {
+      const response = await request.post(path, { data: { action: "message", body: "unauthorized" } });
+      expect(response.status(), path).toBe(401);
     }
   });
 

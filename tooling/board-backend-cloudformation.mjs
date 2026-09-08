@@ -738,6 +738,15 @@ export function buildBoardBackendTemplate() {
                     ],
                   },
                   {
+                    Sid: "ExecutiveSessionReadGuards",
+                    Effect: "Allow",
+                    Action: ["dynamodb:ConditionCheckItem"],
+                    Resource: [
+                      { "Fn::GetAtt": ["BoardAccessTable", "Arn"] },
+                      { "Fn::GetAtt": ["BoardMeetingsTable", "Arn"] },
+                    ],
+                  },
+                  {
                     Sid: "StagingPutGetDelete",
                     Effect: "Allow",
                     Action: ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],

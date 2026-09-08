@@ -258,6 +258,13 @@ test("keeps the web compute role append-only on audit and delete-proof on retain
   assert.ok(!meetings.Action.includes("dynamodb:DeleteItem"));
   assert.ok(!meetings.Action.includes("dynamodb:Scan"));
 
+  const executiveGuards = statements.find((statement) => statement.Sid === "ExecutiveSessionReadGuards");
+  assert.deepEqual(executiveGuards.Action, ["dynamodb:ConditionCheckItem"]);
+  assert.deepEqual(executiveGuards.Resource, [
+    { "Fn::GetAtt": ["BoardAccessTable", "Arn"] },
+    { "Fn::GetAtt": ["BoardMeetingsTable", "Arn"] },
+  ]);
+
   const staging = statements.find((statement) => statement.Sid === "StagingPutGetDelete");
   assert.ok(staging.Action.includes("s3:DeleteObject"));
 
