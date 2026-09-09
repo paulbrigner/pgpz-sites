@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BoardMeetingVersionConflictError } from "./meetings";
 import type { BoardAccessRecord } from "./board-access";
 import { createBoardMeetingsRepository } from "./meetings-repository";
+import { consentDigest, consentPayload } from "./written-consent-integrity";
 
 type Row = Record<string, unknown>;
 
@@ -51,10 +52,10 @@ function rosterFor(client: ReturnType<typeof fakeClient>, voters: { userId: stri
   for (const voter of voters) client.items.set(`ACCESS#${voter.userId}#PROFILE`, { id: voter.userId, name: voter.name, email: voter.email, role: "member", status: "active", version: 1 });
   return roster;
 }
-async function consentFixture() {
+async function consentFixture(adoptDocument = true) {
   const client = fakeClient(), repo = createBoardMeetingsRepository(client, "Meetings");
   let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z" }));
-  meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Adopt bylaws", motion: "Resolved, the attached bylaws are adopted.", attachments: [{ documentId: "bylaws", versionId: "v3", sequence: 3, title: "Bylaws", fileName: "bylaws.pdf", sha256: "a".repeat(64) }], actorEmail: "chair@pgpz.org" });
+  meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Adopt bylaws", motion: "Resolved, the attached bylaws are adopted.", adoption: { targets: adoptDocument ? [{ documentId: "bylaws", versionId: "v3" }] : [], effectiveTerms: "Upon adoption" }, attachments: [{ documentId: "bylaws", versionId: "v3", sequence: 3, title: "Bylaws", fileName: "bylaws.pdf", sha256: "a".repeat(64) }], actorEmail: "chair@pgpz.org" });
   meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
   const voters = Array.from({ length: 5 }, (_, i) => ({ userId: `director-${i}`, name: `Director ${i}`, email: `director${i}@example.org` }));
   const roster = rosterFor(client, voters);
@@ -160,6 +161,7 @@ describe("Board meetings repository", () => {
     const { repo, client, roster, sign, meeting } = await consentFixture();
     for (let i = 0; i < 4; i++) await sign(i);
     expect((await repo.getMeeting(meeting.id))?.decisions).toHaveLength(0);
+    expect(await repo.listDocumentAdoptions("bylaws")).toHaveLength(0);
     await sign(0, "withdraw");
     await sign(4);
     expect((await repo.getMeeting(meeting.id))?.asyncBallots[0].status).toBe("open");
@@ -169,6 +171,8 @@ describe("Board meetings repository", () => {
     expect(detail?.asyncBallots[0]).toMatchObject({ status: "closed", approvalRequired: 5, result: { yes: 5, outcome: "passed" } });
     expect(detail?.decisions).toHaveLength(1);
     expect(await repo.listConsentReceipts(meeting.id, "ballot-1")).toHaveLength(7);
+    expect(await repo.listDocumentAdoptions("bylaws")).toHaveLength(1);
+    expect([...client.items.values()].filter((item) => item.entityType === "DOCUMENT_ADOPTION")).toHaveLength(1);
     await expect(sign(0, "withdraw")).rejects.toThrow(/completed actions cannot be withdrawn/);
     await expect(repo.cancelAsyncBallot({ meetingId: meeting.id, ballotId: "ballot-1", expectedVersion: detail!.meeting.version, reason: "Cannot undo adoption", actorEmail: "chair@pgpz.org" })).rejects.toThrow(/only a draft or open/);
     expect(client.items.get("DIRECTOR_ROSTER#STATE")?.revision).toBe(roster.revision);
@@ -186,6 +190,31 @@ describe("Board meetings repository", () => {
     await repo.upsertAsyncBallot({ ...input, id: "fresh-consent" });
     expect((await repo.getAsyncBallot(meeting.id, "fresh-consent"))?.consentMode).toBe("unanimous-v1");
     expect((await repo.getAsyncBallot(meeting.id, "ballot-1"))?.consentMode).toBeUndefined();
+  });
+
+  it("does not adopt supporting documents or infer targets for schema 1 consents", async () => {
+    const support = await consentFixture(false);
+    for (let i = 0; i < 5; i++) await support.sign(i);
+    expect(await support.repo.listDocumentAdoptions("bylaws")).toEqual([]);
+    const old = await consentFixture();
+    const ballot = (await old.repo.getAsyncBallot(old.meeting.id, "ballot-1"))!;
+    ballot.consent!.schema = 1;
+    ballot.consent!.contentHash = consentDigest(consentPayload(ballot, ballot.consent!));
+    const key = `MEETING#${old.meeting.id}#BALLOT#ballot-1`;
+    old.client.items.set(key, { ...old.client.items.get(key), ...ballot });
+    for (let i = 0; i < 5; i++) await old.sign(i);
+    expect(await old.repo.listDocumentAdoptions("bylaws")).toEqual([]);
+  });
+
+  it("rejects locator-only or altered adoption evidence and never writes an index before adoption", async () => {
+    const { repo, client, sign, meeting } = await consentFixture();
+    client.items.set("forged", { pk: "DOCUMENT_ADOPTIONS#bylaws", sk: "ADOPTION#forged", entityType: "DOCUMENT_ADOPTION", documentId: "bylaws", versionId: "v3", meetingId: meeting.id, ballotId: "ballot-1" });
+    expect(await repo.listDocumentAdoptions("bylaws")).toEqual([]);
+    client.items.delete("forged");
+    for (let i = 0; i < 5; i++) await sign(i);
+    const key = `MEETING#${meeting.id}#BALLOT#ballot-1`;
+    client.items.set(key, { ...client.items.get(key), motion: "Altered resolution" });
+    expect(await repo.listDocumentAdoptions("bylaws")).toEqual([]);
   });
 
   it("rejects stale signatures and competing final-signature or withdrawal transactions", async () => {

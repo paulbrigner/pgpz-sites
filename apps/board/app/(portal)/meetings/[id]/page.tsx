@@ -75,6 +75,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       return {
         consentMode: ballot.consentMode,
         attachments: ballot.attachments,
+        adoption: ballot.consent && ballot.consent.schema === 1 ? undefined : ballot.adoption,
         consent: ballot.consent ? {
           contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,
           statement: ballot.consent.statement, withdrawalStatement: ballot.consent.withdrawalStatement,

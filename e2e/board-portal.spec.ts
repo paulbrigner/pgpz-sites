@@ -11,6 +11,14 @@ const PORTAL_MARKERS = [
 ];
 
 test.describe("board portal privacy boundary", () => {
+  test("anonymous adoption downloads expose neither documents nor signature evidence", async ({ request }) => {
+    for (const path of ["/api/meetings/m/ballots/b/record", "/api/meetings/m/ballots/b/packet?document=d"]) {
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(401);
+      expect(response.headers()["cache-control"], path).toContain("private, no-store");
+      expect(await response.text(), path).toBe("");
+    }
+  });
   test("anonymous document requests redirect to sign-in without portal payload", async ({ request }) => {
     for (const path of ["/", "/terms", "/privacy", "/admin", "/meetings/m/executive-sessions/s"]) {
       const response = await request.get(path, { maxRedirects: 0 });

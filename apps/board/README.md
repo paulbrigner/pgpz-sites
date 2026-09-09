@@ -101,6 +101,14 @@ in filter options and counts. These relationships are presentation metadata
 only; every row still downloads the authoritative retained vault record and
 generates the same audited read event.
 
+The Board-owned **Adopted documents** filter combines with the existing library
+filters and does not change Active/Archived visibility. Each document's adoption
+panel identifies the exact adopted versions, resolutions, actual adoption times,
+director consent counts, and separately signed effective-date/condition text.
+Uploading a revision neither adopts it nor supersedes an earlier adopted version.
+An absent link means no explicit portal adoption record, not a legal finding that
+the document was never adopted elsewhere. Ordinary categories stay unchanged.
+
 Document management is integrated into this same library rather than exposed as
 a parallel interface. Board Chair, Executive Director, Legal Counsel, and Board
 Support roles see permission-scoped controls for creating documents, adding a
@@ -127,6 +135,15 @@ meeting by unanimous written consent**. Async discussion is not a legally
 convened meeting, and agreement to use the portal does not approve an action.
 Each resolution has its own electronic consent record; an omnibus resolution
 or an uploaded signature PDF is unnecessary.
+
+When preparing a resolution, select **Supporting document** or **Adopt this
+document** for each included version. Only explicit adoption targets acquire
+library adoption evidence; background materials never inherit adoption merely
+because they were attached. Effective-date/condition text must agree with the
+resolution and is fixed and signed with it. The portal does not determine that
+an implementation condition has been fulfilled. New records use consent payload
+schema 2. Already opened schema 1 consents retain their original digest and
+remain signable; their attachments are not retroactively classified as adopted.
 
 The Chair or Executive Director prepares the exact resolution text and selects
 specific versions of active library or workspace documents. The opening officer
@@ -165,6 +182,24 @@ versions remain available through that record even if their library head is
 later archived. The general audit ledger records action/resolution identifiers,
 not signature text. Legacy ordinary ballots remain historical records and
 cannot be relabeled or finalized as signed consents.
+
+The final consent transaction also creates immutable per-document adoption
+locators in the meetings table. Library reads verify the underlying action,
+signed targets, digest, and full current receipts before showing adoption.
+**Download adoption packet**, available from the resolution and library panel,
+uses `/api/meetings/[id]/ballots/[ballotId]/packet?document=<id>`. An ordinary PDF
+is reproduced with a resolution/signature appendix and embedded exact original,
+HTML, and JSON records. Other formats, interactive/encrypted PDFs, PDFs over 150
+pages, or typography unsupported by the PDF renderer use a ZIP containing the
+unchanged source, UTF-8 HTML/JSON consent records, and a manifest instead.
+Packets are generated on demand, never uploaded as a new source version, and do
+not create signatures or Secretary certifications. The original remains
+authoritative. Sources over 12 MiB or packets over 4 MiB must be downloaded as
+the original and consent record separately to respect buffered hosting limits.
+Generation failures never undo adoption. Downloads require an authenticated
+passkey session, verify retained bytes against the signed SHA-256, and audit the
+exact document version. Restricted disclosures and executive-session materials
+are excluded; only the expressly adopted ordinary-vault document is included.
 
 A strongly consistent director-roster manifest is transactionally maintained by
 access-registry mutations. Director additions, removals, role/status changes,

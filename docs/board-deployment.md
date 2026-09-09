@@ -504,3 +504,41 @@ requires all directors' own signed consents. An outstanding signature at the
 deadline means not adopted, and completing the workspace does not supply it.
 The Board should retain the adopted resolution's printable/JSON record together
 with its incorporated versions in its permanent corporate records.
+
+### Document adoption evidence release
+
+This is an additive Board-only release. New saved consent drafts include
+explicit adoption targets and effective terms; opening such a draft uses signed
+payload schema 2. Schema 1 already-open collections keep their original digest
+and can finish normally, but do not gain inferred document adoption targets.
+Existing drafts can be edited and saved to select targets before opening.
+Do not rewrite or backfill signed records from attachment lists. There is no
+production data migration, scan, table/index creation, IAM expansion, TTL, or
+Object Lock change for this release.
+
+The last required signature atomically writes the action, receipt, decision,
+audit evidence, and immutable `DOCUMENT_ADOPTIONS#<documentId>` /
+`ADOPTION#<versionId>#<meetingId>#<ballotId>` locator rows in `BOARD_MEETINGS_TABLE`.
+Readers use paginated, strongly consistent partition queries and verify the
+referenced consent before showing a document adoption. This index contains
+identifiers only, not private deliberation or disclosure text.
+
+Before authorized deployment, complete `npm run check`, `npm run build:board`,
+Board infrastructure contracts, targeted browser checks, and independent review.
+Exercise all-five signing, withdrawal races, old schema 1 digest compatibility,
+explicit targets versus supporting documents, version replacement/archiving,
+packet authentication, source hash verification, and PDF/ZIP exports with local
+synthetic records only. Review the Board-only `pdf-lib` and `jszip` dependency
+changes. Verify the same live account, branch, and revision safeguards described
+above; never create real signatures or production email for release tests.
+
+Deploy all schema 2 readers/writers together. Do not roll back to code that
+ignores adoption fields while schema 2 collections are open: it cannot reproduce
+their signed digest. Completed records and originals remain retained if packet
+generation fails. Packets are on-demand derivatives with private/no-store
+responses, not new document versions or stored certifications. Source files over
+12 MiB or resulting packets over 4 MiB remain available as separate original
+and consent-record downloads; unsupported PDF composition uses an exact-source
+ZIP packet instead. Post-release, read existing library/consent screens without
+mutating them and verify that pre-release attachments have no inferred adopted
+labels. New authorized actions should show adoption only after the final consent.

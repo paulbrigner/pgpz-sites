@@ -6,7 +6,8 @@ import { BOARD_MEETINGS_TABLE } from "@/lib/config";
 import { consentDigest, consentPayload } from "@/lib/written-consent-integrity";
 import type { BoardAccessRecord } from "@/lib/board-access";
 import { accessRecordGuard, directorRosterGuard, isVotingDirector, type DirectorRoster } from "@/lib/director-roster";
-import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION, type ConsentAttachment, type ConsentReceipt } from "@/lib/written-consents";
+import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION, validateConsentAdoption, type ConsentAdoption, type ConsentAttachment, type ConsentReceipt } from "@/lib/written-consents";
+import { isAdoptionTarget } from "@/lib/document-adoptions";
 import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
@@ -85,6 +86,7 @@ export interface UpsertBoardAsyncBallotInput {
   readonly agendaItemId?: string | null; readonly title: string; readonly motion: string;
   readonly quorumRequired?: number | null; readonly approvalRequired?: number | null;
   readonly attachments?: readonly ConsentAttachment[];
+  readonly adoption?: ConsentAdoption;
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface OpenBoardAsyncBallotInput {
@@ -195,7 +197,7 @@ function toAsyncBallot(item: Row): BoardAsyncBallot | null {
     ? item.eligibleVoters.map((value) => value as BoardAsyncBallotVoter)
     : [];
   return {
-    ...(item.consentMode === "unanimous-v1" ? { consentMode: "unanimous-v1" as const, attachments: (item.attachments || []) as ConsentAttachment[], consent: item.consent as BoardAsyncBallot["consent"] } : {}),
+    ...(item.consentMode === "unanimous-v1" ? { consentMode: "unanimous-v1" as const, attachments: (item.attachments || []) as ConsentAttachment[], consent: item.consent as BoardAsyncBallot["consent"], ...(item.adoption ? { adoption: item.adoption as ConsentAdoption } : {}) } : {}),
     id: String(item.id || ""), meetingId: String(item.meetingId || ""),
     agendaItemId: item.agendaItemId == null ? null : String(item.agendaItemId),
     title: String(item.title || ""), motion: String(item.motion || ""), status,
@@ -372,6 +374,23 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
   }
   return {
     getMeeting, listMeetings, getAsyncBallot,
+    async listDocumentAdoptions(documentId: string): Promise<BoardAsyncBallot[]> {
+      const id = required(documentId, "documentId");
+      const locators: Row[] = [];
+      let cursor: Record<string, unknown> | undefined;
+      do {
+        const response = await client.query({ TableName: resolvedTable, KeyConditionExpression: "#pk = :pk", ExpressionAttributeNames: { "#pk": "pk" }, ExpressionAttributeValues: { ":pk": `DOCUMENT_ADOPTIONS#${id}` }, ConsistentRead: true, ...(cursor ? { ExclusiveStartKey: cursor } : {}) });
+        locators.push(...(response.Items || []));
+        cursor = response.LastEvaluatedKey;
+      } while (cursor);
+      const found: BoardAsyncBallot[] = [];
+      for (const row of locators) {
+        if (row.entityType !== "DOCUMENT_ADOPTION" || row.documentId !== id || typeof row.meetingId !== "string" || typeof row.ballotId !== "string" || typeof row.versionId !== "string") continue;
+        const ballot = await getAsyncBallot(row.meetingId, row.ballotId);
+        if (ballot && isAdoptionTarget(ballot, id, row.versionId)) found.push(ballot);
+      }
+      return found.sort((a, b) => b.closedAt!.localeCompare(a.closedAt!) || a.id.localeCompare(b.id));
+    },
     async listConsentReceipts(meetingId: string, ballotId: string): Promise<ConsentReceipt[]> {
       return (await rows(meetingId)).filter((row) => row.entityType === "CONSENT_RECEIPT" && row.ballotId === ballotId)
         .map((row) => row.receipt as ConsentReceipt).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
@@ -463,7 +482,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if ((input.attachments?.length || 0) > 20) throw new Error("A resolution may reference at most 20 documents.");
       const quorumRequired = null; const approvalRequired = null;
       const ballot: BoardAsyncBallot = {
-        consentMode: "unanimous-v1", attachments: [...(input.attachments || [])], consent: null,
+        consentMode: "unanimous-v1", attachments: [...(input.attachments || [])], adoption: validateConsentAdoption(input.adoption, input.attachments || []), consent: null,
         id: required(input.id, "ballotId"), meetingId: previous.id,
         agendaItemId: input.agendaItemId?.trim() || null,
         title: required(input.title, "title"), motion: required(input.motion, "motion"), status: "draft",
@@ -496,9 +515,11 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (input.roster.directors.some((director) => director.status !== "active")) throw new Error("Every listed director must have active access before consent collection opens.");
       if (eligibleVoters.length > 30) throw new Error("This consent workflow supports at most 30 directors.");
       if (JSON.stringify(eligibleVoters) !== JSON.stringify(input.roster.directors.map(({ userId, name, email }) => ({ userId, name, email })).sort((a, b) => a.email.localeCompare(b.email)))) throw new Error("The director roster changed. Refresh and try again.");
-      const contentHash = consentDigest(consentPayload({ ...existing, eligibleVoters }, { rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT }));
+      const schema = existing.adoption ? 2 : 1;
+      if (existing.adoption) validateConsentAdoption(existing.adoption, existing.attachments || []);
+      const contentHash = consentDigest(consentPayload({ ...existing, eligibleVoters }, { schema, rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT }));
       const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired: eligibleVoters.length, approvalRequired: eligibleVoters.length, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor,
-        consent: { schema: 1, contentHash, rosterRevision: input.roster.revision, rosterConfirmation: ROSTER_CONFIRMATION, confirmedBy: actor, confirmedAt: at, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT, receipts: [] } };
+        consent: { schema, contentHash, rosterRevision: input.roster.revision, rosterConfirmation: ROSTER_CONFIRMATION, confirmedBy: actor, confirmedAt: at, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT, receipts: [] } };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, "written-consent-opened", actor, at, { ballotId: ballot.id, contentHash, eligibleCount: eligibleVoters.length }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [directorRosterGuard(input.roster), ...(options?.additionalTransactItems || [])] });
     },
@@ -546,6 +567,11 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
             ...(input.action === "consent" && input.roster ? [directorRosterGuard(input.roster)] : []),
             { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: `CONSENT_RECEIPT#${ballot.id}#${at}#${receipt.id}`, entityType: "CONSENT_RECEIPT", ballotId: ballot.id, receipt }, ...immutable } },
             ...(decision ? [{ Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ...immutable } }] : []),
+            ...(complete && updated.consent?.schema === 2 ? (updated.adoption?.targets || []).map((target) => ({ Put: {
+              TableName: resolvedTable,
+              Item: { pk: `DOCUMENT_ADOPTIONS#${target.documentId}`, sk: `ADOPTION#${target.versionId}#${previous.id}#${ballot.id}`, entityType: "DOCUMENT_ADOPTION", documentId: target.documentId, versionId: target.versionId, meetingId: previous.id, ballotId: ballot.id },
+              ...immutable,
+            } })) : []),
             ...(options?.additionalTransactItems || []),
           ],
         });

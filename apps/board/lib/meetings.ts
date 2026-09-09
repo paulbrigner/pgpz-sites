@@ -129,6 +129,7 @@ export interface BoardAsyncBallotResult {
 export interface BoardAsyncBallot {
   readonly consentMode?: "unanimous-v1";
   readonly attachments?: readonly import("./written-consents").ConsentAttachment[];
+  readonly adoption?: import("./written-consents").ConsentAdoption;
   readonly consent?: import("./written-consents").WrittenConsent | null;
   readonly id: string;
   readonly meetingId: string;
