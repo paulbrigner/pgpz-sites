@@ -77,6 +77,7 @@ export interface DiscussionMessageView {
 export interface AsyncBallotView {
   consentMode?: "unanimous-v1";
   attachments?: readonly import("@/lib/written-consents").ConsentAttachment[];
+  adoption?: import("@/lib/written-consents").ConsentAdoption;
   consent?: {
     contentHash: string;
     startAt: string; endAt: string;

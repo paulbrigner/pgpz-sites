@@ -12,6 +12,29 @@ export interface ConsentAttachment {
   sequence: number;
   sha256: string;
 }
+/** Explicit adoption targets, signed alongside the resolution. Other attached
+ * documents are supporting material and acquire no adoption status. */
+export interface ConsentAdoption {
+  targets: { documentId: string; versionId: string }[];
+  /** Human-reviewed terms; the portal does not infer whether conditions are met. */
+  effectiveTerms: string;
+}
+
+export function validateConsentAdoption(value: unknown, attachments: readonly ConsentAttachment[]): ConsentAdoption {
+  if (value == null) return { targets: [], effectiveTerms: "" };
+  if (typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid document adoption instructions.");
+  const input = value as Record<string, unknown>;
+  if (!Array.isArray(input.targets) || input.targets.length > 20 || typeof input.effectiveTerms !== "string" || input.effectiveTerms.length > 2000 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(input.effectiveTerms)) throw new Error("Select adoption targets and enter effective terms of at most 2000 characters.");
+  const seen = new Set<string>();
+  const targets = input.targets.map((value: unknown) => {
+    if (!value || typeof value !== "object") throw new Error("Invalid adoption target.");
+    const { documentId, versionId } = value as Record<string, unknown>;
+    if (typeof documentId !== "string" || typeof versionId !== "string" || seen.has(documentId) || !attachments.some((doc) => doc.documentId === documentId && doc.versionId === versionId)) throw new Error("Each adoption target must be an attached document version, selected once.");
+    seen.add(documentId);
+    return { documentId, versionId };
+  });
+  return { targets, effectiveTerms: input.effectiveTerms.trim() };
+}
 export interface ConsentReceipt {
   id: string;
   meetingId: string;
@@ -28,7 +51,7 @@ export interface ConsentReceipt {
   supersedesReceiptId: string | null;
 }
 export interface WrittenConsent {
-  schema: 1;
+  schema: 1 | 2;
   contentHash: string;
   rosterRevision: string;
   rosterConfirmation: string;

@@ -22,6 +22,21 @@ const openBallot: AsyncBallotView = {
   viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
 describe("AsyncBallots", () => {
+  it("distinguishes adopted documents from supporting materials and signs the effective terms", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({}));
+    const docs = ["Policy", "Background"].map((title) => ({ documentId: title, versionId: "v1", title, sequence: 1, fileName: `${title}.pdf`, sha256: "digest" }));
+    render(<AsyncBallots meeting={meeting} ballots={[]} canManage canDiscuss documentChoices={docs} />);
+    fireEvent.click(screen.getByText("Add written resolution"));
+    fireEvent.change(screen.getByLabelText("Resolution title"), { target: { value: "Adopt policy" } });
+    fireEvent.change(screen.getByLabelText("Exact resolution text"), { target: { value: "Resolved, adopt Policy v1." } });
+    for (const [title, treatment] of [["Policy", "adopt"], ["Background", "support"]]) fireEvent.change(screen.getByLabelText(`Treatment of ${title} · v1`), { target: { value: JSON.stringify({ documentId: title, versionId: "v1", treatment }) } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Effective date/ }), { target: { value: "October 1, 2026" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft resolution" }));
+    await waitFor(() => expect(fetchWithBoardStepUp).toHaveBeenCalled());
+    const body = JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string);
+    expect(body.attachments).toHaveLength(2);
+    expect(body.adoption).toEqual({ targets: [{ documentId: "Policy", versionId: "v1" }], effectiveTerms: "October 1, 2026" });
+  });
   it("does not offer in-place editing or collection for a legacy draft", () => {
     render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "draft", consentMode: undefined, consent: null }]} canManage canDiscuss />);
     expect(screen.queryByText("Edit draft resolution")).not.toBeInTheDocument();

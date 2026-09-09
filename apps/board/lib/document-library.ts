@@ -1,6 +1,7 @@
 import type { DocumentItem, DocumentVersion } from "@pgpz/document-vault";
 import type { BoardDocumentItem } from "@/lib/documents-repository";
 import { BRAND_DOCUMENT_CATEGORY, BRAND_LIBRARY_ENTRIES } from "@/lib/brand-library";
+import type { DocumentAdoptionView } from "@/lib/document-adoptions";
 
 export type LibraryDocumentRole = "package" | "guidelines" | "governance" | "manifest" | "checksum" | "document";
 
@@ -20,6 +21,8 @@ export type LibraryDocument = Readonly<{
   byteLength: number;
   versionCount: number;
   status: "active" | "archived";
+  currentVersionId: string;
+  adoptions?: readonly DocumentAdoptionView[];
   versions: ReadonlyArray<Readonly<{
     versionId: string;
     sequence: number;
@@ -87,6 +90,7 @@ function versionLabel(document: DocumentItem) {
 export function buildDocumentLibrary(
   documents: ReadonlyArray<DocumentItem | BoardDocumentItem>,
   versionsByDocument: ReadonlyMap<string, ReadonlyArray<DocumentVersion>> = new Map(),
+  adoptionsByDocument: ReadonlyMap<string, readonly DocumentAdoptionView[]> = new Map(),
 ): ReadonlyArray<LibraryCategory> {
   const documentsByCategory = new Map<string, LibraryDocument[]>();
   for (const document of documents) {
@@ -109,6 +113,8 @@ export function buildDocumentLibrary(
       byteLength: document.currentVersion.byteLength,
       versionCount: document.versionCount,
       status: document.status,
+      currentVersionId: document.currentVersion.versionId,
+      adoptions: adoptionsByDocument.get(document.documentId) || [],
       versions: [...(versionsByDocument.get(document.documentId) ?? [document.currentVersion])]
         .sort((left, right) => right.sequence - left.sequence)
         .map((version) => ({

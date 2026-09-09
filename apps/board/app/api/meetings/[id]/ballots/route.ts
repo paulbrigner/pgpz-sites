@@ -11,7 +11,7 @@ import { boardDocumentRepository } from "@/lib/vault";
 import { accessRecordGuard, readDirectorRoster } from "@/lib/director-roster";
 import { executiveJson as json, executiveJsonBody } from "@/lib/executive-session-api";
 import { SITE_URL } from "@/lib/config";
-import type { ConsentAttachment } from "@/lib/written-consents";
+import { validateConsentAdoption, type ConsentAttachment } from "@/lib/written-consents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       }
       const meeting = await boardMeetingsRepository.upsertAsyncBallot({
         meetingId, expectedVersion, id: ballotId, agendaItemId: text(body.agendaItemId) || null,
-        title: text(body.title), motion: text(body.motion), attachments, actorEmail: state.member.email,
+        title: text(body.title), motion: text(body.motion), attachments, adoption: validateConsentAdoption(body.adoption, attachments), actorEmail: state.member.email,
       }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting, ballotId });
     }

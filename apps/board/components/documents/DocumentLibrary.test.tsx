@@ -21,7 +21,7 @@ const categories: LibraryCategory[] = [
     label: "Policies",
     description: "Board policies and procedures.",
     documents: [{
-      documentId: "policy-1", title: "Conflict of Interest Policy", description: "Disclosure and recusal policy.",
+      documentId: "policy-1", currentVersionId: "policy-v1", title: "Conflict of Interest Policy", description: "Disclosure and recusal policy.",
       category: "policies", categoryLabel: "Policies", collectionId: null, collectionLabel: null, role: "document",
       typeLabel: "PDF", fileType: "PDF", versionLabel: "v2", updatedAt: "2026-08-12T00:00:00.000Z", byteLength: 2048,
       status: "active",
@@ -34,7 +34,7 @@ const categories: LibraryCategory[] = [
     label: "Brand & Trademark",
     description: "Brand packages and integrity records.",
     documents: [{
-      documentId: "checksums", title: "PGPZ Brand Package Checksums — Version 4", description: "SHA-256 checksums.",
+      documentId: "checksums", currentVersionId: "checksum-v1", title: "PGPZ Brand Package Checksums — Version 4", description: "SHA-256 checksums.",
       category: "brand-trademark", categoryLabel: "Brand & Trademark", collectionId: "pgpz-brand-v4", collectionLabel: "PGPZ Brand v4", role: "checksum",
       typeLabel: "Checksum", fileType: "TXT", versionLabel: "v4", updatedAt: "2026-08-12T00:00:00.000Z", byteLength: 1024,
       status: "active",
@@ -56,6 +56,23 @@ const mixedCategories: LibraryCategory[] = categories.map((category) => ({
 }));
 
 describe("DocumentLibrary", () => {
+  it("filters adoption independently of archive status and keeps newer uploads separate", () => {
+    const adoption = { meetingId: "m", resolutionId: "b", resolutionTitle: "Adopt policy", versionId: "policy-v1", sequence: 1, sha256: "hash", adoptedAt: "2026-09-11T12:00:00Z", effectiveTerms: "October 1, 2026", signatureCount: 5, directorCount: 5, recordHref: "/record", packetHref: "/packet", originalHref: "/original-v1" };
+    const withAdoption = mixedCategories.map((category) => ({ ...category, documents: category.documents.map((doc) => doc.category === "policies" ? { ...doc, currentVersionId: "new-draft", adoptions: [adoption] } : doc) }));
+    render(<DocumentLibrary categories={withAdoption} canManage />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by adoption" }), { target: { value: "adopted" } });
+    expect(screen.getByText("1 document shown")).toBeVisible();
+    fireEvent.click(screen.getByText("Adoption records · earlier version adopted"));
+    expect(screen.getByText(/latest upload has no linked adoption record/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open adopted version" })).toHaveAttribute("href", "/original-v1");
+    expect(screen.getByRole("link", { name: "Download adoption packet" })).toHaveAttribute("href", "/packet");
+    expect(screen.getByText(/October 1, 2026/)).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by document status" }), { target: { value: "all" } });
+    expect(screen.getByText("2 documents shown")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("combobox", { name: "Filter by adoption" })).toHaveValue("all");
+    expect(screen.getByRole("combobox", { name: "Filter by document status" })).toHaveValue("active");
+  });
   it("keeps the brand folder and its collections collapsed until opened", () => {
     render(<DocumentLibrary categories={categories} />);
     expect(screen.getByRole("button", { name: /Brand & Trademark/ })).toHaveAttribute("aria-expanded", "false");

@@ -12,6 +12,8 @@ import { buttonStyles } from "@pgpz/ui";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import { DOCUMENT_CATEGORY_OPTIONS, type LibraryCategory, type LibraryDocument } from "@/lib/document-library";
 
+import { AdoptionPanel } from "./AdoptionPanel";
+
 const ACCEPTED_DOCUMENTS = ".pdf,.zip,.json,.txt,.md,.csv";
 const categoryIcons = { incorporation: Building2, governance: ShieldCheck, policies: FileText, agreements: Handshake, "brand-trademark": Tag } as const;
 const roleIcons = { package: Package, guidelines: BookOpen, governance: ShieldCheck, manifest: Archive, checksum: FileCheck2, document: FileText } as const;
@@ -123,13 +125,14 @@ function DocumentRow({
           {management ? <button type="button" aria-label={`Manage ${document.title}`} aria-expanded={manageOpen} aria-controls={managementId} onClick={() => setManageOpen((current) => !current)} className="rounded-lg p-2 text-[var(--primary)] transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></button> : null}
         </div>
       </div>
+      <AdoptionPanel document={document} />
       {historyOpen ? (
         <div id={historyId} className="border-t border-[var(--border)] bg-[var(--primary-soft)]/45 px-5 py-3 sm:px-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Version history</p><p className="mt-1 text-xs text-[var(--muted)]">Adding a version preserves the earlier files in this record.</p></div>
             {management ? <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] ${busy ? "pointer-events-none opacity-50" : ""}`}><Upload className="h-3.5 w-3.5" aria-hidden="true" />{busy ? "Uploading…" : "Add version"}<input type="file" accept={ACCEPTED_DOCUMENTS} disabled={busy} className="sr-only" aria-label={`Add version to ${document.title}`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void management.onAddVersion(document, file); event.currentTarget.value = ""; }} /></label> : null}
           </div>
-          <ul className="mt-2 divide-y divide-[var(--border)]">{document.versions.map((version, index) => <li key={version.versionId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs text-[var(--muted)]"><span className="font-semibold text-[var(--foreground)]">Version {version.sequence}{index === 0 ? " · Current" : ""}</span><span>{formatDate(version.uploadedAt)}</span><span>{formatBytes(version.byteLength)}</span><a href={version.downloadHref} className="font-semibold text-[var(--primary)] underline underline-offset-4">Open this version</a></li>)}</ul>
+          <ul className="mt-2 divide-y divide-[var(--border)]">{document.versions.map((version, index) => <li key={version.versionId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs text-[var(--muted)]"><span className="font-semibold text-[var(--foreground)]">Version {version.sequence}{index === 0 ? " · Latest upload" : ""}{document.adoptions?.some((item) => item.versionId === version.versionId) ? " · Adopted" : ""}</span><span>{formatDate(version.uploadedAt)}</span><span>{formatBytes(version.byteLength)}</span><a href={version.downloadHref} className="font-semibold text-[var(--primary)] underline underline-offset-4">Open this version</a></li>)}</ul>
         </div>
       ) : null}
       {management && manageOpen ? (
@@ -193,6 +196,7 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
   const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">(focusedDocument?.status ?? "active");
   const [collectionFilter, setCollectionFilter] = useState("all");
   const [fileTypeFilter, setFileTypeFilter] = useState("all");
+  const [adoptionFilter, setAdoptionFilter] = useState("all");
   const [showNewDocument, setShowNewDocument] = useState(false);
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -214,20 +218,21 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
     ...accessibleDocuments.map((document) => document.fileType),
     ...(fileTypeFilter === "all" ? [] : [fileTypeFilter]),
   ])].sort(), [accessibleDocuments, fileTypeFilter]);
-  const expandMatches = Boolean(normalizedQuery) || categoryFilter !== "all" || collectionFilter !== "all" || fileTypeFilter !== "all";
+  const expandMatches = Boolean(normalizedQuery) || categoryFilter !== "all" || collectionFilter !== "all" || fileTypeFilter !== "all" || adoptionFilter !== "all";
   const hasFilters = expandMatches || (canManage && statusFilter !== "active");
   const visibleCategories = useMemo(() => accessibleCategories
     .filter((category) => categoryFilter === "all" || category.key === categoryFilter)
     .map((category) => ({ ...category, documents: category.documents.filter((document) =>
       (!canManage || statusFilter === "all" || document.status === statusFilter)
       && (collectionFilter === "all" || (collectionFilter === "none" ? document.collectionId === null : document.collectionId === collectionFilter))
+      && (adoptionFilter === "all" || (adoptionFilter === "adopted" ? Boolean(document.adoptions?.length) : !document.adoptions?.length))
       && (fileTypeFilter === "all" || document.fileType === fileTypeFilter)
       && (!normalizedQuery || includesQuery(document, normalizedQuery))) }))
-    .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, normalizedQuery, statusFilter]);
+    .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, adoptionFilter, normalizedQuery, statusFilter]);
   const resultCount = visibleCategories.reduce((total, category) => total + category.documents.length, 0);
 
   function clearFilters() {
-    setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active");
+    setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active"); setAdoptionFilter("all");
   }
 
   async function uploadToStaging(file: File) {
@@ -242,7 +247,7 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
     try {
       const stagingKey = await uploadToStaging(input.file);
       await documentMutation({ action: "create", stagingKey, fileName: input.file.name, title: input.title, description: input.description, category: input.category });
-      setMessage(`${input.title} was added to the library.`); setShowNewDocument(false); setStatusFilter("active"); router.refresh(); return true;
+      setMessage(`${input.title} was added to the library.`); setShowNewDocument(false); setStatusFilter("active"); setAdoptionFilter("all"); router.refresh(); return true;
     } catch (error) { setMessage(error instanceof Error ? error.message : "The document could not be added."); return false; }
     finally { setBusyDocumentId(null); }
   }
@@ -286,7 +291,12 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
           { value: "all", label: "All documents" },
         ]} /> : null}
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <LibraryFilter label="Filter by adoption" value={adoptionFilter} onChange={setAdoptionFilter} options={[
+          { value: "all", label: "All adoption states" },
+          { value: "adopted", label: "Adopted documents" },
+          { value: "unlinked", label: "No linked adoption" },
+        ]} />
         <LibraryFilter label="Filter by category" value={categoryFilter} onChange={setCategoryFilter} options={[
           { value: "all", label: "All categories" },
           ...accessibleCategories.map((category) => ({ value: category.key, label: category.label })),

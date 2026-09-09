@@ -62,4 +62,14 @@ describe("written-consent endpoint", () => {
     expect((await POST(request({ ...body, padding: "a".repeat(70000) }), context)).status).toBe(413);
     expect(mocks.sign).not.toHaveBeenCalled();
   });
+  it("accepts only explicit adoption targets within the server-resolved attachments", async () => {
+    mocks.role = "chair"; mocks.currentRole = "chair";
+    mocks.document.mockResolvedValue({ documentId: "doc", title: "Policy", ownerType: "library", status: "active", currentVersion: { versionId: "v1", originalFileName: "policy.pdf", sequence: 1, sha256: "trusted" } });
+    const save = { action: "saveBallot", ballotId: "b", expectedVersion: 2, title: "Adopt policy", motion: "Resolved", attachments: [{ documentId: "doc", versionId: "v1" }], adoption: { targets: [{ documentId: "private-disclosure", versionId: "v1" }], effectiveTerms: "Upon adoption" } };
+    expect((await POST(request(save), context)).status).toBe(400);
+    expect(mocks.save).not.toHaveBeenCalled();
+    save.adoption.targets = [{ documentId: "doc", versionId: "v1" }];
+    expect((await POST(request(save), context)).status).toBe(200);
+    expect(mocks.save.mock.calls[0][0].adoption).toEqual(save.adoption);
+  });
 });

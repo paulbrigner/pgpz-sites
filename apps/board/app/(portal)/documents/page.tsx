@@ -5,6 +5,8 @@ import { DocumentLibrary } from "@/components/documents/DocumentLibrary";
 import { buildDocumentLibrary } from "@/lib/document-library";
 import { canManageBoardDocuments, requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
+import { boardMeetingsRepository } from "@/lib/meetings-repository";
+import { documentAdoptionView } from "@/lib/document-adoptions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +36,14 @@ export default async function BoardDocumentsPage({
         .map(async (document) => [document.documentId, await boardDocumentRepository.listVersions(document.documentId)] as const),
     ),
   );
-  const categories = buildDocumentLibrary(documents, versionsByDocument);
+  // Only query adoption evidence for documents already visible to this reader.
+  const adoptionsByDocument = new Map(await Promise.all(documents.map(async (document) => [
+    document.documentId,
+    (await boardMeetingsRepository.listDocumentAdoptions(document.documentId))
+      .map((ballot) => documentAdoptionView(ballot, document.documentId))
+      .filter((value) => value !== null),
+  ] as const)));
+  const categories = buildDocumentLibrary(documents, versionsByDocument, adoptionsByDocument);
 
   return (
     <Container className="max-w-[90rem] py-2 sm:px-8 sm:py-3 lg:px-12">
