@@ -9,7 +9,7 @@ describe("meeting time windows", () => {
   it("uses the meeting timezone rather than UTC to determine the calendar dates", () => {
     const formatted = formatMeetingDate("2026-09-11T23:00:00Z", "2026-09-12T01:00:00Z", "America/New_York");
     expect(formatted.date).toBe(formatted.endDate);
-    expect(formatted.time).toBe("7:00 PM EDT–9:00 PM EDT");
+    expect(formatted.time).toBe("7:00 PM–9:00 PM EDT");
   });
   it("labels both endpoints correctly across a daylight saving transition", () => {
     const formatted = formatMeetingDate("2026-11-01T05:00:00Z", "2026-11-01T06:30:00Z", "America/New_York");

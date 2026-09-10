@@ -13,8 +13,11 @@ export function formatMeetingDate(startAt: string, endAt: string, timeZone: stri
   const endDate = dateFormatter.format(end);
   const startTime = timeFormatter.format(start);
   const endTime = timeFormatter.format(end);
+  const zone = (instant: Date) => timeFormatter.formatToParts(instant).find((part) => part.type === "timeZoneName")?.value;
+  const compactStart = zone(start) === zone(end)
+    ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone }).format(start) : startTime;
   return { date, endDate, startTime, endTime,
-    time: date === endDate ? `${startTime}–${endTime}` : `${startTime} — ${endDate}, ${endTime}`,
+    time: date === endDate ? `${compactStart}–${endTime}` : `${startTime} — ${endDate}, ${endTime}`,
   };
 }
 
