@@ -80,7 +80,16 @@ follow-up is needed; record any ongoing recusals in the required note. Choose
 **Review recorded — follow-up documented below** to retain findings with
 outstanding follow-up. The satisfactory outcome appears in the status register,
 request, review history, and printable record. Earlier **Review recorded**
-outcomes retain their meaning and are not automatically marked satisfactory. Invited counsel can add advice but cannot mark the
+outcomes retain their meaning and are not automatically marked satisfactory.
+After **Record review**, a focused **Review recorded** confirmation replaces the
+form and shows the saved outcome and revision. This current-review summary also
+appears when reopening the request. Use **Add another review note** only when
+needed, or **Back to disclosures** to return to the register. If saving succeeds
+but refreshing fails, the panel confirms the save and offers a refresh without
+asking you to submit again. Failed or uncertain submissions show a notice by
+the form and preserve your entries.
+
+Invited counsel can add advice but cannot mark the
 director's review complete. A new submission or changed review assignment
 requires fresh review. These notes do not constitute a Board vote, approval of
 compensation, or permission for an interested person to participate.

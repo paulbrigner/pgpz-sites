@@ -452,6 +452,10 @@ review, and nobody can review their own disclosure. Reviewers can explicitly
 record **Review complete — satisfactory**, request clarification, or retain
 findings with documented follow-up. Existing review records are not relabeled
 as satisfactory; statuses and retained history distinguish the new outcome.
+After recording a review, the review panel shows and focuses a confirmation
+in place of the cleared form. Saved current-review outcomes remain visible
+after reopening the request; an explicit action starts another review note.
+A confirmed write followed by a failed refresh still reports that it was saved.
 
 `lib/disclosures-service.ts` checks current access and content-free admission
 before loading private records. `lib/disclosures-repository.ts` stores them in

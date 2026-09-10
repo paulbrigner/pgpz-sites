@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Surface } from "@pgpz/ui";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import { DISCLOSURE_CATEGORIES, DISCLOSURE_ELECTRONIC_CONSENT, disclosureAcknowledgment, disclosureDirector, disclosureStatus, disclosureOutcome, type DisclosureCandidate, type DisclosureForm, type DisclosureView } from "@/lib/disclosures";
@@ -20,6 +20,19 @@ export function DisclosureWorkspace({ initial, candidates }: { initial: Disclosu
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [accepted, setAccepted] = useState(false); const [signedName, setSignedName] = useState("");
   const { request, isSubject, isReviewer, isCounsel } = view; const api = `/api/disclosures/${request.id}`;
+  const [reviewFeedback, setReviewFeedback] = useState<{ kind: "success" | "error"; detail: string; needsRefresh?: boolean } | null>(null);
+  const [reviewEditingVersion, setReviewEditingVersion] = useState<number | null>(null);
+  const reviewNotice = useRef<HTMLDivElement>(null);
+  const recordedReview = isReviewer && request.status !== "submitted" && request.status !== "requested"
+    ? [...view.events].reverse().find((event) => event.kind === "review" && event.revision === request.revision && event.actor.accessId === request.reviewer.accessId && event.outcome === request.status)
+    : undefined;
+  const showReviewReceipt = Boolean(recordedReview && reviewEditingVersion !== request.version) || Boolean(reviewFeedback?.kind === "success" && (isCounsel || reviewFeedback.needsRefresh));
+  useEffect(() => {
+    if (reviewFeedback) {
+      reviewNotice.current?.focus();
+      reviewNotice.current?.scrollIntoView?.({ block: "center", behavior: "auto" });
+    }
+  }, [reviewFeedback]);
   async function reload() {
     const response = await fetch(api, { cache: "no-store" }); const value = await response.json();
     if (!response.ok) throw new Error(value.error);
@@ -57,8 +70,25 @@ export function DisclosureWorkspace({ initial, candidates }: { initial: Disclosu
   }
   async function review(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    await mutate({ action: isReviewer ? "review" : "comment", submissionHash: request.latestHash, independent: data.get("independent") === "on", outcome: data.get("outcome"), note: data.get("note") }, isReviewer && data.get("outcome") === "satisfactory" ? "Review complete — satisfactory. Your findings are retained with this signed revision." : "Review note retained with this signed revision.");
+    setBusy(true); setReviewFeedback(null); setError(""); setMessage("");
+    try {
+      const response = await fetchWithBoardStepUp(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: isReviewer ? "review" : "comment", expectedVersion: request.version, submissionHash: request.latestHash, independent: data.get("independent") === "on", outcome: data.get("outcome"), note: data.get("note") }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "The request could not be completed.");
+      const detail = `${isReviewer ? disclosureOutcome(String(data.get("outcome"))) : "Counsel advice recorded"}. Your note for signed revision ${request.revision} has been saved. You do not need to submit it again.`;
+      setReviewEditingVersion(null);
+      try {
+        await reload();
+        setReviewFeedback({ kind: "success", detail });
+      } catch {
+        // A confirmed write must not be reported as failed when only the subsequent read fails.
+        setReviewFeedback({ kind: "success", detail: `${detail} The updated record could not be loaded. Refresh to see it.`, needsRefresh: true });
+      }
+    } catch (cause) {
+      setReviewFeedback({ kind: "error", detail: `${cause instanceof Error ? cause.message : "Unable to confirm the request."} Your entries are still below. Refresh the record before retrying if the connection was interrupted.` });
+    } finally { setBusy(false); }
   }
+
   async function route(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     await mutate({ action: "route", reviewerId: data.get("reviewerId"), counselId: data.get("counselId"), note: data.get("note") }, "Review assignment changed.", !isSubject);
@@ -81,7 +111,8 @@ export function DisclosureWorkspace({ initial, candidates }: { initial: Disclosu
       </div>}
     </Surface>}
     {view.events.filter((event) => event.kind === "submission").length > 0 && <Surface className="p-6"><h2 className="text-xl font-semibold">Signed submissions</h2>{[...view.events].reverse().map((event) => event.kind === "submission" ? <details key={event.hash} open={event.revision === request.revision} className="mt-5 border-t border-[var(--border)] pt-4"><summary className="cursor-pointer font-semibold">Revision {event.revision} · {new Date(event.deliveredAt).toLocaleString()}</summary><FormSummary form={event.form} questions={event.questions}/><p className="mt-5 text-sm leading-6">{event.acknowledgment}</p><p className="mt-3 text-sm">Signed and delivered by {event.signedName} ({event.actor.email}).</p><p className="mt-2 break-all text-xs text-[var(--muted)]">Verified SHA-256: {event.hash}</p></details> : null)}</Surface>}
-    {(isReviewer || isCounsel) && request.revision > 0 && <Surface className="p-6"><h2 className="text-xl font-semibold">{isReviewer ? "Record your review" : "Add counsel’s advice"}</h2><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Review signed revision {request.revision}. Record relevant findings, required disclosures to other decision-makers, recusals, and follow-up actions. This step does not approve compensation, a conflicted transaction, or a Board resolution.</p><p className="mt-2 text-sm leading-6 text-[var(--muted)]">The person disclosing can read these notes. Keep directors-only deliberation in a restricted executive session.</p><form key={`${request.latestHash}:${request.version}`} onSubmit={review} className="mt-5 space-y-5">{isReviewer && <label className="block text-sm font-medium">Review outcome<select name="outcome" required defaultValue="" className={field}><option value="" disabled>Choose a review outcome</option><option value="satisfactory">{disclosureStatus("satisfactory")}</option><option value="needs-information">Request an update or clarification</option><option value="reviewed">Review recorded — follow-up documented below</option></select><span className="mt-2 block font-normal text-[var(--muted)]">Choose satisfactory when your disclosure review is complete and no further clarification or review follow-up is needed. Record any ongoing recusals in your note.</span></label>}<label className="block text-sm font-medium">Private review note<textarea name="note" required maxLength={6000} rows={5} className={field}/></label><label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" name="independent" required className="mt-1"/>I am disinterested in the disclosed matters and have reviewed this signed revision. If implicated, I will route it to another director instead.</label><button disabled={busy} className={button}>{isReviewer ? "Record review" : "Retain counsel’s advice"}</button></form></Surface>}
+    {(isReviewer || isCounsel) && request.revision > 0 && <Surface className="p-6"><h2 className="text-xl font-semibold">{isReviewer ? showReviewReceipt ? "Your recorded review" : "Record your review" : "Add counsel’s advice"}</h2><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Review signed revision {request.revision}. Record relevant findings, required disclosures to other decision-makers, recusals, and follow-up actions. This step does not approve compensation, a conflicted transaction, or a Board resolution.</p><p className="mt-2 text-sm leading-6 text-[var(--muted)]">The person disclosing can read these notes. Keep directors-only deliberation in a restricted executive session.</p>{(reviewFeedback || showReviewReceipt) && <div ref={reviewNotice} tabIndex={-1} role={reviewFeedback?.kind === "error" ? "alert" : "status"} className={`mt-5 rounded-xl border p-5 focus:outline-2 focus:outline-offset-2 ${reviewFeedback?.kind === "error" ? "border-red-300 bg-red-50 text-red-900" : "border-emerald-300 bg-emerald-50 text-emerald-950"}`}><h3 className="text-lg font-semibold">{reviewFeedback?.kind === "error" ? "Review not confirmed" : isReviewer ? "Review recorded" : "Advice recorded"}</h3><p className="mt-2 text-sm leading-6">{reviewFeedback?.detail ?? `${disclosureStatus(request.status)}. Your review of signed revision ${request.revision} is saved in the review history below.`}</p></div>}
+      {showReviewReceipt ? <div className="mt-5 flex flex-wrap gap-4">{reviewFeedback?.needsRefresh ? <button className={secondary} disabled={busy} onClick={() => window.location.reload()}>Refresh recorded review</button> : <button className={secondary} disabled={busy} onClick={() => { setReviewEditingVersion(request.version); setReviewFeedback(null); }}>Add another review note</button>}<Link href="/disclosures" className={secondary}>Back to disclosures</Link></div> : <form key={`${request.latestHash}:${request.version}`} onSubmit={review} className="mt-5 space-y-5">{isReviewer && <label className="block text-sm font-medium">Review outcome<select name="outcome" required defaultValue="" className={field}><option value="" disabled>Choose a review outcome</option><option value="satisfactory">{disclosureStatus("satisfactory")}</option><option value="needs-information">Request an update or clarification</option><option value="reviewed">Review recorded — follow-up documented below</option></select><span className="mt-2 block font-normal text-[var(--muted)]">Choose satisfactory when your disclosure review is complete and no further clarification or review follow-up is needed. Record any ongoing recusals in your note.</span></label>}<label className="block text-sm font-medium">Private review note<textarea name="note" required maxLength={6000} rows={5} className={field}/></label><label className="flex items-start gap-3 text-sm leading-6"><input type="checkbox" name="independent" required className="mt-1"/>I am disinterested in the disclosed matters and have reviewed this signed revision. If implicated, I will route it to another director instead.</label><button disabled={busy} className={button}>{busy ? "Recording…" : isReviewer ? "Record review" : "Retain counsel’s advice"}</button></form>}</Surface>}
     {view.events.some((event) => event.kind !== "submission") && <Surface className="p-6"><h2 className="text-xl font-semibold">Private review history</h2><ul className="mt-4 space-y-5">{view.events.map((event, index) => event.kind !== "submission" ? <li key={index} className="border-t border-[var(--border)] pt-4"><p className="text-sm font-semibold">{event.actor.name} · {disclosureOutcome(event.outcome)} · signed revision {event.revision}</p><p className="mt-1 text-xs text-[var(--muted)]">{event.at}</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{event.note}</p></li> : null)}</ul></Surface>}
     <Surface className="p-6"><details><summary className="cursor-pointer text-lg font-semibold">Change the review assignment / recuse</summary><p className="mt-3 text-sm leading-6 text-[var(--muted)]">Use this when a reviewer is implicated or cannot serve. Anyone removed from the assignment loses access. You may retain an existing reviewer when changing only the other role, or explicitly invite counsel. Removed reviewers cannot be re-added through this flow. The new group can see signed history; only the subject can see drafts.</p><form onSubmit={route} className="mt-5 space-y-5"><label className="block text-sm font-medium">Reviewing director<select name="reviewerId" defaultValue={request.reviewer.accessId} required className={field}><option value="">Choose another disinterested director</option>{candidates.filter((person) => !unavailable.has(person.accessId) && disclosureDirector(person.role)).map((person) => <option key={person.accessId} value={person.accessId}>{person.name}</option>)}</select></label><label className="block text-sm font-medium">Explicitly invited counsel (optional)<select name="counselId" defaultValue={request.counsel?.accessId ?? ""} className={field}><option value="">No counsel invited</option>{candidates.filter((person) => !unavailable.has(person.accessId) && person.role === "legal-counsel").map((person) => <option key={person.accessId} value={person.accessId}>{person.name}</option>)}</select></label><label className="block text-sm font-medium">Private reason for routing<textarea name="note" required maxLength={2000} rows={3} className={field}/></label><button disabled={busy} className={secondary}>Replace review assignment</button></form></details></Surface>
   </div>;
