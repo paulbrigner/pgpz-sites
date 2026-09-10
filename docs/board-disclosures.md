@@ -73,8 +73,14 @@ never see unsubmitted draft answers.
 
 The reviewing director reads the latest signed revision, confirms they are
 disinterested, and records findings, required recusals, communication to other
-decision-makers, and follow-up steps. They can request an update or record
-completion of review. Invited counsel can add advice but cannot mark the
+decision-makers, and follow-up steps. Choose **Review complete — satisfactory**
+when the disclosure review is complete and no further clarification or review
+follow-up is needed; record any ongoing recusals in the required note. Choose
+**Request an update or clarification** when more information is needed, or
+**Review recorded — follow-up documented below** to retain findings with
+outstanding follow-up. The satisfactory outcome appears in the status register,
+request, review history, and printable record. Earlier **Review recorded**
+outcomes retain their meaning and are not automatically marked satisfactory. Invited counsel can add advice but cannot mark the
 director's review complete. A new submission or changed review assignment
 requires fresh review. These notes do not constitute a Board vote, approval of
 compensation, or permission for an interested person to participate.

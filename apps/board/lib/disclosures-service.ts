@@ -147,7 +147,7 @@ export async function mutateDisclosure(member: BoardMember, id: string, input: R
     if ((!isReviewer && !isCounsel) || (input.action === "review" && !isReviewer)) throw new DisclosureError(403, "Only the assigned director may record completion of review; invited counsel may add advice.");
     if (!request.latestHash || input.submissionHash !== request.latestHash) throw new DisclosureError(409, "Review the current signed submission first.");
     if (input.independent !== true) throw new DisclosureError(400, "Confirm you are disinterested in this disclosure; otherwise route it to another director.");
-    if (input.action === "review" && input.outcome !== "reviewed" && input.outcome !== "needs-information") throw new DisclosureError(400, "Choose a review outcome.");
+    if (input.action === "review" && input.outcome !== "reviewed" && input.outcome !== "needs-information" && input.outcome !== "satisfactory") throw new DisclosureError(400, "Choose a review outcome.");
     const note = disclosureText(input.note, "Review findings and any required recusals or next steps", 6000);
     const outcome = input.action === "comment" ? "counsel-advice" : String(input.outcome);
     event = { kind: "review", at, actor: disclosureIdentity(record), revision: request.revision, note, outcome };

@@ -432,6 +432,9 @@ normal independent review and live Board account/branch/environment preflight.
 Verify the retained meetings/access/audit resources and Board compute role are
 the intended ones; follow the existing guarded infrastructure process if any
 drift requires a change. No production migration or data backfill is needed.
+The additive `satisfactory` disclosure status and review outcome distinguish
+explicit completion from legacy `reviewed` records. Preserve support for this
+status when rolling back; older builds cannot label it in the status register.
 Do not seed, sign, review, or send real disclosure reminders during validation.
 
 Run Board tests/typecheck/build, repository checks, infrastructure tests, and

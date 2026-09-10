@@ -22,7 +22,7 @@ export type DisclosureRequest = {
   id: string; version: number; kind: "annual" | "matter"; year: number; dueDate: string | null;
   subject: DisclosureIdentity; reviewer: DisclosureIdentity; counsel: DisclosureIdentity | null; excludedIds: string[];
   policy: DisclosurePolicy; createdAt: string; createdBy: string;
-  status: "requested" | "submitted" | "needs-information" | "reviewed";
+  status: "requested" | "submitted" | "needs-information" | "reviewed" | "satisfactory";
   revision: number; latestHash: string | null; lastNoticeAt: string | null; lastNoticeStatus: "sending" | "sent" | "unknown" | null;
 };
 export type DisclosureSubmission = {
@@ -45,7 +45,12 @@ export class DisclosureError extends Error {
 }
 export const disclosureDirector = (role: string) => ["chair", "admin", "member"].includes(role);
 export const disclosureChair = (role: string) => role === "chair" || role === "admin";
-export const disclosureStatus = (status: DisclosureRequest["status"]) => ({ requested: "Awaiting signature", submitted: "Awaiting review", "needs-information": "Update requested", reviewed: "Review recorded" })[status];
+export const disclosureStatus = (status: DisclosureRequest["status"]) => ({ requested: "Awaiting signature", submitted: "Awaiting review", "needs-information": "Update requested", reviewed: "Review recorded", satisfactory: "Review complete — satisfactory" })[status];
+/** Preserve legacy review outcomes; completion must be explicitly recorded. */
+export function disclosureOutcome(outcome: string): string {
+  if (outcome === "satisfactory" || outcome === "reviewed" || outcome === "needs-information") return disclosureStatus(outcome);
+  return outcome === "counsel-advice" ? "Counsel advice recorded" : outcome;
+}
 export function disclosureAcknowledgment(policy: DisclosurePolicy) {
   return DISCLOSURE_ACKNOWLEDGMENT + (policy.adoption === "proposed" ? " This version is proposed; my agreement to comply takes effect upon its adoption. A materially changed policy requires a new acknowledgment." : "");
 }
