@@ -2,6 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import { assertBoardEmailReady } from "./email-transport";
 import { SITE_URL } from "./config";
+import { disclosureStatus, type DisclosureReviewOutcome } from "./disclosures";
 
 export function disclosureNotice(input: { id: string; year: number; dueDate: string | null; to: string }) {
   if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(input.to)) throw new Error("One recipient is required");
@@ -12,4 +13,21 @@ export function disclosureNotice(input: { id: string; year: number; dueDate: str
 export async function sendDisclosureNotice(input: Parameters<typeof disclosureNotice>[0]) {
   const { transport, from } = assertBoardEmailReady();
   await nodemailer.createTransport(transport as never).sendMail({ from, ...disclosureNotice(input) } as never);
+}
+
+/** Only status and opaque portal coordinates may enter an automatic review email. */
+export function disclosureReviewNotice(input: { id: string; year: number; revision: number; outcome: DisclosureReviewOutcome; to: string }) {
+  const base = disclosureNotice({ ...input, dueDate: null });
+  const instruction = input.outcome === "satisfactory"
+    ? "Your disclosure review is complete and satisfactory."
+    : input.outcome === "needs-information"
+      ? "Your reviewer has requested an update or clarification. Please open your disclosure to read the request and respond."
+      : "Your reviewer has recorded findings and follow-up. Please open your disclosure to read the note and next steps.";
+  return { to: base.to, subject: `PGPZ Board: ${disclosureStatus(input.outcome)}`,
+    text: `${instruction}\n\nThis notification concerns your ${input.year} disclosure, signed revision ${input.revision}. It does not approve a transaction or a Board resolution.\n\nOpen your restricted disclosure: ${new URL(`/disclosures/${encodeURIComponent(input.id)}`, SITE_URL)}\n\nSign in to read the review. Private disclosure details and review notes are not included in this email.`,
+  };
+}
+export async function sendDisclosureReviewNotice(input: Parameters<typeof disclosureReviewNotice>[0]) {
+  const { transport, from } = assertBoardEmailReady();
+  await nodemailer.createTransport(transport as never).sendMail({ from, ...disclosureReviewNotice(input) } as never);
 }

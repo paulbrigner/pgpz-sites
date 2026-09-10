@@ -17,12 +17,15 @@ export type DisclosureIdentity = { accessId: string; email: string; name: string
 export type DisclosurePolicy = { documentId: string; versionId: string; title: string; sequence: number; sha256: string; adoption: "proposed" | "adopted" };
 export type DisclosureForm = { roles: string; matter: string; answers: { choice: "" | "none" | "disclosed"; details: string }[] };
 export type DisclosureDraft = { form: DisclosureForm; hash: string; savedAt: string };
-/** Admission and register metadata only. Never add answers, private matter titles, or review notes here. */
+export type DisclosureReviewOutcome = "satisfactory" | "reviewed" | "needs-information";
+export type DisclosureReviewNotice = { reviewVersion: number; revision: number; outcome: DisclosureReviewOutcome; attemptedAt: string; status: "sending" | "sent" | "unknown" | "skipped" };
+/** Admission metadata only. Never add answers, private matter titles, or review notes here. */
 export type DisclosureRequest = {
   id: string; version: number; kind: "annual" | "matter"; year: number; dueDate: string | null;
   subject: DisclosureIdentity; reviewer: DisclosureIdentity; counsel: DisclosureIdentity | null; excludedIds: string[];
   policy: DisclosurePolicy; createdAt: string; createdBy: string;
   status: "requested" | "submitted" | "needs-information" | "reviewed" | "satisfactory";
+  reviewNotice?: DisclosureReviewNotice;
   revision: number; latestHash: string | null; lastNoticeAt: string | null; lastNoticeStatus: "sending" | "sent" | "unknown" | null;
 };
 export type DisclosureSubmission = {
@@ -49,7 +52,15 @@ export const disclosureStatus = (status: DisclosureRequest["status"]) => ({ requ
 /** Preserve legacy review outcomes; completion must be explicitly recorded. */
 export function disclosureOutcome(outcome: string): string {
   if (outcome === "satisfactory" || outcome === "reviewed" || outcome === "needs-information") return disclosureStatus(outcome);
+  if (outcome.startsWith("review-email-")) return "Review email: " + outcome.slice("review-email-".length);
   return outcome === "counsel-advice" ? "Counsel advice recorded" : outcome;
+}
+export function disclosureReviewEmailStatus(notice?: DisclosureReviewNotice): string {
+  if (!notice) return "";
+  const prefix = `Automatic email for signed revision ${notice.revision}: `;
+  if (notice.status === "sent") return prefix + "accepted by the email provider. Inbox delivery is not confirmed.";
+  if (notice.status === "skipped") return prefix + "not sent because the recipient's Board access or email changed. Check the recipient before sending a manual reminder.";
+  return prefix + "delivery unconfirmed. Check with the recipient before sending a manual reminder.";
 }
 export function disclosureAcknowledgment(policy: DisclosurePolicy) {
   return DISCLOSURE_ACKNOWLEDGMENT + (policy.adoption === "proposed" ? " This version is proposed; my agreement to comply takes effect upon its adoption. A materially changed policy requires a new acknowledgment." : "");

@@ -5,13 +5,13 @@ import type { BoardAccessRecord } from "./board-access";
 import type { BoardMember } from "./session";
 import { DISCLOSURE_CATEGORIES, disclosureStatus, normalizeDisclosureForm, type DisclosureForm } from "./disclosures";
 
-const mocks = vi.hoisted(() => ({ getByEmail: vi.fn(), getById: vi.fn(), list: vi.fn(), audit: vi.fn(), document: vi.fn(), send: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getByEmail: vi.fn(), getById: vi.fn(), list: vi.fn(), audit: vi.fn(), document: vi.fn(), send: vi.fn(), reviewSend: vi.fn() }));
 vi.mock("./dynamodb", () => ({ documentClient: {} }));
 vi.mock("./config", () => ({ BOARD_ACCESS_REGISTRY_ENABLED: true, BOARD_ACCESS_TABLE: "Access", BOARD_MEETINGS_TABLE: "Meetings" }));
 vi.mock("./board-access-repository", () => ({ boardAccessRepository: { getByEmail: mocks.getByEmail, getById: mocks.getById, list: mocks.list } }));
 vi.mock("./audit", () => ({ authenticatedActor: (member: BoardMember) => member, boardAuditLedger: { buildAppendItems: mocks.audit } }));
 vi.mock("./vault", () => ({ boardDocumentRepository: { getDocument: mocks.document } }));
-vi.mock("./disclosures-email", () => ({ sendDisclosureNotice: mocks.send }));
+vi.mock("./disclosures-email", () => ({ sendDisclosureNotice: mocks.send, sendDisclosureReviewNotice: mocks.reviewSend }));
 vi.mock("./disclosures-repository", async (original) => ({ ...await original<typeof import("./disclosures-repository")>(), disclosuresRepository: { get: vi.fn(), draft: vi.fn(), events: vi.fn(), ids: vi.fn(), commit: vi.fn() } }));
 import { createDisclosuresRepository, disclosuresRepository } from "./disclosures-repository";
 import { createDisclosure, disclosureView, mutateDisclosure, disclosureRegister, notifyDisclosure } from "./disclosures-service";
@@ -43,7 +43,7 @@ beforeEach(() => {
   mocks.getByEmail.mockImplementation(async (email: string) => records.get(email.split("@")[0]) ?? null);
   mocks.getById.mockImplementation(async (id: string) => records.get(id) ?? null);
   mocks.list.mockResolvedValue({ records: [...records.values()], cursor: null });
-  mocks.audit.mockResolvedValue({ TransactItems: [] }); mocks.send.mockResolvedValue(undefined);
+  mocks.audit.mockResolvedValue({ TransactItems: [] }); mocks.send.mockResolvedValue(undefined); mocks.reviewSend.mockResolvedValue(undefined);
   mocks.document.mockResolvedValue({ documentId: "policy", title: "Conflict of Interest Policy", status: "active", currentVersion: { versionId: "v1", sequence: 1, sha256: "a".repeat(64) } });
 });
 
@@ -88,7 +88,7 @@ describe("Board individual disclosure workflow", () => {
     await mutateDisclosure(director, request.id, review);
     const reviewed = await disclosureView(ed, request.id);
     expect(reviewed.request.status).toBe(outcome);
-    expect(reviewed.events.at(-1)).toMatchObject({ kind: "review", outcome, revision: 1 });
+    expect(reviewed.events.find((event) => event.kind === "review")).toMatchObject({ kind: "review", outcome, revision: 1 });
     expect(disclosureRecordHtml(reviewed)).toContain(disclosureStatus(outcome));
     if (outcome === "reviewed") expect(disclosureRecordHtml(reviewed)).not.toContain("satisfactory");
     expect((await disclosureRegister(chair))[0]).toMatchObject({ status: outcome, canOpen: false });
@@ -163,6 +163,71 @@ describe("Board individual disclosure workflow", () => {
     const tampered = structuredClone(submission); tampered.form.roles = "Tampered"; expect(verifyDisclosureSubmission(tampered)).toBe(false);
     vi.mocked(disclosuresRepository.events).mockResolvedValue([tampered]); await expect(disclosureView(ed, request.id)).rejects.toMatchObject({ status: 409 });
     vi.mocked(disclosuresRepository.events).mockResolvedValue([]); await expect(disclosureView(ed, request.id)).rejects.toMatchObject({ status: 409 });
+  });
+  it.each(["satisfactory", "reviewed", "needs-information"] as const)("automatically emails only the subject for %s after a committed review, once per request version", async (outcome) => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); const view = await sign(request.id);
+    const review = { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome, note: "PRIVATE review findings" };
+    mocks.reviewSend.mockImplementation(async () => {
+      expect((await disclosuresRepository.get(request.id))?.reviewNotice).toMatchObject({ status: "sending", outcome, revision: 1 });
+      expect((await disclosuresRepository.events(request.id)).some((event) => event.kind === "review" && event.outcome === outcome)).toBe(true);
+    });
+    const result = await mutateDisclosure(director, request.id, review);
+    expect(result.status).toBe(outcome); expect(result.reviewNotice?.status).toBe("sent");
+    expect(mocks.reviewSend).toHaveBeenCalledExactlyOnceWith({ id: request.id, year: 2026, revision: 1, outcome, to: "ed@example.invalid" });
+    expect(JSON.stringify(mocks.reviewSend.mock.calls)).not.toContain("PRIVATE");
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("PRIVATE");
+    expect(mocks.send).not.toHaveBeenCalled();
+    await expect(mutateDisclosure(director, request.id, review)).rejects.toMatchObject({ status: 409 });
+    expect(mocks.reviewSend).toHaveBeenCalledTimes(1);
+  });
+  it("does not email for rejected reviews or counsel advice and retains a review when delivery is uncertain", async () => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); let view = await sign(request.id);
+    const review = { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "PRIVATE complete" };
+    await expect(mutateDisclosure(director, request.id, { ...review, independent: false })).rejects.toMatchObject({ status: 400 });
+    await mutateDisclosure(counsel, request.id, { ...review, action: "comment" });
+    expect(mocks.reviewSend).not.toHaveBeenCalled();
+    view = await disclosureView(director, request.id);
+    mocks.reviewSend.mockRejectedValue(new Error("PRIVATE provider response"));
+    const result = await mutateDisclosure(director, request.id, { ...review, expectedVersion: view.request.version });
+    expect(result.status).toBe("satisfactory"); expect(result.reviewNotice?.status).toBe("unknown");
+    expect(mocks.reviewSend).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(await disclosuresRepository.events(request.id))).not.toContain("PRIVATE provider response");
+  });
+  it.each(["deactivated", "changed-email"])("skips automatic delivery when the subject is %s", async (change) => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); const view = await sign(request.id);
+    const subject = records.get("ed")!;
+    records.set("ed", change === "deactivated" ? { ...subject, status: "deactivated" } : { ...subject, email: "replacement@example.invalid" });
+    const result = await mutateDisclosure(director, request.id, { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Complete." });
+    expect(result.reviewNotice?.status).toBe("skipped"); expect(result.status).toBe("satisfactory"); expect(mocks.reviewSend).not.toHaveBeenCalled();
+  });
+  it("preserves an intervening amendment while recording delivery and never turns a status-write failure into a failed review", async () => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); let view = await sign(request.id);
+    mocks.reviewSend.mockImplementation(async () => { await prepare(request.id); await sign(request.id); });
+    let result = await mutateDisclosure(director, request.id, { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Revision one review." });
+    expect(result.revision).toBe(2); expect(result.status).toBe("submitted"); expect(result.reviewNotice).toMatchObject({ revision: 1, status: "sent" });
+    view = await disclosureView(director, request.id);
+    mocks.reviewSend.mockImplementation(async () => { vi.mocked(disclosuresRepository.commit).mockRejectedValueOnce(new Error("Result storage unavailable")); });
+    result = await mutateDisclosure(director, request.id, { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Revision two review." });
+    expect(result.status).toBe("satisfactory"); expect(result.reviewNotice?.status).toBe("sending");
+    expect((await disclosuresRepository.get(request.id))?.status).toBe("satisfactory");
+    expect(mocks.reviewSend).toHaveBeenCalledTimes(2);
+  });
+  it("does not overwrite a newer review's notice when an older send finishes later", async () => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); const view = await sign(request.id);
+    mocks.reviewSend.mockImplementationOnce(async () => {
+      const current = (await disclosuresRepository.get(request.id))!;
+      await mutateDisclosure(director, request.id, { action: "review", expectedVersion: current.version, submissionHash: current.latestHash, independent: true, outcome: "needs-information", note: "Further clarification required." });
+    });
+    const result = await mutateDisclosure(director, request.id, { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Initial review." });
+    expect(result.status).toBe("needs-information"); expect(result.reviewNotice).toMatchObject({ outcome: "needs-information", status: "sent" });
+    expect(mocks.reviewSend).toHaveBeenCalledTimes(2);
+  });
+  it("never sends when the guarded review transaction fails", async () => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); const view = await sign(request.id);
+    client.seed("Access", { pk: "ACCESS#director", sk: "PROFILE", version: 2, status: "deactivated" });
+    await expect(mutateDisclosure(director, request.id, { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Complete." })).rejects.toMatchObject({ status: 409 });
+    expect(mocks.reviewSend).not.toHaveBeenCalled();
+    expect((await disclosuresRepository.get(request.id))?.status).toBe("submitted");
   });
   it("requires matter context and enforces bounded, internally consistent answers", () => {
     expect(() => normalizeDisclosureForm({ ...completeForm(), matter: "" }, "matter")).toThrow();

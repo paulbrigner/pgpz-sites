@@ -456,6 +456,10 @@ After recording a review, the review panel shows and focuses a confirmation
 in place of the cleared form. Saved current-review outcomes remain visible
 after reopening the request; an explicit action starts another review note.
 A confirmed write followed by a failed refresh still reports that it was saved.
+Each newly recorded director review automatically attempts one status-only email
+to the subject after the review commits. The attempt is claimed with the review;
+provider acceptance or uncertainty is retained separately and shown in the
+confirmation. Counsel advice and existing records do not trigger emails.
 
 `lib/disclosures-service.ts` checks current access and content-free admission
 before loading private records. `lib/disclosures-repository.ts` stores them in
@@ -466,7 +470,7 @@ records bind the exact policy version, canonical form, acknowledgment,
 authenticated identity, delivery timestamp, and previous signed digest. Policy
 downloads and printable/JSON exports require current admission. Amendments and
 review notes are retained; reassignment revokes removed reviewers and resets
-review status. Manual reminders use the Board email transport with persisted
+review status. Automatic outcome notices and manual reminders use the Board email transport with persisted
 attempt/result records and no sensitive contents or attachments.
 
 Read [Board disclosures](../../docs/board-disclosures.md) for the Chair and

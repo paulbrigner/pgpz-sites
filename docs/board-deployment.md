@@ -435,6 +435,15 @@ drift requires a change. No production migration or data backfill is needed.
 The additive `satisfactory` disclosure status and review outcome distinguish
 explicit completion from legacy `reviewed` records. Preserve support for this
 status when rolling back; older builds cannot label it in the status register.
+Automatic review outcome notices use the existing Board email transport and
+compute role; no new queue, resource or IAM permission is introduced. An optional
+`reviewNotice` admission field records the review version, signed revision,
+outcome and attempt status, claimed atomically with the review. Result events
+append to restricted history. No backfill sends emails for historical reviews.
+Interrupted or uncertain attempts are not automatically retried; inspect the
+retained status and coordinate a manual reminder if needed. Delivery failure
+must not invalidate a committed review. A rollback must preserve retained
+notification fields/events; the older build will stop automatic outcome emails.
 Do not seed, sign, review, or send real disclosure reminders during validation.
 
 Run Board tests/typecheck/build, repository checks, infrastructure tests, and
