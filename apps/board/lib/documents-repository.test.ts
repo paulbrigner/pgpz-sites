@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DocumentVersion } from "@pgpz/document-vault";
 import { createBoardDocumentRepository } from "./documents-repository";
 
@@ -52,7 +52,7 @@ function createFakeClient() {
           const current = items.get(key);
           const values = update.ExpressionAttributeValues;
           if (!current || current.revision !== values[":expectedRevision"]) throw { name: "ConditionalCheckFailedException" };
-          updates.push({ key, item: { ...current, currentVersionId: values[":currentVersionId"], revision: values[":nextRevision"], updatedAt: values[":updatedAt"], updatedBy: values[":updatedBy"] } });
+          updates.push({ key, item: { ...current, ...(":currentVersionId" in values ? { currentVersionId: values[":currentVersionId"] } : {}), ...(":inEffect" in values ? { inEffect: values[":inEffect"] } : {}), revision: values[":nextRevision"], updatedAt: values[":updatedAt"], updatedBy: values[":updatedBy"] } });
         }
       }
       for (const write of writes) items.set(write.key, write.item);
@@ -64,6 +64,7 @@ function createFakeClient() {
       if (!current || current.revision !== ExpressionAttributeValues[":expectedRevision"]) throw { name: "ConditionalCheckFailedException" };
       items.set(key, {
         ...current,
+        ...(":status" in ExpressionAttributeValues ? { status: ExpressionAttributeValues[":status"], title: ExpressionAttributeValues[":title"], description: ExpressionAttributeValues[":description"], category: ExpressionAttributeValues[":category"], visibility: ExpressionAttributeValues[":visibility"] } : {}),
         ...(typeof ExpressionAttributeValues[":displayName"] === "string" ? { displayName: ExpressionAttributeValues[":displayName"] } : {}),
         revision: ExpressionAttributeValues[":nextRevision"],
         updatedAt: ExpressionAttributeValues[":updatedAt"],
@@ -93,6 +94,38 @@ function version(documentId: string, versionId: string, sequence: number): Docum
 }
 
 describe("board documents repository", () => {
+  it("preserves the operative version through uploads, restore, rename, archive and metadata changes, and atomically records replacement and clearing", async () => {
+    const client = createFakeClient(); const tx = vi.spyOn(client, "transactWrite");
+    const repo = createBoardDocumentRepository(client);
+    let doc = await repo.createDocument({ documentId: "effect", title: "Articles", description: "", category: "incorporation", visibility: "members", version: version("effect", "v1", 1), actorId: "chair" });
+    const designation = { versionId: "v1", sha256: "0".repeat(64), reason: "Filed original", recordedAt: "2026-09-10T00:00:00Z", recordedBy: "chair" };
+    const set = (revision: number, inEffect = designation as typeof designation | null) => repo.setInEffect({ documentId: "effect", expectedRevision: revision, inEffect, reason: "Verified status", actorId: "chair", now: "2026-09-10T00:00:00Z" }, [{ Put: { Item: { pk: "AUDIT", sk: `event-${revision}` } } }]);
+    doc = await set(doc.revision);
+    expect(tx.mock.calls.at(-1)?.[0].TransactItems).toHaveLength(3);
+    expect(tx.mock.calls.at(-1)?.[0].TransactItems[1].Put?.Item).toMatchObject({ type: "DOCUMENT_EFFECT_RECORD", previous: null, next: designation });
+    await expect(set(0, null)).rejects.toThrow();
+    doc = await repo.acceptVersion({ documentId: "effect", expectedRevision: doc.revision, head: doc, version: version("effect", "v2", 2), actorId: "chair" }) as typeof doc;
+    await repo.updateDisplayName("effect", "Proposed and filed Articles", "chair");
+    await repo.updateMetadata("effect", { title: "Articles", description: "Updated", category: "incorporation", visibility: "members" }, "chair");
+    await repo.setArchived("effect", true, "chair", "2026-09-10T01:00:00Z");
+    doc = (await repo.getDocument("effect"))!;
+    expect(doc.inEffect).toEqual(designation); expect(doc.currentVersionId).toBe("v2");
+    await expect(set(doc.revision)).rejects.toThrow(/Restore/);
+    doc = (await repo.setArchived("effect", false, "chair", "2026-09-10T01:00:00Z"))!;
+    await expect(set(doc.revision, { ...designation, versionId: "foreign" })).rejects.toThrow(/belong/);
+    await expect(set(doc.revision, { ...designation, sha256: "forged" })).rejects.toThrow(/belong/);
+    doc = await set(doc.revision, { ...designation, versionId: "v2" });
+    doc = await repo.acceptVersion({ documentId: "effect", expectedRevision: doc.revision, head: doc, version: { ...version("effect", "v3", 3), source: "restore", restoredFromVersionId: "v1" }, actorId: "chair" }) as typeof doc;
+    expect((await repo.getDocument("effect"))?.inEffect?.versionId).toBe("v2");
+    doc = await set(doc.revision, null);
+    expect(doc.inEffect).toBeNull(); expect(doc.currentVersionId).toBe("v3");
+    expect((await repo.listVersions("effect")).map((v) => v.versionId)).toEqual(["v1", "v2", "v3"]);
+    expect(tx.mock.calls.at(-1)?.[0].TransactItems[1].Put?.Item).toMatchObject({ previous: { versionId: "v2" }, next: null });
+    tx.mockRejectedValueOnce(new Error("audit transaction failed"));
+    await expect(set(doc.revision)).rejects.toThrow("audit transaction failed");
+    expect((await repo.getDocument("effect"))?.inEffect).toBeNull();
+  });
+
   it("creates, reads, lists, and versions a document", async () => {
     const repo = createBoardDocumentRepository(createFakeClient() as never);
 

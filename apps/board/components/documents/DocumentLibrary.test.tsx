@@ -56,6 +56,44 @@ const mixedCategories: LibraryCategory[] = categories.map((category) => ({
 }));
 
 describe("DocumentLibrary", () => {
+  it("filters in-effect versions independently of adoption and archive status, and opens the exact earlier version", () => {
+    const marked = mixedCategories.map((category) => ({ ...category, documents: category.documents.map((doc) => doc.category === "policies" ? { ...doc, currentVersionId: "draft", inEffect: { versionId: "policy-v1", sequence: 1, reason: "Filed original", recordedAt: "2026-09-10", downloadHref: "/original" } } : doc) }));
+    const { rerender } = render(<DocumentLibrary categories={marked} canManage />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by effect" }), { target: { value: "in-effect" } });
+    expect(screen.getByText("1 document shown")).toBeVisible();
+    expect(screen.getByText("In effect · v1")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open in-effect version 1" })).toHaveAttribute("href", "/original");
+    expect(screen.getByText("The latest upload is a different version.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /v2/ }));
+    expect(screen.getByText(/Version 1.*In effect/)).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by adoption" }), { target: { value: "adopted" } });
+    expect(screen.getByText("0 documents shown")).toBeVisible();
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by adoption" }), { target: { value: "all" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by document status" }), { target: { value: "all" } });
+    expect(screen.getByText("2 documents shown")).toBeVisible();
+    rerender(<DocumentLibrary categories={marked} />);
+    expect(screen.getByText("1 document shown")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("combobox", { name: "Filter by effect" })).toHaveValue("all");
+  });
+
+  it("allows only officers to submit a reviewed version designation with the observed revision", async () => {
+    const data = [{ ...categories[0], documents: [{ ...categories[0].documents[0], revision: 7 }] }];
+    const { rerender } = render(<DocumentLibrary categories={data} focusDocumentId="policy-1" showFocusedHistory canManage />);
+    expect(screen.queryByText("Manage in-effect designation")).not.toBeInTheDocument();
+    rerender(<DocumentLibrary categories={data} focusDocumentId="policy-1" showFocusedHistory canManage canSetInEffect />);
+    fireEvent.click(screen.getByText("Manage in-effect designation"));
+    expect(screen.getByRole("button", { name: "Save designation" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("In-effect version"), { target: { value: "policy-v1" } });
+    fireEvent.change(screen.getByLabelText("Basis for this designation or change"), { target: { value: "Approval and filing verified" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    libraryMocks.fetchWithBoardStepUp.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    fireEvent.click(screen.getByRole("button", { name: "Save designation" }));
+    await waitFor(() => expect(libraryMocks.refresh).toHaveBeenCalled());
+    const sent = JSON.parse(libraryMocks.fetchWithBoardStepUp.mock.calls[0][1].body);
+    expect(sent).toEqual({ action: "setInEffect", documentId: "policy-1", versionId: "policy-v1", expectedRevision: 7, reason: "Approval and filing verified" });
+  });
+
   it("filters adoption independently of archive status and keeps newer uploads separate", () => {
     const adoption = { meetingId: "m", resolutionId: "b", resolutionTitle: "Adopt policy", versionId: "policy-v1", sequence: 1, sha256: "hash", adoptedAt: "2026-09-11T12:00:00Z", effectiveTerms: "October 1, 2026", signatureCount: 5, directorCount: 5, recordHref: "/record", packetHref: "/packet", originalHref: "/original-v1" };
     const withAdoption = mixedCategories.map((category) => ({ ...category, documents: category.documents.map((doc) => doc.category === "policies" ? { ...doc, currentVersionId: "new-draft", adoptions: [adoption] } : doc) }));

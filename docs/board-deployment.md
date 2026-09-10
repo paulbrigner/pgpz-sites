@@ -542,3 +542,36 @@ and consent-record downloads; unsupported PDF composition uses an exact-source
 ZIP packet instead. Post-release, read existing library/consent screens without
 mutating them and verify that pre-release attachments have no inferred adopted
 labels. New authorized actions should show adoption only after the final consent.
+
+
+## In-effect document designations
+
+Board-only additive fields in document `META` records store `inEffect` as either
+null or `{ versionId, sha256, reason, recordedAt, recordedBy }`. Immutable
+`EFFECT#<document-revision>` rows in the same document partition preserve each
+change and its previous designation. The operation uses existing DynamoDB
+Update/Put permissions on the Board documents table and the existing
+ConditionCheckItem permission on the Board access table. No index, new table,
+TTL, object retention change, IAM expansion, or blanket backfill is required.
+Existing records without the field are unmarked. Never infer designations from
+file names, descriptions, latest-upload pointers, or adoption timestamps.
+
+Before release, run the repository gate, Board build and infrastructure tests,
+targeted desktop/mobile library checks, and independent PR review. Verify the
+current AWS account, Board Amplify main branch variables and compute role,
+Board-owned tables and retained buckets, and the rollback commit. Deploy the
+reviewed revision, then verify the running build. Changing a real designation
+requires explicit authorization for that document/version and verification of
+the underlying basis. Use the normal `setDocumentInEffect` service with a current
+active officer and the observed document revision; an authorized operator
+must verify the exact retained version ID and SHA-256 first. Do not write a
+standalone badge or omit the atomic audit/access checks. Record only known
+operative versions; do not seed synthetic designations in production.
+
+Verify the exact version badge and direct link, combined In effect filters,
+permission-scoped controls, audit evidence, and preserved upload/version bytes.
+Test set, replace, clear, stale edits, revoked roles, and audit failure using
+isolated local records. No meeting, consent, signature, or email is generated.
+Older releases ignore the fields and preserve them through their partial
+metadata updates; rollback hides the designation UI but does not erase the
+records. Restore the feature to display them again.

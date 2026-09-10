@@ -22,6 +22,8 @@ export type LibraryDocument = Readonly<{
   versionCount: number;
   status: "active" | "archived";
   currentVersionId: string;
+  revision?: number;
+  inEffect?: Readonly<{ versionId: string; sequence: number; reason: string; recordedAt: string; downloadHref: string }> | null;
   adoptions?: readonly DocumentAdoptionView[];
   versions: ReadonlyArray<Readonly<{
     versionId: string;
@@ -97,6 +99,9 @@ export function buildDocumentLibrary(
     const definition = definitionByKey.get(document.category);
     const collection = collectionForTitle(document.title);
     const role = roleForTitle(document.title);
+    const versions = [...(versionsByDocument.get(document.documentId) ?? [document.currentVersion])];
+    const designation = "inEffect" in document ? document.inEffect : null;
+    const effectiveVersion = designation ? versions.find((v) => v.versionId === designation.versionId && v.sha256 === designation.sha256) : null;
     const item: LibraryDocument = {
       documentId: document.documentId,
       title: "displayName" in document && document.displayName?.trim() ? document.displayName.trim() : document.title,
@@ -114,8 +119,10 @@ export function buildDocumentLibrary(
       versionCount: document.versionCount,
       status: document.status,
       currentVersionId: document.currentVersion.versionId,
+      revision: document.revision,
+      inEffect: designation && effectiveVersion ? { versionId: effectiveVersion.versionId, sequence: effectiveVersion.sequence, reason: designation.reason, recordedAt: designation.recordedAt, downloadHref: `/api/documents/${document.documentId}/download?version=${encodeURIComponent(effectiveVersion.versionId)}` } : null,
       adoptions: adoptionsByDocument.get(document.documentId) || [],
-      versions: [...(versionsByDocument.get(document.documentId) ?? [document.currentVersion])]
+      versions: versions
         .sort((left, right) => right.sequence - left.sequence)
         .map((version) => ({
           versionId: version.versionId,

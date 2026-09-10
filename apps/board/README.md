@@ -109,6 +109,25 @@ Uploading a revision neither adopts it nor supersedes an earlier adopted version
 An absent link means no explicit portal adoption record, not a legal finding that
 the document was never adopted elsewhere. Ordinary categories stay unchanged.
 
+The **In effect** badge identifies an officer-designated version, independently
+of the latest upload and portal adoption records. The badge and **Open in-effect
+version** link appear on desktop and mobile; version history marks the exact
+version. **Filter by effect → In effect** combines with search and all other
+filters. **Not designated** means no designation is recorded, not a finding that
+the document has no legal effect. Directors still cannot see archived records.
+
+The Chair or Executive Director can open version history → **Manage in-effect
+designation**, select a retained version (or clear the designation), explain the
+basis, and confirm the current status. Other document managers cannot change it.
+The service rechecks active officer access and the document revision, binds the
+stored version ID and SHA-256, and atomically writes the designation, immutable
+change record, access guard, and audit event. Changes require recent passkey
+verification. One version per library entry can be designated; a newer upload,
+restoration, archive or metadata edit does not replace that designation. Officers
+verify approval, filing and other conditions before setting it; adoption and
+uploads never infer effectiveness automatically. Meeting and restricted records
+are not eligible. See the [release runbook](../../docs/board-deployment.md#in-effect-document-designations).
+
 Document management is integrated into this same library rather than exposed as
 a parallel interface. Board Chair, Executive Director, Legal Counsel, and Board
 Support roles see permission-scoped controls for creating documents, adding a

@@ -3,7 +3,7 @@ import { Badge, Container } from "@pgpz/ui";
 import { ShieldCheck } from "lucide-react";
 import { DocumentLibrary } from "@/components/documents/DocumentLibrary";
 import { buildDocumentLibrary } from "@/lib/document-library";
-import { canManageBoardDocuments, requireBoardMember } from "@/lib/session";
+import { canManageBoardDocuments, canManageBoardMeetings, requireBoardMember } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { documentAdoptionView } from "@/lib/document-adoptions";
@@ -63,7 +63,7 @@ export default async function BoardDocumentsPage({
         <p>New versions preserve earlier files and their integrity evidence. <Link href="/governance-safeguards" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">How records are protected</Link></p>
       </aside>
 
-      <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} canManage={canManage} />
+      <DocumentLibrary categories={categories} focusDocumentId={focusDocumentId} showFocusedHistory={showHistory} canManage={canManage} canSetInEffect={canManageBoardMeetings(member)} />
     </Container>
   );
 }

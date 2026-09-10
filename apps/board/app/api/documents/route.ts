@@ -18,7 +18,9 @@ import { buildStagingKey, isLocalBoardDocumentStorageEnabled } from "@/lib/objec
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3Client } from "@/lib/s3";
-import { BOARD_DOCUMENTS_STAGING_BUCKET } from "@/lib/config";
+import { setDocumentInEffect } from "@/lib/document-effect";
+import { OptimisticConcurrencyError } from "@pgpz/document-vault/server";
+import { BOARD_DOCUMENTS_STAGING_BUCKET, SITE_URL } from "@/lib/config";
 import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-security";
 
 export const runtime = "nodejs";
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
   const action = text(body?.action);
   const ok = (payload: unknown) => NextResponse.json(payload);
   const fail = (error: unknown) => {
+    if (error instanceof OptimisticConcurrencyError) return NextResponse.json({ error: "The document, access, or audit record changed. Refresh and try again." }, { status: 409 });
     if (error instanceof VaultValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -81,6 +84,12 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (action) {
+      case "setInEffect": {
+        const origin = request.headers.get("origin");
+        if (origin && origin !== new URL(SITE_URL).origin) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+        if (body.versionId !== null && (typeof body.versionId !== "string" || !body.versionId.trim())) return fail(new VaultValidationError("version", "Select a version or explicitly clear the designation."));
+        return ok(await setDocumentInEffect({ member, documentId: text(body.documentId), versionId: body.versionId === null ? null : text(body.versionId), expectedRevision: body.expectedRevision, reason: text(body.reason) }));
+      }
       case "prepareUpload": {
         const operationId = randomUUID();
         const stagingKey = buildStagingKey("board", operationId);
