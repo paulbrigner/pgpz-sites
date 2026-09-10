@@ -448,7 +448,10 @@ start their own request. Invited users may be assigned and emailed before their
 first login. The subject, explicitly assigned reviewing director, and invited
 counsel are the only readers of submitted content; administrative roles have no
 override. Only the subject sees drafts. A director must record completion of
-review, and nobody can review their own disclosure.
+review, and nobody can review their own disclosure. Reviewers can explicitly
+record **Review complete — satisfactory**, request clarification, or retain
+findings with documented follow-up. Existing review records are not relabeled
+as satisfactory; statuses and retained history distinguish the new outcome.
 
 `lib/disclosures-service.ts` checks current access and content-free admission
 before loading private records. `lib/disclosures-repository.ts` stores them in

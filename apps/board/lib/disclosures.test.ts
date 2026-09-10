@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { executiveFakeClient, accessFixture } from "./executive-session-test-helpers";
 import type { BoardAccessRecord } from "./board-access";
 import type { BoardMember } from "./session";
-import { DISCLOSURE_CATEGORIES, normalizeDisclosureForm, type DisclosureForm } from "./disclosures";
+import { DISCLOSURE_CATEGORIES, disclosureStatus, normalizeDisclosureForm, type DisclosureForm } from "./disclosures";
 
 const mocks = vi.hoisted(() => ({ getByEmail: vi.fn(), getById: vi.fn(), list: vi.fn(), audit: vi.fn(), document: vi.fn(), send: vi.fn() }));
 vi.mock("./dynamodb", () => ({ documentClient: {} }));
@@ -79,14 +79,19 @@ describe("Board individual disclosure workflow", () => {
     expect(signed.events[0]).toMatchObject({ questions: [...DISCLOSURE_CATEGORIES] });
     expect(signed.events[0]).toMatchObject({ kind: "submission", actor: { userId: "auth-ed" }, acknowledgment: expect.stringContaining("proposed") });
   });
-  it("ties reviews to a signed revision, preserves all signed amendments, and resets review status", async () => {
+  it.each(["reviewed", "satisfactory"] as const)("ties %s reviews to a signed revision, preserves amendments, and resets status", async (outcome) => {
     const request = await createDisclosure(chair, input()); await prepare(request.id); let view = await sign(request.id);
-    const review = { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "reviewed", note: "PRIVATE recusal required before compensation consideration." };
+    const review = { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome, note: "PRIVATE recusal required before compensation consideration." };
     await expect(mutateDisclosure(ed, request.id, review)).rejects.toMatchObject({ status: 403 });
     await expect(mutateDisclosure(counsel, request.id, review)).rejects.toMatchObject({ status: 403 });
     await expect(mutateDisclosure(director, request.id, { ...review, independent: false })).rejects.toMatchObject({ status: 400 });
     await mutateDisclosure(director, request.id, review);
-    expect((await disclosureView(ed, request.id)).request.status).toBe("reviewed");
+    const reviewed = await disclosureView(ed, request.id);
+    expect(reviewed.request.status).toBe(outcome);
+    expect(reviewed.events.at(-1)).toMatchObject({ kind: "review", outcome, revision: 1 });
+    expect(disclosureRecordHtml(reviewed)).toContain(disclosureStatus(outcome));
+    if (outcome === "reviewed") expect(disclosureRecordHtml(reviewed)).not.toContain("satisfactory");
+    expect((await disclosureRegister(chair))[0]).toMatchObject({ status: outcome, canOpen: false });
     for (let revision = 2; revision <= 5; revision++) { const form = completeForm(); form.matter = `PRIVATE amendment ${revision}`; await prepare(request.id, form); view = await sign(request.id); }
     expect(view.request.status).toBe("submitted"); expect(view.events.filter((event) => event.kind === "submission")).toHaveLength(5);
     await expect(mutateDisclosure(director, request.id, { ...review, expectedVersion: view.request.version })).rejects.toMatchObject({ status: 409 });
@@ -97,6 +102,23 @@ describe("Board individual disclosure workflow", () => {
     expect(await disclosureRegister(member("support", "board-support"))).toEqual([]);
     expect(disclosureRecord(view)).not.toHaveProperty("draft"); expect(disclosureRecordHtml(view)).not.toContain("<script>");
     expect(disclosureRecordHtml(view)).toContain("&lt;script&gt;");
+  });
+  it("requires explicit completion by the assigned director and clears completion on reassignment", async () => {
+    const request = await createDisclosure(chair, input()); await prepare(request.id); let view = await sign(request.id);
+    const review = { action: "review", expectedVersion: view.request.version, submissionHash: view.request.latestHash, independent: true, outcome: "satisfactory", note: "Review complete; no further disclosure follow-up needed." };
+    for (const invalid of [{ outcome: "" }, { outcome: "approved" }, { note: "" }, { submissionHash: "stale" }]) {
+      await expect(mutateDisclosure(director, request.id, { ...review, ...invalid })).rejects.toBeDefined();
+    }
+    await mutateDisclosure(counsel, request.id, { ...review, action: "comment" });
+    view = await disclosureView(director, request.id);
+    expect(view.request.status).toBe("submitted");
+    expect(view.events.at(-1)).toMatchObject({ outcome: "counsel-advice" });
+    await mutateDisclosure(director, request.id, { ...review, expectedVersion: view.request.version });
+    view = await disclosureView(ed, request.id);
+    await mutateDisclosure(ed, request.id, { action: "route", expectedVersion: view.request.version, reviewerId: "alternate", counselId: "", note: "Assign another disinterested director." });
+    view = await disclosureView(member("alternate"), request.id);
+    expect(view.request.status).toBe("submitted");
+    expect(view.events.some((event) => event.kind === "review" && event.outcome === "satisfactory")).toBe(true);
   });
   it("removes implicated reviewers, prevents their restoration, and permits explicitly adding counsel without replacing the director", async () => {
     const request = await createDisclosure(chair, { ...input(), counselId: "" }); await prepare(request.id); let view = await sign(request.id);
