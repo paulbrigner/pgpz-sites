@@ -28,10 +28,10 @@ export function resolveBoardEmailTransportMode(input: {
   return configured === "ses" ? "ses" : "smtp";
 }
 
-export function buildBoardSesTransport(region: string) {
+export function buildBoardSesTransport(region: string, options: { maxAttempts?: number } = {}) {
   return {
     SES: {
-      sesClient: new SESv2Client({ region }),
+      sesClient: new SESv2Client({ region, ...options }),
       SendEmailCommand,
     },
   };
@@ -73,16 +73,16 @@ function buildSmtpTransport() {
   });
 }
 
-export function buildBoardEmailTransport() {
+export function buildBoardEmailTransport(options: { maxAttempts?: number } = {}) {
   const mode = resolveBoardEmailTransportMode({
     configuredTransport: EMAIL_TRANSPORT,
     nodeEnv: process.env.NODE_ENV,
   });
-  return mode === "ses" ? buildBoardSesTransport(AWS_REGION) : buildSmtpTransport();
+  return mode === "ses" ? buildBoardSesTransport(AWS_REGION, options) : buildSmtpTransport();
 }
 
-export function assertBoardEmailReady() {
-  const transport = buildBoardEmailTransport();
+export function assertBoardEmailReady(options: { maxAttempts?: number } = {}) {
+  const transport = buildBoardEmailTransport(options);
   if (!transport || !EMAIL_FROM) throw new Error("Board email delivery is not configured");
   return { transport, from: EMAIL_FROM };
 }

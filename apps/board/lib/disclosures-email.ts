@@ -28,6 +28,6 @@ export function disclosureReviewNotice(input: { id: string; year: number; revisi
   };
 }
 export async function sendDisclosureReviewNotice(input: Parameters<typeof disclosureReviewNotice>[0]) {
-  const { transport, from } = assertBoardEmailReady();
+  const { transport, from } = assertBoardEmailReady({ maxAttempts: 1 });
   await nodemailer.createTransport(transport as never).sendMail({ from, ...disclosureReviewNotice(input) } as never);
 }

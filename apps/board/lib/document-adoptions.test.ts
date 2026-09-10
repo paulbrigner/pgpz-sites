@@ -5,6 +5,19 @@ import { validateConsentAdoption } from "./written-consents";
 import { adoptedFixture } from "./test-support/adoption";
 
 describe("document adoption evidence", () => {
+  it("verifies schema 3 adoption and rejects a changed attachment description", () => {
+    const { ballot } = adoptedFixture();
+    ballot.attachments![0].description = "Clean version for approval";
+    ballot.consent!.schema = 3;
+    const hash = consentDigest(consentPayload(ballot, ballot.consent!));
+    ballot.consent!.contentHash = hash;
+    ballot.consent!.receipts = ballot.consent!.receipts.map(receipt => ({ ...receipt, contentHash: hash }));
+    expect(hasVerifiedAdoption(ballot)).toBe(true);
+    expect(documentAdoptionView(ballot, "doc")).not.toBeNull();
+    ballot.attachments![0].description = "Different explanation";
+    expect(hasVerifiedAdoption(ballot)).toBe(false);
+  });
+
   it("requires an adopted action and all exact receipts, not a passed legacy vote or a locator", () => {
     const { ballot } = adoptedFixture();
     expect(hasVerifiedAdoption(ballot)).toBe(true);

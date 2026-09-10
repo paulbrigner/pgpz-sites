@@ -7,7 +7,7 @@ import { validateConsentAdoption } from "./written-consents";
  * the retained action and all current receipts before claiming adoption. */
 export function hasVerifiedAdoption(ballot: BoardAsyncBallot): boolean {
   const consent = ballot.consent;
-  if (consent?.schema !== 2 || !ballot.adoption || ballot.status !== "closed" || ballot.result?.outcome !== "passed" || !ballot.closedAt || !ballot.eligibleVoters.length) return false;
+  if ((consent?.schema !== 2 && consent?.schema !== 3) || !ballot.adoption || ballot.status !== "closed" || ballot.result?.outcome !== "passed" || !ballot.closedAt || !ballot.eligibleVoters.length) return false;
   try { validateConsentAdoption(ballot.adoption, ballot.attachments || []); } catch { return false; }
   if (consentDigest(consentPayload(ballot, consent)) !== consent.contentHash) return false;
   if (new Set(ballot.eligibleVoters.map((v) => v.userId)).size !== ballot.eligibleVoters.length || consent.receipts.length !== ballot.eligibleVoters.length) return false;

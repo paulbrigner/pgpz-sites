@@ -54,12 +54,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       const attachments: ConsentAttachment[] = [];
       for (const ref of refs) {
         const documentId = text(ref?.documentId), versionId = text(ref?.versionId);
-        if (!documentId || !versionId || attachments.some((item) => item.documentId === documentId)) throw new Error("Select each document once with its exact version.");
+        if (!documentId || !versionId || attachments.some((item) => item.documentId === documentId && item.versionId === versionId)) throw new Error("Select each exact document version only once.");
         const document = await boardDocumentRepository.getDocument(documentId);
-        if (!document || document.status !== "active" || (document.ownerType === "meeting" && document.meetingId !== meetingId)) throw new Error("Select an active library document or a document in this workspace.");
-        if (document.currentVersion.versionId !== versionId) throw new Error("A selected document changed. Refresh and review the current version before saving.");
-        const version = document.currentVersion;
-        attachments.push({ documentId, versionId, title: document.displayName || document.title, fileName: version.originalFileName, sequence: version.sequence, sha256: version.sha256 });
+        if (!document || document.status !== "active" || (document.ownerType !== "library" && !(document.ownerType === "meeting" && document.meetingId === meetingId))) throw new Error("Select an active library document or a document in this workspace.");
+        const version = document.currentVersion.versionId === versionId ? document.currentVersion
+          : (await boardDocumentRepository.listVersions(documentId)).find((candidate) => candidate.versionId === versionId);
+        if (!version) throw new Error("A selected document version changed or is unavailable. Refresh and select an existing version.");
+        if (ref.description != null && (typeof ref.description !== "string" || ref.description.length > 1000 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(ref.description))) throw new Error("Attachment descriptions must be text of at most 1000 characters.");
+        const description = typeof ref.description === "string" ? ref.description.trim() : "";
+        attachments.push({ ...(description ? { description } : {}), documentId, versionId, title: document.displayName || document.title, fileName: version.originalFileName, sequence: version.sequence, sha256: version.sha256 });
       }
       const meeting = await boardMeetingsRepository.upsertAsyncBallot({
         meetingId, expectedVersion, id: ballotId, agendaItemId: text(body.agendaItemId) || null,

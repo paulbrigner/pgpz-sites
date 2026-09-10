@@ -37,7 +37,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
   async function save(event: FormEvent<HTMLFormElement>, ballot?: AsyncBallotView) {
     event.preventDefault(); const form = event.currentTarget, data = new FormData(form);
     const selections = data.getAll("document").filter(Boolean).map((value) => JSON.parse(String(value)));
-    const attachments = selections.map(({ documentId, versionId }) => ({ documentId, versionId }));
+    const attachments = selections.map(({ documentId, versionId, description }) => ({ documentId, versionId, ...(description ? { description } : {}) }));
     const adoption = { targets: selections.filter((item) => item.treatment === "adopt").map(({ documentId, versionId }) => ({ documentId, versionId })), effectiveTerms: String(data.get("effectiveTerms") || "") };
     const saved = await post({ action: "saveBallot", ...(ballot ? { ballotId: ballot.id } : {}), title: data.get("title"), motion: data.get("motion"), attachments, adoption }, "Draft resolution saved. Review its exact document versions and adoption targets before opening collection.");
     return saved;
@@ -74,7 +74,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           <details open={ballot.effectiveStatus !== "draft"} className="mt-3">
             <summary className="cursor-pointer text-sm font-semibold">Resolution text and documents{ballot.attachments?.length ? ` (${ballot.attachments.length})` : ""}</summary>
             <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{ballot.motion}</p>
-            {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={doc.documentId} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a></li>)}</ul>}
+            {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={`${doc.documentId}:${doc.versionId}`} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a>{doc.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--muted)]">{doc.description}</p>}</li>)}</ul>}
             {ballot.adoption && <div className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 text-sm">
               <p className="font-semibold">Documents this resolution adopts</p>
               {ballot.adoption.targets.length ? <ul className="mt-2 grid gap-2">{ballot.adoption.targets.map((target) => {

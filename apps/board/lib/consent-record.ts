@@ -14,8 +14,8 @@ export function consentRecord(ballot: BoardAsyncBallot, receipts: readonly Conse
     meetingId: ballot.meetingId, resolutionId: ballot.id, title: ballot.title, resolution: ballot.motion,
     status: complete ? "adopted" : ballot.status === "cancelled" ? "cancelled-without-adoption" : "not-adopted",
     adoptedAt: complete ? ballot.closedAt : null,
-    attachments: ballot.attachments || [], directors: ballot.eligibleVoters,
-    adoption: ballot.consent.schema === 2 ? ballot.adoption || null : null,
+    attachments: (ballot.attachments || []).map(({ description, ...doc }) => ({ ...doc, ...(ballot.consent?.schema === 3 && description ? { description } : {}) })), directors: ballot.eligibleVoters,
+    adoption: (ballot.consent.schema === 2 || ballot.consent.schema === 3) ? ballot.adoption || null : null,
     canonicalPayload: consentPayload(ballot, ballot.consent),
     contentIntegrityVerified: consentDigest(consentPayload(ballot, ballot.consent)) === ballot.consent.contentHash,
     contentHash: ballot.consent.contentHash, rosterRevision: ballot.consent.rosterRevision,
@@ -36,7 +36,7 @@ export function consentRecordHtml(record: ReturnType<typeof consentRecord>) {
   ${record.contentIntegrityVerified ? "" : "<p><strong>Integrity check failed. This exported text does not match the signed resolution digest.</strong></p>"}
   <h2>Exact resolution</h2><pre>${escape(record.resolution)}</pre>
   ${record.adoption ? `<h2>Document adoption instructions</h2><p>Only these exact versions are adoption targets; other attachments are supporting materials.</p><ul>${record.adoption.targets.map((target) => `<li>${escape(record.attachments.find((doc) => doc.documentId === target.documentId && doc.versionId === target.versionId)?.title || target.documentId)} · version ${escape(target.versionId)}</li>`).join("")}</ul><p><strong>Effective date / conditions:</strong> ${escape(record.adoption.effectiveTerms || "See the exact resolution. Adoption does not establish that implementation conditions have been met.")}</p>` : "<p>This earlier consent does not contain explicit document adoption targets. No library adoption labels have been inferred from its attachments.</p>"}
-  <h2>Incorporated document versions</h2>${record.attachments.length ? record.attachments.map((doc) => `<article><a href="/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&amp;consentMeeting=${encodeURIComponent(record.meetingId)}&amp;consentBallot=${encodeURIComponent(record.resolutionId)}">${escape(doc.title)} · v${escape(doc.sequence)}</a><p class="meta">${escape(doc.fileName)}<br>Version: ${escape(doc.versionId)}<br>SHA-256: ${escape(doc.sha256)}</p></article>`).join("") : "<p>None.</p>"}
+  <h2>Incorporated document versions</h2>${record.attachments.length ? record.attachments.map((doc) => `<article><a href="/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&amp;consentMeeting=${encodeURIComponent(record.meetingId)}&amp;consentBallot=${encodeURIComponent(record.resolutionId)}">${escape(doc.title)} · v${escape(doc.sequence)}</a>${doc.description ? `<p>${escape(doc.description)}</p>` : ""}<p class="meta">${escape(doc.fileName)}<br>Version: ${escape(doc.versionId)}<br>SHA-256: ${escape(doc.sha256)}</p></article>`).join("") : "<p>None.</p>"}
   <h2>Every required director</h2><ul>${record.directors.map((director) => `<li>${escape(director.name)} (${escape(director.email)})</li>`).join("")}</ul>
   <p>${escape(record.rosterConfirmation)}</p><p class="meta">Confirmed by ${escape(record.confirmedBy)} at ${escape(record.confirmedAt)}. Roster revision: ${escape(record.rosterRevision)}</p>
   <h2>Electronic-signature declarations</h2><p>${escape(record.consentStatement)}</p><p>${escape(record.withdrawalStatement)}</p>

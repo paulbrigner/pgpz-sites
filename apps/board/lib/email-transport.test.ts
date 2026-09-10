@@ -19,6 +19,17 @@ describe("Board email transport", () => {
     expect(config.SES.SendEmailCommand).toBe(SendEmailCommand);
   });
 
+  it("does not retry an ambiguous timeout when a single-attempt SES transport is requested", async () => {
+    const transport = buildBoardSesTransport("us-east-1", { maxAttempts: 1 });
+    expect(await transport.SES.sesClient.config.maxAttempts()).toBe(1);
+    let dispatches = 0;
+    const client = new SESv2Client({ region: "us-east-1", maxAttempts: transport.SES.sesClient.config.maxAttempts,
+      credentials: { accessKeyId: "synthetic", secretAccessKey: "synthetic" },
+      requestHandler: { handle: async () => { dispatches++; const error = new Error("Synthetic lost response"); error.name = "TimeoutError"; throw error; } },
+    });
+    await expect(client.send(new SendEmailCommand({ FromEmailAddress: "sender@example.invalid", Destination: { ToAddresses: ["recipient@example.invalid"] }, Content: { Simple: { Subject: { Data: "Synthetic" }, Body: { Text: { Data: "Synthetic" } } } } }))).rejects.toMatchObject({ name: "TimeoutError", $metadata: { attempts: 1 } });
+    expect(dispatches).toBe(1); client.destroy(); transport.SES.sesClient.destroy();
+  });
   it("disables opportunistic TLS only for local MailHog", () => {
     expect(buildBoardSmtpTransport({ host: "localhost", port: "1025", secure: "false" })).toMatchObject({
       host: "localhost", port: 1025, secure: false, ignoreTLS: true,

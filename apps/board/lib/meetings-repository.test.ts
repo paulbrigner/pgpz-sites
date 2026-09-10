@@ -52,10 +52,10 @@ function rosterFor(client: ReturnType<typeof fakeClient>, voters: { userId: stri
   for (const voter of voters) client.items.set(`ACCESS#${voter.userId}#PROFILE`, { id: voter.userId, name: voter.name, email: voter.email, role: "member", status: "active", version: 1 });
   return roster;
 }
-async function consentFixture(adoptDocument = true) {
+async function consentFixture(adoptDocument = true, description?: string) {
   const client = fakeClient(), repo = createBoardMeetingsRepository(client, "Meetings");
   let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", startAt: "2026-09-10T13:00:00Z", endAt: "2026-09-12T21:00:00Z" }));
-  meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Adopt bylaws", motion: "Resolved, the attached bylaws are adopted.", adoption: { targets: adoptDocument ? [{ documentId: "bylaws", versionId: "v3" }] : [], effectiveTerms: "Upon adoption" }, attachments: [{ documentId: "bylaws", versionId: "v3", sequence: 3, title: "Bylaws", fileName: "bylaws.pdf", sha256: "a".repeat(64) }], actorEmail: "chair@pgpz.org" });
+  meeting = await repo.upsertAsyncBallot({ meetingId: meeting.id, expectedVersion: meeting.version, id: "ballot-1", title: "Adopt bylaws", motion: "Resolved, the attached bylaws are adopted.", adoption: { targets: adoptDocument ? [{ documentId: "bylaws", versionId: "v3" }] : [], effectiveTerms: "Upon adoption" }, attachments: [{ documentId: "bylaws", versionId: "v3", sequence: 3, title: "Bylaws", fileName: "bylaws.pdf", sha256: "a".repeat(64), ...(description ? { description } : {}) }], actorEmail: "chair@pgpz.org" });
   meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
   const voters = Array.from({ length: 5 }, (_, i) => ({ userId: `director-${i}`, name: `Director ${i}`, email: `director${i}@example.org` }));
   const roster = rosterFor(client, voters);
@@ -77,6 +77,18 @@ function newMeeting(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Board meetings repository", () => {
+  it("signs attachment descriptions and records adoption after all five schema 3 consents", async () => {
+    const { repo, meeting, sign } = await consentFixture(true, "Clean version for approval");
+    const opened = (await repo.getMeeting(meeting.id))!.asyncBallots[0];
+    expect(opened.consent!.schema).toBe(3);
+    expect(consentDigest(consentPayload(opened, opened.consent!))).toBe(opened.consent!.contentHash);
+    for (let i = 0; i < 5; i++) await sign(i);
+    const adopted = (await repo.getMeeting(meeting.id))!.asyncBallots[0];
+    expect(adopted.status).toBe("closed");
+    expect(adopted.attachments![0].description).toBe("Clean version for approval");
+    expect(await repo.listDocumentAdoptions("bylaws")).toHaveLength(1);
+  });
+
   it("normalizes instants and returns chronological upcoming and reverse chronological past pages", async () => {
     const client = fakeClient();
     const repo = createBoardMeetingsRepository(client as never, "Meetings");

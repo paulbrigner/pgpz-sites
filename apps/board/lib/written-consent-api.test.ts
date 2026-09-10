@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { POST } from "@/app/api/meetings/[id]/ballots/route";
 const mocks = vi.hoisted(() => ({
   anonymous: false, role: "member", currentRole: "member", stepUp: null as Response | null,
-  sign: vi.fn(), save: vi.fn(), open: vi.fn(), cancel: vi.fn(), document: vi.fn(), audit: vi.fn(),
+  sign: vi.fn(), save: vi.fn(), open: vi.fn(), cancel: vi.fn(), document: vi.fn(), versions: vi.fn(), audit: vi.fn(),
 }));
 vi.mock("@/lib/config", () => ({ BOARD_ACCESS_TABLE: "Access", SITE_URL: "http://localhost:3303" }));
 vi.mock("@/lib/dynamodb", () => ({ documentClient: { get: async () => ({ Item: { revision: "r1", ready: true, directors: [{ userId: "director", name: "Director", email: "director@example.invalid", status: "active" }] } }) } }));
@@ -12,12 +12,12 @@ vi.mock("@/lib/session", () => ({ resolveBoardMemberState: async () => mocks.ano
 vi.mock("@/lib/api-security", () => ({ requireBoardPasskeySession: async () => null, requireBoardStepUp: async () => mocks.stepUp }));
 vi.mock("@/lib/board-access-repository", () => ({ boardAccessRepository: { getByEmail: async () => ({ id: "director", name: "Director", email: "director@example.invalid", status: "active", role: mocks.currentRole, version: 1 }) } }));
 vi.mock("@/lib/audit", () => ({ authenticatedActor: (m: unknown) => m, boardAuditLedger: { buildAppendItems: async (input: unknown) => { mocks.audit(input); return { TransactItems: [] }; } } }));
-vi.mock("@/lib/vault", () => ({ boardDocumentRepository: { getDocument: mocks.document } }));
+vi.mock("@/lib/vault", () => ({ boardDocumentRepository: { getDocument: mocks.document, listVersions: mocks.versions } }));
 vi.mock("@/lib/meetings-repository", () => ({ boardMeetingsRepository: { signAsyncConsent: mocks.sign, upsertAsyncBallot: mocks.save, openAsyncBallot: mocks.open, cancelAsyncBallot: mocks.cancel } }));
 const request = (body: unknown, origin = "http://localhost:3303") => new NextRequest("http://localhost:3303/api/meetings/m/ballots", { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body) });
 const context = { params: Promise.resolve({ id: "m" }) };
 const body = { action: "signConsent", ballotId: "b", expectedVersion: 2, intent: true, signatureName: "Director", contentHash: "fixed" };
-beforeEach(() => { vi.clearAllMocks(); mocks.anonymous = false; mocks.role = "member"; mocks.currentRole = "member"; mocks.stepUp = null; mocks.sign.mockResolvedValue({ adopted: false }); });
+beforeEach(() => { vi.clearAllMocks(); mocks.anonymous = false; mocks.role = "member"; mocks.currentRole = "member"; mocks.stepUp = null; mocks.sign.mockResolvedValue({ adopted: false }); mocks.versions.mockResolvedValue([]); });
 describe("written-consent endpoint", () => {
   it("binds identity and receipt time to the server, disregarding forged user and delivery claims", async () => {
     const result = await POST(request({ ...body, authenticatedUserId: "victim", occurredAt: "1999-01-01", accessRecord: { id: "victim" }, role: "chair" }), context);
@@ -45,7 +45,7 @@ describe("written-consent endpoint", () => {
     expect((await POST(request({ action: "finalizeBallot" }), context)).status).toBe(409);
     expect(mocks.open).not.toHaveBeenCalled();
   });
-  it("derives document hashes from stored versions and rejects stale or foreign meeting versions", async () => {
+  it("derives document hashes from stored versions and rejects missing or foreign meeting versions", async () => {
     mocks.role = "chair"; mocks.currentRole = "chair";
     const doc = { documentId: "doc", title: "Bylaws", ownerType: "library", status: "active", currentVersion: { versionId: "v2", originalFileName: "bylaws.pdf", sequence: 2, sha256: "server-hash" } };
     mocks.document.mockResolvedValue(doc);
@@ -57,6 +57,27 @@ describe("written-consent endpoint", () => {
     expect(mocks.save.mock.calls[0][0].attachments[0].sha256).toBe("server-hash");
     mocks.document.mockResolvedValue({ ...doc, ownerType: "meeting", meetingId: "other" });
     expect((await POST(request(current), context)).status).toBe(400);
+  });
+  it("pins multiple versions of one document but permits only one adoption target", async () => {
+    mocks.role = "chair"; mocks.currentRole = "chair";
+    const clean = { versionId: "v5", originalFileName: "proposed.pdf", sequence: 5, sha256: "clean-hash" };
+    const comparison = { versionId: "v4", originalFileName: "tracked-changes.pdf", sequence: 4, sha256: "comparison-hash" };
+    const doc = { documentId: "articles", title: "Articles", ownerType: "library", status: "active", currentVersion: clean };
+    mocks.document.mockResolvedValue(doc); mocks.versions.mockResolvedValue([comparison, clean]);
+    const save = { action: "saveBallot", ballotId: "b", expectedVersion: 2, title: "Articles", motion: "Approve clean version", attachments: [{ documentId: "articles", versionId: "v5" }, { documentId: "articles", versionId: "v4", sha256: "forged", description: "  Comparison only  " }], adoption: { targets: [{ documentId: "articles", versionId: "v5" }], effectiveTerms: "Upon filing" } };
+    expect((await POST(request(save), context)).status).toBe(200);
+    expect(mocks.save.mock.calls[0][0].attachments).toEqual([expect.objectContaining({ versionId: "v5", sha256: "clean-hash" }), expect.objectContaining({ versionId: "v4", sha256: "comparison-hash", fileName: "tracked-changes.pdf", description: "Comparison only" })]);
+    expect(mocks.save.mock.calls[0][0].adoption.targets).toEqual([{ documentId: "articles", versionId: "v5" }]);
+    expect((await POST(request({ ...save, attachments: [save.attachments[0], save.attachments[0]] }), context)).status).toBe(400);
+    expect((await POST(request({ ...save, adoption: { ...save.adoption, targets: save.attachments } }), context)).status).toBe(400);
+    for (const description of [123, "a".repeat(1001), "bad\u0000text"]) {
+      expect((await POST(request({ ...save, attachments: [{ ...save.attachments[0], description }] }), context)).status).toBe(400);
+    }
+    mocks.versions.mockClear(); mocks.document.mockResolvedValue({ ...doc, ownerType: "meeting", meetingId: "other" });
+    expect((await POST(request({ ...save, attachments: [save.attachments[1]] }), context)).status).toBe(400);
+    expect(mocks.versions).not.toHaveBeenCalled();
+    mocks.document.mockResolvedValue({ ...doc, status: "archived" });
+    expect((await POST(request(save), context)).status).toBe(400);
   });
   it("rejects oversized bodies without processing a signature", async () => {
     expect((await POST(request({ ...body, padding: "a".repeat(70000) }), context)).status).toBe(413);
