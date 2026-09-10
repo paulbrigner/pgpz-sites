@@ -32,7 +32,50 @@ describe("disclosure review outcomes", () => {
     expect(JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string)).toEqual({ action: "review", submissionHash: "signed-hash", independent: true, outcome: "satisfactory", note: "Review complete and satisfactory.", expectedVersion: 3 });
     expect(screen.getByText(/Annual disclosure and acknowledgment · Review complete — satisfactory/)).toBeVisible();
     expect(screen.getByText("Reviewer · Review complete — satisfactory · signed revision 1")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveFocus());
+    expect(screen.queryByRole("textbox", { name: "Private review note" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add another review note" }));
+    expect(screen.getByRole("textbox", { name: "Private review note" })).toHaveValue("");
     expect(screen.getByRole("checkbox", { name: /I am disinterested/ })).not.toBeChecked();
+  });
+  it.each(["satisfactory", "reviewed", "needs-information"] as const)("shows the retained %s review when reopening without requiring another submission", (outcome) => {
+    const saved: DisclosureView = { ...initial, request: { ...initial.request, status: outcome }, events: [{ kind: "review", at: "2026-09-10T14:00:00Z", actor: reviewer, revision: 1, note: "Recorded finding.", outcome }] };
+    const { unmount } = render(<DisclosureWorkspace initial={saved} candidates={[reviewer]} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Review recorded");
+    expect(screen.queryByRole("button", { name: "Record review" })).not.toBeInTheDocument();
+    expect(fetchWithBoardStepUp).not.toHaveBeenCalled();
+    unmount();
+    render(<DisclosureWorkspace initial={{ ...saved, request: { ...saved.request, status: "submitted" } }} candidates={[reviewer]} />);
+    expect(screen.getByRole("button", { name: "Record review" })).toBeVisible();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+  it("confirms a successful write even when the subsequent refresh fails", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ request: { ...initial.request, status: "satisfactory" } }));
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Read unavailable")));
+    render(<DisclosureWorkspace initial={initial} candidates={[reviewer]} />);
+    fireEvent.change(screen.getByRole("combobox", { name: /Review outcome/ }), { target: { value: "satisfactory" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Private review note" }), { target: { value: "Complete." } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /I am disinterested/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Record review" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("You do not need to submit it again"));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Refresh recorded review" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Record review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(fetchWithBoardStepUp).toHaveBeenCalledTimes(1);
+  });
+  it("puts a rejected submission error by the form, focuses it, and preserves the entered review", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ error: "The disclosure changed. Refresh before retrying." }, { status: 409 }));
+    render(<DisclosureWorkspace initial={initial} candidates={[reviewer]} />);
+    fireEvent.change(screen.getByRole("combobox", { name: /Review outcome/ }), { target: { value: "satisfactory" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Private review note" }), { target: { value: "Preserve this finding." } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /I am disinterested/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Record review" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Review not confirmed"));
+    expect(screen.getByRole("alert")).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Private review note" })).toHaveValue("Preserve this finding.");
+    expect(screen.getByRole("combobox", { name: /Review outcome/ })).toHaveValue("satisfactory");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
   it("retains the meaning of legacy reviews and limits counsel to advice", () => {
     render(<DisclosureWorkspace initial={{ ...initial, isReviewer: false, isCounsel: true, request: { ...initial.request, status: "reviewed" }, events: [{ kind: "review", at: "2026-09-10T13:00:00Z", actor: reviewer, revision: 1, note: "Recusal documented.", outcome: "reviewed" }] }} candidates={[reviewer]} />);
