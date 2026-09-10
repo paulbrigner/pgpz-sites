@@ -29,7 +29,9 @@ conflict in a specific decision.
    from portal roles. Coordinate these assignments with the recipients required
    by the policy and document any needed follow-up in the private review note.
 5. Create the request, then use **Send reminder** to send an individual email.
-   Request creation, saving, signing, and review do not automatically send email.
+   Request creation, saving, and signing do not automatically send email.
+   A newly recorded director review automatically sends the subject an outcome
+   notification, as described below.
    The reminder contains only the portal link, reporting year, and optional due
    date. Signing users may explicitly email their reviewing director. Reviewers
    may explicitly email the person disclosing.
@@ -111,6 +113,25 @@ For a new, specific matter, use **Start my disclosure** and choose
 **Matter-specific disclosure**. Its private context field is required. Use this
 alongside the annual disclosure and appropriate decision-making process.
 
+## Automatic review outcome notifications
+
+Each newly recorded director review (**satisfactory**, **update requested**, or
+**follow-up documented**) triggers one automatic email attempt to the person
+disclosing. The email contains the outcome, reporting year, signed revision,
+and restricted portal link. It excludes answers, review notes, financial details,
+and recusal explanations. Counsel advice, drafts, signatures, opening a record,
+and previously recorded reviews do not trigger automatic outcome emails.
+
+The review and notification attempt are claimed in one transaction before
+sending. A stale/replayed submission cannot send another email. The subject's
+current active Board access and email must still match the assigned recipient;
+otherwise delivery is skipped. The review remains saved even if sending fails.
+The confirmation and retained history distinguish provider acceptance, skipped
+delivery, and uncertainty. Provider acceptance does not establish inbox delivery.
+If execution is interrupted after the claim, the attempt remains unconfirmed;
+there is no automatic retry. Check with the recipient, then use the existing
+manual reminder only when needed. A new review is not required to resend a reminder.
+
 ## Retained record and email status
 
 **Print / save signed record** opens an escaped, script-free HTML record for
@@ -121,9 +142,9 @@ policy remains available through the request even if later archived in the
 ordinary library. Store downloaded copies only where this same review group is
 authorized; revocation in the app cannot revoke an already downloaded copy.
 
-Email is a manual reminder, not the legal signature or proof of delivery. Each
-attempt is claimed transactionally before sending to one recipient; stale
-requests and rapid duplicate attempts fail closed. Provider acceptance is
+Email notifications and reminders are not the legal signature or proof of
+delivery. Each attempt is claimed transactionally before sending to one
+recipient. Manual reminders also reject stale requests and rapid duplicates. Provider acceptance is
 recorded when known. A timeout or failed result is shown as unconfirmed, and is
 never automatically retried. Check with the recipient before manually retrying;
 the minimum interval between attempts is five minutes.

@@ -15,6 +15,26 @@ const ballot = {
   updatedAt: "2026-09-10T12:00:00Z", updatedBy: "chair",
 } satisfies BoardAsyncBallot;
 describe("per-resolution corporate record", () => {
+  it("binds schema 3 descriptions to the digest and safely exports them", () => {
+    const described: BoardAsyncBallot = { ...ballot, attachments: ballot.attachments.map(doc => ({ ...doc, description: "Comparison <script>private</script>" })), consent: { ...ballot.consent, schema: 3 } };
+    described.consent!.contentHash = consentDigest(consentPayload(described, described.consent!));
+    const record = consentRecord(described, receipts, receipts[0].email);
+    expect(record.contentIntegrityVerified).toBe(true);
+    expect(record.attachments[0].description).toBe("Comparison <script>private</script>");
+    expect(consentRecordHtml(record)).toContain("Comparison &lt;script&gt;");
+    expect(consentRecordHtml(record)).not.toContain("<script>");
+    described.attachments![0].description = "Approve instead";
+    expect(consentRecord(described, receipts, receipts[0].email).contentIntegrityVerified).toBe(false);
+  });
+  it.each([1, 2] as const)("preserves schema %s payloads and omits unsigned descriptions from records", (schema) => {
+    const original = { ...ballot, consent: { ...ballot.consent, schema } };
+    const described = { ...original, attachments: ballot.attachments.map(doc => ({ ...doc, description: "UNSIGNED DESCRIPTION" })) };
+    expect(consentPayload(described, described.consent)).toEqual(consentPayload(original, original.consent));
+    const record = consentRecord(described, receipts, receipts[0].email);
+    expect(record.attachments[0]).not.toHaveProperty("description");
+    expect(consentRecordHtml(record)).not.toContain("UNSIGNED DESCRIPTION");
+  });
+
   it("keeps the digest stable when DynamoDB reorders nested map properties", () => {
     const reordered = { ...ballot,
       attachments: ballot.attachments.map((doc) => ({ sha256: doc.sha256, sequence: doc.sequence, fileName: doc.fileName, title: doc.title, versionId: doc.versionId, documentId: doc.documentId })),

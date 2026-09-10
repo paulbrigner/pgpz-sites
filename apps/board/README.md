@@ -159,7 +159,12 @@ Draft resolution text and document previews are collapsed until opened. The
 editor shows included documents first; **Add documents** opens a searchable,
 scrollable picker. Adding a document defaults to supporting material, and
 searching never removes an existing selection. Older selected versions remain
-explicit until the officer reviews and replaces them.
+explicit until the officer reviews and replaces them. Select **Show earlier
+versions** to include a comparison alongside a clean version of the same entry.
+Each attachment has an optional description (up to 1,000 characters), displayed
+beside its exact version in the resolution and printable consent record. Only
+one version per document may be an adoption target; other versions are supporting
+material. Descriptions become fixed when consent collection opens.
 
 When preparing a resolution, select **Supporting document** or **Adopt this
 document** for each included version. Only explicit adoption targets acquire
@@ -167,8 +172,11 @@ library adoption evidence; background materials never inherit adoption merely
 because they were attached. Effective-date/condition text must agree with the
 resolution and is fixed and signed with it. The portal does not determine that
 an implementation condition has been fulfilled. New records use consent payload
-schema 2. Already opened schema 1 consents retain their original digest and
-remain signable; their attachments are not retroactively classified as adopted.
+schema 2, or schema 3 when attachment descriptions are present. Schema 3 binds
+those descriptions to the signed digest. Already opened schema 1 and 2 consents
+retain their original digest; unsigned descriptions are omitted from their
+views and exports. Schema 1 consents remain signable; they
+do not retroactively classify attachments as adopted.
 
 The Chair or Executive Director prepares the exact resolution text and selects
 specific versions of active library or workspace documents. The opening officer
@@ -456,6 +464,10 @@ After recording a review, the review panel shows and focuses a confirmation
 in place of the cleared form. Saved current-review outcomes remain visible
 after reopening the request; an explicit action starts another review note.
 A confirmed write followed by a failed refresh still reports that it was saved.
+Each newly recorded director review automatically attempts one status-only email
+to the subject after the review commits. The attempt is claimed with the review;
+provider acceptance or uncertainty is retained separately and shown in the
+confirmation. Counsel advice and existing records do not trigger emails.
 
 `lib/disclosures-service.ts` checks current access and content-free admission
 before loading private records. `lib/disclosures-repository.ts` stores them in
@@ -466,7 +478,7 @@ records bind the exact policy version, canonical form, acknowledgment,
 authenticated identity, delivery timestamp, and previous signed digest. Policy
 downloads and printable/JSON exports require current admission. Amendments and
 review notes are retained; reassignment revokes removed reviewers and resets
-review status. Manual reminders use the Board email transport with persisted
+review status. Automatic outcome notices and manual reminders use the Board email transport with persisted
 attempt/result records and no sensitive contents or attachments.
 
 Read [Board disclosures](../../docs/board-disclosures.md) for the Chair and

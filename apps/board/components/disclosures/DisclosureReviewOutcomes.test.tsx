@@ -77,6 +77,14 @@ describe("disclosure review outcomes", () => {
     expect(screen.getByRole("combobox", { name: /Review outcome/ })).toHaveValue("satisfactory");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+  it.each(["sent", "unknown", "sending", "skipped"] as const)("shows %s automatic notification status without confusing it with review completion", (status) => {
+    const saved: DisclosureView = { ...initial, request: { ...initial.request, status: "satisfactory", reviewNotice: { reviewVersion: 4, revision: 1, outcome: "satisfactory", attemptedAt: "2026-09-10T14:00:00Z", status } }, events: [{ kind: "review", at: "2026-09-10T14:00:00Z", actor: reviewer, revision: 1, note: "Complete.", outcome: "satisfactory" }] };
+    render(<DisclosureWorkspace initial={saved} candidates={[reviewer]} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Review complete — satisfactory");
+    expect(screen.getByRole("status")).toHaveTextContent("Automatic email for signed revision 1:");
+    expect(screen.getByRole("status")).toHaveTextContent(status === "sent" ? "accepted by the email provider" : status === "skipped" ? "not sent" : "delivery unconfirmed");
+    expect(fetchWithBoardStepUp).not.toHaveBeenCalled();
+  });
   it("retains the meaning of legacy reviews and limits counsel to advice", () => {
     render(<DisclosureWorkspace initial={{ ...initial, isReviewer: false, isCounsel: true, request: { ...initial.request, status: "reviewed" }, events: [{ kind: "review", at: "2026-09-10T13:00:00Z", actor: reviewer, revision: 1, note: "Recusal documented.", outcome: "reviewed" }] }} candidates={[reviewer]} />);
     expect(screen.getByText(/Annual disclosure and acknowledgment · Review recorded/)).toBeVisible();

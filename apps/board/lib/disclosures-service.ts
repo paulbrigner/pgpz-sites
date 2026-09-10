@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { sendDisclosureNotice } from "./disclosures-email";
+import { sendDisclosureNotice, sendDisclosureReviewNotice } from "./disclosures-email";
 import { boardAccessRepository } from "./board-access-repository";
 import type { BoardAccessRecord } from "./board-access";
 import { BOARD_ACCESS_REGISTRY_ENABLED } from "./config";
@@ -12,7 +12,7 @@ import { disclosuresRepository as repository } from "./disclosures-repository";
 import { disclosureHash, verifyDisclosureSubmission } from "./disclosures-integrity";
 import {
   DISCLOSURE_CATEGORIES, DISCLOSURE_ELECTRONIC_CONSENT, DisclosureError, disclosureAcknowledgment, disclosureChair, disclosureDirector, disclosureText, normalizeDisclosureForm,
-  type DisclosureRequest, type DisclosureIdentity, type DisclosureSubmission, type DisclosureView, type DisclosureRegisterRow, type DisclosureEvent,
+  type DisclosureRequest, type DisclosureReviewOutcome, type DisclosureIdentity, type DisclosureSubmission, type DisclosureView, type DisclosureRegisterRow, type DisclosureEvent,
 } from "./disclosures";
 
 export const disclosureIdentity = (record: BoardAccessRecord): DisclosureIdentity => ({ accessId: record.id, email: record.email, name: record.name, role: record.role });
@@ -151,7 +151,12 @@ export async function mutateDisclosure(member: BoardMember, id: string, input: R
     const note = disclosureText(input.note, "Review findings and any required recusals or next steps", 6000);
     const outcome = input.action === "comment" ? "counsel-advice" : String(input.outcome);
     event = { kind: "review", at, actor: disclosureIdentity(record), revision: request.revision, note, outcome };
-    if (input.action === "review") next.status = input.outcome as DisclosureRequest["status"];
+    if (input.action === "review") {
+      next.status = input.outcome as DisclosureReviewOutcome;
+      // Claim the automatic attempt in the same transaction as the immutable review.
+      // Replaying the POST fails its version guard before another email can be sent.
+      next.reviewNotice = { reviewVersion: next.version, revision: next.revision, outcome: next.status, attemptedAt: at, status: "sending" };
+    }
   } else if (input.action === "route") {
     if (!isSubject && !isReviewer && !isCounsel) throw new DisclosureError(403, "Only an admitted participant can route a disclosure.");
     const note = disclosureText(input.note, "Reason for changing the review assignment", 2000);
@@ -166,7 +171,34 @@ export async function mutateDisclosure(member: BoardMember, id: string, input: R
     guards.push(selected.reviewer, ...(selected.counsel ? [selected.counsel] : []));
     event = { kind: "routing", at, actor: disclosureIdentity(record), revision: request.revision, note, outcome: `Assigned to ${selected.reviewer.name}${selected.counsel ? ` with counsel ${selected.counsel.name}` : ""}` };
   } else throw new DisclosureError(400, "Unknown disclosure action.");
-  return repository.commit(next, request.version, await mutationGuards(member, next, String(input.action), guards, event ?? draft), { ...(draft ? { draft } : {}), ...(event ? { event } : {}) });
+  const committed = await repository.commit(next, request.version, await mutationGuards(member, next, String(input.action), guards, event ?? draft), { ...(draft ? { draft } : {}), ...(event ? { event } : {}) });
+  return input.action === "review" ? deliverReviewOutcome(member, record, committed) : committed;
+}
+
+/** One automatic attempt after the review commits. Email failure never rolls back a saved review. */
+async function deliverReviewOutcome(member: BoardMember, actor: BoardAccessRecord, pending: DisclosureRequest): Promise<DisclosureRequest> {
+  const notice = pending.reviewNotice!;
+  let status: "sent" | "unknown" | "skipped" = "unknown";
+  let recipient: BoardAccessRecord | null = null;
+  try {
+    recipient = await boardAccessRepository.getById(pending.subject.accessId);
+    if (!recipient || recipient.status !== "active" || recipient.email !== pending.subject.email) status = "skipped";
+    else {
+      await sendDisclosureReviewNotice({ id: pending.id, year: pending.year, revision: notice.revision, outcome: notice.outcome, to: recipient.email });
+      status = "sent";
+    }
+  } catch { /* Delivery may have reached the provider. Never automatically retry. */ }
+  try {
+    const current = await repository.get(pending.id);
+    if (!current || current.reviewNotice?.reviewVersion !== notice.reviewVersion) return current ?? pending;
+    return await repository.commit({ ...current, version: current.version + 1, reviewNotice: { ...notice, status } }, current.version,
+      await mutationGuards(member, current, "review_email_result", [actor, ...(recipient && status === "sent" ? [recipient] : [])]), { event: {
+        kind: "notice", at: new Date().toISOString(), actor: disclosureIdentity(actor), revision: notice.revision, outcome: `review-email-${status}`,
+        note: status === "sent" ? "The email provider accepted the automatic review outcome notice to the person disclosing; inbox delivery is not confirmed."
+          : status === "skipped" ? "Automatic review email was not sent because the recipient's current Board access or email did not match."
+          : "Automatic review email delivery is unconfirmed. Check with the recipient before sending a manual reminder.",
+      } });
+  } catch { return pending; } // Preserve the confirmed save even if recording delivery status fails.
 }
 
 export async function disclosurePolicyOptions() {

@@ -11,6 +11,8 @@ export interface ConsentAttachment {
   fileName: string;
   sequence: number;
   sha256: string;
+  /** Explanation specific to this resolution; signed in consent schema 3. */
+  description?: string;
 }
 /** Explicit adoption targets, signed alongside the resolution. Other attached
  * documents are supporting material and acquire no adoption status. */
@@ -51,7 +53,7 @@ export interface ConsentReceipt {
   supersedesReceiptId: string | null;
 }
 export interface WrittenConsent {
-  schema: 1 | 2;
+  schema: 1 | 2 | 3;
   contentHash: string;
   rosterRevision: string;
   rosterConfirmation: string;

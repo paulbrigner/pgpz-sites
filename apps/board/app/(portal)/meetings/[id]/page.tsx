@@ -37,12 +37,19 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
     ["scheduled", "materials-published"].includes(record.meeting.status)
     ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
 
+  const consentDocuments = canManageMeetings && record.meeting.format === "asynchronous"
+    ? [...new Map([...libraryDocuments, ...meetingDocuments.filter((doc) => doc.status === "active")].map((doc) => [doc.documentId, doc])).values()] : [];
+  const consentDocumentChoices = (await Promise.all(consentDocuments.map(async (doc) => {
+    const versions = doc.versionCount > 1 ? await boardDocumentRepository.listVersions(doc.documentId) : [doc.currentVersion];
+    return versions.sort((a, b) => b.sequence - a.sequence).map((version) => ({
+      documentId: doc.documentId, versionId: version.versionId, title: doc.displayName || doc.title,
+      sequence: version.sequence, fileName: version.originalFileName, sha256: version.sha256,
+    }));
+  }))).flat();
+
   const detail: MeetingDetailView = {
     directorRoster: canManageMeetings ? directorRoster : null,
-    consentDocumentChoices: [...libraryDocuments, ...meetingDocuments.filter((doc) => doc.status === "active")].map((doc) => ({
-      documentId: doc.documentId, versionId: doc.currentVersion.versionId, title: doc.displayName || doc.title,
-      sequence: doc.currentVersion.sequence, fileName: doc.currentVersion.originalFileName, sha256: doc.currentVersion.sha256,
-    })),
+    consentDocumentChoices,
     meeting: {
       id: record.meeting.id, title: record.meeting.title, description: record.meeting.description,
       type: record.meeting.type, format: record.meeting.format, status: record.meeting.status, startAt: record.meeting.startAt,
@@ -74,7 +81,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       const effectiveStatus = boardAsyncBallotEffectiveStatus(ballot, record.meeting);
       return {
         consentMode: ballot.consentMode,
-        attachments: ballot.attachments,
+        attachments: ballot.attachments?.map(({ description, ...doc }) => ({ ...doc, ...(!ballot.consent || ballot.consent.schema === 3 ? (description ? { description } : {}) : {}) })),
         adoption: ballot.consent && ballot.consent.schema === 1 ? undefined : ballot.adoption,
         consent: ballot.consent ? {
           contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,

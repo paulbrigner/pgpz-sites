@@ -65,6 +65,34 @@ describe("AsyncBallots", () => {
     expect(body.attachments).toEqual([{ documentId: "policy", versionId: "v2" }]);
     expect(body.adoption).toEqual({ targets: [], effectiveTerms: "Upon adoption" });
   });
+  it("adds an earlier comparison beside the clean adoption version and removes only that exact version", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ error: "Keep draft for inspection" }, { status: 409 }));
+    const clean = { documentId: "articles", versionId: "v5", title: "Articles", sequence: 5, fileName: "clean.pdf", sha256: "clean" };
+    const comparison = { ...clean, versionId: "v4", sequence: 4, fileName: "tracked-changes.pdf", sha256: "comparison" };
+    render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "draft", consent: null, attachments: [clean], adoption: { targets: [{ documentId: "articles", versionId: "v5" }], effectiveTerms: "Upon filing" } }]} canManage canDiscuss documentChoices={[clean, comparison]} />);
+    const card = within(document.getElementById("ballot-ballot-1")!);
+    fireEvent.click(card.getByText("Edit draft resolution"));
+    fireEvent.click(card.getByRole("button", { name: "Add documents" }));
+    expect(card.queryByRole("button", { name: "Add Articles · v4" })).not.toBeInTheDocument();
+    fireEvent.click(card.getByRole("checkbox", { name: "Show earlier versions" }));
+    fireEvent.change(card.getByRole("searchbox", { name: "Search documents" }), { target: { value: "tracked-changes" } });
+    fireEvent.click(card.getByRole("button", { name: "Add Articles · v4" }));
+    expect(card.getByRole("combobox", { name: "Treatment of Articles · v4" })).toHaveValue("support");
+    expect(card.getByRole("combobox", { name: "Treatment of Articles · v5" })).toHaveValue("adopt");
+    expect(within(card.getByRole("combobox", { name: "Treatment of Articles · v4" })).getByRole("option", { name: "Adopt this document" })).toBeDisabled();
+    fireEvent.click(card.getByRole("button", { name: "Done adding documents" }));
+    fireEvent.change(card.getByLabelText("Description for Articles · v5 (optional)"), { target: { value: "Clean proposed Articles for approval" } });
+    fireEvent.change(card.getByLabelText("Description for Articles · v4 (optional)"), { target: { value: "Tracked-changes comparison for reference" } });
+    fireEvent.click(card.getByRole("button", { name: "Save draft resolution" }));
+    await screen.findByText("Keep draft for inspection");
+    const saved = JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string);
+    expect(saved.attachments).toEqual([{ documentId: "articles", versionId: "v5", description: "Clean proposed Articles for approval" }, { documentId: "articles", versionId: "v4", description: "Tracked-changes comparison for reference" }]);
+    expect(card.getByLabelText("Description for Articles · v4 (optional)")).toHaveValue("Tracked-changes comparison for reference");
+    expect(saved.adoption.targets).toEqual([{ documentId: "articles", versionId: "v5" }]);
+    fireEvent.click(card.getByRole("button", { name: "Remove Articles · v4" }));
+    expect(card.getByRole("combobox", { name: "Treatment of Articles · v5" })).toHaveValue("adopt");
+    expect(card.queryByRole("combobox", { name: "Treatment of Articles · v4" })).not.toBeInTheDocument();
+  });
   it("clears document selections after successfully creating a resolution", async () => {
     vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({}));
     const doc = { documentId: "policy", versionId: "v1", title: "Policy", sequence: 1, fileName: "policy.pdf", sha256: "digest" };

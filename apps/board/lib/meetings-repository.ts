@@ -515,7 +515,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (input.roster.directors.some((director) => director.status !== "active")) throw new Error("Every listed director must have active access before consent collection opens.");
       if (eligibleVoters.length > 30) throw new Error("This consent workflow supports at most 30 directors.");
       if (JSON.stringify(eligibleVoters) !== JSON.stringify(input.roster.directors.map(({ userId, name, email }) => ({ userId, name, email })).sort((a, b) => a.email.localeCompare(b.email)))) throw new Error("The director roster changed. Refresh and try again.");
-      const schema = existing.adoption ? 2 : 1;
+      const schema = existing.attachments?.some((doc) => doc.description) ? 3 : existing.adoption ? 2 : 1;
       if (existing.adoption) validateConsentAdoption(existing.adoption, existing.attachments || []);
       const contentHash = consentDigest(consentPayload({ ...existing, eligibleVoters }, { schema, rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT }));
       const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired: eligibleVoters.length, approvalRequired: eligibleVoters.length, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor,
@@ -567,7 +567,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
             ...(input.action === "consent" && input.roster ? [directorRosterGuard(input.roster)] : []),
             { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: `CONSENT_RECEIPT#${ballot.id}#${at}#${receipt.id}`, entityType: "CONSENT_RECEIPT", ballotId: ballot.id, receipt }, ...immutable } },
             ...(decision ? [{ Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ...immutable } }] : []),
-            ...(complete && updated.consent?.schema === 2 ? (updated.adoption?.targets || []).map((target) => ({ Put: {
+            ...(complete && (updated.consent?.schema === 2 || updated.consent?.schema === 3) ? (updated.adoption?.targets || []).map((target) => ({ Put: {
               TableName: resolvedTable,
               Item: { pk: `DOCUMENT_ADOPTIONS#${target.documentId}`, sk: `ADOPTION#${target.versionId}#${previous.id}#${ballot.id}`, entityType: "DOCUMENT_ADOPTION", documentId: target.documentId, versionId: target.versionId, meetingId: previous.id, ballotId: ballot.id },
               ...immutable,

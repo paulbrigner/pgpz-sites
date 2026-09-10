@@ -435,6 +435,15 @@ drift requires a change. No production migration or data backfill is needed.
 The additive `satisfactory` disclosure status and review outcome distinguish
 explicit completion from legacy `reviewed` records. Preserve support for this
 status when rolling back; older builds cannot label it in the status register.
+Automatic review outcome notices use the existing Board email transport and
+compute role; no new queue, resource or IAM permission is introduced. An optional
+`reviewNotice` admission field records the review version, signed revision,
+outcome and attempt status, claimed atomically with the review. Result events
+append to restricted history. No backfill sends emails for historical reviews.
+Interrupted or uncertain attempts are not automatically retried; inspect the
+retained status and coordinate a manual reminder if needed. Delivery failure
+must not invalidate a committed review. A rollback must preserve retained
+notification fields/events; the older build will stop automatic outcome emails.
 Do not seed, sign, review, or send real disclosure reminders during validation.
 
 Run Board tests/typecheck/build, repository checks, infrastructure tests, and
@@ -512,7 +521,13 @@ with its incorporated versions in its permanent corporate records.
 
 This is an additive Board-only release. New saved consent drafts include
 explicit adoption targets and effective terms; opening such a draft uses signed
-payload schema 2. Schema 1 already-open collections keep their original digest
+payload schema 2, or schema 3 if any attachment has a description. Schema 3
+signs each attachment description; existing schema 1/2 payloads remain byte
+compatible and never display newly added unsigned descriptions. Managers can
+select multiple historical versions of an active document, with at most one
+adoption target per document. Version hashes and filenames are resolved from
+the authorized document repository rather than trusted from clients.
+Schema 1 already-open collections keep their original digest
 and can finish normally, but do not gain inferred document adoption targets.
 Existing drafts can be edited and saved to select targets before opening.
 Do not rewrite or backfill signed records from attachment lists. There is no
@@ -528,15 +543,16 @@ identifiers only, not private deliberation or disclosure text.
 
 Before authorized deployment, complete `npm run check`, `npm run build:board`,
 Board infrastructure contracts, targeted browser checks, and independent review.
-Exercise all-five signing, withdrawal races, old schema 1 digest compatibility,
+Exercise all-five schema 3 signing, description tampering and HTML escaping,
+withdrawal races, old schema 1/2 digest compatibility,
 explicit targets versus supporting documents, version replacement/archiving,
 packet authentication, source hash verification, and PDF/ZIP exports with local
 synthetic records only. Review the Board-only `pdf-lib` and `jszip` dependency
 changes. Verify the same live account, branch, and revision safeguards described
 above; never create real signatures or production email for release tests.
 
-Deploy all schema 2 readers/writers together. Do not roll back to code that
-ignores adoption fields while schema 2 collections are open: it cannot reproduce
+Deploy all schema 3 readers/writers together. Do not roll back to code that
+ignores adoption fields or descriptions while schema 2/3 collections are open: it cannot reproduce
 their signed digest. Completed records and originals remain retained if packet
 generation fails. Packets are on-demand derivatives with private/no-store
 responses, not new document versions or stored certifications. Source files over
