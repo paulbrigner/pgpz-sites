@@ -155,6 +155,12 @@ convened meeting, and agreement to use the portal does not approve an action.
 Each resolution has its own electronic consent record; an omnibus resolution
 or an uploaded signature PDF is unnecessary.
 
+Draft resolution text and document previews are collapsed until opened. The
+editor shows included documents first; **Add documents** opens a searchable,
+scrollable picker. Adding a document defaults to supporting material, and
+searching never removes an existing selection. Older selected versions remain
+explicit until the officer reviews and replaces them.
+
 When preparing a resolution, select **Supporting document** or **Adopt this
 document** for each included version. Only explicit adoption targets acquire
 library adoption evidence; background materials never inherit adoption merely

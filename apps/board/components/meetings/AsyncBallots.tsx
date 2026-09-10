@@ -7,6 +7,7 @@ import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION } from "@/lib/written-consents";
 import type { AsyncBallotView, MeetingDetailView, MeetingSummaryView } from "./types";
 import { BallotDiscussion } from "./BallotDiscussion";
+import { ResolutionDraftForm } from "./ResolutionDraftForm";
 
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm";
 const button = "w-fit rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -39,35 +40,12 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
     const attachments = selections.map(({ documentId, versionId }) => ({ documentId, versionId }));
     const adoption = { targets: selections.filter((item) => item.treatment === "adopt").map(({ documentId, versionId }) => ({ documentId, versionId })), effectiveTerms: String(data.get("effectiveTerms") || "") };
     const saved = await post({ action: "saveBallot", ...(ballot ? { ballotId: ballot.id } : {}), title: data.get("title"), motion: data.get("motion"), attachments, adoption }, "Draft resolution saved. Review its exact document versions and adoption targets before opening collection.");
-    if (saved && !ballot) form.reset();
+    return saved;
   }
   function draftForm(ballot?: AsyncBallotView) {
-    const choices = [...documentChoices];
-    for (const attachment of ballot?.attachments || []) {
-      if (!choices.some((choice) => choice.documentId === attachment.documentId && choice.versionId === attachment.versionId)) choices.push(attachment);
-    }
-    return <form onSubmit={(event) => save(event, ballot)} className="mt-3 grid gap-4">
-      <label className="text-sm font-semibold">Resolution title<input name="title" required maxLength={200} defaultValue={ballot?.title} className={field} /></label>
-      <label className="text-sm font-semibold">Exact resolution text<textarea name="motion" required maxLength={16000} rows={6} defaultValue={ballot?.motion} className={field} /></label>
-      <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-semibold">Documents incorporated in this resolution</legend>
-        {choices.length ? choices.map((doc) => {
-          const attached = ballot?.attachments?.some((ref) => ref.documentId === doc.documentId && ref.versionId === doc.versionId);
-          const adopted = ballot?.adoption?.targets.some((ref) => ref.documentId === doc.documentId && ref.versionId === doc.versionId);
-          const value = (treatment: string) => JSON.stringify({ documentId: doc.documentId, versionId: doc.versionId, treatment });
-          return <label key={`${doc.documentId}:${doc.versionId}`} className="grid gap-1 text-sm sm:grid-cols-[1fr_14rem] sm:items-center">
-            <span>{doc.title} · v{doc.sequence}</span>
-            <select name="document" aria-label={`Treatment of ${doc.title} · v${doc.sequence}`} defaultValue={adopted ? value("adopt") : attached ? value("support") : ""} className={field}>
-              <option value="">Not included</option><option value={value("support")}>Supporting document</option><option value={value("adopt")}>Adopt this document</option>
-            </select>
-          </label>;
-        }) : <p className="text-sm text-[var(--muted)]">Add the policies to the Document Library, then refresh to select their exact versions.</p>}
-        <p className="text-xs text-[var(--muted)]">Choose “Adopt this document” only when the resolution expressly adopts that version. Background evidence stays a supporting document.</p>
-      </fieldset>
-      <label className="text-sm font-semibold">Effective date / conditions (optional)<textarea name="effectiveTerms" maxLength={2000} rows={2} defaultValue={ballot?.adoption?.effectiveTerms} className={field} /><span className="mt-1 block text-xs font-normal text-[var(--muted)]">Match the resolution text. This is signed with the resolution; the app does not determine whether a condition has been satisfied.</span></label>
-      <p className="text-sm text-[var(--muted)]">Use one resolution per decision. All directors must sign each item. The resolution text, document versions, adoption targets, and effective terms become fixed when collection opens.</p>
-      <button disabled={pending} className={button}>Save draft resolution</button>
-    </form>;
+    return <ResolutionDraftForm ballot={ballot} documentChoices={documentChoices} pending={pending} onSave={(event) => save(event, ballot)} />;
   }
+
   return <Surface className="p-5 sm:p-6">
     <h2 className="text-xl font-semibold">Resolutions by unanimous written consent</h2>
     <p className="mt-2 text-sm leading-6 text-[var(--muted)]">This is action without a meeting. Each resolution is adopted when every director has signed and delivered consent to that exact action. A majority, an abstention, a recusal, or silence cannot adopt it. Consent to using this process does not approve any resolution.</p>
@@ -93,16 +71,19 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
         return <li key={ballot.id} id={`ballot-${ballot.id}`} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:p-5">
           <p className="text-xs font-semibold text-[var(--muted)]">{status}</p>
           <h3 className="mt-2 text-lg font-semibold">{ballot.title}</h3>
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{ballot.motion}</p>
-          {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={doc.documentId} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a></li>)}</ul>}
-          {ballot.adoption && <div className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 text-sm">
-            <p className="font-semibold">Documents this resolution adopts</p>
-            {ballot.adoption.targets.length ? <ul className="mt-2 grid gap-2">{ballot.adoption.targets.map((target) => {
-              const doc = ballot.attachments?.find((doc) => doc.documentId === target.documentId && doc.versionId === target.versionId);
-              return <li key={target.documentId}>{doc?.title} · v{doc?.sequence}{consent?.adoptedAt && <a className="ml-2 font-semibold underline" href={`/api/meetings/${encodeURIComponent(meeting.id)}/ballots/${encodeURIComponent(ballot.id)}/packet?document=${encodeURIComponent(target.documentId)}`}>Download adoption packet</a>}</li>;
-            })}</ul> : <p>No document adoption targets. Attached documents are supporting materials.</p>}
-            <p className="mt-2 whitespace-pre-wrap break-words"><strong>Effective date / conditions:</strong> {ballot.adoption.effectiveTerms || "See the resolution. Adoption does not establish that implementation conditions have been met."}</p>
-          </div>}
+          <details open={ballot.effectiveStatus !== "draft"} className="mt-3">
+            <summary className="cursor-pointer text-sm font-semibold">Resolution text and documents{ballot.attachments?.length ? ` (${ballot.attachments.length})` : ""}</summary>
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{ballot.motion}</p>
+            {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={doc.documentId} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a></li>)}</ul>}
+            {ballot.adoption && <div className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 text-sm">
+              <p className="font-semibold">Documents this resolution adopts</p>
+              {ballot.adoption.targets.length ? <ul className="mt-2 grid gap-2">{ballot.adoption.targets.map((target) => {
+                const doc = ballot.attachments?.find((doc) => doc.documentId === target.documentId && doc.versionId === target.versionId);
+                return <li key={target.documentId}>{doc?.title} · v{doc?.sequence}{consent?.adoptedAt && <a className="ml-2 font-semibold underline" href={`/api/meetings/${encodeURIComponent(meeting.id)}/ballots/${encodeURIComponent(ballot.id)}/packet?document=${encodeURIComponent(target.documentId)}`}>Download adoption packet</a>}</li>;
+              })}</ul> : <p>No document adoption targets. Attached documents are supporting materials.</p>}
+              <p className="mt-2 whitespace-pre-wrap break-words"><strong>Effective date / conditions:</strong> {ballot.adoption.effectiveTerms || "See the resolution. Adoption does not establish that implementation conditions have been met."}</p>
+            </div>}
+          </details>
           {legacy ? <p className="mt-3 text-sm">This historical ballot is not a signed written consent. Its recorded result is preserved; prepare a new resolution to take action under the unanimous-consent process.</p> : null}
           {legacy && ballot.result && <p className="mt-2 text-sm">Historical result: {ballot.result.outcome} · Yes {ballot.result.yes}, No {ballot.result.no}, Abstain {ballot.result.abstain}, Recused {ballot.result.recused}.</p>}
           {consent && <>
