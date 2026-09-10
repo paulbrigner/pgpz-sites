@@ -153,7 +153,9 @@ A meeting can be `live` or an `asynchronous` workspace for **action without a
 meeting by unanimous written consent**. Async discussion is not a legally
 convened meeting, and agreement to use the portal does not approve an action.
 Each resolution has its own electronic consent record; an omnibus resolution
-or an uploaded signature PDF is unnecessary.
+or an uploaded signature PDF is unnecessary. Meeting details show separate opening
+and closing dates and times in the meeting timezone; list summaries also include
+the closing date for multi-day windows.
 
 Draft resolution text and document previews are collapsed until opened. The
 editor shows included documents first; **Add documents** opens a searchable,

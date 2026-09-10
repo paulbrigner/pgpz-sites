@@ -22,6 +22,16 @@ const detail: MeetingDetailView = {
 };
 
 describe("MeetingDetail", () => {
+  it("shows the complete opening and closing dates for a multi-day consent collection", () => {
+    render(<MeetingDetail detail={{ ...detail, meeting: { ...detail.meeting, format: "asynchronous", startAt: "2026-09-11T12:00:00Z", endAt: "2026-09-16T21:00:00Z" } }} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: false, canDiscuss: true }} />);
+    expect(screen.getByText("Consent collection opens")).toBeVisible();
+    expect(screen.getByText("Consent collection closes")).toBeVisible();
+    expect(screen.getByText("Friday, September 11, 2026").closest("time")).toHaveAttribute("dateTime", "2026-09-11T12:00:00Z");
+    expect(screen.getByText("Wednesday, September 16, 2026").closest("time")).toHaveAttribute("dateTime", "2026-09-16T21:00:00Z");
+    expect(screen.getByText("8:00 AM EDT")).toBeVisible();
+    expect(screen.getByText("5:00 PM EDT")).toBeVisible();
+  });
+
   it("organizes agenda and governed material under the meeting", () => {
     render(<MeetingDetail detail={detail} capabilities={{ canManage: false, canPrepare: false, canManageDocuments: false, canDiscuss: true }} />);
     expect(screen.getByRole("heading", { level: 1, name: "September Board meeting" })).toBeVisible();
