@@ -19,20 +19,23 @@ export type BoardMeetingDocumentSection = (typeof BOARD_MEETING_DOCUMENT_SECTION
 export type BoardDocumentOwnership =
   | Readonly<{ ownerType: "library" }>
   | Readonly<{ ownerType: "meeting"; meetingId: string; meetingSection: BoardMeetingDocumentSection; agendaItemId?: string | null }>;
+export type DocumentInEffect = Readonly<{ versionId: string; sha256: string; reason: string; recordedAt: string; recordedBy: string }>;
 export type BoardDocumentItem = DocumentItem & Readonly<{
+  inEffect?: DocumentInEffect | null;
   displayName?: string;
   ownerType?: "library" | "meeting";
   meetingId?: string;
   meetingSection?: BoardMeetingDocumentSection;
   agendaItemId?: string | null;
 }>;
-type BoardDocumentRecord = DocumentRecord & Readonly<{ displayName?: string }> & BoardDocumentOwnership;
+type BoardDocumentRecord = DocumentRecord & Readonly<{ displayName?: string; inEffect?: DocumentInEffect | null }> & BoardDocumentOwnership;
 export type BoardNewDocumentInput = NewDocumentInput & Readonly<{ ownership?: BoardDocumentOwnership }>;
 export type BoardDocumentRepository = Omit<DocumentRepository, "createDocument" | "getDocument" | "listDocuments"> & {
   getDocument(documentId: string): Promise<BoardDocumentItem | null>;
   listDocuments(filter?: DocumentFilter): Promise<readonly BoardDocumentItem[]>;
   createDocument(input: BoardNewDocumentInput): Promise<BoardDocumentItem>;
   listMeetingDocuments(meetingId: string): Promise<readonly BoardDocumentItem[]>;
+  setInEffect(input: { documentId: string; expectedRevision: number; inEffect: DocumentInEffect | null; reason: string; actorId: string; now: string }, additionalTransactItems: readonly unknown[]): Promise<BoardDocumentItem>;
   updateDisplayName(documentId: string, displayName: string, actorId: string | null): Promise<BoardDocumentItem | null>;
 };
 const META_SK = "META";
@@ -53,6 +56,7 @@ function metaRecord(record: BoardDocumentRecord, includeLibrary = false): Row {
     documentId: record.documentId,
     title: record.title,
     ...(record.displayName ? { displayName: record.displayName } : {}),
+    inEffect: record.inEffect ?? null,
     description: record.description,
     category: record.category,
     visibility: record.visibility,
@@ -84,6 +88,7 @@ function metaToRecord(item: Row | undefined | null): BoardDocumentRecord | null 
     documentId,
     title: String(item.title ?? ""),
     ...(typeof item.displayName === "string" && item.displayName.trim() ? { displayName: item.displayName.trim() } : {}),
+    inEffect: parseInEffect(item.inEffect),
     description: String(item.description ?? ""),
     category: String(item.category ?? ""),
     visibility: String(item.visibility ?? "members"),
@@ -106,7 +111,15 @@ function metaToRecord(item: Row | undefined | null): BoardDocumentRecord | null 
   };
 }
 
+function parseInEffect(value: unknown): DocumentInEffect | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (!["versionId", "sha256", "reason", "recordedAt", "recordedBy"].every((key) => typeof v[key] === "string" && v[key])) return null;
+  return v as DocumentInEffect;
+}
+
 function retainOwnership(record: BoardDocumentRecord, next: DocumentRecord): BoardDocumentRecord {
+  next = { ...next, inEffect: record.inEffect, displayName: record.displayName } as BoardDocumentRecord;
   return record.ownerType === "meeting"
     ? { ...next, ownerType: "meeting", meetingId: record.meetingId, meetingSection: record.meetingSection, agendaItemId: record.agendaItemId }
     : { ...next, ownerType: "library" };
@@ -161,7 +174,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
   const tableName = BOARD_DOCUMENTS_TABLE;
 
   async function getMeta(documentId: string): Promise<BoardDocumentRecord | null> {
-    const result = await client.get({ TableName: tableName, Key: { pk: docPk(documentId), sk: META_SK } });
+    const result = await client.get({ TableName: tableName, Key: { pk: docPk(documentId), sk: META_SK }, ConsistentRead: true });
     return metaToRecord(result?.Item as Row | undefined);
   }
 
@@ -171,6 +184,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     do {
       const result = await client.query({
         TableName: tableName,
+        ConsistentRead: true,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :prefix)",
         ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
         ExpressionAttributeValues: { ":pk": docPk(documentId), ":prefix": VERSION_PREFIX },
@@ -346,6 +360,36 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       if (!current) return null;
       const next = retainOwnership(current, updateDocumentMetadata(current, metadata, new Date().toISOString(), actorId));
       await client.update(updateMetaStatement(current, next));
+      return toItem(next);
+    },
+
+    async setInEffect(input, additionalTransactItems) {
+      const current = await getMeta(input.documentId);
+      if (!current || current.ownerType !== "library") throw new Error("Library document not found.");
+      if (current.revision !== input.expectedRevision) throw new OptimisticConcurrencyError(input.documentId);
+      const selected = input.inEffect;
+      if (selected) {
+        if (current.status !== "active") throw new Error("Restore the document before marking a version in effect.");
+        const versions = (await listVersionRows(input.documentId)).map(itemToVersion);
+        if (!versions.some((v) => v && v.versionId === selected.versionId && v.sha256 === selected.sha256)) throw new Error("Version does not belong to this document.");
+      }
+      const next = { ...current, inEffect: input.inEffect, revision: current.revision + 1, updatedAt: input.now, updatedBy: input.actorId };
+      try {
+        await client.transactWrite({ TransactItems: [
+          { Update: {
+            TableName: tableName, Key: { pk: docPk(input.documentId), sk: META_SK },
+            UpdateExpression: "SET inEffect = :inEffect, #rev = :nextRevision, #updAt = :updatedAt, #updBy = :updatedBy",
+            ExpressionAttributeNames: { "#rev": "revision", "#updAt": "updatedAt", "#updBy": "updatedBy" },
+            ExpressionAttributeValues: { ":inEffect": input.inEffect, ":nextRevision": next.revision, ":updatedAt": input.now, ":updatedBy": input.actorId, ":expectedRevision": current.revision },
+            ConditionExpression: "#rev = :expectedRevision",
+          } },
+          { Put: { TableName: tableName, Item: { pk: docPk(input.documentId), sk: `EFFECT#${pad(next.revision)}`, type: "DOCUMENT_EFFECT_RECORD", previous: current.inEffect ?? null, next: input.inEffect, reason: input.reason, recordedAt: input.now, recordedBy: input.actorId }, ConditionExpression: "attribute_not_exists(pk)" } },
+          ...additionalTransactItems,
+        ] });
+      } catch (error) {
+        if (isConditional(error)) throw new OptimisticConcurrencyError(input.documentId);
+        throw error;
+      }
       return toItem(next);
     },
 

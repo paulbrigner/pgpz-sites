@@ -1,5 +1,7 @@
 "use client";
 
+import { InEffectControl } from "./InEffectControl";
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -83,6 +85,7 @@ function NewDocumentPanel({
 }
 
 type ManagementActions = {
+  onSetInEffect?: (document: LibraryDocument, versionId: string | null, reason: string) => Promise<boolean>;
   busyDocumentId: string | null;
   onAddVersion: (document: LibraryDocument, file: File) => Promise<void>;
   onRename: (document: LibraryDocument, title: string) => Promise<boolean>;
@@ -111,7 +114,7 @@ function DocumentRow({
         <div className="flex min-w-0 items-start gap-3 pr-20 lg:pr-0">
           <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2"><a href={document.downloadHref} className="font-semibold text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-4 transition hover:decoration-[var(--foreground)] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{document.title}</a>{document.status === "archived" ? <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[var(--muted)]">Archived</span> : null}</div>
+            <div className="flex flex-wrap items-center gap-2"><a href={document.downloadHref} className="font-semibold text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-4 transition hover:decoration-[var(--foreground)] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{document.title}</a>{document.inEffect ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-900">In effect · v{document.inEffect.sequence}</span> : null}{document.status === "archived" ? <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[var(--muted)]">Archived</span> : null}</div>
             {document.description ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)] lg:hidden">{document.description}</p> : null}
           </div>
         </div>
@@ -125,6 +128,7 @@ function DocumentRow({
           {management ? <button type="button" aria-label={`Manage ${document.title}`} aria-expanded={manageOpen} aria-controls={managementId} onClick={() => setManageOpen((current) => !current)} className="rounded-lg p-2 text-[var(--primary)] transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></button> : null}
         </div>
       </div>
+      {document.inEffect ? <div className="mx-4 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm sm:mx-6"><a href={document.inEffect.downloadHref} className="font-semibold text-[var(--primary)] underline underline-offset-4">Open in-effect version {document.inEffect.sequence}</a>{document.inEffect.versionId !== document.currentVersionId ? <span className="text-[var(--muted)]">The latest upload is a different version.</span> : null}<details className="w-full text-xs text-[var(--muted)]"><summary className="cursor-pointer">Designation details</summary><p className="mt-1 whitespace-pre-wrap break-words">{document.inEffect.reason}</p><p className="mt-1">Recorded {formatDate(document.inEffect.recordedAt)}</p></details></div> : null}
       <AdoptionPanel document={document} />
       {historyOpen ? (
         <div id={historyId} className="border-t border-[var(--border)] bg-[var(--primary-soft)]/45 px-5 py-3 sm:px-10">
@@ -132,7 +136,8 @@ function DocumentRow({
             <div><p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Version history</p><p className="mt-1 text-xs text-[var(--muted)]">Adding a version preserves the earlier files in this record.</p></div>
             {management ? <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] ${busy ? "pointer-events-none opacity-50" : ""}`}><Upload className="h-3.5 w-3.5" aria-hidden="true" />{busy ? "Uploading…" : "Add version"}<input type="file" accept={ACCEPTED_DOCUMENTS} disabled={busy} className="sr-only" aria-label={`Add version to ${document.title}`} onChange={(event) => { const file = event.target.files?.[0]; if (file) void management.onAddVersion(document, file); event.currentTarget.value = ""; }} /></label> : null}
           </div>
-          <ul className="mt-2 divide-y divide-[var(--border)]">{document.versions.map((version, index) => <li key={version.versionId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs text-[var(--muted)]"><span className="font-semibold text-[var(--foreground)]">Version {version.sequence}{index === 0 ? " · Latest upload" : ""}{document.adoptions?.some((item) => item.versionId === version.versionId) ? " · Adopted" : ""}</span><span>{formatDate(version.uploadedAt)}</span><span>{formatBytes(version.byteLength)}</span><a href={version.downloadHref} className="font-semibold text-[var(--primary)] underline underline-offset-4">Open this version</a></li>)}</ul>
+          {management?.onSetInEffect ? <InEffectControl key={`${document.documentId}-${document.revision}`} document={document} busy={busy} onSave={management.onSetInEffect} /> : null}
+          <ul className="mt-2 divide-y divide-[var(--border)]">{document.versions.map((version, index) => <li key={version.versionId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs text-[var(--muted)]"><span className="font-semibold text-[var(--foreground)]">Version {version.sequence}{index === 0 ? " · Latest upload" : ""}{document.inEffect?.versionId === version.versionId ? " · In effect" : ""}{document.adoptions?.some((item) => item.versionId === version.versionId) ? " · Adopted" : ""}</span><span>{formatDate(version.uploadedAt)}</span><span>{formatBytes(version.byteLength)}</span><a href={version.downloadHref} className="font-semibold text-[var(--primary)] underline underline-offset-4">Open this version</a></li>)}</ul>
         </div>
       ) : null}
       {management && manageOpen ? (
@@ -186,7 +191,7 @@ function LibraryFilter({ label, value, onChange, options }: {
   </label>;
 }
 
-export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistory = false, canManage = false }: { categories: ReadonlyArray<LibraryCategory>; focusDocumentId?: string; showFocusedHistory?: boolean; canManage?: boolean }) {
+export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistory = false, canManage = false, canSetInEffect = false }: { categories: ReadonlyArray<LibraryCategory>; focusDocumentId?: string; showFocusedHistory?: boolean; canManage?: boolean; canSetInEffect?: boolean }) {
   const router = useRouter();
   const focusedDocument = categories.flatMap((category) => category.documents).find((document) => document.documentId === focusDocumentId);
   const focusedCategory = categories.find((category) => category.documents.some((document) => document.documentId === focusDocumentId));
@@ -196,6 +201,7 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
   const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">(focusedDocument?.status ?? "active");
   const [collectionFilter, setCollectionFilter] = useState("all");
   const [fileTypeFilter, setFileTypeFilter] = useState("all");
+  const [effectFilter, setEffectFilter] = useState("all");
   const [adoptionFilter, setAdoptionFilter] = useState("all");
   const [showNewDocument, setShowNewDocument] = useState(false);
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
@@ -218,21 +224,22 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
     ...accessibleDocuments.map((document) => document.fileType),
     ...(fileTypeFilter === "all" ? [] : [fileTypeFilter]),
   ])].sort(), [accessibleDocuments, fileTypeFilter]);
-  const expandMatches = Boolean(normalizedQuery) || categoryFilter !== "all" || collectionFilter !== "all" || fileTypeFilter !== "all" || adoptionFilter !== "all";
+  const expandMatches = Boolean(normalizedQuery) || categoryFilter !== "all" || collectionFilter !== "all" || fileTypeFilter !== "all" || adoptionFilter !== "all" || effectFilter !== "all";
   const hasFilters = expandMatches || (canManage && statusFilter !== "active");
   const visibleCategories = useMemo(() => accessibleCategories
     .filter((category) => categoryFilter === "all" || category.key === categoryFilter)
     .map((category) => ({ ...category, documents: category.documents.filter((document) =>
       (!canManage || statusFilter === "all" || document.status === statusFilter)
       && (collectionFilter === "all" || (collectionFilter === "none" ? document.collectionId === null : document.collectionId === collectionFilter))
+      && (effectFilter === "all" || (effectFilter === "in-effect" ? Boolean(document.inEffect) : !document.inEffect))
       && (adoptionFilter === "all" || (adoptionFilter === "adopted" ? Boolean(document.adoptions?.length) : !document.adoptions?.length))
       && (fileTypeFilter === "all" || document.fileType === fileTypeFilter)
       && (!normalizedQuery || includesQuery(document, normalizedQuery))) }))
-    .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, adoptionFilter, normalizedQuery, statusFilter]);
+    .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, adoptionFilter, effectFilter, normalizedQuery, statusFilter]);
   const resultCount = visibleCategories.reduce((total, category) => total + category.documents.length, 0);
 
   function clearFilters() {
-    setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active"); setAdoptionFilter("all");
+    setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active"); setAdoptionFilter("all"); setEffectFilter("all");
   }
 
   async function uploadToStaging(file: File) {
@@ -247,7 +254,7 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
     try {
       const stagingKey = await uploadToStaging(input.file);
       await documentMutation({ action: "create", stagingKey, fileName: input.file.name, title: input.title, description: input.description, category: input.category });
-      setMessage(`${input.title} was added to the library.`); setShowNewDocument(false); setStatusFilter("active"); setAdoptionFilter("all"); router.refresh(); return true;
+      setMessage(`${input.title} was added to the library.`); setShowNewDocument(false); setStatusFilter("active"); setAdoptionFilter("all"); setEffectFilter("all"); router.refresh(); return true;
     } catch (error) { setMessage(error instanceof Error ? error.message : "The document could not be added."); return false; }
     finally { setBusyDocumentId(null); }
   }
@@ -275,8 +282,18 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
     finally { setBusyDocumentId(null); }
   }
 
+  async function setInEffect(document: LibraryDocument, versionId: string | null, reason: string) {
+    setBusyDocumentId(document.documentId); setMessage(null);
+    try {
+      await documentMutation({ action: "setInEffect", documentId: document.documentId, versionId, expectedRevision: document.revision, reason });
+      setMessage(versionId ? `The in-effect version of ${document.title} was recorded.` : `The in-effect designation for ${document.title} was cleared.`);
+      router.refresh(); return true;
+    } catch (error) { setMessage(error instanceof Error ? error.message : "The designation could not be saved."); return false; }
+    finally { setBusyDocumentId(null); }
+  }
+
   function toggleCategory(key: string) { setOpenCategories((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; }); }
-  const management = canManage ? { busyDocumentId, onAddVersion: addVersion, onRename: renameDocument, onToggleArchive: toggleArchive } : undefined;
+  const management = canManage ? { busyDocumentId, onAddVersion: addVersion, onRename: renameDocument, onToggleArchive: toggleArchive, ...(canSetInEffect ? { onSetInEffect: setInEffect } : {}) } : undefined;
 
   return (
     <div className="mt-3 max-w-[84rem]">
@@ -291,7 +308,12 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
           { value: "all", label: "All documents" },
         ]} /> : null}
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <LibraryFilter label="Filter by effect" value={effectFilter} onChange={setEffectFilter} options={[
+          { value: "all", label: "All effect states" },
+          { value: "in-effect", label: "In effect" },
+          { value: "unmarked", label: "Not designated" },
+        ]} />
         <LibraryFilter label="Filter by adoption" value={adoptionFilter} onChange={setAdoptionFilter} options={[
           { value: "all", label: "All adoption states" },
           { value: "adopted", label: "Adopted documents" },
