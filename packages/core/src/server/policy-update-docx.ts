@@ -151,6 +151,8 @@ function splitPageBreakRuns(input: PolicyUpdateTextRun[]) {
     parts.forEach((part, index) => {
       if (index > 0) pendingPageBreak = true;
       if (!part) return;
+      // Empty runs after a break must not consume it before visible content.
+      if (pendingPageBreak && !normalizeBlockText(part)) return;
       runs.push({
         ...raw,
         text: part,
@@ -193,7 +195,9 @@ function extractRuns(node: any, style: RunStyle = {}): PolicyUpdateTextRun[] {
     if (href) nextStyle.href = href;
   }
 
-  return compactRuns(childNodes(node).flatMap((child) => extractRuns(child, nextStyle)));
+  // Inline elements can own the only space between words. Trim only once the
+  // complete paragraph/list item has been assembled, never inside a link/style.
+  return childNodes(node).flatMap((child) => extractRuns(child, nextStyle));
 }
 
 function runsText(runs: PolicyUpdateTextRun[]) {
@@ -353,15 +357,73 @@ function isSourceDividerParagraph(paragraphXml: string) {
   );
 }
 
-function docxWithLayoutTokens(zip: JSZip, documentXml: string) {
+function wordOnOff(element: any): boolean | undefined {
+  if (!element) return undefined;
+  return !/^(?:0|false|off)$/i.test(element.attribs?.["w:val"] || "");
+}
+
+function paragraphPageBreakResolver(stylesXml: string) {
+  const styles = descendantElements(parseDocument(stylesXml, { xmlMode: true }), "w:style");
+  const byId = new Map(styles.map((style) => [style.attribs?.["w:styleId"], style]));
+  const defaultStyle = styles.find(
+    (style) => style.attribs?.["w:type"] === "paragraph" &&
+      /^(?:1|true|on)$/i.test(style.attribs?.["w:default"] || ""),
+  );
+  return (properties: any) => {
+    const direct = wordOnOff(directElements(properties, "w:pagebreakbefore")[0]);
+    if (direct !== undefined) return direct;
+    let styleId = directElements(properties, "w:pstyle")[0]?.attribs?.["w:val"] ||
+      defaultStyle?.attribs?.["w:styleId"];
+    const seen = new Set<string>();
+    while (styleId && !seen.has(styleId)) {
+      seen.add(styleId);
+      const style = byId.get(styleId);
+      const value = wordOnOff(
+        directElements(directElements(style, "w:ppr")[0], "w:pagebreakbefore")[0],
+      );
+      if (value !== undefined) return value;
+      styleId = directElements(style, "w:basedon")[0]?.attribs?.["w:val"];
+    }
+    return false;
+  };
+}
+
+function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string) {
   const tokenRun = `<w:t>${PAGE_BREAK_TOKEN}</w:t>`;
+  const breakRun = `<w:r>${tokenRun}</w:r>`;
   const dividerRun = `<w:r><w:t>${DIVIDER_TOKEN}</w:t></w:r>`;
+  const pageBreakBefore = paragraphPageBreakResolver(stylesXml);
+  const body = descendantElements(parseDocument(documentXml, { xmlMode: true }), "w:body")[0];
+  // A section's properties are stored at its END, but its type describes how
+  // that section STARTS. The last section stores its properties on the body.
+  const sectionStartTypes = descendantElements(body, "w:sectpr")
+    .filter((section) => section.parent === body ||
+      (elementName(section.parent) === "w:ppr" && elementName(section.parent?.parent) === "w:p"))
+    .map((section) => directElements(section, "w:type")[0]?.attribs?.["w:val"] || "nextPage");
+  let sectionIndex = 0;
   const markedDocumentXml = documentXml
-    .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) =>
-      isSourceDividerParagraph(paragraph)
-        ? paragraph.replace(/<\/w:p>$/, `${dividerRun}</w:p>`)
-        : paragraph,
-    )
+    .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) => {
+      const element = childNodes(parseDocument(paragraph, { xmlMode: true }))[0];
+      const properties = directElements(element, "w:ppr")[0];
+      let marked = paragraph;
+      if (pageBreakBefore(properties)) {
+        // Keep pPr first, as required by WordprocessingML.
+        marked = properties
+          ? marked.replace(/<\/w:pPr>|<w:pPr\s*\/>/, `$&${breakRun}`)
+          : marked.replace(/<w:p(?:\s[^>]*)?>/, `$&${breakRun}`);
+      }
+      if (isSourceDividerParagraph(paragraph)) {
+        marked = marked.replace(/<\/w:p>$/, `${dividerRun}</w:p>`);
+      }
+      const section = directElements(properties, "w:sectpr")[0];
+      if (section) {
+        const nextSectionType = sectionStartTypes[++sectionIndex] || "nextPage";
+        if (/^(?:nextPage|oddPage|evenPage)$/.test(nextSectionType)) {
+          marked += `<w:p>${breakRun}</w:p>`;
+        }
+      }
+      return marked;
+    })
     .replace(/<w:lastRenderedPageBreak\s*\/>/g, tokenRun)
     .replace(/<w:br\b[^>]*\bw:type="page"[^>]*\/>/g, tokenRun);
   zip.file("word/document.xml", markedDocumentXml);
@@ -433,11 +495,17 @@ function shouldIgnoreIntroParagraph(text: string) {
 
 function tableSummary(table: any) {
   const result = { keyTakeaways: [] as string[], actionItems: [] as string[] };
+  // The summary is reflowed into the cover's two columns, not source pages.
+  // Its plain-text fields must never contain the parser's layout markers.
+  const summaryText = (node: any) => runsText(extractRuns(node).map((run) => ({
+    ...run,
+    text: run.text.replaceAll(PAGE_BREAK_TOKEN, "").replaceAll(DIVIDER_TOKEN, ""),
+  })));
   for (const cell of descendantElements(table, "td")) {
     const paragraphs = descendantElements(cell, "p");
-    const label = paragraphs.length ? runsText(extractRuns(paragraphs[0])) : "";
+    const label = paragraphs.length ? summaryText(paragraphs[0]) : "";
     const items = descendantElements(cell, "li")
-      .map((item) => runsText(extractRuns(item)))
+      .map(summaryText)
       .filter(Boolean);
     if (/key takeaways?/i.test(label)) result.keyTakeaways.push(...items);
     if (/action items?/i.test(label)) result.actionItems.push(...items);
@@ -582,6 +650,7 @@ export async function parsePolicyUpdateDocx(
   const relationshipsXml =
     (await zip.file("word/_rels/document.xml.rels")?.async("string")) || "";
   const appXml = (await zip.file("docProps/app.xml")?.async("string")) || "";
+  const stylesXml = (await zip.file("word/styles.xml")?.async("string")) || "";
   const sourcePageCount = sourcePageCountFromAppXml(appXml);
   const displaySizeBySha256 = await imageDisplaySizeBySha256(
     zip,
@@ -589,7 +658,7 @@ export async function parsePolicyUpdateDocx(
     relationshipsXml,
   );
   const displaySizeOccurrenceBySha256 = new Map<string, number>();
-  const mammothBytes = await docxWithLayoutTokens(zip, documentXml);
+  const mammothBytes = await docxWithLayoutTokens(zip, documentXml, stylesXml);
   const assets: PolicyUpdateDocxAsset[] = [];
   const conversion = await mammoth.convertToHtml(
     { buffer: mammothBytes },
@@ -718,7 +787,9 @@ export async function parsePolicyUpdateDocx(
     if (!/^h[1-6]$/.test(tag) && tag !== "p" && !imageNodes.length) continue;
 
     const rawRuns = extractRuns(element);
-    if (runsText(rawRuns) === DIVIDER_TOKEN) {
+    if (runsText(rawRuns).replaceAll(PAGE_BREAK_TOKEN, "").trim() === DIVIDER_TOKEN) {
+      // A break on an otherwise empty divider belongs to the next content.
+      prepareRuns(rawRuns.map((run) => ({ ...run, text: run.text.replaceAll(DIVIDER_TOKEN, "") })));
       pushCurrentSection();
       if (sections.length) {
         sections[sections.length - 1] = {
@@ -916,7 +987,22 @@ function addSourcePdfPage(doc: PDFKit.PDFDocument) {
 }
 
 function ensurePdfSpace(doc: PDFKit.PDFDocument, height: number) {
-  if (doc.y + height > doc.page.height - doc.page.margins.bottom - 8) doc.addPage();
+  if (!isAtPdfContentTop(doc) && doc.y + height > doc.page.height - doc.page.margins.bottom - 8) {
+    doc.addPage();
+  }
+}
+
+function withoutLeadingPageBreak(runs: PolicyUpdateTextRun[] | undefined) {
+  return runs?.map((run, index) => index === 0 ? { ...run, pageBreakBefore: undefined } : run);
+}
+
+function pdfImageSize(image: PolicyUpdateDocumentImage, asset: PolicyUpdateDocxAsset) {
+  const naturalWidth = image.displayWidthPt || asset.displayWidthPt ||
+    (image.width || asset.width || 468) * 0.75;
+  const naturalHeight = image.displayHeightPt || asset.displayHeightPt ||
+    (image.height || asset.height || 320) * 0.75;
+  const scale = Math.min(1, 468 / naturalWidth, 430 / naturalHeight);
+  return { width: Math.max(1, naturalWidth * scale), height: Math.max(1, naturalHeight * scale) };
 }
 
 export async function renderPolicyUpdatePdf(
@@ -952,36 +1038,17 @@ export async function renderPolicyUpdatePdf(
   const contentWidth = 468;
   let createdPageCount = 0;
 
-  const drawPageFurniture = () => {
+  const beginPage = () => {
     createdPageCount += 1;
     const isOddPage = createdPageCount % 2 === 1;
-    if (isOddPage) {
-      doc
-        .save()
-        .rect(0, 0, pageWidth, 37.3)
-        .fill("#17130a")
-        .font("Helvetica")
-        .fontSize(11)
-        .fillColor("#ffe6a3")
-        .text(options.brandName, contentLeft, 22, {
-          width: 220,
-          lineBreak: false,
-          height: 12,
-        })
-        .text("Member Policy Resource", 320, 22, {
-          width: 220,
-          align: "right",
-          lineBreak: false,
-          height: 12,
-        })
-        .restore();
-    }
     const top = isOddPage ? 70 : 16;
     pdfContentTop.set(doc, top);
     doc.x = contentLeft;
     doc.y = top;
   };
-  doc.on("pageAdded", drawPageFurniture);
+  // Draw furniture only after flowing the body: PDFKit's save/restore does not
+  // restore text state, so drawing headers here changes a continued paragraph.
+  doc.on("pageAdded", beginPage);
   doc.addPage();
 
   const coverImageFileName = content.coverCta
@@ -1149,16 +1216,38 @@ export async function renderPolicyUpdatePdf(
       });
   }
 
-  const sectionStartsWithPageBreak = (section: PolicyUpdateDocumentSection) =>
-    !!section.headingRuns?.[0]?.pageBreakBefore;
-
   for (const section of content.sections) {
-    if (sectionStartsWithPageBreak(section)) addSourcePdfPage(doc);
-    ensurePdfSpace(doc, 38);
-
     const isArticleHeading = !/^(?:overview|why this matters(?: for zcash)?|action items?|relevant posts?|x post of the week)$/i.test(
       section.heading,
     );
+    const headingSize = isArticleHeading ? 14 : 13;
+    const firstImage = (section.images || []).find((image) => {
+      const asset = assetByName.get(decodeURIComponent(image.src.split("/").at(-1) || ""));
+      return asset && /image\/(?:png|jpe?g)/i.test(asset.contentType);
+    });
+    const firstContent = section.body.length
+      ? section.bodyRuns?.[0]?.[0]
+      : section.bullets?.length ? section.bulletRuns?.[0]?.[0] : firstImage;
+    // If Word starts the first body block on a new page, carry its heading
+    // forward too; otherwise preserving that break would strand the heading.
+    if (section.headingRuns?.[0]?.pageBreakBefore || firstContent?.pageBreakBefore) {
+      addSourcePdfPage(doc);
+    }
+    doc.font("Helvetica-Bold").fontSize(headingSize);
+    const headingHeight = doc.heightOfString(
+      section.headingRuns?.map((run) => run.text).join("") || section.heading,
+      { width: contentWidth, lineGap: 1.5 },
+    );
+    const headingGap = doc.currentLineHeight(true) * 0.55;
+    const dividerHeight = section.dividerBefore ? doc.currentLineHeight(true) * 0.8 : 0;
+    // Keep at least two body lines (or the first graphic) with the entire heading.
+    let followingHeight = section.body.length || section.bullets?.length ? 32 : 0;
+    if (!section.body.length && !section.bullets?.length && firstImage) {
+      const asset = assetByName.get(decodeURIComponent(firstImage.src.split("/").at(-1) || ""))!;
+      followingHeight = pdfImageSize(firstImage, asset).height + 8;
+    }
+    ensurePdfSpace(doc, dividerHeight + headingHeight + headingGap + followingHeight);
+
     if (section.dividerBefore) {
       doc
         .moveTo(contentLeft, doc.y)
@@ -1169,8 +1258,8 @@ export async function renderPolicyUpdatePdf(
       doc.moveDown(0.8);
     }
 
-    doc.fontSize(isArticleHeading ? 14 : 13);
-    writePdfRuns(doc, section.headingRuns, section.heading, {
+    doc.fontSize(headingSize);
+    writePdfRuns(doc, withoutLeadingPageBreak(section.headingRuns), section.heading, {
       x: contentLeft,
       width: contentWidth,
       lineGap: 1.5,
@@ -1179,7 +1268,8 @@ export async function renderPolicyUpdatePdf(
 
     section.body.forEach((paragraph, index) => {
       doc.fontSize(10.5);
-      writePdfRuns(doc, section.bodyRuns?.[index], paragraph, {
+      const runs = section.bodyRuns?.[index];
+      writePdfRuns(doc, index === 0 ? withoutLeadingPageBreak(runs) : runs, paragraph, {
         x: contentLeft,
         width: contentWidth,
         lineGap: 2,
@@ -1189,13 +1279,9 @@ export async function renderPolicyUpdatePdf(
 
     (section.bullets || []).forEach((item, index) => {
       const sourceRuns = section.bulletRuns?.[index];
-      const startsWithPageBreak = !!sourceRuns?.[0]?.pageBreakBefore;
+      const startsWithPageBreak = !!sourceRuns?.[0]?.pageBreakBefore && (section.body.length > 0 || index > 0);
       if (startsWithPageBreak) addSourcePdfPage(doc);
-      const bulletRuns = startsWithPageBreak
-        ? sourceRuns?.map((run, runIndex) =>
-            runIndex === 0 ? { ...run, pageBreakBefore: undefined } : run,
-          )
-        : sourceRuns;
+      const bulletRuns = withoutLeadingPageBreak(sourceRuns);
       ensurePdfSpace(doc, 28);
       const y = doc.y + 5;
       doc.circle(contentLeft + 8, y, 1.6).fill("#111111");
@@ -1209,22 +1295,14 @@ export async function renderPolicyUpdatePdf(
     });
 
     for (const image of section.images || []) {
-      if (image.pageBreakBefore) addSourcePdfPage(doc);
+      if (image.pageBreakBefore && (section.body.length || section.bullets?.length || image !== firstImage)) {
+        addSourcePdfPage(doc);
+      }
       const fileName = decodeURIComponent(image.src.split("/").at(-1) || "");
       const asset = assetByName.get(fileName);
       if (!asset || !/image\/(?:png|jpe?g)/i.test(asset.contentType)) continue;
 
-      const naturalWidth =
-        image.displayWidthPt ||
-        asset.displayWidthPt ||
-        (image.width || asset.width || contentWidth) * 0.75;
-      const naturalHeight =
-        image.displayHeightPt ||
-        asset.displayHeightPt ||
-        (image.height || asset.height || 320) * 0.75;
-      const scale = Math.min(1, contentWidth / naturalWidth, 430 / naturalHeight);
-      let width = Math.max(1, naturalWidth * scale);
-      let height = Math.max(1, naturalHeight * scale);
+      let { width, height } = pdfImageSize(image, asset);
       const remainingHeight =
         doc.page.height - doc.page.margins.bottom - 8 - doc.y;
       if (
@@ -1273,6 +1351,18 @@ export async function renderPolicyUpdatePdf(
     const pageNumber = index - range.start + 1;
     const previousBottomMargin = doc.page.margins.bottom;
     doc.page.margins.bottom = 0;
+    if (pageNumber % 2 === 1) {
+      doc
+        .rect(0, 0, pageWidth, 37.3)
+        .fill("#17130a")
+        .font("Helvetica")
+        .fontSize(11)
+        .fillColor("#ffe6a3")
+        .text(options.brandName, contentLeft, 22, { width: 220, lineBreak: false, height: 12 })
+        .text("Member Policy Resource", 320, 22, {
+          width: 220, align: "right", lineBreak: false, height: 12,
+        });
+    }
     doc
       .font("Helvetica")
       .fontSize(8)
@@ -1292,13 +1382,8 @@ export async function renderPolicyUpdatePdf(
       );
     doc.page.margins.bottom = previousBottomMargin;
   }
-  const renderedPageCount = doc.bufferedPageRange().count;
   doc.end();
-  const pdf = await result;
-  if (content.sourcePageCount && renderedPageCount !== content.sourcePageCount) {
-    throw new Error(
-      `Generated PDF has ${renderedPageCount} pages, but the Word source has ${content.sourcePageCount}. Review the DOCX page breaks before publishing.`,
-    );
-  }
-  return pdf;
+  // Word's cached Pages property is not a layout constraint. Keeping headings
+  // together can legitimately add pages under the PDF's fonts and margins.
+  return result;
 }

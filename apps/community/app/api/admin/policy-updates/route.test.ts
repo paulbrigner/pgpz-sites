@@ -311,7 +311,16 @@ describe("admin policy update sends", () => {
       coverImage: "",
       keyTakeaways: ["Takeaway"],
       actionItems: ["Action"],
-      sections: [],
+      sections: [{
+        heading: "Policy heading",
+        headingRuns: [{ text: "Policy heading", pageBreakBefore: true }],
+        body: ["The revised Senate text is available."],
+        bodyRuns: [[
+          { text: "The" },
+          { text: " revised Senate text", href: "https://example.org/source" },
+          { text: " is available." },
+        ]],
+      }],
       assets: [],
       sourceText: "Document source text",
       sourceTextSha256: "a".repeat(64),
@@ -348,10 +357,12 @@ describe("admin policy update sends", () => {
       expect.objectContaining({
         summary: uploadRecord.summary,
         emailPreheader: uploadRecord.emailPreheader,
+        sections: generated.sections,
       }),
       expect.any(Object),
     );
     const saved = mocks.saveGeneratedPolicyUpdateContent.mock.calls[0]?.[0];
+    expect(saved.sections).toEqual(generated.sections);
     expect(saved).not.toHaveProperty("summary");
     expect(saved).not.toHaveProperty("emailPreheader");
   });

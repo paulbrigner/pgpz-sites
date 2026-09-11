@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import {
   parsePolicyUpdateDocx,
@@ -144,7 +145,7 @@ async function exampleDocxWithoutSummaryWithImage() {
   zip.file(
     "word/media/image1.png",
     Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7o9sAAAAASUVORK5CYII=",
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC",
       "base64",
     ),
   );
@@ -219,7 +220,158 @@ async function exampleDocxWithDividers() {
 const pdfPageCount = (pdf: Buffer) =>
   pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)?.length || 0;
 
+async function docxWithParagraphs(paragraphs: string, styles = "", finalSection = "<w:sectPr/>") {
+  const zip = await JSZip.loadAsync(await exampleDocx());
+  const xml = await zip.file("word/document.xml")!.async("string");
+  zip.file("word/document.xml", xml.replace(
+    /<w:body>[\s\S]*?<\/w:body>/,
+    `<w:body><w:p><w:r><w:t>Weekly Policy Memo</w:t></w:r></w:p>
+      ${paragraphs}${finalSection}</w:body>`,
+  ));
+  const styleXml = await zip.file("word/styles.xml")!.async("string");
+  zip.file("word/styles.xml", styleXml.replace("</w:styles>", `${styles}</w:styles>`));
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+const pdfOptions = { brandName: "PGPZ Community", categoryLabel: "Weekly Policy Memo" };
+
+async function readPdfPages(pdf: Buffer) {
+  const document = await getDocument({ data: new Uint8Array(pdf), useSystemFonts: true }).promise;
+  try {
+    return await Promise.all(Array.from({ length: document.numPages }, async (_, index) => {
+      const page = await document.getPage(index + 1);
+      const text = await page.getTextContent();
+      const operators = await page.getOperatorList();
+      return {
+        text: text.items.map((item) => "str" in item ? item.str + (item.hasEOL ? "\n" : "") : "")
+          .join("").replace(/\s+/g, " "),
+        hasImage: operators.fnArray.some((op) =>
+          [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject].includes(op),
+        ),
+      };
+    }));
+  } finally {
+    await document.destroy();
+  }
+}
+
 describe("policy update DOCX pipeline", () => {
+  it.each(["direct", "inherited", "run"])("does not leak %s page-break markers into cover summaries", async (kind) => {
+    const zip = await JSZip.loadAsync(await exampleDocx());
+    const xml = await zip.file("word/document.xml")!.async("string");
+    zip.file("word/document.xml", kind === "run"
+      ? xml.replace("<w:t>First takeaway.</w:t>", "<w:lastRenderedPageBreak/><w:t>First takeaway.</w:t>")
+      : xml.replace("<w:numPr>", `${kind === "direct" ? "<w:pageBreakBefore/>" : '<w:pStyle w:val="PageStart"/>'}<w:numPr>`),
+    );
+    const styles = await zip.file("word/styles.xml")!.async("string");
+    zip.file("word/styles.xml", styles.replace("</w:styles>",
+      '<w:style w:type="paragraph" w:styleId="PageStart"><w:name w:val="Page start"/><w:pPr><w:pageBreakBefore/></w:pPr></w:style></w:styles>',
+    ));
+    const parsed = await parsePolicyUpdateDocx(await zip.generateAsync({ type: "nodebuffer" }), { assetBasePath: "/assets" });
+    expect(parsed.keyTakeaways).toEqual(["First takeaway."]);
+    expect(parsed.actionItems).toEqual(["First action."]);
+    expect(parsed.sourceText).not.toContain("[[PGPZ_");
+    const pages = await readPdfPages(await renderPolicyUpdatePdf(parsed, pdfOptions));
+    expect(pages[0].text).toContain("First takeaway.");
+    expect(pages.map((page) => page.text).join("")).not.toContain("[[PGPZ_");
+  });
+
+  it("preserves whitespace owned by nested links and styles without inserting spaces before punctuation", async () => {
+    const bytes = await docxWithParagraphs(`
+      <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Policy Heading</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Remains uncertain. The</w:t></w:r>
+        <w:hyperlink r:id="rIdLink"><w:r><w:rPr><w:b/><w:u w:val="single"/></w:rPr>
+          <w:t xml:space="preserve"> revised Senate text </w:t></w:r></w:hyperlink>
+        <w:r><w:t>is publicly available</w:t></w:r>
+        <w:r><w:rPr><w:i/></w:rPr><w:t>.</w:t></w:r></w:p>
+      <w:p><w:r><w:t>One</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve"> </w:t></w:r>
+        <w:r><w:t>two</w:t></w:r><w:hyperlink r:id="rIdLink"><w:r><w:t>,three</w:t></w:r></w:hyperlink></w:p>`);
+    const parsed = await parsePolicyUpdateDocx(bytes, { assetBasePath: "/assets" });
+    expect(parsed.sections[0].body).toEqual([
+      "Remains uncertain. The revised Senate text is publicly available.", "One two,three",
+    ]);
+    expect(parsed.sections[0].bodyRuns?.[0]).toContainEqual({
+      text: " revised Senate text ", bold: true, underline: true, href: "https://example.org/source",
+    });
+    const pages = await readPdfPages(await renderPolicyUpdatePdf(parsed, pdfOptions));
+    expect(pages[0].text).toContain("The revised Senate text is publicly available.");
+    expect(pages[0].text).toContain("One two,three");
+  });
+
+  it("preserves paragraph and inherited style page breaks and respects explicit off values", async () => {
+    const paragraph = (text: string, properties = "") =>
+      `<w:p><w:pPr>${properties}</w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
+    const bytes = await docxWithParagraphs(
+      paragraph("First paragraph.") +
+      paragraph("Direct break.", '<w:pageBreakBefore/>') +
+      paragraph("Inherited break.", '<w:pStyle w:val="Derived"/>') +
+      paragraph("Disabled break.", '<w:pStyle w:val="Derived"/><w:pageBreakBefore w:val="0"/>'),
+      `<w:style w:type="paragraph" w:styleId="PageStart"><w:name w:val="Page start"/><w:pPr><w:pageBreakBefore/></w:pPr></w:style>
+       <w:style w:type="paragraph" w:styleId="Derived"><w:name w:val="Derived"/><w:basedOn w:val="PageStart"/></w:style>`,
+    );
+    const parsed = await parsePolicyUpdateDocx(bytes, { assetBasePath: "/assets" });
+    expect(parsed.sections[0].bodyRuns?.map((runs) => !!runs[0].pageBreakBefore))
+      .toEqual([false, true, true, false]);
+    const pages = await readPdfPages(await renderPolicyUpdatePdf(parsed, pdfOptions));
+    expect(pages).toHaveLength(3);
+    expect(pages[0].text).toContain("First paragraph.");
+    expect(pages[1].text).toContain("Direct break.");
+    expect(pages[2].text).toContain("Inherited break. Disabled break.");
+  });
+
+  it.each(["nextPage", "continuous"])("uses each upcoming section's type, including the final %s section", async (finalType) => {
+    const bytes = await docxWithParagraphs(`
+      <w:p><w:pPr><w:sectPr/></w:pPr><w:r><w:t>Section one.</w:t></w:r></w:p>
+      <w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr>
+        <w:r><w:t>Section two.</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Section three.</w:t></w:r></w:p>`, "",
+      `<w:sectPr><w:type w:val="${finalType}"/></w:sectPr>`,
+    );
+    const parsed = await parsePolicyUpdateDocx(bytes, { assetBasePath: "/assets" });
+    expect(parsed.sections[0].bodyRuns?.map((runs) => !!runs[0].pageBreakBefore))
+      .toEqual([false, false, finalType === "nextPage"]);
+    const pages = await readPdfPages(await renderPolicyUpdatePdf(parsed, pdfOptions));
+    expect(pages).toHaveLength(finalType === "nextPage" ? 2 : 1);
+    expect(pages[0].text).toContain("Section one. Section two.");
+    expect(pages.at(-1)?.text).toContain("Section three.");
+  });
+
+  it("carries a page break across blank styled text and a divider to the next heading", async () => {
+    const bytes = await docxWithParagraphs(`
+      <w:p><w:r><w:t>First paragraph.</w:t></w:r></w:p>
+      <w:p><w:pPr><w:pageBreakBefore/><w:pBdr><w:bottom w:val="single"/></w:pBdr></w:pPr></w:p>
+      <w:p><w:r><w:br w:type="page"/><w:t xml:space="preserve"> </w:t></w:r>
+        <w:r><w:rPr><w:b/></w:rPr><w:t>Next heading</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Following content.</w:t></w:r></w:p>`);
+    const parsed = await parsePolicyUpdateDocx(bytes, { assetBasePath: "/assets" });
+    expect(parsed.sections[1].headingRuns?.[0]).toMatchObject({ text: "Next heading", pageBreakBefore: true });
+  });
+
+  it.each(["paragraph", "bullet", "image", "body-break", "heading-break-divider"])(
+    "keeps the whole heading with its first %s at a page boundary", async (kind) => {
+      const parsed = await parsePolicyUpdateDocx(await exampleDocxWithoutSummaryWithImage(), { assetBasePath: "/assets" });
+      const heading = "A long policy heading that must remain with its following content ".repeat(4).trim();
+      const body = "The first body line must share a page with the complete heading.";
+      const section = {
+        heading, headingRuns: [{ text: heading, bold: true, pageBreakBefore: kind === "heading-break-divider" }],
+        dividerBefore: kind === "heading-break-divider",
+        body: kind === "paragraph" || kind === "body-break" || kind === "heading-break-divider" ? [body] : [],
+        bodyRuns: [[{ text: body, pageBreakBefore: kind === "body-break" }]],
+        bullets: kind === "bullet" ? [body] : [],
+        images: kind === "image" ? [{ ...parsed.sections[0].images![0], displayWidthPt: 250, displayHeightPt: 250 }] : [],
+      };
+      const pdf = await renderPolicyUpdatePdf({
+        ...parsed, keyTakeaways: ["Cover summary."], sections: [section], sourcePageCount: 1,
+      }, pdfOptions);
+      const pages = await readPdfPages(pdf);
+      expect(pages).toHaveLength(2);
+      expect(pages[0].text).not.toContain("A long policy heading");
+      expect(pages[1].text).toContain(heading);
+      if (kind === "image") expect(pages[1].hasImage).toBe(true);
+      else expect(pages[1].text).toContain(body);
+    },
+  );
+
   it("validates and parses Word structure, direct bold headings, and hyperlinks", async () => {
     const bytes = await exampleDocx();
     const validation = await validatePolicyUpdateDocx(bytes);
