@@ -26,6 +26,8 @@ Policy-update PDFs preserve spaces across inline formatting and hyperlink
 boundaries. The parser carries explicit run breaks, Word's saved rendered-break
 markers, paragraph `pageBreakBefore` (including inherited styles), and page-based
 section breaks into the PDF model. Continuous sections do not force a page.
+Summary tables reflow into the existing cover columns, with layout markers
+excluded from their plain-text fields.
 Headings stay with the first body lines, bullet, or graphic; a break immediately
 before that first block carries its heading forward with it. Word's cached page
 count remains source metadata, rather than a required PDF page count, because

@@ -393,6 +393,14 @@ function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string
   const breakRun = `<w:r>${tokenRun}</w:r>`;
   const dividerRun = `<w:r><w:t>${DIVIDER_TOKEN}</w:t></w:r>`;
   const pageBreakBefore = paragraphPageBreakResolver(stylesXml);
+  const body = descendantElements(parseDocument(documentXml, { xmlMode: true }), "w:body")[0];
+  // A section's properties are stored at its END, but its type describes how
+  // that section STARTS. The last section stores its properties on the body.
+  const sectionStartTypes = descendantElements(body, "w:sectpr")
+    .filter((section) => section.parent === body ||
+      (elementName(section.parent) === "w:ppr" && elementName(section.parent?.parent) === "w:p"))
+    .map((section) => directElements(section, "w:type")[0]?.attribs?.["w:val"] || "nextPage");
+  let sectionIndex = 0;
   const markedDocumentXml = documentXml
     .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) => {
       const element = childNodes(parseDocument(paragraph, { xmlMode: true }))[0];
@@ -408,9 +416,11 @@ function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string
         marked = marked.replace(/<\/w:p>$/, `${dividerRun}</w:p>`);
       }
       const section = directElements(properties, "w:sectpr")[0];
-      const sectionType = directElements(section, "w:type")[0]?.attribs?.["w:val"];
-      if (section && (!sectionType || /^(?:nextPage|oddPage|evenPage)$/.test(sectionType))) {
-        marked += `<w:p>${breakRun}</w:p>`;
+      if (section) {
+        const nextSectionType = sectionStartTypes[++sectionIndex] || "nextPage";
+        if (/^(?:nextPage|oddPage|evenPage)$/.test(nextSectionType)) {
+          marked += `<w:p>${breakRun}</w:p>`;
+        }
       }
       return marked;
     })
@@ -485,11 +495,17 @@ function shouldIgnoreIntroParagraph(text: string) {
 
 function tableSummary(table: any) {
   const result = { keyTakeaways: [] as string[], actionItems: [] as string[] };
+  // The summary is reflowed into the cover's two columns, not source pages.
+  // Its plain-text fields must never contain the parser's layout markers.
+  const summaryText = (node: any) => runsText(extractRuns(node).map((run) => ({
+    ...run,
+    text: run.text.replaceAll(PAGE_BREAK_TOKEN, "").replaceAll(DIVIDER_TOKEN, ""),
+  })));
   for (const cell of descendantElements(table, "td")) {
     const paragraphs = descendantElements(cell, "p");
-    const label = paragraphs.length ? runsText(extractRuns(paragraphs[0])) : "";
+    const label = paragraphs.length ? summaryText(paragraphs[0]) : "";
     const items = descendantElements(cell, "li")
-      .map((item) => runsText(extractRuns(item)))
+      .map(summaryText)
       .filter(Boolean);
     if (/key takeaways?/i.test(label)) result.keyTakeaways.push(...items);
     if (/action items?/i.test(label)) result.actionItems.push(...items);
