@@ -22,6 +22,24 @@ const openBallot: AsyncBallotView = {
   viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
 describe("AsyncBallots", () => {
+  it("shows named consent, pending, and withdrawal states with delivery times in the meeting time zone", () => {
+    const ballot = { ...openBallot, consent: { ...openBallot.consent!, directorStatuses: [
+      { userId: "a", name: "Alex Director", status: "consented" as const, receivedAt: "2026-09-11T14:30:00Z" },
+      { userId: "b", name: "Blair Director", status: "pending" as const, receivedAt: null },
+      { userId: "c", name: "Casey Director", status: "withdrawn" as const, receivedAt: "2026-09-11T15:45:00Z" },
+    ] } };
+    const { rerender } = render(<AsyncBallots meeting={meeting} ballots={[ballot]} canManage={false} canDiscuss />);
+    const statuses = within(screen.getByRole("region", { name: "Director consent status" }));
+    expect(statuses.getByText(/does not indicate opposition/)).toBeVisible();
+    const rows = statuses.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Alex DirectorConsentedConsent received Sep 11, 2026, 10:30 AM EDT");
+    expect(rows[1]).toHaveTextContent("Blair DirectorNot yet consented");
+    expect(rows[1].querySelector("time")).toBeNull();
+    expect(rows[2]).toHaveTextContent("Casey DirectorWithdrawnWithdrawal received Sep 11, 2026, 11:45 AM EDT");
+    expect(rows[0].querySelector("time")).toHaveAttribute("dateTime", "2026-09-11T14:30:00Z");
+    rerender(<AsyncBallots meeting={meeting} ballots={[openBallot]} canManage canDiscuss />);
+    expect(screen.queryByRole("region", { name: "Director consent status" })).not.toBeInTheDocument();
+  });
   it("distinguishes adopted documents from supporting materials and signs the effective terms", async () => {
     vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({}));
     const docs = ["Policy", "Background"].map((title) => ({ documentId: title, versionId: "v1", title, sequence: 1, fileName: `${title}.pdf`, sha256: "digest" }));

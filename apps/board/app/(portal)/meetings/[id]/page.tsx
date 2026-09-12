@@ -87,6 +87,17 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
           contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,
           statement: ballot.consent.statement, withdrawalStatement: ballot.consent.withdrawalStatement,
           directors: ballot.eligibleVoters,
+          // Project only status metadata for active directors, never other signers' receipts.
+          ...(accessRecord?.status === "active" && isDirectorRole(accessRecord.role) ? {
+            directorStatuses: ballot.eligibleVoters.map((director) => {
+              const receipt = ballot.consent!.receipts.find((item) => item.accessId === director.userId);
+              return {
+                userId: director.userId, name: director.name,
+                status: receipt?.action === "consent" ? "consented" as const : receipt?.action === "withdraw" ? "withdrawn" as const : "pending" as const,
+                receivedAt: receipt?.receivedAt || null,
+              };
+            }),
+          } : {}),
           viewerReceipt: ballot.consent.receipts.find((receipt) => receipt.email === member.email && receipt.accessId === accessRecord?.id) || null,
           rosterChanged: directorRoster?.revision !== ballot.consent.rosterRevision,
           adoptedAt: ballot.closedAt,
