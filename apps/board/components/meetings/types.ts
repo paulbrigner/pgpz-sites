@@ -83,6 +83,12 @@ export interface AsyncBallotView {
     startAt: string; endAt: string;
     statement: string; withdrawalStatement: string;
     directors: readonly { userId: string; name: string; email: string }[];
+    directorStatuses?: readonly {
+      userId: string;
+      name: string;
+      status: "consented" | "pending" | "withdrawn";
+      receivedAt: string | null;
+    }[];
     viewerReceipt: import("@/lib/written-consents").ConsentReceipt | null;
     rosterChanged: boolean;
     adoptedAt: string | null;
