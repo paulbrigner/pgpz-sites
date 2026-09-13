@@ -26,9 +26,11 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   if (!record || (record.meeting.status === "draft" && !canManageBoardMeetings(member) && !canPrepareBoardMeetings(member))) notFound();
   const canManageMeetings = canManageBoardMeetings(member);
   const canDiscuss = canParticipateBoardDiscussions(member);
-  const [directorRoster, libraryDocuments] = record.meeting.format === "asynchronous"
-    ? await Promise.all([readDirectorRoster(), canManageMeetings ? boardDocumentRepository.listDocuments({ status: "active" }) : Promise.resolve([])])
-    : [null, []];
+  const canManageMaterials = canManageBoardDocuments(member) && ["draft", "scheduled", "materials-published"].includes(record.meeting.status);
+  const [directorRoster, libraryDocuments] = await Promise.all([
+    record.meeting.format === "asynchronous" ? readDirectorRoster() : Promise.resolve(null),
+    canManageMaterials || (canManageMeetings && record.meeting.format === "asynchronous") ? boardDocumentRepository.listDocuments({ status: "active" }) : Promise.resolve([]),
+  ]);
   const renderedAt = Date.now();
   const [executiveSessions, executiveReports, accessRecord] = await Promise.all([
     visibleExecutiveSessions(member, id), executiveSessionsRepository.reports(id), executiveAccessRecord(member),
@@ -38,20 +40,22 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
     ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
   const canReadReviews = accessRecord?.status === "active" && isDirectorRole(accessRecord.role);
 
-  const consentDocuments = canManageMeetings && record.meeting.format === "asynchronous"
-    ? [...new Map([...libraryDocuments, ...meetingDocuments.filter((doc) => doc.status === "active")].map((doc) => [doc.documentId, doc])).values()] : [];
-  const consentDocumentChoices = (await Promise.all(consentDocuments.map(async (doc) => {
+  const selectableDocuments = [...libraryDocuments, ...(canManageMeetings && record.meeting.format === "asynchronous" ? meetingDocuments.filter((doc) => doc.status === "active") : [])];
+  const documentChoices = (await Promise.all(selectableDocuments.map(async (doc) => {
     const versions = doc.versionCount > 1 ? await boardDocumentRepository.listVersions(doc.documentId) : [doc.currentVersion];
     return versions.sort((a, b) => b.sequence - a.sequence).map((version) => ({
       documentId: doc.documentId, versionId: version.versionId, title: doc.displayName || doc.title,
       sequence: version.sequence, fileName: version.originalFileName, sha256: version.sha256,
     }));
   }))).flat();
+  const materialReferences = (record.materialReferences || []).filter((ref) => ref.status === "active");
+  const libraryIds = new Set(libraryDocuments.map((doc) => doc.documentId));
 
   const detail: MeetingDetailView = {
     canCoordinateReviews: accessRecord?.status === "active" && ["chair", "admin"].includes(accessRecord.role),
     directorRoster: canManageMeetings ? directorRoster : null,
-    consentDocumentChoices,
+    consentDocumentChoices: canManageMeetings && record.meeting.format === "asynchronous" ? documentChoices : [],
+    preparationDocumentChoices: canManageMaterials ? documentChoices.filter((doc) => libraryIds.has(doc.documentId) && !materialReferences.some((ref) => ref.documentId === doc.documentId && ref.versionId === doc.versionId)) : [],
     meeting: {
       id: record.meeting.id, title: record.meeting.title, description: record.meeting.description,
       type: record.meeting.type, format: record.meeting.format, status: record.meeting.status, startAt: record.meeting.startAt,
@@ -63,7 +67,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       id: item.id, title: item.title, description: item.description, kind: item.kind, order: item.order,
       presenter: item.presenter || null, durationMinutes: item.allottedMinutes,
     })),
-    materials: meetingDocuments.filter((document) => document.status === "active").map((document) => ({
+    materials: [...meetingDocuments.filter((document) => document.status === "active").map((document) => ({
       id: document.documentId,
       title: document.displayName || document.title,
       description: document.description,
@@ -71,7 +75,11 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       downloadHref: `/api/documents/${encodeURIComponent(document.documentId)}/download`,
       versionLabel: `v${document.currentVersion.sequence}`,
       updatedAt: document.updatedAt,
-    })),
+    })), ...materialReferences.map((ref) => ({
+      id: ref.id, source: "library" as const, title: ref.title, description: ref.description, section: "preparation" as const,
+      downloadHref: `/api/documents/${encodeURIComponent(ref.documentId)}/download?version=${encodeURIComponent(ref.versionId)}&preparationMeeting=${encodeURIComponent(id)}`,
+      versionLabel: `v${ref.sequence}`, updatedAt: ref.updatedAt,
+    }))],
     attendance: record.attendance.map((person) => ({ id: person.userId, name: person.name, email: person.email, status: person.status, quorumEligible: person.quorumEligible })),
     decisions: record.decisions.map((decision) => ({
       id: decision.id, title: decision.title, motion: decision.motion, outcome: decision.outcome,

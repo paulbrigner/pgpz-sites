@@ -18,6 +18,7 @@ import {
 import { MeetingLifecycleControls } from "./MeetingLifecycleControls";
 import { MeetingRecordsManager } from "./MeetingRecordsManager";
 import { MeetingRsvp } from "./MeetingRsvp";
+import { MeetingLibraryMaterials, RemoveMeetingLibraryReference } from "./MeetingLibraryMaterials";
 import { AsyncBallots } from "./AsyncBallots";
 import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel, meetingTypeLabel, minutesStatusLabel } from "./meeting-format";
 import type { MeetingCapabilities, MeetingDetailView } from "./types";
@@ -43,6 +44,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
   const date = formatMeetingDate(meeting.startAt, meeting.endAt, meeting.timeZone);
   const minutes = detail.materials.filter((material) => material.section === "minutes");
   const preparation = detail.materials.filter((material) => material.section !== "minutes");
+  const canManageMaterials = capabilities.canManageDocuments && ["draft", "scheduled", "materials-published"].includes(meeting.status);
   const attended = detail.attendance.filter((person) => person.status === "attended").length;
   const quorumEligibleAttended = detail.attendance.filter((person) => person.status === "attended" && person.quorumEligible !== false).length;
   const viewerAttendance = viewerEmail ? detail.attendance.find((person) => person.email.toLowerCase() === viewerEmail.toLowerCase()) : null;
@@ -75,8 +77,8 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
         </div>
       </header>
 
-      <div className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
-        <div className="grid gap-6">
+      <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+        <div className="grid min-w-0 grid-cols-1 gap-6">
           {meeting.format === "live" ? <Surface className="p-5 sm:p-6">
             <SectionHeading icon={ListChecks} title="Agenda" detail={`${detail.agendaItems.length} ${detail.agendaItems.length === 1 ? "item" : "items"}`} />
             {detail.agendaItems.length === 0 ? <EmptySection>The agenda has not been published yet.</EmptySection> : (
@@ -105,13 +107,15 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--primary)]"><FileText className="h-4 w-4" aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-[var(--foreground)]">{material.title}</span>
-                      <span className="mt-0.5 block text-xs text-[var(--muted)]">{material.versionLabel} · Updated {formatShortMeetingDate(material.updatedAt, meeting.timeZone)}</span>
+                      <span className="mt-0.5 block text-xs text-[var(--muted)]">{material.versionLabel}{material.source === "library" ? " · Library reference · Added " : " · Updated "}{formatShortMeetingDate(material.updatedAt, meeting.timeZone)}</span>
                     </span>
                     <a href={material.downloadHref} aria-label={`Download ${material.title}`} className="rounded-full border border-[var(--border)] p-2 text-[var(--muted)] transition hover:border-[var(--primary)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><Download className="h-4 w-4" aria-hidden="true" /></a>
+                    {canManageMaterials && material.source === "library" && <RemoveMeetingLibraryReference meeting={meeting} referenceId={material.id} title={material.title} />}
                   </li>
                 ))}
               </ul>
             )}
+            {canManageMaterials && <MeetingLibraryMaterials meeting={meeting} choices={detail.preparationDocumentChoices || []} />}
           </Surface>
 
           {meeting.format === "asynchronous" ? <AsyncBallots canCoordinateReviews={detail.canCoordinateReviews} meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
@@ -163,7 +167,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
             )}
           </Surface>
 
-          {capabilities.canPrepare || capabilities.canManageDocuments ? <MeetingRecordsManager meeting={meeting} agendaCount={detail.agendaItems.length} materials={detail.materials} canManage={capabilities.canManage} canPrepare={capabilities.canPrepare} canManageDocuments={capabilities.canManageDocuments} /> : null}
+          {capabilities.canPrepare || capabilities.canManageDocuments ? <MeetingRecordsManager meeting={meeting} agendaCount={detail.agendaItems.length} materials={detail.materials.filter((material) => material.source !== "library")} canManage={capabilities.canManage} canPrepare={capabilities.canPrepare} canManageDocuments={capabilities.canManageDocuments} /> : null}
         </div>
 
         <aside className="grid gap-5 lg:sticky lg:top-24">

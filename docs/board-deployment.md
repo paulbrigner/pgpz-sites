@@ -623,3 +623,30 @@ Use synthetic local records only. Follow the normal independent-review and live
 AWS/account/branch preflight before deployment. No production review, consent,
 cancellation, official communication or document publication is authorized by
 testing this feature.
+
+## Preparation library references release
+
+This additive Board-only feature stores `MATERIAL#<referenceId>` child rows with
+`entityType=MATERIAL_REFERENCE` in the existing meeting partition. Each row pins a
+library document/version, title, description, filename, sequence and SHA-256.
+Add/remove writes increment the meeting version and atomically retain a meeting
+revision plus the normal audit append. Removal marks the reference `removed`;
+no library metadata or retained object is deleted or reassigned. Existing meetings
+without these rows read as an empty reference list. No migration, new table/index,
+IAM permission or environment variable is required.
+
+Before an authorized release, run the repository gate, Board build and targeted
+browser checks. Verify exact-version selection, duplicate/stale-write rejection,
+document-manager authorization and passkey step-up, concealed drafts, exclusion of
+meeting-owned/restricted files, retained removal history, and archived-document
+reads through an exact active reference in a visible meeting. Preparation links do
+not change resolution review packets or consent documents. Complete independent
+review and the normal live Board account/branch/storage preflight before merging.
+After deployment, inspect the library picker and discussion wrapping read-only;
+use synthetic local data for add/remove tests, not production governance records.
+
+A rollback hides the picker and references but preserves their child rows,
+revisions, audit evidence and original library objects. Older builds do not use
+`preparationMeeting` to authorize archived-library downloads; deploy the feature
+again to restore that retained access path. Do not migrate or delete rows as a
+rollback workaround.

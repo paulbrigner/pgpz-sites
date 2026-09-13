@@ -16,7 +16,7 @@ function displayTime(value: string, timeZone: string) {
 
 function MessageByline({ message, timeZone }: { message: DiscussionMessageView; timeZone: string }) {
   return (
-    <p className="text-xs leading-5 text-[var(--muted)]">
+    <p className="text-xs leading-5 [overflow-wrap:anywhere] text-[var(--muted)]">
       <span className="font-semibold text-[var(--foreground)]">{message.authorName}</span>
       <span> · {message.authorEmail} · {displayTime(message.createdAt, timeZone)}</span>
       {message.editedAt ? <span> · Edited</span> : null}
@@ -72,7 +72,7 @@ export function BallotDiscussion({
 
   function renderMessage(message: DiscussionMessageView, reply = false) {
     return (
-      <article key={message.id} className={`${reply ? "ml-5 border-l-2 border-[var(--border)] pl-4 sm:ml-8" : ""} rounded-xl bg-white py-3`}>
+      <article key={message.id} className={`${reply ? "ml-5 border-l-2 border-[var(--border)] pl-4 sm:ml-8" : ""} min-w-0 rounded-xl bg-white py-3`}>
         <MessageByline message={message} timeZone={timeZone} />
         {editing === message.id ? (
           <form className="mt-2" onSubmit={(event) => void save(event, { action: "editMessage", messageId: message.id, expectedUpdatedAt: message.updatedAt }, "Your edit was retained.")}>
@@ -83,7 +83,7 @@ export function BallotDiscussion({
               <button type="button" disabled={pending} onClick={() => setEditing(null)} className="rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-semibold">Cancel</button>
             </div>
           </form>
-        ) : <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--foreground)]">{message.body}</p>}
+        ) : <p className="mt-1 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere] text-[var(--foreground)]">{message.body}</p>}
         {discussionOpen && canDiscuss && editing !== message.id ? (
           <div className="mt-2 flex gap-3">
             {!reply ? <button type="button" onClick={() => { setReplyingTo(replyingTo === message.id ? null : message.id); setEditing(null); }} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)]"><Reply className="h-3.5 w-3.5" aria-hidden="true" />Reply</button> : null}

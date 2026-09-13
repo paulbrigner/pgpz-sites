@@ -276,6 +276,8 @@ post and edit are retained in the meeting partition, and each mutation appends
 the normal hash-chained Board audit event with a content hash. Discussion opens
 with the collection window and becomes read-only when the window closes or the
 resolution is adopted or cancelled, while remaining visible in the historical meeting record.
+Long URLs and other unbroken text wrap inside both messages and replies, including
+author bylines, without changing the retained message contents.
 Discussion does not constitute an electronic signature or consent. Threads refresh on
 request; email notifications, unread counts, reactions, attachments, and live
 chat delivery are intentionally outside the initial discussion scope.
@@ -397,10 +399,26 @@ for the additive record layout, release checks, and rollback behavior.
 
 Meeting documents use the same governance vault, immutable versions, retained
 objects, checksums, and audited downloads as the general Document Library. A
-sparse ownership index assigns each record to exactly one surface: library
-documents remain in `/documents`; meeting-owned agenda, preparation, minutes,
-resolution, and other records appear only inside their meeting. Changing a
-meeting status never deletes its documents.
+sparse ownership index assigns each document one owner: library documents remain
+in `/documents`; meeting-owned agenda, preparation, minutes, resolution, and other
+records appear only inside their meeting. Changing a meeting status never deletes
+its documents.
+
+Document managers can use **Preparation materials → Add from Document Library**
+in an active live or asynchronous meeting to search and select an exact retained
+version. The reference pins its title, version, filename and checksum without
+copying bytes or changing library ownership. Later library versions do not replace
+that selection. Up to 50 active references are supported; the same document/version
+cannot be linked twice. Removing a reference preserves the library document and
+retained add/remove history. Closed or cancelled meetings retain read-only references.
+Existing referenced versions remain downloadable by the meeting's readers if the
+library item is subsequently archived; this exception requires the exact active
+reference and does not expose concealed draft meetings or restricted session files.
+Preparation references neither adopt documents nor change any resolution attachments
+or review packet. Use the resolution's own document selector for those actions.
+The Board-only materials API uses document-management authorization, passkey step-up,
+meeting-version concurrency and an atomic audit append. No upload or email is sent
+when adding a reference. See the deployment runbook for the additive record layout.
 
 Calendar downloads use a stable iCalendar UID and sequence. Board Chair and
 Executive Director users can manually send an invitation, update, materials

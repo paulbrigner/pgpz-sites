@@ -37,6 +37,7 @@ import {
   type BoardMeetingDecision,
   type BoardMeetingDelivery,
   type BoardMeetingDetail,
+  type BoardMeetingMaterialReference,
   type BoardMeetingListPage,
   type BoardMeetingStatus,
 } from "@/lib/meetings";
@@ -79,6 +80,10 @@ export interface RecordBoardActionItemInput extends Omit<BoardMeetingActionItem,
 export interface SetBoardMinutesInput {
   readonly meetingId: string; readonly expectedVersion: number; readonly status: BoardMeeting["minutesStatus"];
   readonly documentId?: string | null; readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface AddMeetingMaterialReferenceInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly actorEmail: string; readonly occurredAt?: string;
+  readonly document: Pick<BoardMeetingMaterialReference, "documentId" | "versionId" | "title" | "description" | "sequence" | "fileName" | "sha256">;
 }
 export interface RecordBoardDeliveryInput extends Omit<BoardMeetingDelivery, "meetingId" | "occurredAt" | "actorEmail"> {
   readonly meetingId: string; readonly actorEmail: string; readonly occurredAt?: string;
@@ -282,6 +287,8 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     if (!meeting) return null;
     return {
       meeting,
+      materialReferences: (all.filter((r) => r.entityType === "MATERIAL_REFERENCE") as unknown as BoardMeetingMaterialReference[])
+        .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id)),
       agendaItems: (all.filter((r) => r.entityType === "AGENDA_ITEM") as unknown as BoardAgendaItem[])
         .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
       attendance: (all.filter((r) => r.entityType === "ATTENDANCE") as unknown as BoardMeetingAttendance[])
@@ -492,6 +499,32 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (previous.status === "draft" || previous.status === "cancelled" || previous.status === "closed") throw new Error("quorum can be confirmed only for an active or completed meeting");
       const next: BoardMeeting = { ...previous, quorumConfirmedAt: input.confirmed ? at : null, quorumConfirmedBy: input.confirmed ? actor : null, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, input.confirmed ? "quorum-confirmed" : "quorum-cleared", actor, at, { quorumRequired: previous.quorumRequired }, undefined, options);
+    },
+    async addMaterialReference(input: AddMeetingMaterialReferenceInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (!["draft", "scheduled", "materials-published"].includes(previous.status)) throw new Error("Preparation references can change only in an active meeting.");
+      const active = (await getMeeting(previous.id))!.materialReferences.filter((ref) => ref.status === "active");
+      if (active.some((ref) => ref.documentId === input.document.documentId && ref.versionId === input.document.versionId)) throw new Error("This document version is already in Preparation materials.");
+      if (active.length >= 50) throw new Error("A meeting may reference at most 50 library document versions.");
+      const document = input.document;
+      if (!Number.isInteger(document.sequence) || document.sequence < 1 || !/^[a-f0-9]{64}$/.test(document.sha256)) throw new Error("Select a retained document version.");
+      const child: BoardMeetingMaterialReference = {
+        id: randomUUID(), meetingId: previous.id, documentId: required(document.documentId, "documentId"),
+        versionId: required(document.versionId, "versionId"), title: required(document.title, "title"),
+        description: document.description, fileName: required(document.fileName, "fileName"), sequence: document.sequence,
+        sha256: document.sha256, status: "active", updatedAt: at, updatedBy: actor,
+      };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "material-reference-added", actor, at, child, { item: { pk: meetingPk(previous.id), sk: entitySk("MATERIAL", child.id), entityType: "MATERIAL_REFERENCE", ...child }, immutable: true }, options);
+    },
+    async removeMaterialReference(input: { meetingId: string; expectedVersion: number; referenceId: string; actorEmail: string; occurredAt?: string }, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+      if (!["draft", "scheduled", "materials-published"].includes(previous.status)) throw new Error("Preparation references can change only in an active meeting.");
+      const reference = (await getMeeting(previous.id))!.materialReferences.find((ref) => ref.id === input.referenceId && ref.status === "active");
+      if (!reference) throw new Error("Preparation reference not found. Refresh the meeting.");
+      const child: BoardMeetingMaterialReference = { ...reference, status: "removed", updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "material-reference-removed", actor, at, child, { item: { pk: meetingPk(previous.id), sk: entitySk("MATERIAL", child.id), entityType: "MATERIAL_REFERENCE", ...child } }, options);
     },
     async upsertAgendaItem(input: UpsertBoardAgendaItemInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);

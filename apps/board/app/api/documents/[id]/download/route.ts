@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { resolveBoardMemberState, canManageBoardDocuments } from "@/lib/session";
+import { resolveBoardMemberState, canManageBoardDocuments, canPrepareBoardMeetings } from "@/lib/session";
 import { boardDocumentRepository } from "@/lib/vault";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
 import { contentDisposition } from "@pgpz/document-vault/server";
@@ -32,11 +32,17 @@ export async function GET(request: NextRequest, context: Params) {
   // An exact version remains available to its reviewers even if the library
   // head is archived. Existing consent-record access remains unchanged.
   let incorporatedVersion = false;
+  const preparationMeeting = request.nextUrl.searchParams.get("preparationMeeting");
+  if (item?.status === "archived" && item.ownerType === "library" && requestedVersion && preparationMeeting) {
+    const record = await boardMeetingsRepository.getMeeting(preparationMeeting);
+    incorporatedVersion = Boolean(record && (record.meeting.status !== "draft" || canPrepareBoardMeetings(member))
+      && record.materialReferences.some((ref) => ref.status === "active" && ref.documentId === id && ref.versionId === requestedVersion));
+  }
   const consentMeeting = request.nextUrl.searchParams.get("consentMeeting");
   const consentBallot = request.nextUrl.searchParams.get("consentBallot");
   if (item?.status === "archived" && requestedVersion && consentMeeting && consentBallot) {
     const ballot = await boardMeetingsRepository.getAsyncBallot(consentMeeting, consentBallot);
-    incorporatedVersion = Boolean(ballot?.consent && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion));
+    incorporatedVersion ||= Boolean(ballot?.consent && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion));
     const round = ballot?.review?.round;
     if (!incorporatedVersion && ballot && round && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion)) {
       const access = await boardAccessRepository.getByEmail(member.email);
