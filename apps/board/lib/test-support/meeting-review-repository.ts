@@ -77,4 +77,3 @@ export async function reviewFixture() {
   const open = async (extra: Partial<Parameters<typeof repo.openAsyncBallot>[0]> = {}) => repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: (await get()).meeting.version, ballotId: draft.id, roster, rosterConfirmed: true, eligibleVoters: voters, actorEmail: voters[0].email, reviewCoordinator: access(0), reviewRecordConfirmed: true, reviewFindings: "The directors completed the requested reviews and the proposed terms reflect their documented findings.", occurredAt: "2026-09-10T20:00:00Z", ...extra });
   return { client, repo, meeting, draft, roster, voters, access, get, start, submit, open };
 }
-
