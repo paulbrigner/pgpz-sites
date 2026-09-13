@@ -16,6 +16,7 @@ describe("director resolution tasks", () => {
     const changed = reviewBallot(true);
     changed.review!.round = null;
     expect(resolutionTask(changed, meeting)).toMatchObject({ label: "Waiting for review to start", bucket: "waiting" });
+    expect(resolutionTask(changed, { ...meeting, endAt: "2020-01-01T00:00:00Z" })).toMatchObject({ label: "Review window ended", bucket: "reference" });
   });
   it("surfaces the viewer's unresolved conflict without changing it to readiness", () => {
     const ballot = reviewBallot(true);

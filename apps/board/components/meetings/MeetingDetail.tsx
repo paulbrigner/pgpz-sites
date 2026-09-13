@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge, Surface } from "@pgpz/ui";
 import {
   ArrowLeft,
@@ -37,6 +38,13 @@ function SectionHeading({ icon: Icon, title, detail }: { icon: typeof FileText; 
       {detail ? <span className="text-xs font-semibold text-[var(--muted)]">{detail}</span> : null}
     </div>
   );
+}
+
+function DetailItem({ icon: Icon, label, children }: { icon: typeof FileText; label: string; children: ReactNode }) {
+  return <div className="relative pl-7">
+    <dt className="text-xs font-semibold text-[var(--muted)]"><Icon className="absolute left-0 top-0.5 h-4 w-4" aria-hidden="true" />{label}</dt>
+    <dd className="mt-1">{children}</dd>
+  </div>;
 }
 
 export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: MeetingDetailView; capabilities: MeetingCapabilities; viewerEmail?: string }) {
@@ -182,17 +190,15 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
           <Surface className="p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Meeting details</h2>
             <dl className="mt-4 grid gap-4 text-sm">
-              <div className="flex gap-3"><CalendarPlus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div>
-                <dt className="text-xs font-semibold text-[var(--muted)]">{meeting.format === "asynchronous" ? "Consent collection opens" : "Meeting starts"}</dt>
-                <dd className="mt-1"><time dateTime={meeting.startAt}><span className="block font-semibold text-[var(--foreground)]">{date.date}</span><span className="mt-1 block text-[var(--muted)]">{date.startTime}</span></time></dd>
-              </div></div>
-              <div className="flex gap-3"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div>
-                <dt className="text-xs font-semibold text-[var(--muted)]">{meeting.format === "asynchronous" ? "Consent collection closes" : "Meeting ends"}</dt>
-                <dd className="mt-1"><time dateTime={meeting.endAt}><span className="block font-semibold text-[var(--foreground)]">{date.endDate}</span><span className="mt-1 block text-[var(--muted)]">{date.endTime}</span></time></dd>
-              </div></div>
-              {meeting.format === "live" ? <div className="flex gap-3"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Location</dt><dd className="text-[var(--muted)]">{meeting.location || "Location to be confirmed"}</dd></div></div> : null}
-              {meeting.virtualUrl ? <div className="flex gap-3"><Video className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Online meeting</dt><dd><a href={meeting.virtualUrl} rel="noreferrer" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Open meeting link</a></dd></div></div> : null}
-              {meeting.format === "live" ? <div className="flex gap-3"><Users className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Attendance</dt><dd className="text-[var(--muted)]">{attended > 0 ? `${attended} recorded as attended` : `${detail.attendance.length} invited`}{meeting.quorumRequired ? <span className="mt-1 block text-xs font-semibold text-[var(--foreground)]">{meeting.quorumConfirmedAt ? "Quorum confirmed" : `${quorumEligibleAttended} of ${meeting.quorumRequired} required for quorum`}</span> : null}</dd></div></div> : null}
+              <DetailItem icon={CalendarPlus} label={asynchronous ? "Consent collection opens" : "Meeting starts"}>
+                <time dateTime={meeting.startAt}><span className="block font-semibold text-[var(--foreground)]">{date.date}</span><span className="mt-1 block text-[var(--muted)]">{date.startTime}</span></time>
+              </DetailItem>
+              <DetailItem icon={Clock3} label={asynchronous ? "Consent collection closes" : "Meeting ends"}>
+                <time dateTime={meeting.endAt}><span className="block font-semibold text-[var(--foreground)]">{date.endDate}</span><span className="mt-1 block text-[var(--muted)]">{date.endTime}</span></time>
+              </DetailItem>
+              {!asynchronous && <DetailItem icon={MapPin} label="Location"><span className="text-[var(--muted)]">{meeting.location || "Location to be confirmed"}</span></DetailItem>}
+              {meeting.virtualUrl && <DetailItem icon={Video} label="Online meeting"><a href={meeting.virtualUrl} rel="noreferrer" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Open meeting link</a></DetailItem>}
+              {!asynchronous && <DetailItem icon={Users} label="Attendance"><span className="text-[var(--muted)]">{attended > 0 ? `${attended} recorded as attended` : `${detail.attendance.length} invited`}{meeting.quorumRequired ? <span className="mt-1 block text-xs font-semibold text-[var(--foreground)]">{meeting.quorumConfirmedAt ? "Quorum confirmed" : `${quorumEligibleAttended} of ${meeting.quorumRequired} required for quorum`}</span> : null}</span></DetailItem>}
             </dl>
           </Surface>
 

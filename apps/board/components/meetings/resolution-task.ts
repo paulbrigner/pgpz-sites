@@ -21,11 +21,11 @@ export function resolutionTask(ballot: AsyncBallotView, meeting: MeetingSummaryV
   if (consent?.rosterChanged || ballot.review?.rosterChanged) return task("Paused · Chair action needed", signed ? "Your consent remains on record; the changed director roster requires a new collection." : "The director roster changed. The Chair must restart the applicable review or collection.", "waiting");
   if (ballot.effectiveStatus === "awaiting-finalization") return task(signed ? "Your consent on record" : withdrawn ? "Your consent withdrawn" : "Consent not delivered", "Collection ended without adoption. No new consents can be delivered.", "reference");
   if (ballot.effectiveStatus === "draft") {
+    if (now >= Date.parse(meeting.endAt)) return task(ballot.reviewRequired ? "Review window ended" : "Draft · window ended", "The Chair must arrange the next steps. Earlier records remain available.", "reference");
     const review = ballot.review;
     const round = review?.round;
     if (ballot.reviewRequired && !review) return task("Director review required", "Review details are available to directors. Consent collection has not opened.", "waiting");
     if (!round) return task(ballot.reviewRequired ? "Waiting for review to start" : "Draft · not open", "The Chair has not opened this item for director action.", "waiting");
-    if (now >= Date.parse(meeting.endAt)) return task("Review window ended", "The Chair must arrange the next steps. Earlier reviews remain on record.", "reference");
     if (!round.reviewers.some((person) => person.userId === review.viewerAccessId)) return task("Review in progress", "No review is assigned to you for this round.", "waiting");
     const own = round.submissions.find((entry) => entry.accessId === review.viewerAccessId);
     if (!own) return task("Your review needed", "Read the materials and record your assessment. Review is separate from consent.", "attention", "attention");
