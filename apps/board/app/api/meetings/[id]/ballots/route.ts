@@ -8,7 +8,7 @@ import { requireBoardPasskeySession, requireBoardStepUp } from "@/lib/api-securi
 import { canManageBoardMeetings, resolveBoardMemberState } from "@/lib/session";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { boardDocumentRepository } from "@/lib/vault";
-import { accessRecordGuard, readDirectorRoster } from "@/lib/director-roster";
+import { accessRecordGuard, isVotingDirector, readDirectorRoster } from "@/lib/director-roster";
 import { executiveJson as json, executiveJsonBody } from "@/lib/executive-session-api";
 import { SITE_URL } from "@/lib/config";
 import { validateConsentAdoption, type ConsentAttachment } from "@/lib/written-consents";
@@ -36,10 +36,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const expectedVersion = Number(body.expectedVersion);
     const accessRecord = await boardAccessRepository.getByEmail(state.member.email);
     if (!accessRecord || accessRecord.status !== "active") return json({ error: "Active Board access is required." }, 403);
-    if (!["signConsent", "withdrawConsent"].includes(action) && (!canManageBoardMeetings(state.member) || !roleCanManageBoardMeetings(accessRecord.role))) {
+    if (!["signConsent", "withdrawConsent", "submitReview"].includes(action) && (!canManageBoardMeetings(state.member) || !roleCanManageBoardMeetings(accessRecord.role))) {
       return json({ error: "Only the Board Chair or Executive Director may manage written resolutions." }, 403);
     }
     if (["castVote", "finalizeBallot"].includes(action)) return json({ error: "Ordinary async voting is retired. Each resolution requires every director's signed consent." }, 409);
+    const chair = ["chair", "admin"].includes(accessRecord.role);
+    if (action === "submitReview" && !isVotingDirector(accessRecord.role)) return json({ error: "Only active directors may record reviews." }, 403);
+    if (action === "startReview" && !chair) return json({ error: "Only the Board Chair may start required review." }, 403);
+    const existing = ["saveBallot", "openBallot", "cancelBallot"].includes(action) ? await boardMeetingsRepository.getAsyncBallot(meetingId, ballotId) : null;
+    if (!chair && (existing?.review || (action === "saveBallot" && body.review != null))) return json({ error: "Only the Board Chair may manage a resolution with required review." }, 403);
     const audit = await boardAuditLedger.buildAppendItems({
       category: "meeting", action: `written_consent_${action}`, outcome: "success",
       actor: authenticatedActor(state.member), target: { type: "meeting-ballot", id: ballotId, version: String(expectedVersion + 1) },
@@ -49,6 +54,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     if (action === "saveBallot") {
       if (body.quorumRequired != null || body.approvalRequired != null) return json({ error: "Every director must consent; custom thresholds are not permitted." }, 400);
+      if (body.review != null && (typeof body.review !== "object" || Array.isArray(body.review) || typeof (body.review as Record<string, unknown>).instructions !== "string")) return json({ error: "Enter valid review instructions." }, 400);
       const refs = body.attachments ?? [];
       if (!Array.isArray(refs) || refs.length > 20) return json({ error: "Select at most 20 document versions." }, 400);
       const attachments: ConsentAttachment[] = [];
@@ -67,8 +73,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       const meeting = await boardMeetingsRepository.upsertAsyncBallot({
         meetingId, expectedVersion, id: ballotId, agendaItemId: text(body.agendaItemId) || null,
         title: text(body.title), motion: text(body.motion), attachments, adoption: validateConsentAdoption(body.adoption, attachments), actorEmail: state.member.email,
+        ...(body.review === undefined ? {} : { review: body.review === null ? null : { instructions: text((body.review as Record<string, unknown>).instructions) } }),
+        restartReview: body.restartReview === true, reviewCoordinator: accessRecord,
       }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting, ballotId });
+    }
+    if (action === "startReview") {
+      const roster = await readDirectorRoster();
+      if (!roster?.ready || body.rosterRevision !== roster.revision) return json({ error: "Refresh and confirm the current director roster before starting review." }, 409);
+      const meeting = await boardMeetingsRepository.startResolutionReview({ meetingId, expectedVersion, ballotId, roster, rosterConfirmed: body.rosterConfirmed === true, accessRecord }, options);
+      return json({ meeting });
+    }
+    if (action === "submitReview") {
+      const meeting = await boardMeetingsRepository.submitResolutionReview({
+        meetingId, expectedVersion, ballotId, roundId: text(body.roundId), contentHash: text(body.contentHash),
+        reviewedOn: text(body.reviewedOn), outcome: text(body.outcome), conflict: text(body.conflict), assessment: text(body.assessment), attested: body.attested === true,
+        accessRecord, authenticatedUserId: state.member.id, roster: await readDirectorRoster(),
+      }, options);
+      return json({ meeting });
     }
     if (action === "openBallot") {
       const roster = await readDirectorRoster();
@@ -77,6 +99,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       const meeting = await boardMeetingsRepository.openAsyncBallot({
         meetingId, expectedVersion, ballotId, roster, rosterConfirmed: body.rosterConfirmed === true,
         eligibleVoters: roster.directors.map(({ userId, name, email }) => ({ userId, name, email })), actorEmail: state.member.email,
+        reviewCoordinator: accessRecord, reviewRecordConfirmed: body.reviewRecordConfirmed === true, reviewFindings: text(body.reviewFindings),
       }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting });
     }
@@ -89,7 +112,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return json(result);
     }
     if (action === "cancelBallot") {
-      const meeting = await boardMeetingsRepository.cancelAsyncBallot({ meetingId, expectedVersion, ballotId, reason: text(body.reason), actorEmail: state.member.email }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
+      const meeting = await boardMeetingsRepository.cancelAsyncBallot({ meetingId, expectedVersion, ballotId, reason: text(body.reason), actorEmail: state.member.email, reviewCoordinator: accessRecord }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting });
     }
     return json({ error: "Select a valid written-consent action." }, 400);

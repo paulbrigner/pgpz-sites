@@ -127,6 +127,7 @@ export interface BoardAsyncBallotResult {
 }
 
 export interface BoardAsyncBallot {
+  readonly review?: import("./resolution-reviews").ResolutionReview;
   readonly consentMode?: "unanimous-v1";
   readonly attachments?: readonly import("./written-consents").ConsentAttachment[];
   readonly adoption?: import("./written-consents").ConsentAdoption;

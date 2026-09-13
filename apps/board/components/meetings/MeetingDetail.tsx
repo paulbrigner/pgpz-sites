@@ -114,7 +114,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
             )}
           </Surface>
 
-          {meeting.format === "asynchronous" ? <AsyncBallots meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
+          {meeting.format === "asynchronous" ? <AsyncBallots canCoordinateReviews={detail.canCoordinateReviews} meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
 
           <div className="grid gap-6 xl:grid-cols-2">
             {meeting.format === "live" ? <Surface className="p-5 sm:p-6">

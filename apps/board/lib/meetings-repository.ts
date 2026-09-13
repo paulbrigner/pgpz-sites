@@ -6,8 +6,10 @@ import { BOARD_MEETINGS_TABLE } from "@/lib/config";
 import { consentDigest, consentPayload } from "@/lib/written-consent-integrity";
 import type { BoardAccessRecord } from "@/lib/board-access";
 import { accessRecordGuard, directorRosterGuard, isVotingDirector, type DirectorRoster } from "@/lib/director-roster";
-import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION, validateConsentAdoption, type ConsentAdoption, type ConsentAttachment, type ConsentReceipt } from "@/lib/written-consents";
+import { CONSENT_STATEMENT, REVIEWED_CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION, validateConsentAdoption, type ConsentAdoption, type ConsentAttachment, type ConsentReceipt } from "@/lib/written-consents";
 import { isAdoptionTarget } from "@/lib/document-adoptions";
+import { REVIEW_ATTESTATION, reviewProgress, type ResolutionReview, type ResolutionReviewSubmission } from "@/lib/resolution-reviews";
+import { resolutionReviewHash, resolutionReviewPacket } from "@/lib/resolution-review-integrity";
 import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
@@ -82,6 +84,9 @@ export interface RecordBoardDeliveryInput extends Omit<BoardMeetingDelivery, "me
   readonly meetingId: string; readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface UpsertBoardAsyncBallotInput {
+  readonly reviewCoordinator?: BoardAccessRecord;
+  readonly review?: { readonly instructions: string } | null;
+  readonly restartReview?: boolean;
   readonly meetingId: string; readonly expectedVersion: number; readonly id: string;
   readonly agendaItemId?: string | null; readonly title: string; readonly motion: string;
   readonly quorumRequired?: number | null; readonly approvalRequired?: number | null;
@@ -90,10 +95,25 @@ export interface UpsertBoardAsyncBallotInput {
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface OpenBoardAsyncBallotInput {
+  readonly reviewRecordConfirmed?: boolean;
+  readonly reviewFindings?: string;
+  readonly reviewCoordinator?: BoardAccessRecord;
   readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
   readonly eligibleVoters: readonly BoardAsyncBallotVoter[];
   readonly roster: DirectorRoster; readonly rosterConfirmed: boolean;
   readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface StartResolutionReviewInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
+  readonly roster: DirectorRoster; readonly rosterConfirmed: boolean;
+  readonly accessRecord: BoardAccessRecord; readonly occurredAt?: string;
+}
+export interface SubmitResolutionReviewInput {
+  readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
+  readonly roundId: string; readonly contentHash: string; readonly roster: DirectorRoster | null;
+  readonly accessRecord: BoardAccessRecord; readonly authenticatedUserId: string;
+  readonly reviewedOn: string; readonly outcome: string; readonly conflict: string;
+  readonly assessment: string; readonly attested: boolean; readonly occurredAt?: string;
 }
 export interface CastBoardAsyncVoteInput {
   readonly meetingId: string; readonly ballotId: string; readonly choice: BoardAsyncVoteChoice;
@@ -115,6 +135,7 @@ export interface CloseBoardAsyncBallotInput {
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface CancelBoardAsyncBallotInput {
+  readonly reviewCoordinator?: BoardAccessRecord;
   readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
   readonly reason: string; readonly actorEmail: string; readonly occurredAt?: string;
 }
@@ -198,6 +219,7 @@ function toAsyncBallot(item: Row): BoardAsyncBallot | null {
     : [];
   return {
     ...(item.consentMode === "unanimous-v1" ? { consentMode: "unanimous-v1" as const, attachments: (item.attachments || []) as ConsentAttachment[], consent: item.consent as BoardAsyncBallot["consent"], ...(item.adoption ? { adoption: item.adoption as ConsentAdoption } : {}) } : {}),
+    ...(item.review ? { review: item.review as ResolutionReview } : {}),
     id: String(item.id || ""), meetingId: String(item.meetingId || ""),
     agendaItemId: item.agendaItemId == null ? null : String(item.agendaItemId),
     title: String(item.title || ""), motion: String(item.motion || ""), status,
@@ -372,8 +394,32 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       entityType: "ASYNC_DISCUSSION_REVISION", action, ...message, occurredAt,
     };
   }
+  function reviewText(value: string, label: string, maximum: number) {
+    const result = required(value, label);
+    if (result.length > maximum || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(result)) throw new Error(`${label} must be valid text of at most ${maximum} characters`);
+    return result;
+  }
+  function reviewEvent(ballot: BoardAsyncBallot, at: string, actor: string, action: string, detail: unknown): BoardMeetingTransactItem {
+    return { Put: { TableName: resolvedTable, Item: {
+      pk: `RESOLUTION_REVIEW#${ballot.meetingId}#${ballot.id}`, sk: `${at}#${randomUUID()}`,
+      entityType: "RESOLUTION_REVIEW_EVENT", meetingId: ballot.meetingId, ballotId: ballot.id,
+      action, actor, occurredAt: at, detail,
+    }, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" } };
+  }
+  function assertReviewCoordinator(record: BoardAccessRecord | undefined, actorEmail?: string) {
+    if (!record || record.status !== "active" || (!["chair", "admin"].includes(record.role) || (actorEmail && record.email !== actorEmail))) throw new Error("Only an active Board Chair may coordinate required reviews.");
+  }
   return {
     getMeeting, listMeetings, getAsyncBallot,
+    async listResolutionReviewEvents(meetingId: string, ballotId: string): Promise<Row[]> {
+      const events: Row[] = [];
+      let cursor: Record<string, unknown> | undefined;
+      do {
+        const response = await client.query({ TableName: resolvedTable, KeyConditionExpression: "#pk = :pk", ExpressionAttributeNames: { "#pk": "pk" }, ExpressionAttributeValues: { ":pk": `RESOLUTION_REVIEW#${required(meetingId, "meetingId")}#${required(ballotId, "ballotId")}` }, ConsistentRead: true, ...(cursor ? { ExclusiveStartKey: cursor } : {}) });
+        events.push(...(response.Items || [])); cursor = response.LastEvaluatedKey;
+      } while (cursor);
+      return events;
+    },
     async listDocumentAdoptions(documentId: string): Promise<BoardAsyncBallot[]> {
       const id = required(documentId, "documentId");
       const locators: Row[] = [];
@@ -475,13 +521,21 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
       if (!["draft", "scheduled", "materials-published"].includes(previous.status)) throw new Error("Resolutions can be prepared only in an active workspace.");
       const existing = await getAsyncBallot(previous.id, input.id);
+      if (existing?.review || input.review) assertReviewCoordinator(input.reviewCoordinator, actor);
       if (existing && existing.consentMode !== "unanimous-v1") throw new Error("Legacy ballots are historical records. Create a new resolution instead of editing this ballot.");
       if (existing && existing.status !== "draft") throw new Error("an opened ballot cannot be edited");
       if (input.quorumRequired != null || input.approvalRequired != null) throw new Error("Written consent requires every director; custom thresholds are not permitted.");
       if (input.title.trim().length > 200 || input.motion.trim().length > 16000) throw new Error("Resolution title or text is too long.");
       if ((input.attachments?.length || 0) > 20) throw new Error("A resolution may reference at most 20 documents.");
+      if (existing?.review?.everStarted && input.review === null) throw new Error("A started review requirement cannot be removed. Cancel this resolution if it is no longer needed.");
+      const requestedReview = input.review === undefined ? existing?.review : input.review;
+      let review: ResolutionReview | undefined = requestedReview ? {
+        instructions: reviewText(requestedReview.instructions, "Review instructions", 4000),
+        everStarted: existing?.review?.everStarted || false, round: existing?.review?.round || null,
+      } : undefined;
       const quorumRequired = null; const approvalRequired = null;
-      const ballot: BoardAsyncBallot = {
+      let ballot: BoardAsyncBallot = {
+        ...(review ? { review } : {}),
         consentMode: "unanimous-v1", attachments: [...(input.attachments || [])], adoption: validateConsentAdoption(input.adoption, input.attachments || []), consent: null,
         id: required(input.id, "ballotId"), meetingId: previous.id,
         agendaItemId: input.agendaItemId?.trim() || null,
@@ -492,8 +546,49 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         createdAt: existing?.createdAt || at, createdBy: existing?.createdBy || actor,
         updatedAt: at, updatedBy: actor,
       };
+      let invalidated = false;
+      if (review?.round && resolutionReviewHash(ballot, review.round.reviewers, review.round.rosterRevision) !== review.round.contentHash) {
+        if (!input.restartReview) throw new Error("Changing reviewed text, documents or instructions requires restarting every director's review. Confirm the restart before saving.");
+        review = { ...review, round: null };
+        ballot = { ...ballot, review }; invalidated = true;
+      }
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      return commit(previous, next, existing ? "async-ballot-updated" : "async-ballot-created", actor, at, { ballotId: ballot.id, title: ballot.title }, { item: asyncBallotItem(ballot) }, options);
+      return commit(previous, next, existing ? "async-ballot-updated" : "async-ballot-created", actor, at, { ballotId: ballot.id, title: ballot.title }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [...(invalidated ? [reviewEvent(ballot, at, actor, "review-invalidated", { previousRoundId: existing?.review?.round?.id, reason: "Resolution materials or review instructions changed" })] : []), ...(options?.additionalTransactItems || [])] });
+    },
+    async startResolutionReview(input: StartResolutionReviewInput, options?: BoardMeetingMutationOptions) {
+      assertReviewCoordinator(input.accessRecord);
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.accessRecord.email, input.occurredAt);
+      const ballot = await getAsyncBallot(previous.id, input.ballotId);
+      if (previous.format !== "asynchronous" || !["scheduled", "materials-published"].includes(previous.status) || at >= previous.endAt) throw new Error("Reviews require an active asynchronous workspace before its deadline.");
+      if (!ballot?.review || ballot.status !== "draft" || ballot.consent) throw new Error("Only a draft resolution with required review can begin review.");
+      if (!input.rosterConfirmed || !input.roster.ready || !input.roster.directors.length || input.roster.directors.length > 30 || input.roster.directors.some((person) => person.status !== "active")) throw new Error("Confirm the full current director roster with active access before starting review.");
+      if (ballot.review.round?.rosterRevision === input.roster.revision) throw new Error("Review has already started for this version. Directors may update their own assessments.");
+      const reviewers = input.roster.directors.map(({ userId, name, email }) => ({ userId, name, email })).sort((a, b) => a.email.localeCompare(b.email));
+      const round = { id: randomUUID(), contentHash: resolutionReviewHash(ballot, reviewers, input.roster.revision), rosterRevision: input.roster.revision, reviewers, startedAt: at, startedBy: actor, submissions: [] };
+      const updated = { ...ballot, review: { ...ballot.review, everStarted: true, round }, updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "resolution-review-started", actor, at, { ballotId: ballot.id, roundId: round.id, contentHash: round.contentHash }, { item: asyncBallotItem(updated) }, { additionalTransactItems: [accessRecordGuard(input.accessRecord), directorRosterGuard(input.roster), reviewEvent(ballot, at, actor, "review-started", { round, packet: resolutionReviewPacket(ballot, reviewers, input.roster.revision) }), ...(options?.additionalTransactItems || [])] });
+    },
+    async submitResolutionReview(input: SubmitResolutionReviewInput, options?: BoardMeetingMutationOptions) {
+      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.accessRecord.email, input.occurredAt);
+      const ballot = await getAsyncBallot(previous.id, input.ballotId), round = ballot?.review?.round;
+      if (!ballot?.review || !round || ballot.status !== "draft" || ballot.consent || previous.format !== "asynchronous" || !["scheduled", "materials-published"].includes(previous.status) || at >= previous.endAt) throw new Error("This review is not open. Reviews cannot change after consent collection opens.");
+      if (!input.attested || !input.authenticatedUserId || input.accessRecord.status !== "active" || !isVotingDirector(input.accessRecord.role)) throw new Error("An active director must attest to their own review.");
+      const reviewer = round.reviewers.find((person) => person.userId === input.accessRecord.id && person.email === actor);
+      if (!reviewer) throw new Error("You are not on this resolution's review roster.");
+      if (!input.roster?.ready || input.roster.revision !== round.rosterRevision) throw new Error("The director roster changed. The Chair must restart review for the current board.");
+      if (input.roundId !== round.id || input.contentHash !== round.contentHash || resolutionReviewHash(ballot, round.reviewers, round.rosterRevision) !== round.contentHash) throw new Error("The review materials changed. Refresh and review the current version.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.reviewedOn) || Number.isNaN(Date.parse(input.reviewedOn)) || new Date(input.reviewedOn).toISOString().slice(0, 10) !== input.reviewedOn || input.reviewedOn > at.slice(0, 10)) throw new Error("Enter the actual completed review date; it cannot be in the future.");
+      const submission: ResolutionReviewSubmission = {
+        id: randomUUID(), accessId: reviewer.userId, authenticatedUserId: input.authenticatedUserId,
+        name: reviewer.name, email: reviewer.email, reviewedOn: input.reviewedOn, recordedAt: at,
+        outcome: member(input.outcome, ["ready", "needs-attention"] as const, "Review outcome"),
+        conflict: member(input.conflict, ["none", "needs-attention"] as const, "Conflict review"),
+        assessment: reviewText(input.assessment, "Review assessment", 2000), attestation: REVIEW_ATTESTATION,
+      };
+      const updated = { ...ballot, review: { ...ballot.review, round: { ...round, submissions: [...round.submissions.filter((entry) => entry.accessId !== reviewer.userId), submission].sort((a, b) => a.email.localeCompare(b.email)) } }, updatedAt: at, updatedBy: actor };
+      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+      return commit(previous, next, "resolution-review-submitted", actor, at, { ballotId: ballot.id, roundId: round.id, submissionId: submission.id, contentHash: createHash("sha256").update(JSON.stringify(submission)).digest("hex") }, { item: asyncBallotItem(updated) }, { additionalTransactItems: [accessRecordGuard(input.accessRecord), directorRosterGuard(input.roster), reviewEvent(ballot, at, actor, "review-submitted", { roundId: round.id, submission }), ...(options?.additionalTransactItems || [])] });
     },
     async openAsyncBallot(input: OpenBoardAsyncBallotInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
@@ -515,13 +610,24 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (input.roster.directors.some((director) => director.status !== "active")) throw new Error("Every listed director must have active access before consent collection opens.");
       if (eligibleVoters.length > 30) throw new Error("This consent workflow supports at most 30 directors.");
       if (JSON.stringify(eligibleVoters) !== JSON.stringify(input.roster.directors.map(({ userId, name, email }) => ({ userId, name, email })).sort((a, b) => a.email.localeCompare(b.email)))) throw new Error("The director roster changed. Refresh and try again.");
-      const schema = existing.attachments?.some((doc) => doc.description) ? 3 : existing.adoption ? 2 : 1;
+      let reviewed = existing.review;
+      if (reviewed) {
+        assertReviewCoordinator(input.reviewCoordinator);
+        const round = reviewed.round;
+        if (!round || round.rosterRevision !== input.roster.revision || resolutionReviewHash(existing, eligibleVoters, input.roster.revision) !== round.contentHash) throw new Error("Start or restart review of this exact resolution for the current board before opening consents.");
+        if (!reviewProgress(round).complete) throw new Error("Every director must complete the required review without an unresolved conflict or request for follow-up before consents open.");
+        if (!input.reviewRecordConfirmed) throw new Error("Confirm that the review record and final approval terms are complete before opening consents.");
+        reviewed = { ...reviewed, round: { ...round, finalization: { findings: reviewText(input.reviewFindings || "", "Findings presented for adoption", 4000), confirmedAt: at, confirmedBy: actor } } };
+      }
+      const schema = reviewed ? 4 : existing.attachments?.some((doc) => doc.description) ? 3 : existing.adoption ? 2 : 1;
+      const statement = reviewed ? REVIEWED_CONSENT_STATEMENT : CONSENT_STATEMENT;
       if (existing.adoption) validateConsentAdoption(existing.adoption, existing.attachments || []);
-      const contentHash = consentDigest(consentPayload({ ...existing, eligibleVoters }, { schema, rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT }));
+      const contentHash = consentDigest(consentPayload({ ...existing, ...(reviewed ? { review: reviewed } : {}), eligibleVoters }, { schema, rosterRevision: input.roster.revision, startAt: previous.startAt, endAt: previous.endAt, statement, withdrawalStatement: WITHDRAWAL_STATEMENT }));
       const ballot: BoardAsyncBallot = { ...existing, status: "open", eligibleVoters, rosterHash: rosterHash(eligibleVoters), quorumRequired: eligibleVoters.length, approvalRequired: eligibleVoters.length, openedAt: at, openedBy: actor, updatedAt: at, updatedBy: actor,
-        consent: { schema, contentHash, rosterRevision: input.roster.revision, rosterConfirmation: ROSTER_CONFIRMATION, confirmedBy: actor, confirmedAt: at, startAt: previous.startAt, endAt: previous.endAt, statement: CONSENT_STATEMENT, withdrawalStatement: WITHDRAWAL_STATEMENT, receipts: [] } };
+        ...(reviewed ? { review: reviewed } : {}),
+        consent: { schema, contentHash, rosterRevision: input.roster.revision, rosterConfirmation: ROSTER_CONFIRMATION, confirmedBy: actor, confirmedAt: at, startAt: previous.startAt, endAt: previous.endAt, statement, withdrawalStatement: WITHDRAWAL_STATEMENT, receipts: [] } };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      return commit(previous, next, "written-consent-opened", actor, at, { ballotId: ballot.id, contentHash, eligibleCount: eligibleVoters.length }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [directorRosterGuard(input.roster), ...(options?.additionalTransactItems || [])] });
+      return commit(previous, next, "written-consent-opened", actor, at, { ballotId: ballot.id, contentHash, eligibleCount: eligibleVoters.length }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [directorRosterGuard(input.roster), ...(reviewed ? [reviewEvent(ballot, at, actor, "review-finalized", { round: reviewed.round, consentHash: contentHash })] : []), ...(options?.additionalTransactItems || [])] });
     },
     async castAsyncVote(_input: CastBoardAsyncVoteInput, _options?: BoardMeetingMutationOptions): Promise<BoardAsyncVote> {
       void _input; void _options; // Retained API surface rejects all legacy callers.
@@ -567,7 +673,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
             ...(input.action === "consent" && input.roster ? [directorRosterGuard(input.roster)] : []),
             { Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: `CONSENT_RECEIPT#${ballot.id}#${at}#${receipt.id}`, entityType: "CONSENT_RECEIPT", ballotId: ballot.id, receipt }, ...immutable } },
             ...(decision ? [{ Put: { TableName: resolvedTable, Item: { pk: meetingPk(previous.id), sk: entitySk("DECISION", decision.id), entityType: "DECISION", ...decision }, ...immutable } }] : []),
-            ...(complete && (updated.consent?.schema === 2 || updated.consent?.schema === 3) ? (updated.adoption?.targets || []).map((target) => ({ Put: {
+            ...(complete && (updated.consent?.schema || 1) >= 2 ? (updated.adoption?.targets || []).map((target) => ({ Put: {
               TableName: resolvedTable,
               Item: { pk: `DOCUMENT_ADOPTIONS#${target.documentId}`, sk: `ADOPTION#${target.versionId}#${previous.id}#${ballot.id}`, entityType: "DOCUMENT_ADOPTION", documentId: target.documentId, versionId: target.versionId, meetingId: previous.id, ballotId: ballot.id },
               ...immutable,
@@ -652,6 +758,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
       const existing = await getAsyncBallot(previous.id, input.ballotId);
       if (!existing || existing.status === "closed" || existing.status === "cancelled") throw new Error("only a draft or open ballot can be cancelled");
+      if (existing.review) assertReviewCoordinator(input.reviewCoordinator, actor);
       const reason = required(input.reason, "cancellation reason");
       const ballot: BoardAsyncBallot = { ...existing, status: "cancelled", cancellationReason: reason, updatedAt: at, updatedBy: actor };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };

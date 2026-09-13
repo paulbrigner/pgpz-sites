@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import Page from "@/app/(portal)/meetings/[id]/page";
 import type { MeetingDetailView } from "@/components/meetings/types";
 import type { ConsentReceipt } from "./written-consents";
+import { resolutionReviewFixture } from "./test-support/resolution-review";
 const mocks = vi.hoisted(() => ({ manage: true, get: vi.fn(), library: vi.fn(), meeting: vi.fn(), versions: vi.fn(), access: vi.fn(), detail: vi.fn() }));
 vi.mock("@/lib/session", () => ({ requireBoardMember: async () => ({ id: "chair", email: "chair@example.invalid" }), canManageBoardMeetings: () => mocks.manage, canPrepareBoardMeetings: () => false, canManageBoardDocuments: () => mocks.manage, canParticipateBoardDiscussions: () => true }));
 vi.mock("@/lib/meetings-repository", () => ({ boardMeetingsRepository: { getMeeting: mocks.get } }));
@@ -41,6 +42,20 @@ async function consentPage(receipts = [receipt(0), receipt(1), receipt(2, "withd
 }
 
 describe("meeting director consent visibility", () => {
+  it.each(["executive-director", "legal-counsel", "board-support", "deactivated"])("never serializes review assessments or prior-review identities to %s", async (role) => {
+    mocks.manage = role === "executive-director";
+    mocks.access.mockResolvedValue({ id: "chair", role: role === "deactivated" ? "member" : role, status: role === "deactivated" ? "deactivated" : "active" });
+    const record = await mocks.get(); mocks.get.mockResolvedValue({ ...record, asyncBallots: [resolutionReviewFixture(), { ...resolutionReviewFixture(), id: "open-review", status: "open" }] });
+    const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ id: "m" }) }));
+    expect(html).not.toContain("PRIVATE_REVIEW"); expect(html).not.toContain("private-auth"); expect(html).not.toContain("assessment-");
+  });
+  it("shows a published review draft to an active director while omitting authentication identifiers", async () => {
+    mocks.manage = false; mocks.access.mockResolvedValue({ id: "chair", role: "member", status: "active" });
+    const record = await mocks.get(); mocks.get.mockResolvedValue({ ...record, asyncBallots: [resolutionReviewFixture()] });
+    const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ id: "m" }) }));
+    expect(html).toContain("PRIVATE_REVIEW"); expect(html).not.toContain("private-auth");
+    expect((mocks.detail.mock.lastCall![0] as { detail: MeetingDetailView }).detail.asyncBallots).toHaveLength(1);
+  });
   it.each(["member", "chair", "admin"])("shows %s the latest named statuses per resolution without other signature evidence", async (role) => {
     mocks.manage = role !== "member";
     mocks.access.mockResolvedValue({ id: "chair", email: "chair@example.invalid", role, status: "active" });

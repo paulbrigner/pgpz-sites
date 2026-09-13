@@ -11,8 +11,8 @@ const PORTAL_MARKERS = [
 ];
 
 test.describe("board portal privacy boundary", () => {
-  test("anonymous adoption downloads expose neither documents nor signature evidence", async ({ request }) => {
-    for (const path of ["/api/meetings/m/ballots/b/record", "/api/meetings/m/ballots/b/packet?document=d"]) {
+  test("anonymous governance downloads expose neither documents, reviews nor signature evidence", async ({ request }) => {
+    for (const path of ["/api/meetings/m/ballots/b/record", "/api/meetings/m/ballots/b/packet?document=d", "/api/meetings/m/ballots/b/review-record", "/api/meetings/m/ballots/b/review-record?format=pdf", "/api/meetings/m/ballots/b/review-record?format=json"]) {
       const response = await request.get(path);
       expect(response.status(), path).toBe(401);
       expect(response.headers()["cache-control"], path).toContain("private, no-store");

@@ -8,14 +8,17 @@ import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT, ROSTER_CONFIRMATION } from "@/
 import type { AsyncBallotView, MeetingDetailView, MeetingSummaryView } from "./types";
 import { BallotDiscussion } from "./BallotDiscussion";
 import { ResolutionDraftForm } from "./ResolutionDraftForm";
+import { ResolutionReviewPanel } from "./ResolutionReviewPanel";
+import { reviewProgress } from "@/lib/resolution-reviews";
 
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm";
 const button = "w-fit rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
 const secondary = "w-fit rounded-full border border-[var(--border-strong)] bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50";
 
-export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, documentChoices = [], directorRoster = null }: {
+export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, documentChoices = [], directorRoster = null, canCoordinateReviews = false }: {
   meeting: MeetingSummaryView; ballots: AsyncBallotView[]; canManage: boolean; canDiscuss: boolean;
   documentChoices?: MeetingDetailView["consentDocumentChoices"]; directorRoster?: MeetingDetailView["directorRoster"];
+  canCoordinateReviews?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -39,11 +42,11 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
     const selections = data.getAll("document").filter(Boolean).map((value) => JSON.parse(String(value)));
     const attachments = selections.map(({ documentId, versionId, description }) => ({ documentId, versionId, ...(description ? { description } : {}) }));
     const adoption = { targets: selections.filter((item) => item.treatment === "adopt").map(({ documentId, versionId }) => ({ documentId, versionId })), effectiveTerms: String(data.get("effectiveTerms") || "") };
-    const saved = await post({ action: "saveBallot", ...(ballot ? { ballotId: ballot.id } : {}), title: data.get("title"), motion: data.get("motion"), attachments, adoption }, "Draft resolution saved. Review its exact document versions and adoption targets before opening collection.");
+    const saved = await post({ action: "saveBallot", ...(ballot ? { ballotId: ballot.id } : {}), title: data.get("title"), motion: data.get("motion"), attachments, adoption, ...(canCoordinateReviews ? { review: data.get("reviewRequired") === "true" ? { instructions: data.get("reviewInstructions") } : null, restartReview: data.get("restartReview") === "on" } : {}) }, "Draft resolution saved. Review its exact document versions and adoption targets before opening collection.");
     return saved;
   }
   function draftForm(ballot?: AsyncBallotView) {
-    return <ResolutionDraftForm ballot={ballot} documentChoices={documentChoices} pending={pending} onSave={(event) => save(event, ballot)} />;
+    return <ResolutionDraftForm ballot={ballot} documentChoices={documentChoices} pending={pending} canCoordinateReviews={canCoordinateReviews} onSave={(event) => save(event, ballot)} />;
   }
 
   return <Surface className="p-5 sm:p-6">
@@ -56,6 +59,9 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
         const legacy = !ballot.consentMode;
         const current = consent?.viewerReceipt;
         const hasConsent = current?.action === "consent";
+        const canManageBallot = canManage && (!ballot.reviewRequired || canCoordinateReviews);
+        const needsReviewStart = ballot.reviewRequired && (!ballot.review?.round || ballot.review.rosterChanged);
+        const reviewReady = !ballot.reviewRequired || (!needsReviewStart && reviewProgress(ballot.review?.round).complete);
         const status = legacy ? `Legacy ballot · ${ballot.effectiveStatus}` : ballot.effectiveStatus === "closed" ? "Adopted by unanimous written consent" : ballot.effectiveStatus === "awaiting-finalization" ? "Collection ended · not adopted" : ballot.effectiveStatus === "open" ? "Collecting consents" : ballot.effectiveStatus === "scheduled" ? "Collection scheduled" : ballot.effectiveStatus === "cancelled" ? "Cancelled · not adopted" : "Draft resolution";
         const signatureForm = (withdraw: boolean) => <form className="mt-4 grid gap-3 rounded-xl border border-[var(--border)] bg-white p-4" onSubmit={async (event) => {
           event.preventDefault(); const form = event.currentTarget, data = new FormData(form);
@@ -69,9 +75,9 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           <button disabled={pending} className={withdraw ? secondary : button}>{withdraw ? "Sign and deliver withdrawal" : "Sign and deliver consent"}</button>
         </form>;
         return <li key={ballot.id} id={`ballot-${ballot.id}`} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:p-5">
-          <p className="text-xs font-semibold text-[var(--muted)]">{status}</p>
+          <p className="text-xs font-semibold text-[var(--muted)]">{ballot.effectiveStatus === "draft" && ballot.review?.round ? "Director review in progress · consents not open" : status}</p>
           <h3 className="mt-2 text-lg font-semibold">{ballot.title}</h3>
-          <details open={ballot.effectiveStatus !== "draft"} className="mt-3">
+          <details open={ballot.effectiveStatus !== "draft" || !!ballot.review?.round} className="mt-3">
             <summary className="cursor-pointer text-sm font-semibold">Resolution text and documents{ballot.attachments?.length ? ` (${ballot.attachments.length})` : ""}</summary>
             <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{ballot.motion}</p>
             {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={`${doc.documentId}:${doc.versionId}`} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a>{doc.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--muted)]">{doc.description}</p>}</li>)}</ul>}
@@ -84,6 +90,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
               <p className="mt-2 whitespace-pre-wrap break-words"><strong>Effective date / conditions:</strong> {ballot.adoption.effectiveTerms || "See the resolution. Adoption does not establish that implementation conditions have been met."}</p>
             </div>}
           </details>
+          <ResolutionReviewPanel ballot={ballot} meeting={meeting} pending={pending} onPost={post} />
           {legacy ? <p className="mt-3 text-sm">This historical ballot is not a signed written consent. Its recorded result is preserved; prepare a new resolution to take action under the unanimous-consent process.</p> : null}
           {legacy && ballot.result && <p className="mt-2 text-sm">Historical result: {ballot.result.outcome} · Yes {ballot.result.yes}, No {ballot.result.no}, Abstain {ballot.result.abstain}, Recused {ballot.result.recused}.</p>}
           {consent && <>
@@ -114,15 +121,27 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
             {ballot.viewerEligible && active && hasConsent && ["open", "awaiting-finalization", "scheduled"].includes(ballot.effectiveStatus) && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold">Withdraw my consent before adoption</summary>{signatureForm(true)}</details>}
           </>}
           {ballot.effectiveStatus !== "draft" && <div className="mt-4"><BallotDiscussion meetingId={meeting.id} ballot={ballot} canDiscuss={canDiscuss && !legacy && active} timeZone={meeting.timeZone} /></div>}
-          {canManage && active && <div className="mt-4 grid gap-3 border-t border-[var(--border)] pt-3">
+          {canManageBallot && active && <div className="mt-4 grid gap-3 border-t border-[var(--border)] pt-3">
             {ballot.effectiveStatus === "draft" && !legacy && <>
               <details><summary className="cursor-pointer text-sm font-semibold">Edit draft resolution</summary>{draftForm(ballot)}</details>
-              {!legacy && meeting.status !== "draft" && <form className="grid gap-3" onSubmit={(event) => {
+              {needsReviewStart && meeting.status !== "draft" && <form className="grid gap-3" onSubmit={(event) => {
                 event.preventDefault(); const data = new FormData(event.currentTarget);
-                void post({ action: "openBallot", ballotId: ballot.id, rosterRevision: directorRoster?.revision, rosterConfirmed: data.get("rosterConfirmed") === "on" }, "Consent collection opened for every listed director.");
+                void post({ action: "startReview", ballotId: ballot.id, rosterRevision: directorRoster?.revision, rosterConfirmed: data.get("rosterConfirmed") === "on" }, "Director review started for these exact materials. Consent collection remains closed.");
               }}>
+                {directorRoster?.ready ? <><p className="text-sm font-semibold">Reviewers: every current director</p><ul className="text-sm">{directorRoster.directors.map((person) => <li key={person.userId}>{person.name} ({person.email}) · {person.status}</li>)}</ul><label className="flex items-start gap-2 text-sm"><input name="rosterConfirmed" type="checkbox" required className="mt-1" /><span>I confirm that this list includes every director currently in office. Starting review does not authorize this action or resolve any conflict.</span></label></> : <p className="text-sm text-amber-900">The director roster must be initialized before review can begin.</p>}
+                <button disabled={pending || !directorRoster?.ready} className={button}>{ballot.review?.everStarted ? "Restart director review" : "Start director review"}</button>
+              </form>}
+              {!legacy && !needsReviewStart && meeting.status !== "draft" && <form className="grid gap-3" onSubmit={(event) => {
+                event.preventDefault(); const data = new FormData(event.currentTarget);
+                void post({ action: "openBallot", ballotId: ballot.id, rosterRevision: directorRoster?.revision, rosterConfirmed: data.get("rosterConfirmed") === "on", reviewRecordConfirmed: data.get("reviewRecordConfirmed") === "on", reviewFindings: data.get("reviewFindings") }, "Consent collection opened for every listed director.");
+              }}>
+                {ballot.reviewRequired && <>
+                  <p className="text-sm font-semibold">{reviewReady ? "All directors have recorded readiness. Complete the review record before opening consents." : "Consent collection is blocked until every director records readiness and unresolved issues are addressed."}</p>
+                  <label className="text-sm font-semibold">Findings presented for adoption<textarea required name="reviewFindings" maxLength={4000} rows={4} className={field} /><span className="mt-1 block text-xs font-normal">Summarize the completed review and basis for the proposed action. These findings and each director&apos;s review will be fixed and bound to the signed consent. Material changes to the resolution or attachments require a new review round.</span></label>
+                  <label className="flex items-start gap-2 text-sm"><input name="reviewRecordConfirmed" type="checkbox" required className="mt-1" /><span>I have assembled the required review evidence, addressed outstanding issues and timing requirements, and confirmed that the final resolution states all approval terms. This records readiness for consent, not adoption.</span></label>
+                </>}
                 {directorRoster?.ready ? <><p className="text-sm font-semibold">Review all {directorRoster.directors.length} directors before opening:</p><ul className="text-sm">{directorRoster.directors.map((person) => <li key={person.userId}>{person.name} ({person.email}) · {person.status}</li>)}</ul><label className="flex items-start gap-2 text-sm"><input name="rosterConfirmed" type="checkbox" required className="mt-1" /><span>{ROSTER_CONFIRMATION}</span></label></> : <p className="text-sm text-amber-900">The director roster must be initialized before consent collection can open.</p>}
-                <button disabled={pending || !directorRoster?.ready} className={button}>Open consent collection</button>
+                <button disabled={pending || !directorRoster?.ready || !reviewReady} className={button}>Open consent collection</button>
               </form>}
             </>}
             {consent && !consent.rosterChanged && ballot.effectiveStatus === "open" && <button disabled={pending} className={secondary} onClick={() => post({ action: "send-vote-reminder", ballotId: ballot.id, communicationId: crypto.randomUUID() }, "Reminders sent to directors with outstanding consents.", true)}>Remind directors with outstanding consents</button>}

@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { POST } from "@/app/api/meetings/[id]/ballots/route";
 const mocks = vi.hoisted(() => ({
   anonymous: false, role: "member", currentRole: "member", stepUp: null as Response | null,
-  sign: vi.fn(), save: vi.fn(), open: vi.fn(), cancel: vi.fn(), document: vi.fn(), versions: vi.fn(), audit: vi.fn(),
+  getBallot: vi.fn(), startReview: vi.fn(), submitReview: vi.fn(), sign: vi.fn(), save: vi.fn(), open: vi.fn(), cancel: vi.fn(), document: vi.fn(), versions: vi.fn(), audit: vi.fn(),
 }));
 vi.mock("@/lib/config", () => ({ BOARD_ACCESS_TABLE: "Access", SITE_URL: "http://localhost:3303" }));
 vi.mock("@/lib/dynamodb", () => ({ documentClient: { get: async () => ({ Item: { revision: "r1", ready: true, directors: [{ userId: "director", name: "Director", email: "director@example.invalid", status: "active" }] } }) } }));
@@ -13,12 +13,27 @@ vi.mock("@/lib/api-security", () => ({ requireBoardPasskeySession: async () => n
 vi.mock("@/lib/board-access-repository", () => ({ boardAccessRepository: { getByEmail: async () => ({ id: "director", name: "Director", email: "director@example.invalid", status: "active", role: mocks.currentRole, version: 1 }) } }));
 vi.mock("@/lib/audit", () => ({ authenticatedActor: (m: unknown) => m, boardAuditLedger: { buildAppendItems: async (input: unknown) => { mocks.audit(input); return { TransactItems: [] }; } } }));
 vi.mock("@/lib/vault", () => ({ boardDocumentRepository: { getDocument: mocks.document, listVersions: mocks.versions } }));
-vi.mock("@/lib/meetings-repository", () => ({ boardMeetingsRepository: { signAsyncConsent: mocks.sign, upsertAsyncBallot: mocks.save, openAsyncBallot: mocks.open, cancelAsyncBallot: mocks.cancel } }));
+vi.mock("@/lib/meetings-repository", () => ({ boardMeetingsRepository: { getAsyncBallot: mocks.getBallot, startResolutionReview: mocks.startReview, submitResolutionReview: mocks.submitReview, signAsyncConsent: mocks.sign, upsertAsyncBallot: mocks.save, openAsyncBallot: mocks.open, cancelAsyncBallot: mocks.cancel } }));
 const request = (body: unknown, origin = "http://localhost:3303") => new NextRequest("http://localhost:3303/api/meetings/m/ballots", { method: "POST", headers: { "content-type": "application/json", origin }, body: JSON.stringify(body) });
 const context = { params: Promise.resolve({ id: "m" }) };
 const body = { action: "signConsent", ballotId: "b", expectedVersion: 2, intent: true, signatureName: "Director", contentHash: "fixed" };
-beforeEach(() => { vi.clearAllMocks(); mocks.anonymous = false; mocks.role = "member"; mocks.currentRole = "member"; mocks.stepUp = null; mocks.sign.mockResolvedValue({ adopted: false }); mocks.versions.mockResolvedValue([]); });
+beforeEach(() => { vi.clearAllMocks(); mocks.anonymous = false; mocks.role = "member"; mocks.currentRole = "member"; mocks.stepUp = null; mocks.sign.mockResolvedValue({ adopted: false }); mocks.versions.mockResolvedValue([]); mocks.getBallot.mockResolvedValue(null); });
 describe("written-consent endpoint", () => {
+  it("records only the authenticated director's review and never logs its assessment in the ordinary audit metadata", async () => {
+    const response = await POST(request({ action: "submitReview", ballotId: "b", expectedVersion: 2, roundId: "round", contentHash: "reviewed", reviewedOn: "2026-09-09", outcome: "ready", conflict: "none", assessment: "Private assessment", attested: true, authenticatedUserId: "forged", accessRecord: { id: "someone-else" }, occurredAt: "1999-01-01" }), context);
+    expect(response.status).toBe(200);
+    expect(mocks.submitReview.mock.calls[0][0]).toMatchObject({ authenticatedUserId: "authenticated-director", accessRecord: { id: "director" }, assessment: "Private assessment" });
+    expect(mocks.submitReview.mock.calls[0][0].occurredAt).toBeUndefined();
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("Private assessment");
+  });
+  it("restricts review management to the Chair and stops staff submitting or bypassing reviews", async () => {
+    mocks.role = "executive-director"; mocks.currentRole = "executive-director";
+    expect((await POST(request({ action: "submitReview" }), context)).status).toBe(403);
+    expect((await POST(request({ action: "startReview" }), context)).status).toBe(403);
+    mocks.getBallot.mockResolvedValue({ review: { instructions: "Required" } });
+    for (const action of ["openBallot", "saveBallot", "cancelBallot"]) expect((await POST(request({ action }), context)).status).toBe(403);
+    expect(mocks.save).not.toHaveBeenCalled(); expect(mocks.open).not.toHaveBeenCalled(); expect(mocks.startReview).not.toHaveBeenCalled();
+  });
   it("binds identity and receipt time to the server, disregarding forged user and delivery claims", async () => {
     const result = await POST(request({ ...body, authenticatedUserId: "victim", occurredAt: "1999-01-01", accessRecord: { id: "victim" }, role: "chair" }), context);
     expect(result.status).toBe(200);

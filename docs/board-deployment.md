@@ -594,3 +594,32 @@ isolated local records. No meeting, consent, signature, or email is generated.
 Older releases ignore the fields and preserve them through their partial
 metadata updates; rollback hides the designation UI but does not erase the
 records. Restore the feature to display them again.
+
+
+## Required resolution review release
+
+This Board-only additive release adds optional review configuration and the
+current round to `ASYNC_BALLOT` records. Immutable starts, submissions,
+invalidations and finalizations use `RESOLUTION_REVIEW#<meetingId>#<ballotId>`
+partitions in the existing meetings table. Each mutation is atomic with the
+meeting version, current access/roster guards, and Board audit append. General
+audit metadata contains opaque identifiers and hashes, not private assessments.
+No table, index, IAM privilege, TTL, Object Lock setting or migration is added.
+Existing open/adopted resolutions are not backfilled or rewritten.
+
+Schema 4 consent payloads bind the finalized review-record digest and use an
+explicit declaration that includes review of that record. Schemas 1-3 remain
+byte-compatible. Deploy all schema 4 readers/writers together before starting
+required reviews. Do not roll back to writers that drop review fields while
+required-review drafts or schema 4 consents are in use; those writers cannot
+safely preserve the review gate or reproduce the newer signed payload.
+
+Before an authorized release, run the repository gate, Board build, infrastructure
+contracts and targeted browser checks. Verify individual attribution, complete
+roster enforcement, stale revisions, edits invalidating reviews, unresolved
+conflicts, finalization without adoption, schema 4 signing/adoption, old-schema
+compatibility, director-only page/export access and lossless PDF fallback.
+Use synthetic local records only. Follow the normal independent-review and live
+AWS/account/branch preflight before deployment. No production review, consent,
+cancellation, official communication or document publication is authorized by
+testing this feature.

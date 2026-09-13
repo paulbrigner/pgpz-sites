@@ -75,6 +75,14 @@ export interface DiscussionMessageView {
 }
 
 export interface AsyncBallotView {
+  reviewRequired?: boolean;
+  review?: {
+    instructions: string;
+    everStarted: boolean;
+    round: (Omit<import("@/lib/resolution-reviews").ResolutionReviewRound, "submissions"> & { submissions: readonly Omit<import("@/lib/resolution-reviews").ResolutionReviewSubmission, "authenticatedUserId">[] }) | null;
+    rosterChanged: boolean;
+    viewerAccessId: string;
+  };
   consentMode?: "unanimous-v1";
   attachments?: readonly import("@/lib/written-consents").ConsentAttachment[];
   adoption?: import("@/lib/written-consents").ConsentAdoption;
@@ -141,6 +149,7 @@ export interface DeliveryView {
 }
 
 export interface MeetingDetailView {
+  canCoordinateReviews?: boolean;
   consentDocumentChoices?: readonly import("@/lib/written-consents").ConsentAttachment[];
   directorRoster?: { revision: string; ready: boolean; directors: { userId: string; name: string; email: string; status: string }[] } | null;
   meeting: MeetingSummaryView;
