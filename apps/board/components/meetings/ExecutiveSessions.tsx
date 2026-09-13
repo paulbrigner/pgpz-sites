@@ -39,7 +39,7 @@ export function ExecutiveSessions({ meetingId, sessions, candidates }: {
     finally { setPending(false); }
   }
 
-  return <section className="mt-8 rounded-2xl border border-[var(--border)] bg-white p-5 sm:p-7" aria-labelledby="executive-sessions-heading">
+  return <section id="executive-sessions" className="scroll-mt-28 mt-8 rounded-2xl border border-[var(--border)] bg-white p-5 sm:p-7" aria-labelledby="executive-sessions-heading">
     <h2 id="executive-sessions-heading" className="text-xl font-semibold">Executive sessions</h2>
     <p className="mt-2 text-sm text-[var(--muted)]">Private workspaces for selected directors and explicitly invited Legal Counsel. Only sessions you may enter are listed.</p>
     <ul className="mt-4 space-y-3">{sessions.map((session) => <li key={session.id}>
