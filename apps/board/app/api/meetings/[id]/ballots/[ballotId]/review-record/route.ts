@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!access || access.status !== "active" || !isVotingDirector(access.role)) return new Response(null, { status: 404, headers });
   const { id, ballotId } = await context.params;
   const ballot = await boardMeetingsRepository.getAsyncBallot(id, ballotId);
-  if (!ballot?.review?.round) return new Response(null, { status: 404, headers });
+  if (!ballot?.review || (!ballot.review.round && !ballot.review.everStarted)) return new Response(null, { status: 404, headers });
   const history = await boardMeetingsRepository.listResolutionReviewEvents(id, ballotId);
   try {
     const record = resolutionReviewRecord(ballot, history), format = request.nextUrl.searchParams.get("format");

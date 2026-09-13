@@ -84,6 +84,7 @@ export interface RecordBoardDeliveryInput extends Omit<BoardMeetingDelivery, "me
   readonly meetingId: string; readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface UpsertBoardAsyncBallotInput {
+  readonly reviewCoordinator?: BoardAccessRecord;
   readonly review?: { readonly instructions: string } | null;
   readonly restartReview?: boolean;
   readonly meetingId: string; readonly expectedVersion: number; readonly id: string;
@@ -134,6 +135,7 @@ export interface CloseBoardAsyncBallotInput {
   readonly actorEmail: string; readonly occurredAt?: string;
 }
 export interface CancelBoardAsyncBallotInput {
+  readonly reviewCoordinator?: BoardAccessRecord;
   readonly meetingId: string; readonly expectedVersion: number; readonly ballotId: string;
   readonly reason: string; readonly actorEmail: string; readonly occurredAt?: string;
 }
@@ -404,8 +406,8 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       action, actor, occurredAt: at, detail,
     }, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" } };
   }
-  function assertReviewCoordinator(record: BoardAccessRecord | undefined) {
-    if (!record || record.status !== "active" || !["chair", "admin"].includes(record.role)) throw new Error("Only an active Board Chair may coordinate required reviews.");
+  function assertReviewCoordinator(record: BoardAccessRecord | undefined, actorEmail?: string) {
+    if (!record || record.status !== "active" || (!["chair", "admin"].includes(record.role) || (actorEmail && record.email !== actorEmail))) throw new Error("Only an active Board Chair may coordinate required reviews.");
   }
   return {
     getMeeting, listMeetings, getAsyncBallot,
@@ -519,6 +521,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       if (previous.format !== "asynchronous") throw new Error("ballots are available only for asynchronous meetings");
       if (!["draft", "scheduled", "materials-published"].includes(previous.status)) throw new Error("Resolutions can be prepared only in an active workspace.");
       const existing = await getAsyncBallot(previous.id, input.id);
+      if (existing?.review || input.review) assertReviewCoordinator(input.reviewCoordinator, actor);
       if (existing && existing.consentMode !== "unanimous-v1") throw new Error("Legacy ballots are historical records. Create a new resolution instead of editing this ballot.");
       if (existing && existing.status !== "draft") throw new Error("an opened ballot cannot be edited");
       if (input.quorumRequired != null || input.approvalRequired != null) throw new Error("Written consent requires every director; custom thresholds are not permitted.");
@@ -755,6 +758,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
       const existing = await getAsyncBallot(previous.id, input.ballotId);
       if (!existing || existing.status === "closed" || existing.status === "cancelled") throw new Error("only a draft or open ballot can be cancelled");
+      if (existing.review) assertReviewCoordinator(input.reviewCoordinator, actor);
       const reason = required(input.reason, "cancellation reason");
       const ballot: BoardAsyncBallot = { ...existing, status: "cancelled", cancellationReason: reason, updatedAt: at, updatedBy: actor };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };

@@ -10,14 +10,14 @@ const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) =
 
 export function resolutionReviewRecord(ballot: BoardAsyncBallot, history: readonly Record<string, unknown>[]) {
   const review = ballot.review, round = review?.round;
-  if (!review || !round) throw new Error("A review round has not started for the current draft.");
+  if (!review || (!round && !review.everStarted)) throw new Error("A review round has not started for the current draft.");
   return {
     schema: 1, corporation: "Pretty Good Policy for Zcash", recordType: "Director review before written consent",
     meetingId: ballot.meetingId, resolutionId: ballot.id, title: ballot.title, resolution: ballot.motion,
     resolutionStatus: ballot.status, adoptedAt: ballot.closedAt, instructions: review.instructions,
     attachments: ballot.attachments || [], adoption: ballot.adoption || null, round, progress: reviewProgress(round),
-    integrityVerified: resolutionReviewHash(ballot, round.reviewers, round.rosterRevision) === round.contentHash && (!ballot.consent || ballot.consent.schema !== 4 || consentDigest(consentPayload(ballot, ballot.consent)) === ballot.consent.contentHash),
-    finalizedReviewHash: round.finalization ? resolutionReviewRecordHash(review) : null,
+    integrityVerified: !round ? null : resolutionReviewHash(ballot, round.reviewers, round.rosterRevision) === round.contentHash && (!ballot.consent || ballot.consent.schema !== 4 || consentDigest(consentPayload(ballot, ballot.consent)) === ballot.consent.contentHash),
+    finalizedReviewHash: round?.finalization ? resolutionReviewRecordHash(review) : null,
     consentHash: ballot.consent?.contentHash || null,
     declaration: "This record documents individual reviews and findings presented for adoption. It is not a signed consent, a certification that all legal requirements were met, or an adoption record. Individual review dates are self-reported; recorded-at times are server timestamps. Sensitive deliberations and disclosures remain in their separate restricted records.",
     history,
@@ -25,20 +25,20 @@ export function resolutionReviewRecord(ballot: BoardAsyncBallot, history: readon
 }
 
 export function resolutionReviewRecordHtml(record: ReturnType<typeof resolutionReviewRecord>) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(record.title)} - review record</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 24px;color:#152829}h1{line-height:1.2}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.meta{font-size:12px;overflow-wrap:anywhere}article{border-top:1px solid #aab8b8;margin-top:20px;padding-top:10px}a{color:#164b50}@media print{body{margin:0}article{break-inside:avoid}details{display:none}}</style></head><body>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(record.title)} - review record</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 24px;color:#152829}h1{line-height:1.2}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.meta{font-size:12px;overflow-wrap:anywhere}article{border-top:1px solid #aab8b8;margin-top:20px;padding-top:10px}a{color:#164b50}@media print{body{margin:0}article{break-inside:avoid}details{display:none}details.history[open]{display:block}}</style></head><body>
   <p>${escape(record.corporation)} | Directors only</p><h1>${escape(record.title)}</h1><h2>Review before consent</h2>
-  <p>${escape(record.declaration)}</p><p><strong>${record.round.finalization ? "Review record finalized for consent" : "Review in progress"}</strong> - ${record.progress.ready} of ${record.progress.total} ready. Resolution status: ${escape(record.resolutionStatus)}.</p>
-  ${record.integrityVerified ? "" : "<p><strong>Integrity check failed. Do not rely on this record until the Chair resolves the mismatch.</strong></p>"}
-  <p class="meta">Workspace: ${escape(record.meetingId)}<br>Resolution: ${escape(record.resolutionId)}<br>Review round: ${escape(record.round.id)}<br>Reviewed materials SHA-256: ${escape(record.round.contentHash)}<br>Final review record SHA-256: ${escape(record.finalizedReviewHash || "Not finalized")}<br>Consent SHA-256: ${escape(record.consentHash || "Not opened")}</p>
-  <h2>Requested review</h2><pre>${escape(record.instructions)}</pre><p class="meta">Started by ${escape(record.round.startedBy)} at ${escape(record.round.startedAt)}. Roster revision: ${escape(record.round.rosterRevision)}</p>
-  <h2>Individual reviews</h2>${record.round.reviewers.map((person) => {
-    const entry = record.round.submissions.find((item) => item.accessId === person.userId);
+  <p>${escape(record.declaration)}</p><p><strong>${!record.round ? "No current review round; earlier reviews retained" : record.round.finalization ? "Review record finalized for consent" : "Review in progress"}</strong>${record.round ? ` - ${record.progress.ready} of ${record.progress.total} ready.` : "."} Resolution status: ${escape(record.resolutionStatus)}.</p>
+  ${record.integrityVerified !== false ? "" : "<p><strong>Integrity check failed. Do not rely on this record until the Chair resolves the mismatch.</strong></p>"}
+  <p class="meta">Workspace: ${escape(record.meetingId)}<br>Resolution: ${escape(record.resolutionId)}<br>Review round: ${escape(record.round?.id || "No current review round")}<br>Reviewed materials SHA-256: ${escape(record.round?.contentHash || "Not currently reviewed")}<br>Final review record SHA-256: ${escape(record.finalizedReviewHash || "Not finalized")}<br>Consent SHA-256: ${escape(record.consentHash || "Not opened")}</p>
+  <h2>Requested review</h2><pre>${escape(record.instructions)}</pre><p class="meta">Started by ${escape(record.round?.startedBy || "Not started for current materials")} at ${escape(record.round?.startedAt || "Not started for current materials")}. Roster revision: ${escape(record.round?.rosterRevision || "No current roster")}</p>
+  <h2>Individual reviews</h2>${(record.round?.reviewers || []).map((person) => {
+    const entry = record.round!.submissions.find((item) => item.accessId === person.userId);
     return `<article><h3>${escape(person.name)}</h3>${entry ? `<p>Review date: ${escape(entry.reviewedOn)}<br>Recorded at: ${escape(entry.recordedAt)}<br>Outcome: ${entry.outcome === "ready" ? "Ready for consent" : "Follow-up required"}<br>Conflict review: ${entry.conflict === "none" ? "No conflict requiring recusal reported" : "Requires attention"}</p><pre>${escape(entry.assessment)}</pre><p>${escape(entry.attestation)}</p><p class="meta">Submission: ${escape(entry.id)}</p>` : "<p>Review pending. No completion or conflict determination is assumed.</p>"}</article>`;
   }).join("")}
-  <h2>Findings presented for adoption</h2>${record.round.finalization ? `<pre>${escape(record.round.finalization.findings)}</pre><p class="meta">Finalized by ${escape(record.round.finalization.confirmedBy)} at ${escape(record.round.finalization.confirmedAt)}</p>` : "<p>Not yet finalized by the Chair.</p>"}
-  <h2>Exact resolution reviewed</h2><pre>${escape(record.resolution)}</pre>
-  <h2>Document versions reviewed</h2>${record.attachments.map((doc) => `<article><strong>${escape(doc.title)} - v${doc.sequence}</strong><p>${escape(doc.description || "")}</p><p class="meta">Document: ${escape(doc.documentId)}<br>Version: ${escape(doc.versionId)}<br>SHA-256: ${escape(doc.sha256)}</p></article>`).join("") || "<p>No attachments.</p>"}
-  <details><summary>Retained review history (${record.history.length} events)</summary><pre class="meta">${escape(JSON.stringify(record.history, null, 2))}</pre></details>
+  <h2>Findings presented for adoption</h2>${record.round?.finalization ? `<pre>${escape(record.round?.finalization.findings)}</pre><p class="meta">Finalized by ${escape(record.round?.finalization.confirmedBy)} at ${escape(record.round?.finalization.confirmedAt)}</p>` : "<p>Not yet finalized by the Chair.</p>"}
+  <h2>${record.round ? "Exact resolution reviewed" : "Current resolution - not reviewed"}</h2><pre>${escape(record.resolution)}</pre>
+  <h2>${record.round ? "Document versions reviewed" : "Current document versions - not reviewed"}</h2>${record.attachments.map((doc) => `<article><strong>${escape(doc.title)} - v${doc.sequence}</strong><p>${escape(doc.description || "")}</p><p class="meta">Document: ${escape(doc.documentId)}<br>Version: ${escape(doc.versionId)}<br>SHA-256: ${escape(doc.sha256)}</p></article>`).join("") || "<p>No attachments.</p>"}
+  <details class="history" ${record.round ? "" : "open"}><summary>Retained review history (${record.history.length} events)</summary><pre class="meta">${escape(JSON.stringify(record.history, null, 2))}</pre></details>
   <p>Use Print to save this current review record as a PDF. The JSON export and downloadable packet also retain previous review rounds and assessments.</p></body></html>`;
 }
 
@@ -77,13 +77,13 @@ export async function resolutionReviewPacket(record: ReturnType<typeof resolutio
       y -= 8;
     }
     paragraph("PGPZ | Director review before consent", true); paragraph(record.title, true);
-    paragraph(`${record.round.finalization ? "Finalized for consent" : "Review in progress"} - ${record.progress.ready} of ${record.progress.total} ready`);
+    paragraph(`${!record.round ? "No current review round; earlier reviews retained" : `${record.round.finalization ? "Finalized for consent" : "Review in progress"} - ${record.progress.ready} of ${record.progress.total} ready`}`);
     paragraph(record.declaration);
-    if (!record.integrityVerified) paragraph("INTEGRITY CHECK FAILED. Contact the Chair before relying on this record.", true);
-    paragraph(`Review round: ${record.round.id}\nMaterials SHA-256: ${record.round.contentHash}\nFinal review SHA-256: ${record.finalizedReviewHash || "Not finalized"}\nConsent SHA-256: ${record.consentHash || "Not opened"}`);
+    if (record.integrityVerified === false) paragraph("INTEGRITY CHECK FAILED. Contact the Chair before relying on this record.", true);
+    paragraph(`Review round: ${record.round?.id || "No current review round"}\nMaterials SHA-256: ${record.round?.contentHash || "Not currently reviewed"}\nFinal review SHA-256: ${record.finalizedReviewHash || "Not finalized"}\nConsent SHA-256: ${record.consentHash || "Not opened"}`);
     paragraph("Requested review", true); paragraph(record.instructions);
-    for (const person of record.round.reviewers) {
-      const entry = record.round.submissions.find((item) => item.accessId === person.userId);
+    for (const person of record.round?.reviewers || []) {
+      const entry = record.round!.submissions.find((item) => item.accessId === person.userId);
       // Keep ordinary director blocks together. Very long assessments may
       // span pages, while each paragraph remains intact where it can fit.
       const reserve = entry ? linesFor(person.name, true).length * 18 + 8
@@ -95,11 +95,15 @@ export async function resolutionReviewPacket(record: ReturnType<typeof resolutio
       paragraph(entry.assessment); paragraph(entry.attestation);
     }
     paragraph("Findings presented for adoption", true);
-    paragraph(record.round.finalization ? `${record.round.finalization.findings}\n\nFinalized by ${record.round.finalization.confirmedBy} at ${record.round.finalization.confirmedAt}` : "Not yet finalized by the Chair.");
-    paragraph("Exact resolution reviewed", true); paragraph(record.resolution);
-    paragraph("Document versions reviewed", true);
+    paragraph(record.round?.finalization ? `${record.round?.finalization.findings}\n\nFinalized by ${record.round?.finalization.confirmedBy} at ${record.round?.finalization.confirmedAt}` : "Not yet finalized by the Chair.");
+    paragraph(record.round ? "Exact resolution reviewed" : "Current resolution - not reviewed", true); paragraph(record.resolution);
+    paragraph(record.round ? "Document versions reviewed" : "Current document versions - not reviewed", true);
     for (const doc of record.attachments) paragraph(`${doc.title} - v${doc.sequence}\n${doc.description || ""}\nDocument: ${doc.documentId}\nVersion: ${doc.versionId}\nSHA-256: ${doc.sha256}`);
-    paragraph(`Workspace: ${record.meetingId}\nResolution: ${record.resolutionId}\nReview started by ${record.round.startedBy} at ${record.round.startedAt}\nThe complete review history is embedded in review-record.json and review-record.html.`);
+    paragraph(`Workspace: ${record.meetingId}\nResolution: ${record.resolutionId}\nReview started by ${record.round?.startedBy || "Not started for current materials"} at ${record.round?.startedAt || "Not started for current materials"}\nThe complete review history is embedded in review-record.json and review-record.html.`);
+    if (!record.round) {
+      paragraph("Earlier review history - not approval of current materials", true);
+      for (const event of record.history) paragraph(JSON.stringify(event, null, 2));
+    }
     for (const [i, sheet] of pdf.getPages().entries()) sheet.drawText(`PGPZ | Directors only | Review record | ${i + 1} of ${pdf.getPageCount()}`, { x: 54, y: 30, size: 8, font });
     await pdf.attach(Buffer.from(json), "review-record.json", { mimeType: "application/json" });
     await pdf.attach(Buffer.from(html), "review-record.html", { mimeType: "text/html" });

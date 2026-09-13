@@ -22,7 +22,7 @@ export function ResolutionReviewPanel({ ballot, meeting, pending, onPost }: {
     <h4 className="font-semibold">Review before consent</h4>
     <p className="mt-2 whitespace-pre-wrap break-words text-sm">{review.instructions}</p>
     <p className="mt-2 text-xs text-[var(--muted)]">Assessments and the review record are visible only to active directors. Use Executive Session for sensitive conflict details or deliberations requiring a narrower audience. Completing review does not adopt this resolution.</p>
-    {!round ? <p className="mt-3 text-sm font-semibold">The Chair must start review of the saved document versions before consents can open.</p> : <>
+    {!round ? <p className="mt-3 text-sm font-semibold">{ballot.effectiveStatus === "cancelled" ? "This resolution was cancelled. Earlier reviews remain available in the retained record." : review.everStarted ? "The materials changed. Earlier reviews remain available; the Chair must restart review before consents can open." : "The Chair must start review of the saved document versions before consents can open."}</p> : <>
       <p className="mt-3 text-sm font-semibold">{progress.ready} of {progress.total} reviews ready{progress.attention ? ` · ${progress.attention} requiring follow-up` : ""}{progress.pending ? ` · ${progress.pending} pending` : ""}</p>
       {review.rosterChanged && <p className="mt-2 text-sm font-semibold text-amber-900">The director roster changed. The Chair must restart review for the current board. Previous reviews remain retained.</p>}
       <ul className="mt-3 grid gap-3">
@@ -37,9 +37,9 @@ export function ResolutionReviewPanel({ ballot, meeting, pending, onPost }: {
           </li>;
         })}
       </ul>
-      <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><button type="button" className="underline" disabled={pending} onClick={() => router.refresh()}>Refresh reviews</button><a href={`${record}?format=pdf`} className="underline">Download review packet</a><a href={record} target="_blank" rel="noreferrer" className="underline">View full review record</a></div>
       {round.finalization && <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm"><p className="font-semibold">Findings presented for adoption</p><p className="mt-2 whitespace-pre-wrap break-words">{round.finalization.findings}</p><p className="mt-2 text-xs">Record finalized by {round.finalization.confirmedBy} on {stamp(round.finalization.confirmedAt)}. Adoption is recorded separately through signed consents.</p></div>}
     </>}
+    {(round || review.everStarted) && <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><button type="button" className="underline" disabled={pending} onClick={() => router.refresh()}>Refresh reviews</button><a href={`${record}?format=pdf`} className="underline">Download review packet</a><a href={record} target="_blank" rel="noreferrer" className="underline">View full review record</a></div>}
     {canSubmit && <details key={`${round!.id}:${own?.id || "new"}`} className="mt-4" open={!own}><summary className="cursor-pointer text-sm font-semibold">{own ? "Update my review" : "Record my review"}</summary>
       <form className="mt-3 grid gap-3" onSubmit={async (event) => {
         event.preventDefault(); const data = new FormData(event.currentTarget);

@@ -323,7 +323,10 @@ adopts an action. The app records the declarations supplied, not a legal
 conclusion that due diligence or a tax presumption has been established.
 
 **Download review packet** provides a PDF containing the current round and
-embedded full HTML/JSON history. Unsupported typography falls back to a ZIP of
+embedded full HTML/JSON history. Earlier reviews remain downloadable after
+materials are revised or the resolution is cancelled, including when no current
+review round exists; these records do not approve the changed materials.
+Unsupported typography falls back to a ZIP of
 UTF-8 HTML/JSON without substituting text; browser Print can produce a PDF.
 The ordinary consent/adoption export includes only the review digest, keeping
 the detailed review record restricted to directors.

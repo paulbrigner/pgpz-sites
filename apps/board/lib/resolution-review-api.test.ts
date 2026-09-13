@@ -13,6 +13,12 @@ const context = { params: Promise.resolve({ id: "m", ballotId: "b" }) };
 const request = (format = "json") => new NextRequest(`https://board.example.invalid/api/meetings/m/ballots/b/review-record?format=${format}`);
 beforeEach(() => { vi.clearAllMocks(); mocks.anonymous = false; mocks.role = "member"; mocks.status = "active"; mocks.assurance = null; mocks.ballot.mockResolvedValue(resolutionReviewFixture()); mocks.history.mockResolvedValue([]); });
 describe("review record access", () => {
+  it("does not invent history for a draft whose review never started", async () => {
+    const ballot = resolutionReviewFixture();
+    mocks.ballot.mockResolvedValue({ ...ballot, review: { ...ballot.review, everStarted: false, round: null } });
+    expect((await GET(request(), context)).status).toBe(404);
+    expect(mocks.history).not.toHaveBeenCalled();
+  });
   it.each(["executive-director", "legal-counsel", "board-support"])("denies %s before fetching review content", async (role) => {
     mocks.role = role;
     const response = await GET(request(), context);

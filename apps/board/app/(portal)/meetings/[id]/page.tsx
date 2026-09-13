@@ -77,7 +77,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       id: decision.id, title: decision.title, motion: decision.motion, outcome: decision.outcome,
       yes: decision.yes, no: decision.no, abstain: decision.abstain, recused: decision.recused,
     })),
-    asyncBallots: record.asyncBallots.filter((ballot) => canManageMeetings || ballot.status !== "draft" || (canReadReviews && ballot.review?.round)).map((ballot) => {
+    asyncBallots: record.asyncBallots.filter((ballot) => canManageMeetings || ballot.status !== "draft" || (canReadReviews && ballot.review?.everStarted)).map((ballot) => {
       const votes = record.asyncVotes.filter((vote) => vote.ballotId === ballot.id);
       const viewerVote = votes.find((vote) => vote.voterEmail === member.email);
       const effectiveStatus = boardAsyncBallotEffectiveStatus(ballot, record.meeting);

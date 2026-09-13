@@ -74,7 +74,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         meetingId, expectedVersion, id: ballotId, agendaItemId: text(body.agendaItemId) || null,
         title: text(body.title), motion: text(body.motion), attachments, adoption: validateConsentAdoption(body.adoption, attachments), actorEmail: state.member.email,
         ...(body.review === undefined ? {} : { review: body.review === null ? null : { instructions: text((body.review as Record<string, unknown>).instructions) } }),
-        restartReview: body.restartReview === true,
+        restartReview: body.restartReview === true, reviewCoordinator: accessRecord,
       }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting, ballotId });
     }
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       return json(result);
     }
     if (action === "cancelBallot") {
-      const meeting = await boardMeetingsRepository.cancelAsyncBallot({ meetingId, expectedVersion, ballotId, reason: text(body.reason), actorEmail: state.member.email }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
+      const meeting = await boardMeetingsRepository.cancelAsyncBallot({ meetingId, expectedVersion, ballotId, reason: text(body.reason), actorEmail: state.member.email, reviewCoordinator: accessRecord }, { additionalTransactItems: [accessRecordGuard(accessRecord), ...options.additionalTransactItems] });
       return json({ meeting });
     }
     return json({ error: "Select a valid written-consent action." }, 400);

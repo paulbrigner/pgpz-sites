@@ -7,6 +7,21 @@ import { resolutionReviewRecord, resolutionReviewRecordHtml, resolutionReviewPac
 import { resolutionReviewRecordHash } from "./resolution-review-integrity";
 
 describe("director review records", () => {
+  it("exports superseded reviews without claiming the current materials were reviewed", async () => {
+    const ballot = resolutionReviewFixture();
+    const history = [{ action: "review-submitted", detail: ballot.review!.round }];
+    const record = resolutionReviewRecord({ ...ballot, review: { ...ballot.review!, everStarted: true, round: null } }, history);
+    expect(record.integrityVerified).toBeNull();
+    expect(record.finalizedReviewHash).toBeNull();
+    const html = resolutionReviewRecordHtml(record);
+    expect(html).toContain("Current resolution - not reviewed");
+    expect(html).toContain('class="history" open');
+    expect(html).toContain("PRIVATE_REVIEW");
+    expect(html).not.toContain("0 of 0 ready");
+    const packet = await resolutionReviewPacket(record);
+    expect(packet.mimeType).toBe("application/pdf");
+    expect((await PDFDocument.load(packet.bytes)).getPageCount()).toBeGreaterThan(1);
+  });
   it("labels incomplete reviews honestly and preserves exact sources and escaped assessments", () => {
     const ballot = resolutionReviewFixture();
     const record = resolutionReviewRecord(ballot, []);

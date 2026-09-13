@@ -23,6 +23,17 @@ const openBallot: AsyncBallotView = {
   viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
 describe("AsyncBallots", () => {
+  it.each(["draft", "cancelled"] as const)("keeps retained review downloads available for a %s with invalidated materials", (effectiveStatus) => {
+    const source = resolutionReviewFixture();
+    const ballot: AsyncBallotView = { ...openBallot, id: source.id, title: source.title, effectiveStatus, consent: null, reviewRequired: true, review: { ...source.review!, everStarted: true, round: null, rosterChanged: false, viewerAccessId: "chair" } };
+    render(<AsyncBallots meeting={meeting} ballots={[ballot]} canManage={false} canDiscuss />);
+    expect(screen.getByRole("link", { name: "Download review packet" })).toHaveAttribute("href", expect.stringContaining("review-record?format=pdf"));
+    expect(screen.getByRole("link", { name: "View full review record" })).toBeVisible();
+    expect(screen.queryByText(/0 of 0 reviews ready/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record my review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
+    expect(screen.getByText(effectiveStatus === "cancelled" ? /This resolution was cancelled/ : /The materials changed/)).toBeVisible();
+  });
   it("lets a director record a dated assessment without submitting a consent", async () => {
     vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({}));
     const source = resolutionReviewFixture();
