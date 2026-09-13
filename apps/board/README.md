@@ -157,8 +157,14 @@ or an uploaded signature PDF is unnecessary. Meeting details show separate openi
 and closing dates and times in the meeting timezone; list summaries also include
 the closing date for multi-day windows.
 
-Draft resolution text and document previews are collapsed until opened. The
-editor shows included documents first; **Add documents** opens a searchable,
+Draft resolution text and document previews are collapsed until opened.
+Cancelled resolution cards use neutral shading and a **Cancelled · reference
+only** label, with discussions collapsed by default. Readers can expand the
+retained discussion and open document or consent records; consent counts and
+director statuses are explicitly historical and no participation controls are
+offered for cancelled items.
+
+The editor shows included documents first; **Add documents** opens a searchable,
 scrollable picker. Adding a document defaults to supporting material, and
 searching never removes an existing selection. Older selected versions remain
 explicit until the officer reviews and replaces them. Select **Show earlier

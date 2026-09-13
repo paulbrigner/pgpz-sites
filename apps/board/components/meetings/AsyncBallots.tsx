@@ -56,6 +56,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
     <ol className="mt-5 grid gap-5">
       {ballots.map((ballot) => {
         const consent = ballot.consent;
+        const cancelled = ballot.effectiveStatus === "cancelled";
         const legacy = !ballot.consentMode;
         const current = consent?.viewerReceipt;
         const hasConsent = current?.action === "consent";
@@ -74,15 +75,18 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="intent" required className="mt-1" /><span>I intend to electronically sign and deliver {withdraw ? "this withdrawal" : "my consent to this resolution"}.</span></label>
           <button disabled={pending} className={withdraw ? secondary : button}>{withdraw ? "Sign and deliver withdrawal" : "Sign and deliver consent"}</button>
         </form>;
-        return <li key={ballot.id} id={`ballot-${ballot.id}`} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:p-5">
-          <p className="text-xs font-semibold text-[var(--muted)]">{ballot.effectiveStatus === "draft" && ballot.review?.round ? "Director review in progress · consents not open" : status}</p>
+        return <li key={ballot.id} id={`ballot-${ballot.id}`} className={`min-w-0 rounded-2xl border p-4 sm:p-5 ${cancelled ? "border-stone-300 border-l-4 border-l-stone-400 bg-stone-100" : "border-[var(--border)] bg-[var(--surface-muted)]"}`}>
+          {cancelled ? <>
+            <p className="inline-flex rounded-full border border-stone-300 bg-stone-200 px-3 py-1 text-xs font-semibold text-stone-800">Cancelled · reference only</p>
+            <p className="mt-2 text-sm text-stone-700">Not adopted. Consent collection is closed; this item is retained for reference.</p>
+          </> : <p className="text-xs font-semibold text-[var(--muted)]">{ballot.effectiveStatus === "draft" && ballot.review?.round ? "Director review in progress · consents not open" : status}</p>}
           <h3 className="mt-2 text-lg font-semibold">{ballot.title}</h3>
           <details open={ballot.effectiveStatus !== "draft" || !!ballot.review?.round} className="mt-3">
             <summary className="cursor-pointer text-sm font-semibold">Resolution text and documents{ballot.attachments?.length ? ` (${ballot.attachments.length})` : ""}</summary>
             <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{ballot.motion}</p>
             {!!ballot.attachments?.length && <ul className="mt-3 grid gap-1">{ballot.attachments.map((doc) => <li key={`${doc.documentId}:${doc.versionId}`} className="text-sm"><a className="font-semibold underline" href={`/api/documents/${encodeURIComponent(doc.documentId)}/download?version=${encodeURIComponent(doc.versionId)}&consentMeeting=${encodeURIComponent(meeting.id)}&consentBallot=${encodeURIComponent(ballot.id)}`}>{doc.title} · v{doc.sequence}</a>{doc.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--muted)]">{doc.description}</p>}</li>)}</ul>}
             {ballot.adoption && <div className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 text-sm">
-              <p className="font-semibold">Documents this resolution adopts</p>
+              <p className="font-semibold">{cancelled ? "Proposed document adoption targets" : "Documents this resolution adopts"}</p>
               {ballot.adoption.targets.length ? <ul className="mt-2 grid gap-2">{ballot.adoption.targets.map((target) => {
                 const doc = ballot.attachments?.find((doc) => doc.documentId === target.documentId && doc.versionId === target.versionId);
                 return <li key={target.documentId}>{doc?.title} · v{doc?.sequence}{consent?.adoptedAt && <a className="ml-2 font-semibold underline" href={`/api/meetings/${encodeURIComponent(meeting.id)}/ballots/${encodeURIComponent(ballot.id)}/packet?document=${encodeURIComponent(target.documentId)}`}>Download adoption packet</a>}</li>;
@@ -94,15 +98,15 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           {legacy ? <p className="mt-3 text-sm">This historical ballot is not a signed written consent. Its recorded result is preserved; prepare a new resolution to take action under the unanimous-consent process.</p> : null}
           {legacy && ballot.result && <p className="mt-2 text-sm">Historical result: {ballot.result.outcome} · Yes {ballot.result.yes}, No {ballot.result.no}, Abstain {ballot.result.abstain}, Recused {ballot.result.recused}.</p>}
           {consent && <>
-            <p className="mt-4 text-sm font-semibold">{ballot.ballotsCast} of {ballot.eligibleCount} directors have delivered consent. Every director is required.</p>
+            <p className="mt-4 text-sm font-semibold">{cancelled ? `${ballot.ballotsCast} of ${ballot.eligibleCount} directors had consent on record at cancellation. Collection is closed.` : `${ballot.ballotsCast} of ${ballot.eligibleCount} directors have delivered consent. Every director is required.`}</p>
             {consent.directorStatuses && <section aria-labelledby={`consent-status-${ballot.id}`} className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 sm:p-4">
-              <h4 id={`consent-status-${ballot.id}`} className="text-sm font-semibold">Director consent status</h4>
-              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">Visible to directors. “Not yet consented” means no consent has been delivered; it does not indicate opposition. Times shown in {meeting.timeZone}.</p>
+              <h4 id={`consent-status-${ballot.id}`} className="text-sm font-semibold">{cancelled ? "Director consent status at cancellation" : "Director consent status"}</h4>
+              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{cancelled ? "Historical record, visible to directors. No further consents can be delivered to this cancelled item." : "Visible to directors. “Not yet consented” means no consent has been delivered; it does not indicate opposition."} Times shown in {meeting.timeZone}.</p>
               <ul className="mt-2 divide-y divide-[var(--border)]">
                 {consent.directorStatuses.map((person) => <li key={person.userId} className="grid gap-1 py-2.5 text-sm sm:grid-cols-2 sm:gap-4">
                   <span className="min-w-0 break-words font-medium">{person.name}</span>
                   <div className="min-w-0">
-                    <p className="font-semibold">{person.status === "consented" ? "Consented" : person.status === "withdrawn" ? "Withdrawn" : "Not yet consented"}</p>
+                    <p className="font-semibold">{person.status === "consented" ? "Consented" : person.status === "withdrawn" ? "Withdrawn" : cancelled ? "No consent recorded" : "Not yet consented"}</p>
                     {person.receivedAt && <p className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{person.status === "withdrawn" ? "Withdrawal received" : "Consent received"} <time dateTime={person.receivedAt}>{new Date(person.receivedAt).toLocaleString("en-US", { timeZone: meeting.timeZone, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</time></p>}
                   </div>
                 </li>)}
@@ -113,15 +117,18 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
               <p className="mt-2 break-all text-xs">Resolution SHA-256: {consent.contentHash}</p>
               <p className="mt-2">Collection: {new Date(consent.startAt).toLocaleString()} – {new Date(consent.endAt).toLocaleString()}</p>
             </details>
-            {consent.rosterChanged && ballot.effectiveStatus !== "closed" && <p className="mt-3 text-sm font-semibold text-amber-900">The director roster changed. Further consents are paused. The Chair must prepare a new collection after verifying the full board.</p>}
+            {consent.rosterChanged && ballot.effectiveStatus !== "closed" && !cancelled && <p className="mt-3 text-sm font-semibold text-amber-900">The director roster changed. Further consents are paused. The Chair must prepare a new collection after verifying the full board.</p>}
             {current && <p className="mt-3 text-sm">Your signed {hasConsent ? "consent" : "withdrawal"} was received {new Date(current.receivedAt).toLocaleString()}. Receipt: <span className="break-all">{current.id}</span>.</p>}
             {consent.adoptedAt && <p className="mt-2 text-sm font-semibold">Adopted {new Date(consent.adoptedAt).toLocaleString()} when the final required consent was received.</p>}
             <a className="mt-3 inline-block text-sm font-semibold underline" href={`/api/meetings/${encodeURIComponent(meeting.id)}/ballots/${encodeURIComponent(ballot.id)}/record`} target="_blank" rel="noreferrer">View / print consent record</a>
             {ballot.viewerEligible && active && ballot.effectiveStatus === "open" && !hasConsent && !consent.rosterChanged && signatureForm(false)}
             {ballot.viewerEligible && active && hasConsent && ["open", "awaiting-finalization", "scheduled"].includes(ballot.effectiveStatus) && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold">Withdraw my consent before adoption</summary>{signatureForm(true)}</details>}
           </>}
-          {ballot.effectiveStatus !== "draft" && <div className="mt-4"><BallotDiscussion meetingId={meeting.id} ballot={ballot} canDiscuss={canDiscuss && !legacy && active} timeZone={meeting.timeZone} /></div>}
-          {canManageBallot && active && <div className="mt-4 grid gap-3 border-t border-[var(--border)] pt-3">
+          {ballot.effectiveStatus !== "draft" && (cancelled ? <details className="mt-4 rounded-xl border border-stone-300 bg-white/60 p-3">
+            <summary className="cursor-pointer rounded text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--focus)]">Discussion ({ballot.discussionMessages.length}) · reference only</summary>
+            <BallotDiscussion meetingId={meeting.id} ballot={ballot} canDiscuss={false} timeZone={meeting.timeZone} />
+          </details> : <div className="mt-4"><BallotDiscussion meetingId={meeting.id} ballot={ballot} canDiscuss={canDiscuss && !legacy && active} timeZone={meeting.timeZone} /></div>)}
+          {canManageBallot && active && !cancelled && <div className="mt-4 grid gap-3 border-t border-[var(--border)] pt-3">
             {ballot.effectiveStatus === "draft" && !legacy && <>
               <details><summary className="cursor-pointer text-sm font-semibold">Edit draft resolution</summary>{draftForm(ballot)}</details>
               {needsReviewStart && meeting.status !== "draft" && <form className="grid gap-3" onSubmit={(event) => {
