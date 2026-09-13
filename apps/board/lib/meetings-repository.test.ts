@@ -76,6 +76,102 @@ function newMeeting(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function reviewFixture() {
+  const client = fakeClient(), repo = createBoardMeetingsRepository(client, "Meetings");
+  let meeting = await repo.createMeeting(newMeeting({ format: "asynchronous", endAt: "2026-09-16T21:00:00Z" }));
+  meeting = await repo.changeStatus({ id: meeting.id, expectedVersion: meeting.version, status: "scheduled", actorEmail: "chair@pgpz.org" });
+  const voters = Array.from({ length: 5 }, (_, i) => ({ userId: `director-${i}`, name: `Director ${i}`, email: `director${i}@example.org` }));
+  const roster = rosterFor(client, voters);
+  const access = (i: number) => client.items.get(`ACCESS#director-${i}#PROFILE`) as unknown as BoardAccessRecord;
+  client.items.set("ACCESS#director-0#PROFILE", { ...access(0), role: "chair" });
+  const get = async () => (await repo.getMeeting(meeting.id))!;
+  const draft = { meetingId: meeting.id, id: "review-ballot", title: "Approve employment", motion: "Adopt the attached revised employment resolution.", attachments: [{ documentId: "employment", versionId: "v2", sequence: 2, title: "Employment resolution", fileName: "employment.pdf", sha256: "b".repeat(64) }], adoption: { targets: [{ documentId: "employment", versionId: "v2" }], effectiveTerms: "Upon adoption" }, review: { instructions: "Review compensation, conflicts, initial services and the outside-client exception." }, actorEmail: voters[0].email, occurredAt: "2026-09-09T13:00:00Z" };
+  await repo.upsertAsyncBallot({ ...draft, expectedVersion: meeting.version });
+  const start = async () => repo.startResolutionReview({ meetingId: meeting.id, expectedVersion: (await get()).meeting.version, ballotId: draft.id, roster, rosterConfirmed: true, accessRecord: access(0), occurredAt: "2026-09-09T14:00:00Z" });
+  const submit = async (i: number, extra: Partial<Parameters<typeof repo.submitResolutionReview>[0]> = {}) => {
+    const current = await get(), round = current.asyncBallots[0].review!.round!;
+    return repo.submitResolutionReview({ meetingId: meeting.id, expectedVersion: current.meeting.version, ballotId: draft.id, roundId: round.id, contentHash: round.contentHash, roster, accessRecord: access(i), authenticatedUserId: `auth-${i}`, reviewedOn: "2026-09-09", outcome: "ready", conflict: "none", assessment: `Director ${i} reviewed the sources and considers the compensation reasonable for the duties and available resources.`, attested: true, occurredAt: "2026-09-09T15:00:00Z", ...extra });
+  };
+  const open = async (extra: Partial<Parameters<typeof repo.openAsyncBallot>[0]> = {}) => repo.openAsyncBallot({ meetingId: meeting.id, expectedVersion: (await get()).meeting.version, ballotId: draft.id, roster, rosterConfirmed: true, eligibleVoters: voters, actorEmail: voters[0].email, reviewCoordinator: access(0), reviewRecordConfirmed: true, reviewFindings: "The directors completed the requested reviews and the proposed terms reflect their documented findings.", occurredAt: "2026-09-10T20:00:00Z", ...extra });
+  return { client, repo, meeting, draft, roster, voters, access, get, start, submit, open };
+}
+
+describe("required resolution reviews", () => {
+  it("blocks opening until every director is ready, then binds the review record to schema 4 without adopting early", async () => {
+    const f = await reviewFixture();
+    await expect(f.open()).rejects.toThrow(/Start or restart review/);
+    await f.start();
+    for (let i = 0; i < 4; i++) await f.submit(i);
+    await expect(f.open()).rejects.toThrow(/Every director must complete/);
+    expect((await f.get()).asyncBallots[0].status).toBe("draft");
+    await f.submit(4);
+    await expect(f.open({ reviewRecordConfirmed: false })).rejects.toThrow(/Confirm that the review record/);
+    await expect(f.open({ reviewFindings: "" })).rejects.toThrow(/Findings presented for adoption/);
+    await f.open();
+    const ballot = (await f.get()).asyncBallots[0];
+    expect(ballot.consent?.schema).toBe(4);
+    expect(ballot.consent?.receipts).toEqual([]);
+    expect(ballot.status).toBe("open");
+    expect(consentDigest(consentPayload(ballot, ballot.consent!))).toBe(ballot.consent!.contentHash);
+    const changed = { ...ballot, review: { ...ballot.review!, round: { ...ballot.review!.round!, finalization: { ...ballot.review!.round!.finalization!, findings: "Altered after opening" } } } };
+    expect(consentDigest(consentPayload(changed, ballot.consent!))).not.toBe(ballot.consent!.contentHash);
+    await expect(f.submit(0)).rejects.toThrow(/Reviews cannot change/);
+    for (let i = 0; i < 5; i++) {
+      const current = await f.get();
+      await f.repo.signAsyncConsent({ meetingId: f.meeting.id, expectedVersion: current.meeting.version, ballotId: f.draft.id, contentHash: ballot.consent!.contentHash, action: "consent", signatureName: f.voters[i].name, intent: true, accessRecord: f.access(i), authenticatedUserId: `auth-${i}`, roster: f.roster, occurredAt: "2026-09-10T20:10:00Z" });
+    }
+    expect((await f.get()).asyncBallots[0].status).toBe("closed");
+    expect(await f.repo.listDocumentAdoptions("employment")).toHaveLength(1);
+    const events = await f.repo.listResolutionReviewEvents(f.meeting.id, f.draft.id);
+    expect(events.filter((event) => event.action === "review-submitted")).toHaveLength(5);
+    expect(events.some((event) => event.action === "review-finalized")).toBe(true);
+  });
+
+  it("preserves corrections and prevents unresolved conflicts or follow-up requests from opening consent", async () => {
+    const f = await reviewFixture(); await f.start();
+    for (let i = 0; i < 5; i++) await f.submit(i);
+    await f.submit(1, { conflict: "needs-attention" });
+    await expect(f.open()).rejects.toThrow(/Every director must complete/);
+    await f.submit(1, { outcome: "needs-attention" });
+    await expect(f.open()).rejects.toThrow(/Every director must complete/);
+    await f.submit(1); await f.open();
+    expect((await f.repo.listResolutionReviewEvents(f.meeting.id, f.draft.id)).filter((event) => event.action === "review-submitted")).toHaveLength(8);
+  });
+
+  it("requires fresh review after material edits or roster changes and never drops the review requirement", async () => {
+    const f = await reviewFixture(); await f.start(); await f.submit(0);
+    const originalRound = (await f.get()).asyncBallots[0].review!.round!.id;
+    await expect(f.repo.upsertAsyncBallot({ ...f.draft, expectedVersion: (await f.get()).meeting.version, review: null })).rejects.toThrow(/cannot be removed/);
+    await expect(f.repo.upsertAsyncBallot({ ...f.draft, expectedVersion: (await f.get()).meeting.version, motion: "Changed terms" })).rejects.toThrow(/restarting every director/);
+    await f.repo.upsertAsyncBallot({ ...f.draft, expectedVersion: (await f.get()).meeting.version, motion: "Changed terms", restartReview: true });
+    expect((await f.get()).asyncBallots[0].review).toMatchObject({ everStarted: true, round: null });
+    await expect(f.open()).rejects.toThrow(/Start or restart/);
+    await f.start();
+    expect((await f.get()).asyncBallots[0].review!.round!.id).not.toBe(originalRound);
+    await expect(f.submit(0, { roundId: originalRound })).rejects.toThrow(/materials changed/);
+    const changedRoster = { ...f.roster, revision: "roster-2" };
+    await expect(f.submit(0, { roster: changedRoster })).rejects.toThrow(/roster changed/);
+    await expect(f.open({ roster: changedRoster })).rejects.toThrow(/Start or restart/);
+    expect((await f.repo.listResolutionReviewEvents(f.meeting.id, f.draft.id)).some((event) => event.action === "review-invalidated")).toBe(true);
+  });
+
+  it("checks actor, exact materials, dates, explicit attestation and optimistic concurrency", async () => {
+    const f = await reviewFixture(); await f.start();
+    await expect(f.submit(0, { accessRecord: { ...f.access(0), role: "executive-director" } })).rejects.toThrow(/active director/);
+    await expect(f.submit(0, { accessRecord: { ...f.access(0), status: "deactivated" } })).rejects.toThrow(/active director/);
+    await expect(f.submit(0, { accessRecord: { ...f.access(0), id: "someone-else" } })).rejects.toThrow(/not on/);
+    await expect(f.submit(0, { contentHash: "forged" })).rejects.toThrow(/materials changed/);
+    await expect(f.submit(0, { reviewedOn: "2099-01-01" })).rejects.toThrow(/future/);
+    await expect(f.submit(0, { reviewedOn: "2026-02-30" })).rejects.toThrow(/actual completed review date/);
+    await expect(f.submit(0, { attested: false })).rejects.toThrow(/attest/);
+    await expect(f.submit(0, { assessment: "" })).rejects.toThrow(/assessment/);
+    await expect(f.submit(0, { expectedVersion: 1 })).rejects.toBeInstanceOf(BoardMeetingVersionConflictError);
+    const revoked = { ...f.access(0), version: 2 };
+    await expect(f.submit(0, { accessRecord: revoked })).rejects.toBeInstanceOf(BoardMeetingVersionConflictError);
+    expect((await f.get()).asyncBallots[0].review!.round!.submissions).toHaveLength(0);
+  });
+});
+
 describe("Board meetings repository", () => {
   it("signs attachment descriptions and records adoption after all five schema 3 consents", async () => {
     const { repo, meeting, sign } = await consentFixture(true, "Clean version for approval");

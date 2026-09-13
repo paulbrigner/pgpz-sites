@@ -8,11 +8,12 @@ const secondary = "rounded-full border border-[var(--border-strong)] bg-white px
 type DocumentChoice = NonNullable<MeetingDetailView["consentDocumentChoices"]>[number];
 type Selection = { document: DocumentChoice; treatment: "support" | "adopt" };
 
-export function ResolutionDraftForm({ ballot, documentChoices, pending, onSave }: {
+export function ResolutionDraftForm({ ballot, documentChoices, pending, onSave, canCoordinateReviews = false }: {
   ballot?: AsyncBallotView;
   documentChoices: NonNullable<MeetingDetailView["consentDocumentChoices"]>;
   pending: boolean;
   onSave: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
+  canCoordinateReviews?: boolean;
 }) {
   const [selected, setSelected] = useState<Selection[]>(() => (ballot?.attachments || []).map((document) => ({
     document,
@@ -22,6 +23,7 @@ export function ResolutionDraftForm({ ballot, documentChoices, pending, onSave }
   const [showEarlier, setShowEarlier] = useState(false);
   const [search, setSearch] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [reviewRequired, setReviewRequired] = useState(!!ballot?.reviewRequired);
   const pickerId = useId();
   const addButton = useRef<HTMLButtonElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -39,11 +41,19 @@ export function ResolutionDraftForm({ ballot, documentChoices, pending, onSave }
   return <form onSubmit={async (event) => {
     const form = event.currentTarget;
     if (await onSave(event) && !ballot) {
-      form.reset(); setSelected([]); setAdding(false); setSearch(""); setAnnouncement("");
+      form.reset(); setSelected([]); setAdding(false); setSearch(""); setAnnouncement(""); setReviewRequired(false);
     }
   }} className="mt-3 grid gap-4">
     <label className="text-sm font-semibold">Resolution title<input name="title" required maxLength={200} defaultValue={ballot?.title} className={field} /></label>
     <label className="text-sm font-semibold">Exact resolution text<textarea name="motion" required maxLength={16000} rows={6} defaultValue={ballot?.motion} className={field} /></label>
+    {canCoordinateReviews && <fieldset className="rounded-xl border border-[var(--border)] bg-white p-3">
+      <legend className="px-1 text-sm font-semibold">Review before consent</legend>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={reviewRequired} disabled={!!ballot?.review?.everStarted} onChange={(event) => setReviewRequired(event.target.checked)} /><span>Require each director to complete a recorded review before consent collection opens.</span></label>
+      <input type="hidden" name="reviewRequired" value={reviewRequired ? "true" : "false"} />
+      {reviewRequired && <label className="mt-3 block text-sm font-semibold">Review instructions<textarea name="reviewInstructions" required maxLength={4000} rows={4} defaultValue={ballot?.review?.instructions} className={field} placeholder="Identify the materials, conflict checks, and assessment each director should complete." /></label>}
+      {ballot?.review?.round && <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" name="restartReview" className="mt-1" /><span>If I change the text, document versions or instructions, restart every director&apos;s review. Previous assessments remain retained.</span></label>}
+      <p className="mt-2 text-xs text-[var(--muted)]">After saving, start review and confirm the full director roster. A review is separate from a signed consent. A started review requirement cannot be removed from this resolution.</p>
+    </fieldset>}
     <fieldset className="min-w-0 rounded-xl border border-[var(--border)] bg-white p-3 sm:p-4">
       <legend className="px-1 text-sm font-semibold">Included documents ({selected.length})</legend>
       <p className="text-xs leading-5 text-[var(--muted)]">You can include multiple versions of the same document, but adopt only one version. Supporting documents provide context. Choose “Adopt this document” only when the resolution expressly adopts that version.</p>

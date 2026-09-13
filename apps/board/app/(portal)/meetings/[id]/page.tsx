@@ -36,6 +36,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   const candidates = accessRecord?.status === "active" && canCreateExecutiveSession(accessRecord.role) &&
     ["scheduled", "materials-published"].includes(record.meeting.status)
     ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
+  const canReadReviews = accessRecord?.status === "active" && isDirectorRole(accessRecord.role);
 
   const consentDocuments = canManageMeetings && record.meeting.format === "asynchronous"
     ? [...new Map([...libraryDocuments, ...meetingDocuments.filter((doc) => doc.status === "active")].map((doc) => [doc.documentId, doc])).values()] : [];
@@ -48,6 +49,7 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
   }))).flat();
 
   const detail: MeetingDetailView = {
+    canCoordinateReviews: accessRecord?.status === "active" && ["chair", "admin"].includes(accessRecord.role),
     directorRoster: canManageMeetings ? directorRoster : null,
     consentDocumentChoices,
     meeting: {
@@ -75,13 +77,20 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
       id: decision.id, title: decision.title, motion: decision.motion, outcome: decision.outcome,
       yes: decision.yes, no: decision.no, abstain: decision.abstain, recused: decision.recused,
     })),
-    asyncBallots: record.asyncBallots.filter((ballot) => canManageMeetings || ballot.status !== "draft").map((ballot) => {
+    asyncBallots: record.asyncBallots.filter((ballot) => canManageMeetings || ballot.status !== "draft" || (canReadReviews && ballot.review?.round)).map((ballot) => {
       const votes = record.asyncVotes.filter((vote) => vote.ballotId === ballot.id);
       const viewerVote = votes.find((vote) => vote.voterEmail === member.email);
       const effectiveStatus = boardAsyncBallotEffectiveStatus(ballot, record.meeting);
       return {
+        reviewRequired: !!ballot.review,
+        ...(canReadReviews && ballot.review ? { review: {
+          instructions: ballot.review.instructions, everStarted: ballot.review.everStarted,
+          round: ballot.review.round ? { ...ballot.review.round, submissions: ballot.review.round.submissions.map(({ authenticatedUserId: _userId, ...entry }) => { void _userId; return entry; }) } : null,
+          rosterChanged: ballot.status === "draft" && !!ballot.review.round && ballot.review.round.rosterRevision !== directorRoster?.revision,
+          viewerAccessId: accessRecord!.id,
+        } } : {}),
         consentMode: ballot.consentMode,
-        attachments: ballot.attachments?.map(({ description, ...doc }) => ({ ...doc, ...(!ballot.consent || ballot.consent.schema === 3 ? (description ? { description } : {}) : {}) })),
+        attachments: ballot.attachments?.map(({ description, ...doc }) => ({ ...doc, ...(!ballot.consent || ballot.consent.schema >= 3 ? (description ? { description } : {}) : {}) })),
         adoption: ballot.consent && ballot.consent.schema === 1 ? undefined : ballot.adoption,
         consent: ballot.consent ? {
           contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,

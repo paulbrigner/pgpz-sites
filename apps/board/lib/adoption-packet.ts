@@ -83,6 +83,10 @@ export async function buildAdoptionPacket(input: {
       paragraph("This appendix reproduces the existing electronic consents. It is not a new signature or a Secretary certification. The original file and complete consent record are embedded as attachments; the retained original remains authoritative.");
       paragraph(`Original SHA-256: ${hash}\nDocument: ${documentId}\nVersion: ${version.versionId}\nResolution: ${ballot.id}\nWorkspace: ${ballot.meetingId}\nResolution SHA-256: ${record.contentHash}`);
       paragraph("Exact resolution", true); paragraph(record.resolution);
+      if (record.reviewRecord) {
+        paragraph("Associated director review record", true);
+        paragraph(`Review round: ${record.reviewRecord.roundId}\nReview record SHA-256: ${record.reviewRecord.sha256}\nThe finalized review record is bound to these consents. Its detailed assessments remain available only to active directors through the Board portal.`);
+      }
       paragraph("Document adoption targets", true);
       for (const ref of record.adoption!.targets) paragraph(`${record.attachments.find((doc) => doc.documentId === ref.documentId)?.title || ref.documentId}\nDocument ${ref.documentId}, version ${ref.versionId}`);
       paragraph("All incorporated document versions", true);

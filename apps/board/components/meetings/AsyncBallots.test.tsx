@@ -5,6 +5,7 @@ import { AsyncBallots } from "./AsyncBallots";
 import type { AsyncBallotView, MeetingSummaryView } from "./types";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT } from "@/lib/written-consents";
+import { resolutionReviewFixture } from "@/lib/test-support/resolution-review";
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/step-up-client", () => ({ fetchWithBoardStepUp: vi.fn() }));
@@ -22,6 +23,45 @@ const openBallot: AsyncBallotView = {
   viewerEligible: true, viewerChoice: null, discussionMessages: [], result: null,
 };
 describe("AsyncBallots", () => {
+  it("lets a director record a dated assessment without submitting a consent", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({}));
+    const source = resolutionReviewFixture();
+    const ballot: AsyncBallotView = { ...openBallot, id: source.id, title: source.title, effectiveStatus: "draft", consent: null, reviewRequired: true, review: { ...source.review!, rosterChanged: false, viewerAccessId: "chair" } };
+    render(<AsyncBallots meeting={{ ...meeting, endAt: "2099-01-01T00:00:00Z" }} ballots={[ballot]} canManage={false} canDiscuss />);
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Date you completed this review"), { target: { value: "2026-09-09" } });
+    fireEvent.change(screen.getByLabelText("Conflict review"), { target: { value: "none" } });
+    fireEvent.change(screen.getByLabelText("Review outcome"), { target: { value: "ready" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Your assessment and basis/ }), { target: { value: "I reviewed the duties and evidence and find these terms reasonable." } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /This review is not consent/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Record my review" }));
+    await waitFor(() => expect(fetchWithBoardStepUp).toHaveBeenCalled());
+    const body = JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string);
+    expect(body).toMatchObject({ action: "submitReview", roundId: "round-1", reviewedOn: "2026-09-09", attested: true, conflict: "none", outcome: "ready" });
+    expect(body).not.toHaveProperty("signatureName");
+  });
+  it("blocks consent opening until review is complete and keeps the Chair's findings distinct from adoption", () => {
+    const source = resolutionReviewFixture(), roster = { revision: "r1", ready: true, directors: source.review!.round!.reviewers.map((p) => ({ ...p, status: "active" })) };
+    const ballot: AsyncBallotView = { ...openBallot, id: source.id, title: source.title, effectiveStatus: "draft", consent: null, reviewRequired: true, review: { ...source.review!, rosterChanged: false, viewerAccessId: "chair" } };
+    const { rerender } = render(<AsyncBallots meeting={meeting} ballots={[ballot]} canManage canCoordinateReviews canDiscuss directorRoster={roster} />);
+    expect(screen.getByRole("button", { name: "Open consent collection" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: /Findings presented for adoption/ })).toBeRequired();
+    const complete = resolutionReviewFixture(true);
+    rerender(<AsyncBallots meeting={meeting} ballots={[{ ...ballot, review: { ...complete.review!, rosterChanged: false, viewerAccessId: "chair" } }]} canManage canCoordinateReviews canDiscuss directorRoster={roster} />);
+    expect(screen.getByRole("button", { name: "Open consent collection" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /I have assembled the required review evidence/ })).toBeRequired();
+    expect(screen.queryByText("Adopted by unanimous written consent")).not.toBeInTheDocument();
+  });
+  it("offers review start before consent and keeps reviewed resolutions out of staff management controls", () => {
+    const source = resolutionReviewFixture(), roster = { revision: "r1", ready: true, directors: source.review!.round!.reviewers.map((p) => ({ ...p, status: "active" })) };
+    const ballot: AsyncBallotView = { ...openBallot, effectiveStatus: "draft", consent: null, reviewRequired: true, review: { ...source.review!, everStarted: false, round: null, rosterChanged: false, viewerAccessId: "chair" } };
+    const { rerender } = render(<AsyncBallots meeting={meeting} ballots={[ballot]} canManage canCoordinateReviews canDiscuss directorRoster={roster} />);
+    expect(screen.getByRole("button", { name: "Start director review" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Open consent collection" })).not.toBeInTheDocument();
+    rerender(<AsyncBallots meeting={meeting} ballots={[{ ...ballot, review: undefined }]} canManage canDiscuss directorRoster={roster} />);
+    expect(screen.queryByText("Edit draft resolution")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cancel collection without adoption")).not.toBeInTheDocument();
+  });
   it("shows named consent, pending, and withdrawal states with delivery times in the meeting time zone", () => {
     const ballot = { ...openBallot, consent: { ...openBallot.consent!, directorStatuses: [
       { userId: "a", name: "Alex Director", status: "consented" as const, receivedAt: "2026-09-11T14:30:00Z" },

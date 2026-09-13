@@ -10,6 +10,9 @@ import { BOARD_DOCUMENTS_RETAINED_BUCKET } from "@/lib/config";
 import { requireBoardPasskeySession } from "@/lib/api-security";
 import { boardDocumentObjectStore, isLocalBoardDocumentStorageEnabled } from "@/lib/object-store";
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
+import { boardAccessRepository } from "@/lib/board-access-repository";
+import { isVotingDirector } from "@/lib/director-roster";
+import { resolutionReviewHash } from "@/lib/resolution-review-integrity";
 
 export const runtime = "nodejs";
 
@@ -26,14 +29,21 @@ export async function GET(request: NextRequest, context: Params) {
   const requestedVersion = request.nextUrl.searchParams.get("version");
 
   const item = await boardDocumentRepository.getDocument(id);
-  // An incorporated version remains accessible as part of its consent record
-  // even if the library head is archived after circulation or adoption.
+  // An exact version remains available to its reviewers even if the library
+  // head is archived. Existing consent-record access remains unchanged.
   let incorporatedVersion = false;
   const consentMeeting = request.nextUrl.searchParams.get("consentMeeting");
   const consentBallot = request.nextUrl.searchParams.get("consentBallot");
   if (item?.status === "archived" && requestedVersion && consentMeeting && consentBallot) {
     const ballot = await boardMeetingsRepository.getAsyncBallot(consentMeeting, consentBallot);
     incorporatedVersion = Boolean(ballot?.consent && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion));
+    const round = ballot?.review?.round;
+    if (!incorporatedVersion && ballot && round && ballot.attachments?.some((ref) => ref.documentId === id && ref.versionId === requestedVersion)) {
+      const access = await boardAccessRepository.getByEmail(member.email);
+      incorporatedVersion = Boolean(access?.status === "active" && isVotingDirector(access.role)
+        && round.reviewers.some((reviewer) => reviewer.userId === access.id)
+        && round.contentHash === resolutionReviewHash(ballot, round.reviewers, round.rosterRevision));
+    }
   }
   if (!item || (item.status === "archived" && !canManageBoardDocuments(member) && !incorporatedVersion)) {
     return new Response(null, { status: 404 });

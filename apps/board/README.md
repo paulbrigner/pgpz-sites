@@ -175,7 +175,8 @@ because they were attached. Effective-date/condition text must agree with the
 resolution and is fixed and signed with it. The portal does not determine that
 an implementation condition has been fulfilled. New records use consent payload
 schema 2, or schema 3 when attachment descriptions are present. Schema 3 binds
-those descriptions to the signed digest. Already opened schema 1 and 2 consents
+those descriptions to the signed digest. Required-review resolutions use schema 4,
+which also binds the finalized director review record. Already opened schema 1 and 2 consents
 retain their original digest; unsigned descriptions are omitted from their
 views and exports. Schema 1 consents remain signable; they
 do not retroactively classify attachments as adopted.
@@ -279,6 +280,59 @@ Important mutations compose the meeting write with the Board hash-chained audit
 append in one DynamoDB transaction. The table is KMS-encrypted, PITR-enabled,
 deletion-protected, `Retain`-protected, has no TTL, and gives web compute no
 `DeleteItem` or `Scan` permission.
+
+### Required review before consent
+
+The Chair may enable **Review before consent** on a draft written resolution,
+enter the required due-diligence instructions, and select **Start director
+review** after confirming the complete active director roster. Directors can
+then view this draft and record their own review before the consent window
+opens. Ordinary drafts remain hidden from non-managers until review starts.
+This feature belongs only to Board; it shares no membership or records with
+other apps.
+
+Each authenticated director records an actual review date, a conflict/recusal
+assessment, readiness or a request for follow-up, a brief supporting assessment,
+and an explicit review attestation. The server supplies attribution and the
+recorded-at time. These are review records, never votes or consents. A director
+can update their own review before consent collection opens; every prior
+submission and review round remains immutable. The Chair cannot complete a
+review for another director. A pending review does not indicate opposition.
+
+Detailed assessments and HTML/JSON/PDF review exports are restricted to current
+active directors. The server omits them from staff and counsel page payloads,
+and export authorization checks current registry status before reading review
+content. Use the existing Executive Session boundary when conflicts or
+compensation deliberations require a narrower participant group. This general
+review feature cannot exclude a director or settle a conflict of interest.
+
+For a required-review resolution, only the Chair can edit, start/restart review,
+cancel, or open consent collection. Every director must record readiness with
+no unresolved conflict flag. Changes to the reviewed resolution text, attachment
+versions/descriptions, adoption targets, effective terms, or instructions require
+an explicit restart and fresh reviews. A roster change also requires a restart.
+Once started, the review requirement cannot be removed from that resolution.
+
+Before opening consents, the Chair records findings presented for adoption and
+confirms that the supporting review evidence, final terms, outstanding issues,
+and timing requirements have been addressed. The server checks the exact
+reviewed materials and current roster again. It freezes the review record and
+binds its digest to schema 4 consent signatures. All signatures are still
+required for adoption; review completion or the Chair's finalization never
+adopts an action. The app records the declarations supplied, not a legal
+conclusion that due diligence or a tax presumption has been established.
+
+**Download review packet** provides a PDF containing the current round and
+embedded full HTML/JSON history. Unsupported typography falls back to a ZIP of
+UTF-8 HTML/JSON without substituting text; browser Print can produce a PDF.
+The ordinary consent/adoption export includes only the review digest, keeping
+the detailed review record restricted to directors.
+
+Existing open or adopted items cannot acquire this review stage retroactively.
+For an unadopted item needing revised terms, retain/cancel the original and
+prepare a new required-review resolution. New review/consent collections must
+open before the workspace deadline. Existing consent schemas 1-3 and their
+signed bytes remain supported. See the [release safeguards](../../docs/board-deployment.md#required-resolution-review-release).
 
 ### Restricted executive sessions
 

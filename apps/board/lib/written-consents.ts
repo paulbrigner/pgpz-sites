@@ -2,6 +2,7 @@
  * new schema version; opened records retain the exact declaration they used. */
 export const CONSENT_STATEMENT = "I have reviewed this resolution and its identified document versions. I approve the action described, intend my typed name and authenticated submission to be my electronic signature, and deliver this signed consent to Pretty Good Policy for Zcash through its Board portal.";
 export const WITHDRAWAL_STATEMENT = "I withdraw my consent to this resolution. I intend my typed name and authenticated submission to be my electronic signature and deliver this signed revocation to Pretty Good Policy for Zcash through its Board portal.";
+export const REVIEWED_CONSENT_STATEMENT = "I have reviewed this resolution, its identified document versions, and the associated finalized review record. I approve the action described, intend my typed name and authenticated submission to be my electronic signature, and deliver this signed consent to Pretty Good Policy for Zcash through its Board portal.";
 export const ROSTER_CONFIRMATION = "I confirm that the listed directors are every director currently in office, and that this action is permitted without a meeting under the applicable articles, bylaws, and law. Any conflict or recusal requiring a different approval procedure has been resolved before collection.";
 
 export interface ConsentAttachment {
@@ -53,7 +54,7 @@ export interface ConsentReceipt {
   supersedesReceiptId: string | null;
 }
 export interface WrittenConsent {
-  schema: 1 | 2 | 3;
+  schema: 1 | 2 | 3 | 4;
   contentHash: string;
   rosterRevision: string;
   rosterConfirmation: string;
