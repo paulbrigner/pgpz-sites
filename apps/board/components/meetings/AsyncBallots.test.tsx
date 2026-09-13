@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderComponent, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AsyncBallots } from "./AsyncBallots";
@@ -6,6 +6,16 @@ import type { AsyncBallotView, MeetingSummaryView } from "./types";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
 import { CONSENT_STATEMENT, WITHDRAWAL_STATEMENT } from "@/lib/written-consents";
 import { resolutionReviewFixture } from "@/lib/test-support/resolution-review";
+// Existing action tests explicitly open the item before exercising its retained controls.
+function render(ui: React.ReactElement) {
+  const result = renderComponent(ui);
+  const expand = screen.queryByRole("button", { name: "Expand shown items" });
+  if (expand) fireEvent.click(expand);
+  for (const summary of result.container.querySelectorAll("summary")) {
+    if (["Resolution management", "See each director’s consent status"].includes(summary.textContent || "")) fireEvent.click(summary);
+  }
+  return result;
+}
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/step-up-client", () => ({ fetchWithBoardStepUp: vi.fn() }));
@@ -201,7 +211,7 @@ describe("AsyncBallots", () => {
   it("does not expose majority finalization or signature controls on expired or legacy ballots", () => {
     render(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "awaiting-finalization" }, { ...openBallot, id: "legacy", consentMode: undefined, consent: null }]} canManage canDiscuss />);
     expect(screen.queryByRole("button", { name: /Finalize|Sign and deliver consent/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Collection ended · not adopted")).toBeVisible();
+    expect(screen.getByText(/Collection ended · not adopted/)).toBeVisible();
     expect(screen.getByText(/historical ballot is not a signed written consent/)).toBeVisible();
   });
   it("blocks consent when the roster changed and presents withdrawal only before adoption", () => {
@@ -212,5 +222,56 @@ describe("AsyncBallots", () => {
     expect(screen.getByText("Withdraw my consent before adoption")).toBeVisible();
     rerender(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, effectiveStatus: "closed", consent: { ...openBallot.consent!, viewerReceipt: receipt, adoptedAt: receipt.receivedAt } }]} canManage={false} canDiscuss />);
     expect(screen.queryByText("Withdraw my consent before adoption")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("Resolution checklist navigation", () => {
+  const ownReceipt = { id: "receipt", meetingId: "meeting-1", ballotId: "signed", contentHash: "fixed-hash", accessId: "d1", authenticatedUserId: "auth1", email: "director@example.invalid", name: "Director", signatureName: "Director", action: "consent" as const, statement: CONSENT_STATEMENT, receivedAt: "2026-09-10T14:00:00Z", supersedesReceiptId: null };
+  const signed = { ...openBallot, id: "signed", title: "Already reviewed policy", consent: { ...openBallot.consent!, viewerReceipt: ownReceipt } };
+  const cancelled = { ...openBallot, id: "cancelled", title: "Superseded employment resolution", effectiveStatus: "cancelled" as const };
+  it("starts collapsed with personal status and filters completed and cancelled items out of the to-do list", () => {
+    renderComponent(<AsyncBallots meeting={meeting} ballots={[openBallot, signed, cancelled]} canManage={false} canDiscuss />);
+    expect(screen.getByText("1 item needs your attention")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Approve policy/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
+    expect(screen.getByText("Your consent delivered")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Needs my attention (1)" }));
+    expect(screen.getByRole("button", { name: /Approve policy/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Already reviewed policy|Superseded employment/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reference (1)" }));
+    expect(screen.getByRole("button", { name: /Superseded employment/ })).toHaveTextContent("Cancelled · reference only");
+    expect(fetchWithBoardStepUp).not.toHaveBeenCalled();
+  });
+  it("retains an unfinished signature when collapsed or filtered, and never signs through navigation", () => {
+    renderComponent(<AsyncBallots meeting={meeting} ballots={[openBallot, signed]} canManage={false} canDiscuss />);
+    const toggle = screen.getByRole("button", { name: /Approve policy/ });
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByRole("textbox", { name: "Full name as electronic signature" }), { target: { value: "Draft name" } });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+    fireEvent.click(toggle);
+    expect(screen.getByRole("textbox", { name: "Full name as electronic signature" })).toHaveValue("Draft name");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search resolutions" }), { target: { value: "no matches" } });
+    expect(screen.getByText("No resolutions match this view.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Show all resolutions" }));
+    expect(screen.getByRole("textbox", { name: "Full name as electronic signature" })).toHaveValue("Draft name");
+    expect(fetchWithBoardStepUp).not.toHaveBeenCalled();
+  });
+  it("reveals a resolution linked by hash even when a filter hides it", async () => {
+    const { unmount } = renderComponent(<AsyncBallots meeting={meeting} ballots={[openBallot, signed]} canManage={false} canDiscuss />);
+    fireEvent.click(screen.getByRole("button", { name: "Needs my attention (1)" }));
+    window.history.replaceState({}, "", "#ballot-signed");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Already reviewed policy/ })).toHaveAttribute("aria-expanded", "true"));
+    expect(screen.getByRole("button", { name: "All (2)" })).toHaveAttribute("aria-pressed", "true");
+    unmount(); window.history.replaceState({}, "", window.location.pathname);
+  });
+  it("does not invent a director checklist for staff or display signature controls", () => {
+    renderComponent(<AsyncBallots meeting={meeting} ballots={[{ ...openBallot, viewerEligible: false }]} canManage={false} canDiscuss />);
+    expect(screen.getByRole("heading", { name: "Resolutions" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Needs my attention/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Approve policy/ }));
+    expect(screen.getByText("Viewing only")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
   });
 });

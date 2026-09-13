@@ -1,10 +1,10 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge, Surface } from "@pgpz/ui";
 import {
   ArrowLeft,
   CalendarPlus,
   CheckCircle2,
-  ClipboardCheck,
   Clock3,
   Download,
   FileText,
@@ -19,6 +19,7 @@ import { MeetingLifecycleControls } from "./MeetingLifecycleControls";
 import { MeetingRecordsManager } from "./MeetingRecordsManager";
 import { MeetingRsvp } from "./MeetingRsvp";
 import { MeetingLibraryMaterials, RemoveMeetingLibraryReference } from "./MeetingLibraryMaterials";
+import { MeetingSection } from "./MeetingSection";
 import { AsyncBallots } from "./AsyncBallots";
 import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel, meetingTypeLabel, minutesStatusLabel } from "./meeting-format";
 import type { MeetingCapabilities, MeetingDetailView } from "./types";
@@ -39,8 +40,16 @@ function SectionHeading({ icon: Icon, title, detail }: { icon: typeof FileText; 
   );
 }
 
+function DetailItem({ icon: Icon, label, children }: { icon: typeof FileText; label: string; children: ReactNode }) {
+  return <div className="relative pl-7">
+    <dt className="text-xs font-semibold text-[var(--muted)]"><Icon className="absolute left-0 top-0.5 h-4 w-4" aria-hidden="true" />{label}</dt>
+    <dd className="mt-1">{children}</dd>
+  </div>;
+}
+
 export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: MeetingDetailView; capabilities: MeetingCapabilities; viewerEmail?: string }) {
   const { meeting } = detail;
+  const asynchronous = meeting.format === "asynchronous";
   const date = formatMeetingDate(meeting.startAt, meeting.endAt, meeting.timeZone);
   const minutes = detail.materials.filter((material) => material.section === "minutes");
   const preparation = detail.materials.filter((material) => material.section !== "minutes");
@@ -55,15 +64,15 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> All meetings
       </Link>
 
-      <header className="mt-6 grid gap-6 border-b border-[var(--border)] pb-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <header className={`grid gap-4 border-b border-[var(--border)] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end ${asynchronous ? "mt-4 pb-5" : "mt-6 pb-8"}`}>
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="accent">{meetingTypeLabel(meeting.type)}</Badge>
             {meeting.format === "asynchronous" ? <span className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent-ink)]">Asynchronous</span> : null}
             <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-semibold text-[var(--muted)]">{meetingStatusLabel(meeting.status)}</span>
           </div>
-          <h1 className="mt-4 max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] sm:text-5xl">{meeting.title}</h1>
-          {meeting.description ? <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--muted)]">{meeting.description}</p> : null}
+          <h1 className={`max-w-4xl font-semibold tracking-[-0.045em] text-[var(--foreground)] ${asynchronous ? "mt-3 text-3xl sm:text-4xl" : "mt-4 text-4xl sm:text-5xl"}`}>{meeting.title}</h1>
+          {meeting.description ? asynchronous ? <details className="mt-3 max-w-3xl text-sm text-[var(--muted)]"><summary className="cursor-pointer font-semibold">About this meeting</summary><p className="mt-2 whitespace-pre-wrap leading-6">{meeting.description}</p></details> : <p className="mt-4 max-w-3xl text-base leading-7 text-[var(--muted)]">{meeting.description}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <a href={`/api/meetings/${encodeURIComponent(meeting.id)}/calendar`} className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">
@@ -77,8 +86,13 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
         </div>
       </header>
 
-      <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+      {asynchronous && <p className="mt-4 text-sm font-medium text-[var(--muted)]">Consent window closes {date.endDate} at {date.endTime}.</p>}
+      {asynchronous && <nav aria-label="Meeting sections" className="mt-3 flex flex-wrap gap-2 text-sm font-semibold">
+        {[["resolutions", "Resolutions"], ["preparation", "Preparation materials"], ["action-items", "Follow-up tasks"], ["minutes", "Minutes"], ["executive-sessions", "Executive sessions"]].map(([id, label]) => <a key={id} href={`#${id}`} className="rounded-full border border-[var(--border)] bg-white px-3 py-2 text-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]">{label}</a>)}
+      </nav>}
+      <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
         <div className="grid min-w-0 grid-cols-1 gap-6">
+          {meeting.format === "asynchronous" ? <AsyncBallots canCoordinateReviews={detail.canCoordinateReviews} meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
           {meeting.format === "live" ? <Surface className="p-5 sm:p-6">
             <SectionHeading icon={ListChecks} title="Agenda" detail={`${detail.agendaItems.length} ${detail.agendaItems.length === 1 ? "item" : "items"}`} />
             {detail.agendaItems.length === 0 ? <EmptySection>The agenda has not been published yet.</EmptySection> : (
@@ -98,8 +112,8 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
             )}
           </Surface> : null}
 
-          <Surface className="p-5 sm:p-6">
-            <SectionHeading icon={FileText} title="Preparation materials" detail={`${preparation.length} ${preparation.length === 1 ? "file" : "files"}`} />
+          <Surface id="preparation" className="scroll-mt-28 p-5 sm:p-6">
+            <MeetingSection id="preparation" title="Preparation materials" detail={`${preparation.length} ${preparation.length === 1 ? "file" : "files"}`} collapsed={asynchronous}>
             {preparation.length === 0 ? <EmptySection>No preparation materials have been added.</EmptySection> : (
               <ul className="divide-y divide-[var(--border)]">
                 {preparation.map((material) => (
@@ -116,11 +130,10 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
               </ul>
             )}
             {canManageMaterials && <MeetingLibraryMaterials meeting={meeting} choices={detail.preparationDocumentChoices || []} />}
+            </MeetingSection>
           </Surface>
 
-          {meeting.format === "asynchronous" ? <AsyncBallots canCoordinateReviews={detail.canCoordinateReviews} meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
-
-          <div className="grid gap-6 xl:grid-cols-2">
+          <div className={`grid gap-6 ${asynchronous ? "" : "xl:grid-cols-2"}`}>
             {meeting.format === "live" ? <Surface className="p-5 sm:p-6">
               <SectionHeading icon={Gavel} title="Decisions & votes" detail={`${detail.decisions.length}`} />
               {detail.decisions.length === 0 ? <EmptySection>No decisions have been recorded.</EmptySection> : (
@@ -139,8 +152,8 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
               )}
             </Surface> : null}
 
-            <Surface className="p-5 sm:p-6">
-              <SectionHeading icon={ClipboardCheck} title="Action items" detail={`${detail.actionItems.length}`} />
+            <Surface id="action-items" className="scroll-mt-28 p-5 sm:p-6">
+              <MeetingSection id="action-items" title={asynchronous ? "Follow-up tasks" : "Action items"} detail={`${detail.actionItems.length}`} collapsed={asynchronous}>
               {detail.actionItems.length === 0 ? <EmptySection>No action items have been recorded.</EmptySection> : (
                 <ul className="grid gap-3">
                   {detail.actionItems.map((item) => (
@@ -148,26 +161,28 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
                       <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${item.status === "completed" ? "text-emerald-700" : "text-[var(--muted)]"}`} aria-hidden="true" />
                       <div>
                         <h3 className="text-sm font-semibold text-[var(--foreground)]">{item.title}</h3>
-                        <p className="mt-1 text-xs text-[var(--muted)]">{item.owner}{item.dueAt ? ` · Due ${formatShortMeetingDate(item.dueAt, meeting.timeZone)}` : ""}</p>
+                        <p className="mt-1 text-xs capitalize text-[var(--muted)]">{item.status} · {item.owner}{item.dueAt ? ` · Due ${formatShortMeetingDate(item.dueAt, meeting.timeZone)}` : ""}</p>
                       </div>
                     </li>
                   ))}
                 </ul>
               )}
+              </MeetingSection>
             </Surface>
           </div>
 
-          <Surface id="minutes" className="p-5 sm:p-6">
-            <SectionHeading icon={FileText} title="Minutes" detail={minutesStatusLabel(meeting.minutesStatus)} />
+          <Surface id="minutes" className="scroll-mt-28 p-5 sm:p-6">
+            <MeetingSection id="minutes" title="Minutes" detail={minutesStatusLabel(meeting.minutesStatus)} collapsed={asynchronous}>
             <p className="mb-4 text-xs leading-5 text-[var(--muted)]">Minutes and later amendments remain with this meeting&apos;s preserved record.</p>
             {minutes.length === 0 ? <EmptySection>{meeting.status === "draft" || meeting.status === "scheduled" || meeting.status === "materials-published" ? "Minutes will be added after the meeting." : "Draft minutes have not been added yet."}</EmptySection> : (
               <ul className="grid gap-3">
                 {minutes.map((material) => <li key={material.id}><a href={material.downloadHref} className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] p-4 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><span>{material.title}<span className="mt-1 block text-xs font-normal text-[var(--muted)]">{material.versionLabel}</span></span><Download className="h-4 w-4" aria-hidden="true" /></a></li>)}
               </ul>
             )}
+            </MeetingSection>
           </Surface>
 
-          {capabilities.canPrepare || capabilities.canManageDocuments ? <MeetingRecordsManager meeting={meeting} agendaCount={detail.agendaItems.length} materials={detail.materials.filter((material) => material.source !== "library")} canManage={capabilities.canManage} canPrepare={capabilities.canPrepare} canManageDocuments={capabilities.canManageDocuments} /> : null}
+          {capabilities.canPrepare || capabilities.canManageDocuments ? <details className="rounded-2xl border border-[var(--border)] bg-white p-5" open={!asynchronous}><summary className="cursor-pointer font-semibold">Preparation tools</summary><MeetingRecordsManager meeting={meeting} agendaCount={detail.agendaItems.length} materials={detail.materials.filter((material) => material.source !== "library")} canManage={capabilities.canManage} canPrepare={capabilities.canPrepare} canManageDocuments={capabilities.canManageDocuments} /></details> : null}
         </div>
 
         <aside className="grid gap-5 lg:sticky lg:top-24">
@@ -175,21 +190,19 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
           <Surface className="p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Meeting details</h2>
             <dl className="mt-4 grid gap-4 text-sm">
-              <div className="flex gap-3"><CalendarPlus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div>
-                <dt className="text-xs font-semibold text-[var(--muted)]">{meeting.format === "asynchronous" ? "Consent collection opens" : "Meeting starts"}</dt>
-                <dd className="mt-1"><time dateTime={meeting.startAt}><span className="block font-semibold text-[var(--foreground)]">{date.date}</span><span className="mt-1 block text-[var(--muted)]">{date.startTime}</span></time></dd>
-              </div></div>
-              <div className="flex gap-3"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div>
-                <dt className="text-xs font-semibold text-[var(--muted)]">{meeting.format === "asynchronous" ? "Consent collection closes" : "Meeting ends"}</dt>
-                <dd className="mt-1"><time dateTime={meeting.endAt}><span className="block font-semibold text-[var(--foreground)]">{date.endDate}</span><span className="mt-1 block text-[var(--muted)]">{date.endTime}</span></time></dd>
-              </div></div>
-              {meeting.format === "live" ? <div className="flex gap-3"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Location</dt><dd className="text-[var(--muted)]">{meeting.location || "Location to be confirmed"}</dd></div></div> : null}
-              {meeting.virtualUrl ? <div className="flex gap-3"><Video className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Online meeting</dt><dd><a href={meeting.virtualUrl} rel="noreferrer" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Open meeting link</a></dd></div></div> : null}
-              {meeting.format === "live" ? <div className="flex gap-3"><Users className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted)]" aria-hidden="true" /><div><dt className="sr-only">Attendance</dt><dd className="text-[var(--muted)]">{attended > 0 ? `${attended} recorded as attended` : `${detail.attendance.length} invited`}{meeting.quorumRequired ? <span className="mt-1 block text-xs font-semibold text-[var(--foreground)]">{meeting.quorumConfirmedAt ? "Quorum confirmed" : `${quorumEligibleAttended} of ${meeting.quorumRequired} required for quorum`}</span> : null}</dd></div></div> : null}
+              <DetailItem icon={CalendarPlus} label={asynchronous ? "Consent collection opens" : "Meeting starts"}>
+                <time dateTime={meeting.startAt}><span className="block font-semibold text-[var(--foreground)]">{date.date}</span><span className="mt-1 block text-[var(--muted)]">{date.startTime}</span></time>
+              </DetailItem>
+              <DetailItem icon={Clock3} label={asynchronous ? "Consent collection closes" : "Meeting ends"}>
+                <time dateTime={meeting.endAt}><span className="block font-semibold text-[var(--foreground)]">{date.endDate}</span><span className="mt-1 block text-[var(--muted)]">{date.endTime}</span></time>
+              </DetailItem>
+              {!asynchronous && <DetailItem icon={MapPin} label="Location"><span className="text-[var(--muted)]">{meeting.location || "Location to be confirmed"}</span></DetailItem>}
+              {meeting.virtualUrl && <DetailItem icon={Video} label="Online meeting"><a href={meeting.virtualUrl} rel="noreferrer" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Open meeting link</a></DetailItem>}
+              {!asynchronous && <DetailItem icon={Users} label="Attendance"><span className="text-[var(--muted)]">{attended > 0 ? `${attended} recorded as attended` : `${detail.attendance.length} invited`}{meeting.quorumRequired ? <span className="mt-1 block text-xs font-semibold text-[var(--foreground)]">{meeting.quorumConfirmedAt ? "Quorum confirmed" : `${quorumEligibleAttended} of ${meeting.quorumRequired} required for quorum`}</span> : null}</span></DetailItem>}
             </dl>
           </Surface>
 
-          {capabilities.canManage || capabilities.canPrepare ? <MeetingLifecycleControls meeting={meeting} capabilities={capabilities} deliveryCount={detail.deliveries.length} quorumEligibleAttended={quorumEligibleAttended} /> : null}
+          {capabilities.canManage || capabilities.canPrepare ? <details className="rounded-2xl border border-[var(--border)] bg-white p-4" open={!asynchronous}><summary className="cursor-pointer font-semibold">Meeting management</summary><MeetingLifecycleControls meeting={meeting} capabilities={capabilities} deliveryCount={detail.deliveries.length} quorumEligibleAttended={quorumEligibleAttended} /></details> : null}
         </aside>
       </div>
     </>

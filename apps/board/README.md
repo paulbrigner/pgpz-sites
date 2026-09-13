@@ -157,6 +157,26 @@ or an uploaded signature PDF is unnecessary. Meeting details show separate openi
 and closing dates and times in the meeting timezone; list summaries also include
 the closing date for multi-day windows.
 
+Asynchronous meeting pages lead with a compact **Your resolution checklist**.
+Each collapsed row shows the viewer's recorded review or consent status,
+collection status, consent count, and document/discussion counts. Search covers
+resolution titles, text, and attached document titles. **Needs my attention**,
+**My consent delivered**, **Waiting**, and **Reference** filters distinguish
+outstanding personal steps from completed signatures and historical items.
+A completed review never counts as a consent; paused rosters, closed windows,
+and cancelled items do not prompt new signatures. Staff see a reading-oriented
+resolution list using only their existing authorized payload.
+
+Opening a row reveals the exact action, documents, and existing review/signature
+controls. Director consent lists, discussions, and management tools expand
+separately. Collapse and filtering preserve unfinished form entries. Existing
+`#ballot-<id>` links reveal the referenced row and clear any hiding filters.
+**Refresh status** retrieves current server records. Preparation materials,
+follow-up tasks, and minutes start collapsed in asynchronous meetings, with
+section links including the existing restricted Executive Sessions entry.
+These are Board-only presentation changes; authorization, consent requirements,
+review records, and retention rules remain enforced by the existing services.
+
 Draft resolution text and document previews are collapsed until opened.
 Cancelled resolution cards use neutral shading and a **Cancelled · reference
 only** label, with discussions collapsed by default. Readers can expand the
