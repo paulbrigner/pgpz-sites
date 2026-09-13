@@ -131,6 +131,7 @@ export interface ActionItemView {
 }
 
 export interface MeetingMaterialView {
+  source?: "library";
   id: string;
   title: string;
   description: string;
@@ -149,6 +150,7 @@ export interface DeliveryView {
 }
 
 export interface MeetingDetailView {
+  preparationDocumentChoices?: readonly import("@/lib/written-consents").ConsentAttachment[];
   canCoordinateReviews?: boolean;
   consentDocumentChoices?: readonly import("@/lib/written-consents").ConsentAttachment[];
   directorRoster?: { revision: string; ready: boolean; directors: { userId: string; name: string; email: string; status: string }[] } | null;

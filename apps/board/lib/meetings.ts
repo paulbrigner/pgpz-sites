@@ -244,8 +244,24 @@ export interface BoardMeetingDelivery {
   readonly failureReason: string | null;
 }
 
+export interface BoardMeetingMaterialReference {
+  readonly id: string;
+  readonly meetingId: string;
+  readonly documentId: string;
+  readonly versionId: string;
+  readonly title: string;
+  readonly description: string;
+  readonly sequence: number;
+  readonly fileName: string;
+  readonly sha256: string;
+  readonly status: "active" | "removed";
+  readonly updatedAt: string;
+  readonly updatedBy: string;
+}
+
 export interface BoardMeetingDetail {
   readonly meeting: BoardMeeting;
+  readonly materialReferences: readonly BoardMeetingMaterialReference[];
   readonly agendaItems: readonly BoardAgendaItem[];
   readonly attendance: readonly BoardMeetingAttendance[];
   readonly decisions: readonly BoardMeetingDecision[];

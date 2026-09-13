@@ -100,6 +100,16 @@ describe("meeting director consent visibility", () => {
   });
 });
 describe("meeting resolution attachment choices", () => {
+  it("offers library versions for live meeting preparation and excludes already referenced versions", async () => {
+    const record = await mocks.get();
+    mocks.get.mockResolvedValue({ ...record, meeting: { ...record.meeting, format: "live" }, materialReferences: [{ id: "ref", documentId: "articles", versionId: "v4", sequence: 4, title: "Reviewed Articles", description: "Sources", updatedAt: "2026-09-13T14:00:00Z", status: "active" }] });
+    renderToStaticMarkup(await Page({ params: Promise.resolve({ id: "m" }) }));
+    const detail = mocks.detail.mock.calls.at(-1)![0].detail as MeetingDetailView;
+    expect(detail.consentDocumentChoices).toEqual([]);
+    expect(detail.preparationDocumentChoices?.map((doc) => doc.versionId)).toEqual(["v5"]);
+    expect(detail.materials).toEqual([expect.objectContaining({ id: "ref", source: "library", versionLabel: "v4", title: "Reviewed Articles", downloadHref: "/api/documents/articles/download?version=v4&preparationMeeting=m" })]);
+    expect(JSON.stringify(detail)).not.toContain("SECRET_KEY");
+  });
   it("provides managers exact historical version metadata without storage keys", async () => {
     const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ id: "m" }) }));
     expect(mocks.versions).toHaveBeenCalledWith("articles");

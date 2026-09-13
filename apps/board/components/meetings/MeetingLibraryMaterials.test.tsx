@@ -1,0 +1,41 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MeetingLibraryMaterials, RemoveMeetingLibraryReference } from "./MeetingLibraryMaterials";
+import type { MeetingSummaryView } from "./types";
+const mocks = vi.hoisted(() => ({ fetch: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/lib/step-up-client", () => ({ fetchWithBoardStepUp: mocks.fetch }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
+const meeting = { id: "m", version: 3 } as MeetingSummaryView;
+const choices = [{ documentId: "doc", versionId: "v1", title: "Source evidence", sequence: 1, fileName: "source.pdf", sha256: "a".repeat(64) }, { documentId: "other", versionId: "v2", title: "Bylaws", sequence: 2, fileName: "bylaws.pdf", sha256: "b".repeat(64) }];
+beforeEach(() => { vi.clearAllMocks(); mocks.fetch.mockResolvedValue({ ok: true, json: async () => ({}) }); });
+afterEach(cleanup);
+describe("meeting preparation library controls", () => {
+  it("searches and adds the selected version through step-up without re-uploading or adopting it", async () => {
+    render(<MeetingLibraryMaterials meeting={meeting} choices={choices} />);
+    fireEvent.click(screen.getByText("Add from Document Library"));
+    fireEvent.change(screen.getByLabelText("Find a library document"), { target: { value: "source" } });
+    expect(screen.queryByRole("option", { name: /Bylaws/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Document and version"), { target: { value: JSON.stringify(["doc", "v1"]) } });
+    fireEvent.click(screen.getByRole("button", { name: "Add reference" }));
+    await screen.findByText("Library reference added to Preparation materials.");
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch.mock.calls[0][0]).toBe("/api/meetings/m/materials");
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body)).toEqual({ action: "add", documentId: "doc", versionId: "v1", expectedVersion: 3 });
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+  it("keeps the chosen version after a conflict and reports removal errors without hiding the reference", async () => {
+    mocks.fetch.mockResolvedValue({ ok: false, json: async () => ({ error: "The meeting changed. Refresh and try again." }) });
+    render(<MeetingLibraryMaterials meeting={meeting} choices={choices} />);
+    fireEvent.click(screen.getByText("Add from Document Library"));
+    fireEvent.change(screen.getByLabelText("Document and version"), { target: { value: JSON.stringify(["doc", "v1"]) } });
+    fireEvent.click(screen.getByRole("button", { name: "Add reference" }));
+    await screen.findByRole("status");
+    expect(screen.getByLabelText("Document and version")).toHaveValue(JSON.stringify(["doc", "v1"]));
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    cleanup();
+    render(<RemoveMeetingLibraryReference meeting={meeting} referenceId="ref" title="Source evidence" />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove reference to Source evidence" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("The meeting changed"));
+    expect(JSON.parse(mocks.fetch.mock.calls.at(-1)![1].body)).toEqual({ action: "remove", referenceId: "ref", expectedVersion: 3 });
+  });
+});
