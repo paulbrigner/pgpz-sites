@@ -73,7 +73,7 @@ describe("assessment reply notifications", () => {
   it("builds a private portal link and rejects recipient injection", () => {
     const input = { meetingId: "meeting-1", submissionId: "assessment-1", to: "director@example.invalid", body: "SECRET_BODY", title: "SECRET_TITLE", assessment: "SECRET_ASSESSMENT" };
     const email = reviewReplyEmail(input);
-    expect(email.text).toContain("/meetings/meeting-1#review-thread-assessment-1");
+    expect(email.text).toContain("/meetings/meeting-1?reviewThread=assessment-1");
     expect(JSON.stringify(email)).not.toContain("SECRET_");
     expect(email.text).toContain("does not change your review status");
     for (const to of ["a@example.org,b@example.org", "a@example.org\r\nBcc:b@example.org"]) expect(() => reviewReplyEmail({ ...input, to })).toThrow();

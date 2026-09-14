@@ -12,13 +12,14 @@ import { canCreateExecutiveSession, isDirectorRole } from "@/lib/executive-sessi
 import { executiveSessionsRepository } from "@/lib/executive-sessions-repository";
 import { readDirectorRoster } from "@/lib/director-roster";
 import { resolutionReviewThreads } from "@/lib/resolution-review-discussion";
+import { reviewThreadPath } from "@/lib/resolution-review-links";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Meeting", robots: { index: false, follow: false, nocache: true } };
 
-export default async function BoardMeetingPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BoardMeetingPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
-  const member = await requireBoardMember(`/meetings/${encodeURIComponent(id)}`);
+  const member = await requireBoardMember(reviewThreadPath(id, (await searchParams)?.reviewThread));
   if (!member) return null;
   const [record, meetingDocuments] = await Promise.all([
     boardMeetingsRepository.getMeeting(id),

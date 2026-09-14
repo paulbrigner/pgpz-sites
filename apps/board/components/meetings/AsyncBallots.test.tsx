@@ -328,6 +328,13 @@ describe("Assessment reply threads", () => {
     expect(screen.getByText(/This assessment thread is read-only/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Reply to assessment" })).not.toBeInTheDocument();
   });
+  it("opens a query target after returning from authentication", async () => {
+    window.history.replaceState({}, "", "?reviewThread=assessment-0");
+    renderComponent(<AsyncBallots meeting={activeMeeting} ballots={[reviewBallot()]} canManage={false} canDiscuss />);
+    await waitFor(() => expect(document.getElementById("review-thread-assessment-0")).toHaveAttribute("open"));
+    expect(screen.getByRole("button", { name: /Employment and compensation/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Reply to assessment" })).toBeVisible();
+  });
   it.each([false, true])("opens an email deep link through filters to an earlier assessment: %s", async (earlier) => {
     const ballot = reviewBallot();
     if (earlier) {

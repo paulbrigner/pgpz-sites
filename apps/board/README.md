@@ -347,7 +347,9 @@ record, while existing finalized records keep their original digest.
 
 Posting a reply attempts one email to the director being answered (the assessment
 author or the selected message's author), with a link that opens that assessment
-thread. The email omits resolution titles, assessments and reply text. Self-replies
+thread after sign-in or passkey verification. The validated opaque target is
+preserved in the authentication callback. The email omits resolution titles,
+assessments and reply text. Self-replies
 and recipients without matching current active director access are skipped.
 Delivery claims and results are retained separately from review readiness; an
 uncertain or failed email does not undo the saved reply and is not retried

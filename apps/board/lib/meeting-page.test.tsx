@@ -4,8 +4,8 @@ import Page from "@/app/(portal)/meetings/[id]/page";
 import type { MeetingDetailView } from "@/components/meetings/types";
 import type { ConsentReceipt } from "./written-consents";
 import { resolutionReviewFixture } from "./test-support/resolution-review";
-const mocks = vi.hoisted(() => ({ manage: true, get: vi.fn(), history: vi.fn(), library: vi.fn(), meeting: vi.fn(), versions: vi.fn(), access: vi.fn(), detail: vi.fn() }));
-vi.mock("@/lib/session", () => ({ requireBoardMember: async () => ({ id: "chair", email: "chair@example.invalid" }), canManageBoardMeetings: () => mocks.manage, canPrepareBoardMeetings: () => false, canManageBoardDocuments: () => mocks.manage, canParticipateBoardDiscussions: () => true }));
+const mocks = vi.hoisted(() => ({ manage: true, member: vi.fn(), get: vi.fn(), history: vi.fn(), library: vi.fn(), meeting: vi.fn(), versions: vi.fn(), access: vi.fn(), detail: vi.fn() }));
+vi.mock("@/lib/session", () => ({ requireBoardMember: mocks.member, canManageBoardMeetings: () => mocks.manage, canPrepareBoardMeetings: () => false, canManageBoardDocuments: () => mocks.manage, canParticipateBoardDiscussions: () => true }));
 vi.mock("@/lib/meetings-repository", () => ({ boardMeetingsRepository: { getMeeting: mocks.get, listResolutionReviewEvents: mocks.history } }));
 vi.mock("@/lib/vault", () => ({ boardDocumentRepository: { listDocuments: mocks.library, listMeetingDocuments: mocks.meeting, listVersions: mocks.versions } }));
 vi.mock("@/lib/director-roster", () => ({ readDirectorRoster: async () => ({ revision: "r1", directors: [] }) }));
@@ -17,6 +17,7 @@ vi.mock("@pgpz/ui", () => ({ Container: ({ children }: { children: React.ReactNo
 vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND"); } }));
 beforeEach(() => {
   vi.clearAllMocks(); mocks.manage = true;
+  mocks.member.mockResolvedValue({ id: "chair", email: "chair@example.invalid" });
   mocks.access.mockResolvedValue(null);
   mocks.history.mockResolvedValue([]);
   mocks.get.mockResolvedValue({ meeting: { id: "m", status: "scheduled", format: "asynchronous" }, agendaItems: [], attendance: [], decisions: [], asyncBallots: [], asyncVotes: [], asyncDiscussionMessages: [], actionItems: [], deliveries: [] });
@@ -43,6 +44,12 @@ async function consentPage(receipts = [receipt(0), receipt(1), receipt(2, "withd
 }
 
 describe("meeting director consent visibility", () => {
+  it.each(["assessment-1", "//evil.invalid", "a#b", ["one", "two"], "a".repeat(201)])("preserves only a safe email thread target in the authentication callback: %s", async (reviewThread) => {
+    mocks.member.mockResolvedValue(null);
+    await Page({ params: Promise.resolve({ id: "m" }), searchParams: Promise.resolve({ reviewThread, callbackUrl: "//evil.invalid" }) });
+    expect(mocks.member).toHaveBeenCalledWith(reviewThread === "assessment-1" ? "/meetings/m?reviewThread=assessment-1" : "/meetings/m");
+    expect(mocks.get).not.toHaveBeenCalled(); expect(mocks.history).not.toHaveBeenCalled();
+  });
   it.each(["executive-director", "legal-counsel", "board-support", "deactivated"])("never serializes review assessments or prior-review identities to %s", async (role) => {
     mocks.manage = role === "executive-director";
     mocks.access.mockResolvedValue({ id: "chair", role: role === "deactivated" ? "member" : role, status: role === "deactivated" ? "deactivated" : "active" });

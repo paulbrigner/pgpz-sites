@@ -12,6 +12,7 @@ import { BallotDiscussion } from "./BallotDiscussion";
 import { ResolutionDraftForm } from "./ResolutionDraftForm";
 import { ResolutionReviewPanel } from "./ResolutionReviewPanel";
 import { reviewProgress } from "@/lib/resolution-reviews";
+import { reviewThreadId } from "@/lib/resolution-review-links";
 
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm";
 const button = "w-fit rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -37,7 +38,8 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
   const reviewThreadIds = ballots.flatMap((ballot) => ballot.review?.threads?.map((thread) => thread.submission.id) || []).join(",");
   useEffect(() => {
     function openLinkedResolution() {
-      const id = window.location.hash.slice(1);
+      const queryThread = reviewThreadId(new URLSearchParams(window.location.search).get("reviewThread"));
+      const id = window.location.hash.slice(1) || (queryThread ? `review-thread-${queryThread}` : "");
       const target = document.getElementById(id);
       const linkedBallotId = id.startsWith("review-thread-") ? target?.closest("[data-resolution-id]")?.getAttribute("data-resolution-id") : id.slice(7);
       if (!linkedBallotId || !ballotIds.split(",").includes(linkedBallotId) || (!id.startsWith("ballot-") && !id.startsWith("review-thread-"))) return;
@@ -54,7 +56,8 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
     }
     openLinkedResolution();
     window.addEventListener("hashchange", openLinkedResolution);
-    return () => window.removeEventListener("hashchange", openLinkedResolution);
+    window.addEventListener("popstate", openLinkedResolution);
+    return () => { window.removeEventListener("hashchange", openLinkedResolution); window.removeEventListener("popstate", openLinkedResolution); };
   }, [ballotIds, reviewThreadIds]);
   const active = ["draft", "scheduled", "materials-published"].includes(meeting.status);
   async function post(body: Record<string, unknown>, success: string, communications = false) {
