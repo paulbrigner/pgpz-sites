@@ -334,6 +334,25 @@ content. Use the existing Executive Session boundary when conflicts or
 compensation deliberations require a narrower participant group. This general
 review feature cannot exclude a director or settle a conflict of interest.
 
+Each recorded assessment has **Reply / Discuss** for active directors on the
+current review roster. Replies are attributed and retained with the exact
+assessment version and round. They do not update anyone's readiness or restart
+review; only the assessment author can update their review. Updated assessments
+and restarted rounds leave earlier threads available under **Earlier assessments
+and replies**. Threads become read-only when consent collection opens, the
+resolution or meeting is cancelled, the deadline passes, or the roster changes.
+The director-only HTML/JSON/PDF review packet includes the retained threads;
+new finalizations bind the current round's discussion digest into the consent
+record, while existing finalized records keep their original digest.
+
+Posting a reply attempts one email to the director being answered (the assessment
+author or the selected message's author), with a link that opens that assessment
+thread. The email omits resolution titles, assessments and reply text. Self-replies
+and recipients without matching current active director access are skipped.
+Delivery claims and results are retained separately from review readiness; an
+uncertain or failed email does not undo the saved reply and is not retried
+automatically. The portal reports the send outcome to the person posting.
+
 For a required-review resolution, only the Chair can edit, start/restart review,
 cancel, or open consent collection. Every director must record readiness with
 no unresolved conflict flag. Changes to the reviewed resolution text, attachment

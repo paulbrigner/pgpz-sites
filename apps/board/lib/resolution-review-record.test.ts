@@ -46,6 +46,9 @@ describe("director review records", () => {
   it("reconstructs a stable finalized record digest across DynamoDB property reordering", () => {
     const ballot = resolutionReviewFixture(true);
     const review = { ...ballot.review!, round: { ...ballot.review!.round!, finalization: { findings: "Reviewed findings", confirmedAt: "2026-09-10T12:00:00Z", confirmedBy: "chair@example.invalid" } } };
+    // Captured before adding reply support: already signed schema 4 records
+    // must retain their exact digest, not merely agree with a new algorithm.
+    expect(resolutionReviewRecordHash(review)).toBe("5072dea18b6c5edaf0a48e19088470d726716067020d382a8da9c0996a3f308e");
     function reverse(value: unknown): unknown {
       if (Array.isArray(value)) return value.map(reverse);
       if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, reverse(v)]));

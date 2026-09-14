@@ -36,6 +36,7 @@ export function fakeClient() {
         if (put.ConditionExpression?.includes("attribute_not_exists") && current && !(put.ConditionExpression.includes(" OR ") && current.status === "failed")) throw { name: "TransactionCanceledException" };
         if (put.ConditionExpression?.includes("#attemptId") && (current?.attemptId !== put.ExpressionAttributeValues?.[":attemptId"] || current?.status !== put.ExpressionAttributeValues?.[":pending"])) throw { name: "TransactionCanceledException" };
         const expected = put.ExpressionAttributeValues?.[":expectedVersion"];
+        if (put.ExpressionAttributeValues?.[":expectedStatus"] !== undefined && current?.status !== put.ExpressionAttributeValues[":expectedStatus"]) throw { name: "TransactionCanceledException" };
         if (expected !== undefined && current?.version !== expected) throw { name: "TransactionCanceledException" };
       }
       for (const entry of TransactItems) if (entry.Put?.Item) items.set(keyOf(entry.Put.Item), entry.Put.Item);

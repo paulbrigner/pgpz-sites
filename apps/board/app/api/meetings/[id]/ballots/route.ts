@@ -12,6 +12,7 @@ import { accessRecordGuard, isVotingDirector, readDirectorRoster } from "@/lib/d
 import { executiveJson as json, executiveJsonBody } from "@/lib/executive-session-api";
 import { SITE_URL } from "@/lib/config";
 import { validateConsentAdoption, type ConsentAttachment } from "@/lib/written-consents";
+import { notifyResolutionReviewReply } from "@/lib/resolution-review-notification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,12 +37,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const expectedVersion = Number(body.expectedVersion);
     const accessRecord = await boardAccessRepository.getByEmail(state.member.email);
     if (!accessRecord || accessRecord.status !== "active") return json({ error: "Active Board access is required." }, 403);
-    if (!["signConsent", "withdrawConsent", "submitReview"].includes(action) && (!canManageBoardMeetings(state.member) || !roleCanManageBoardMeetings(accessRecord.role))) {
+    if (!["signConsent", "withdrawConsent", "submitReview", "postReviewReply"].includes(action) && (!canManageBoardMeetings(state.member) || !roleCanManageBoardMeetings(accessRecord.role))) {
       return json({ error: "Only the Board Chair or Executive Director may manage written resolutions." }, 403);
     }
     if (["castVote", "finalizeBallot"].includes(action)) return json({ error: "Ordinary async voting is retired. Each resolution requires every director's signed consent." }, 409);
     const chair = ["chair", "admin"].includes(accessRecord.role);
-    if (action === "submitReview" && !isVotingDirector(accessRecord.role)) return json({ error: "Only active directors may record reviews." }, 403);
+    if (["submitReview", "postReviewReply"].includes(action) && !isVotingDirector(accessRecord.role)) return json({ error: "Only active directors may record reviews or reply to assessments." }, 403);
     if (action === "startReview" && !chair) return json({ error: "Only the Board Chair may start required review." }, 403);
     const existing = ["saveBallot", "openBallot", "cancelBallot"].includes(action) ? await boardMeetingsRepository.getAsyncBallot(meetingId, ballotId) : null;
     if (!chair && (existing?.review || (action === "saveBallot" && body.review != null))) return json({ error: "Only the Board Chair may manage a resolution with required review." }, 403);
@@ -91,6 +92,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         accessRecord, authenticatedUserId: state.member.id, roster: await readDirectorRoster(),
       }, options);
       return json({ meeting });
+    }
+    if (action === "postReviewReply") {
+      const saved = await boardMeetingsRepository.postResolutionReviewReply({
+        meetingId, expectedVersion, ballotId, roundId: text(body.roundId), contentHash: text(body.contentHash),
+        submissionId: text(body.submissionId), replyToMessageId: text(body.replyToMessageId) || null, body: text(body.body),
+        accessRecord, authenticatedUserId: state.member.id, roster: await readDirectorRoster(),
+      }, options);
+      const replyNotice = await notifyResolutionReviewReply(state.member, saved).catch(() => "unknown" as const);
+      return json({ meeting: saved.meeting, replyNotice });
     }
     if (action === "openBallot") {
       const roster = await readDirectorRoster();

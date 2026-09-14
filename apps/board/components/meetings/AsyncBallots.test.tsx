@@ -275,3 +275,75 @@ describe("Resolution checklist navigation", () => {
     expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
   });
 });
+
+// Exercise replies through the actual meeting action adapter and navigation.
+describe("Assessment reply threads", () => {
+  function reviewBallot(): AsyncBallotView {
+    const source = resolutionReviewFixture(), round = source.review!.round!;
+    return { ...openBallot, id: source.id, title: source.title, effectiveStatus: "draft", consent: null, reviewRequired: true,
+      review: { ...source.review!, rosterChanged: false, viewerAccessId: "chair", threads: [{ roundId: round.id, submission: round.submissions[0], replies: [] }] } };
+  }
+  const activeMeeting = { ...meeting, endAt: "2099-01-01T00:00:00Z" };
+  afterEach(() => { window.history.replaceState({}, "", window.location.pathname); });
+  it("posts against the exact assessment without changing readiness and reports uncertain email separately", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ replyNotice: "unknown" }));
+    const ballot = reviewBallot();
+    render(<AsyncBallots meeting={activeMeeting} ballots={[ballot]} canManage={false} canDiscuss />);
+    fireEvent.click(screen.getByText("Reply / Discuss (0) · Director 1"));
+    expect(screen.queryByRole("textbox", { name: /Reply to Director 1/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reply to assessment" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Reply to Director 1/ }), { target: { value: "Please see the transition terms in section 2.5." } });
+    fireEvent.click(screen.getByRole("button", { name: "Post reply" }));
+    await waitFor(() => expect(screen.getByText(/Your reply was saved.*email delivery could not be confirmed/)).toBeVisible());
+    const body = JSON.parse(vi.mocked(fetchWithBoardStepUp).mock.calls[0][1]!.body as string);
+    expect(body).toEqual({ expectedVersion: 5, action: "postReviewReply", ballotId: ballot.id, roundId: "round-1", contentHash: ballot.review!.round!.contentHash, submissionId: "assessment-0", replyToMessageId: null, body: "Please see the transition terms in section 2.5." });
+    expect(screen.getByText(/1 of 5 reviews ready/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+  it("preserves a reply draft after a failed save, collapse, and filtering", async () => {
+    vi.mocked(fetchWithBoardStepUp).mockResolvedValue(Response.json({ error: "Refresh to read the updated assessment." }, { status: 409 }));
+    const ballot = reviewBallot();
+    render(<AsyncBallots meeting={activeMeeting} ballots={[ballot]} canManage={false} canDiscuss />);
+    fireEvent.click(screen.getByText("Reply / Discuss (0) · Director 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Reply to assessment" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Reply to Director 1/ }), { target: { value: "Unfinished response" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post reply" }));
+    await waitFor(() => expect(screen.getByText("Refresh to read the updated assessment.")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+    fireEvent.click(screen.getByRole("button", { name: /Employment and compensation/ }));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no matches" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show all resolutions" }));
+    expect(screen.getByRole("textbox", { name: /Reply to Director 1/ })).toHaveValue("Unfinished response");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+  it.each(["consents", "cancelled", "expired", "inactive", "roster"])("retains read-only threads for %s", (condition) => {
+    const ballot = reviewBallot();
+    if (condition === "consents") ballot.effectiveStatus = "open";
+    if (condition === "cancelled") ballot.effectiveStatus = "cancelled";
+    if (condition === "roster") ballot.review!.rosterChanged = true;
+    const context = condition === "expired" ? { ...activeMeeting, endAt: "2000-01-01T00:00:00Z" } : condition === "inactive" ? { ...activeMeeting, status: "closed" as const } : activeMeeting;
+    render(<AsyncBallots meeting={context} ballots={[ballot]} canManage={false} canDiscuss />);
+    fireEvent.click(screen.getByText("Replies (0) · Director 1"));
+    expect(screen.getByText(/This assessment thread is read-only/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Reply to assessment" })).not.toBeInTheDocument();
+  });
+  it.each([false, true])("opens an email deep link through filters to an earlier assessment: %s", async (earlier) => {
+    const ballot = reviewBallot();
+    if (earlier) {
+      ballot.review!.threads = [{ ...ballot.review!.threads![0], roundId: "previous-round", submission: { ...ballot.review!.threads![0].submission, id: "earlier-assessment", assessment: "Original review with follow-up questions." } }];
+    }
+    const targetId = earlier ? "earlier-assessment" : "assessment-0";
+    renderComponent(<AsyncBallots meeting={activeMeeting} ballots={[ballot]} canManage={false} canDiscuss />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no matches" } });
+    window.history.replaceState({}, "", `#review-thread-${targetId}`);
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    await waitFor(() => expect(document.getElementById(`review-thread-${targetId}`)).toHaveAttribute("open"));
+    expect(screen.getByRole("button", { name: /Employment and compensation/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    if (earlier) {
+      expect(screen.getByText("Original review with follow-up questions.")).toBeVisible();
+      expect(screen.getByText(/This assessment thread is read-only/)).toBeVisible();
+    }
+  });
+});

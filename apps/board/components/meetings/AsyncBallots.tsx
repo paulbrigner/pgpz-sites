@@ -34,20 +34,28 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
   tasks.forEach((task) => counts[task.bucket]++);
   const matches = ballots.map((ballot, index) => (filter === "all" || tasks[index].bucket === filter) && `${ballot.title} ${ballot.motion} ${ballot.attachments?.map((doc) => doc.title).join(" ") || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
   const ballotIds = ballots.map((ballot) => ballot.id).join(",");
+  const reviewThreadIds = ballots.flatMap((ballot) => ballot.review?.threads?.map((thread) => thread.submission.id) || []).join(",");
   useEffect(() => {
     function openLinkedResolution() {
       const id = window.location.hash.slice(1);
-      if (!ballotIds.split(",").some((ballotId) => `ballot-${ballotId}` === id)) return;
-      setFilter("all"); setQuery(""); setExpanded((previous) => ({ ...previous, [id.slice(7)]: true }));
+      const target = document.getElementById(id);
+      const linkedBallotId = id.startsWith("review-thread-") ? target?.closest("[data-resolution-id]")?.getAttribute("data-resolution-id") : id.slice(7);
+      if (!linkedBallotId || !ballotIds.split(",").includes(linkedBallotId) || (!id.startsWith("ballot-") && !id.startsWith("review-thread-"))) return;
+      setFilter("all"); setQuery(""); setExpanded((previous) => ({ ...previous, [linkedBallotId]: true }));
       requestAnimationFrame(() => {
-        document.getElementById(id)?.scrollIntoView?.({ block: "start" });
-        document.getElementById(`${id}-toggle`)?.focus({ preventScroll: true });
+        if (id.startsWith("review-thread-")) {
+          for (let ancestor = target; ancestor; ancestor = ancestor.parentElement) {
+            if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
+          }
+          target?.querySelector("summary")?.focus({ preventScroll: true });
+        } else document.getElementById(`${id}-toggle`)?.focus({ preventScroll: true });
+        target?.scrollIntoView?.({ block: "start" });
       });
     }
     openLinkedResolution();
     window.addEventListener("hashchange", openLinkedResolution);
     return () => window.removeEventListener("hashchange", openLinkedResolution);
-  }, [ballotIds]);
+  }, [ballotIds, reviewThreadIds]);
   const active = ["draft", "scheduled", "materials-published"].includes(meeting.status);
   async function post(body: Record<string, unknown>, success: string, communications = false) {
     setPending(true); setMessage("");
@@ -57,7 +65,8 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "The record could not be saved.");
-      setMessage(result.adopted ? "All directors have delivered consent. This resolution is now adopted." : success);
+      const notice = body.action === "postReviewReply" ? result.replyNotice === "sent" ? " Email notification sent." : result.replyNotice === "skipped" ? " No email was sent because this was a self-reply or the recipient no longer has matching active director access." : " Your reply is saved, but email delivery could not be confirmed. Check with the director before sending another notice." : "";
+      setMessage(result.adopted ? "All directors have delivered consent. This resolution is now adopted." : success + notice);
       router.refresh(); return true;
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save. Refresh to check your receipt before retrying."); return false; }
     finally { setPending(false); }
@@ -115,7 +124,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="intent" required className="mt-1" /><span>I intend to electronically sign and deliver {withdraw ? "this withdrawal" : "my consent to this resolution"}.</span></label>
           <button disabled={pending} className={withdraw ? secondary : button}>{withdraw ? "Sign and deliver withdrawal" : "Sign and deliver consent"}</button>
         </form>;
-        return <li key={ballot.id} id={`ballot-${ballot.id}`} hidden={!matches[index]} className={`min-w-0 scroll-mt-28 rounded-2xl border ${cancelled ? "border-stone-300 border-l-4 border-l-stone-400 bg-stone-100" : "border-[var(--border)] bg-white"}`}>
+        return <li key={ballot.id} id={`ballot-${ballot.id}`} data-resolution-id={ballot.id} hidden={!matches[index]} className={`min-w-0 scroll-mt-28 rounded-2xl border ${cancelled ? "border-stone-300 border-l-4 border-l-stone-400 bg-stone-100" : "border-[var(--border)] bg-white"}`}>
           <h3><button id={`ballot-${ballot.id}-toggle`} type="button" aria-expanded={isExpanded} aria-controls={`ballot-${ballot.id}-content`} onClick={() => setExpanded((previous) => ({ ...previous, [ballot.id]: !previous[ballot.id] }))} className="flex w-full items-start gap-3 rounded-2xl p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] sm:p-5">
             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold" aria-hidden="true">{index + 1}</span>
             <span className="min-w-0 flex-1"><span className="block text-base font-semibold [overflow-wrap:anywhere]">{ballot.title}</span><span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${task.tone === "attention" ? "bg-amber-100 text-amber-950" : task.tone === "positive" ? "bg-emerald-50 text-emerald-900" : "bg-stone-200/70 text-stone-800"}`}>{task.label}</span>

@@ -3,6 +3,7 @@
 import { REVIEW_ATTESTATION, reviewProgress } from "@/lib/resolution-reviews";
 import type { AsyncBallotView, MeetingSummaryView } from "./types";
 import { useRouter } from "next/navigation";
+import { ReviewReplies } from "./ReviewReplies";
 
 const field = "mt-1.5 w-full rounded-xl border border-[var(--border-strong)] bg-white px-3 py-2.5 text-sm";
 
@@ -15,6 +16,8 @@ export function ResolutionReviewPanel({ ballot, meeting, pending, onPost }: {
   if (!review) return null;
   const round = review.round, progress = reviewProgress(round);
   const own = round?.submissions.find((entry) => entry.accessId === review.viewerAccessId);
+  const threads = review.threads || [];
+  const earlierThreads = threads.filter((thread) => thread.roundId !== round?.id || !round.submissions.some((entry) => entry.id === thread.submission.id));
   const canSubmit = !!round && round.reviewers.some((person) => person.userId === review.viewerAccessId) && !review.rosterChanged && ballot.effectiveStatus === "draft" && ["scheduled", "materials-published"].includes(meeting.status) && Date.now() < Date.parse(meeting.endAt);
   const stamp = (value: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: meeting.timeZone }).format(new Date(value));
   const record = `/api/meetings/${encodeURIComponent(meeting.id)}/ballots/${encodeURIComponent(ballot.id)}/review-record`;
@@ -31,15 +34,24 @@ export function ResolutionReviewPanel({ ballot, meeting, pending, onPost }: {
           return <li key={person.userId} className="min-w-0 border-t border-[var(--border)] pt-2 text-sm">
             <div className="flex flex-wrap justify-between gap-2"><strong className="break-words">{person.name}</strong><span>{!entry ? "Review pending" : entry.outcome === "ready" && entry.conflict === "none" ? "Ready for consent" : "Follow-up required"}</span></div>
             {entry && <details className="mt-1"><summary className="cursor-pointer text-xs font-semibold">Assessment · reviewed {entry.reviewedOn}</summary>
-              <p className="mt-2 whitespace-pre-wrap break-words">{entry.assessment}</p>
+              <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{entry.assessment}</p>
               <p className="mt-2 text-xs">Conflict review: {entry.conflict === "none" ? "No conflict requiring recusal reported" : "Conflict or recusal requires attention"}. Recorded {stamp(entry.recordedAt)}.</p>
             </details>}
+            {entry && <ReviewReplies thread={threads.find((thread) => thread.roundId === round.id && thread.submission.id === entry.id) || { roundId: round.id, submission: entry, replies: [] }} canReply={canSubmit && !round.finalization} timeZone={meeting.timeZone} ballotId={ballot.id} contentHash={round.contentHash} pending={pending} onPost={onPost} />}
           </li>;
         })}
       </ul>
       {round.finalization && <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm"><p className="font-semibold">Findings presented for adoption</p><p className="mt-2 whitespace-pre-wrap break-words">{round.finalization.findings}</p><p className="mt-2 text-xs">Record finalized by {round.finalization.confirmedBy} on {stamp(round.finalization.confirmedAt)}. Adoption is recorded separately through signed consents.</p></div>}
     </>}
     {(round || review.everStarted) && <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold"><button type="button" className="underline" disabled={pending} onClick={() => router.refresh()}>Refresh reviews</button><a href={`${record}?format=pdf`} className="underline">Download review packet</a><a href={record} target="_blank" rel="noreferrer" className="underline">View full review record</a></div>}
+    {earlierThreads.length > 0 && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold">Earlier assessments and replies ({earlierThreads.length})</summary>
+      <p className="mt-2 text-xs text-[var(--muted)]">Retained for reference. These assessments do not establish readiness for the current materials.</p>
+      {earlierThreads.map((thread) => <article key={`${thread.roundId}:${thread.submission.id}`} className="mt-3 min-w-0 border-t border-[var(--border)] pt-3 text-sm">
+        <p><strong>{thread.submission.name}</strong> · reviewed {thread.submission.reviewedOn} · {thread.roundId === round?.id ? "Earlier assessment in this round" : "Earlier review round"}</p>
+        <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{thread.submission.assessment}</p>
+        <ReviewReplies thread={thread} canReply={false} timeZone={meeting.timeZone} ballotId={ballot.id} contentHash="" pending={pending} onPost={onPost} />
+      </article>)}
+    </details>}
     {canSubmit && <details key={`${round!.id}:${own?.id || "new"}`} className="mt-4" open={!own}><summary className="cursor-pointer text-sm font-semibold">{own ? "Update my review" : "Record my review"}</summary>
       <form className="mt-3 grid gap-3" onSubmit={async (event) => {
         event.preventDefault(); const data = new FormData(event.currentTarget);

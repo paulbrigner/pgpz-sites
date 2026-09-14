@@ -82,6 +82,7 @@ export interface AsyncBallotView {
     round: (Omit<import("@/lib/resolution-reviews").ResolutionReviewRound, "submissions"> & { submissions: readonly Omit<import("@/lib/resolution-reviews").ResolutionReviewSubmission, "authenticatedUserId">[] }) | null;
     rosterChanged: boolean;
     viewerAccessId: string;
+    threads?: readonly ReviewThreadView[];
   };
   consentMode?: "unanimous-v1";
   attachments?: readonly import("@/lib/written-consents").ConsentAttachment[];
@@ -120,6 +121,12 @@ export interface AsyncBallotView {
     quorumMet: boolean;
     outcome: "passed" | "failed" | "no-quorum";
   };
+}
+
+export interface ReviewThreadView {
+  roundId: string;
+  submission: Omit<import("@/lib/resolution-reviews").ResolutionReviewSubmission, "authenticatedUserId">;
+  replies: readonly Omit<import("@/lib/resolution-reviews").ResolutionReviewReply, "authenticatedUserId">[];
 }
 
 export interface ActionItemView {
