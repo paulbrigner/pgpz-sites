@@ -5,22 +5,25 @@ import type { BoardAsyncBallot } from "./meetings";
 import { resolutionReviewHash, resolutionReviewRecordHash } from "./resolution-review-integrity";
 import { reviewProgress } from "./resolution-reviews";
 import { consentDigest, consentPayload } from "./written-consent-integrity";
+import { resolutionReviewThreads, resolutionReviewDiscussionHash } from "./resolution-review-discussion";
 
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 export function resolutionReviewRecord(ballot: BoardAsyncBallot, history: readonly Record<string, unknown>[]) {
   const review = ballot.review, round = review?.round;
   if (!review || (!round && !review.everStarted)) throw new Error("A review round has not started for the current draft.");
+  const threads = resolutionReviewThreads(review, history);
+  const discussionVerified = !round?.finalization?.discussionHash || resolutionReviewDiscussionHash(round.id, threads) === round.finalization.discussionHash;
   return {
     schema: 1, corporation: "Pretty Good Policy for Zcash", recordType: "Director review before written consent",
     meetingId: ballot.meetingId, resolutionId: ballot.id, title: ballot.title, resolution: ballot.motion,
     resolutionStatus: ballot.status, adoptedAt: ballot.closedAt, instructions: review.instructions,
     attachments: ballot.attachments || [], adoption: ballot.adoption || null, round, progress: reviewProgress(round),
-    integrityVerified: !round ? null : resolutionReviewHash(ballot, round.reviewers, round.rosterRevision) === round.contentHash && (!ballot.consent || ballot.consent.schema !== 4 || consentDigest(consentPayload(ballot, ballot.consent)) === ballot.consent.contentHash),
+    integrityVerified: !round ? null : discussionVerified && resolutionReviewHash(ballot, round.reviewers, round.rosterRevision) === round.contentHash && (!ballot.consent || ballot.consent.schema !== 4 || consentDigest(consentPayload(ballot, ballot.consent)) === ballot.consent.contentHash),
     finalizedReviewHash: round?.finalization ? resolutionReviewRecordHash(review) : null,
     consentHash: ballot.consent?.contentHash || null,
     declaration: "This record documents individual reviews and findings presented for adoption. It is not a signed consent, a certification that all legal requirements were met, or an adoption record. Individual review dates are self-reported; recorded-at times are server timestamps. Sensitive deliberations and disclosures remain in their separate restricted records.",
-    history,
+    threads, history,
   };
 }
 
@@ -35,6 +38,8 @@ export function resolutionReviewRecordHtml(record: ReturnType<typeof resolutionR
     const entry = record.round!.submissions.find((item) => item.accessId === person.userId);
     return `<article><h3>${escape(person.name)}</h3>${entry ? `<p>Review date: ${escape(entry.reviewedOn)}<br>Recorded at: ${escape(entry.recordedAt)}<br>Outcome: ${entry.outcome === "ready" ? "Ready for consent" : "Follow-up required"}<br>Conflict review: ${entry.conflict === "none" ? "No conflict requiring recusal reported" : "Requires attention"}</p><pre>${escape(entry.assessment)}</pre><p>${escape(entry.attestation)}</p><p class="meta">Submission: ${escape(entry.id)}</p>` : "<p>Review pending. No completion or conflict determination is assumed.</p>"}</article>`;
   }).join("")}
+  <h2>Assessment replies</h2><p>Replies do not change an assessment or constitute consent. Each thread identifies the assessment version it answered.</p>
+  ${record.threads.filter((thread) => thread.replies.length).map((thread) => `<article><h3>${escape(thread.submission.name)} - ${thread.roundId === record.round?.id ? "Current review round" : "Earlier review round"}</h3><p class="meta">Review round: ${escape(thread.roundId)}<br>Assessment: ${escape(thread.submission.id)}<br>Recorded: ${escape(thread.submission.recordedAt)}</p><pre>${escape(thread.submission.assessment)}</pre>${thread.replies.map((reply) => `<article><strong>${escape(reply.authorName)}</strong><p class="meta">${escape(reply.createdAt)}<br>Reply: ${escape(reply.id)}${reply.replyToMessageId ? `<br>In reply to: ${escape(reply.replyToMessageId)}` : ""}</p><pre>${escape(reply.body)}</pre></article>`).join("")}</article>`).join("") || "<p>No assessment replies.</p>"}
   <h2>Findings presented for adoption</h2>${record.round?.finalization ? `<pre>${escape(record.round?.finalization.findings)}</pre><p class="meta">Finalized by ${escape(record.round?.finalization.confirmedBy)} at ${escape(record.round?.finalization.confirmedAt)}</p>` : "<p>Not yet finalized by the Chair.</p>"}
   <h2>${record.round ? "Exact resolution reviewed" : "Current resolution - not reviewed"}</h2><pre>${escape(record.resolution)}</pre>
   <h2>${record.round ? "Document versions reviewed" : "Current document versions - not reviewed"}</h2>${record.attachments.map((doc) => `<article><strong>${escape(doc.title)} - v${doc.sequence}</strong><p>${escape(doc.description || "")}</p><p class="meta">Document: ${escape(doc.documentId)}<br>Version: ${escape(doc.versionId)}<br>SHA-256: ${escape(doc.sha256)}</p></article>`).join("") || "<p>No attachments.</p>"}
@@ -93,6 +98,15 @@ export async function resolutionReviewPacket(record: ReturnType<typeof resolutio
       if (!entry) { paragraph("Review pending. No completion or conflict determination is assumed."); continue; }
       paragraph(`Review date: ${entry.reviewedOn}\nRecorded at: ${entry.recordedAt}\nOutcome: ${entry.outcome === "ready" ? "Ready for consent" : "Follow-up required"}\nConflict review: ${entry.conflict === "none" ? "No conflict requiring recusal reported" : "Requires attention"}`);
       paragraph(entry.assessment); paragraph(entry.attestation);
+    }
+    if (record.threads.some((thread) => thread.replies.length)) {
+      paragraph("Assessment replies", true);
+      paragraph("Replies do not change assessments or constitute consent. Threads remain linked to the assessment version answered.");
+      for (const thread of record.threads.filter((item) => item.replies.length)) {
+        paragraph(`${thread.submission.name} - ${thread.roundId === record.round?.id ? "Current review round" : "Earlier review round"}`, true);
+        paragraph(`Review round: ${thread.roundId}\nAssessment: ${thread.submission.id}\nRecorded: ${thread.submission.recordedAt}\n${thread.submission.assessment}`);
+        for (const reply of thread.replies) paragraph(`${reply.authorName} - ${reply.createdAt}\nReply: ${reply.id}${reply.replyToMessageId ? `\nIn reply to: ${reply.replyToMessageId}` : ""}\n${reply.body}`);
+      }
     }
     paragraph("Findings presented for adoption", true);
     paragraph(record.round?.finalization ? `${record.round?.finalization.findings}\n\nFinalized by ${record.round?.finalization.confirmedBy} at ${record.round?.finalization.confirmedAt}` : "Not yet finalized by the Chair.");

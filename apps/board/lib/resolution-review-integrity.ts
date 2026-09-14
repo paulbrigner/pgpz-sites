@@ -27,7 +27,8 @@ export function resolutionReviewRecordHash(review: ResolutionReview | undefined)
     rosterRevision: round.rosterRevision, startedAt: round.startedAt, startedBy: round.startedBy,
     reviewers: round.reviewers.map(({ userId, name, email }) => ({ userId, name, email })),
     submissions: round.submissions.map((entry) => ({ id: entry.id, accessId: entry.accessId, authenticatedUserId: entry.authenticatedUserId, name: entry.name, email: entry.email, reviewedOn: entry.reviewedOn, recordedAt: entry.recordedAt, outcome: entry.outcome, conflict: entry.conflict, assessment: entry.assessment, attestation: entry.attestation })),
-    finalization: { findings: round.finalization.findings, confirmedAt: round.finalization.confirmedAt, confirmedBy: round.finalization.confirmedBy },
+    finalization: { findings: round.finalization.findings, confirmedAt: round.finalization.confirmedAt, confirmedBy: round.finalization.confirmedBy,
+      ...(round.finalization.discussionHash === undefined ? {} : { discussionHash: round.finalization.discussionHash }) },
   };
   return createHash("sha256").update(JSON.stringify(record)).digest("hex");
 }

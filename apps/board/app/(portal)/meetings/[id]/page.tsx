@@ -11,13 +11,15 @@ import { executiveAccessRecord, listExecutiveCandidates, visibleExecutiveSession
 import { canCreateExecutiveSession, isDirectorRole } from "@/lib/executive-sessions";
 import { executiveSessionsRepository } from "@/lib/executive-sessions-repository";
 import { readDirectorRoster } from "@/lib/director-roster";
+import { resolutionReviewThreads } from "@/lib/resolution-review-discussion";
+import { reviewThreadPath } from "@/lib/resolution-review-links";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Meeting", robots: { index: false, follow: false, nocache: true } };
 
-export default async function BoardMeetingPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BoardMeetingPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
-  const member = await requireBoardMember(`/meetings/${encodeURIComponent(id)}`);
+  const member = await requireBoardMember(reviewThreadPath(id, (await searchParams)?.reviewThread));
   if (!member) return null;
   const [record, meetingDocuments] = await Promise.all([
     boardMeetingsRepository.getMeeting(id),
@@ -39,6 +41,10 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
     ["scheduled", "materials-published"].includes(record.meeting.status)
     ? (await listExecutiveCandidates()).map((p) => ({ id: p.id, name: p.name, email: p.email, kind: isDirectorRole(p.role) ? "director" as const : "counsel" as const })) : null;
   const canReadReviews = accessRecord?.status === "active" && isDirectorRole(accessRecord.role);
+  // Never query or serialize private review exchanges for staff/counsel.
+  const reviewHistories = new Map(await Promise.all(record.asyncBallots
+    .filter((ballot) => canReadReviews && ballot.review?.everStarted)
+    .map(async (ballot) => [ballot.id, await boardMeetingsRepository.listResolutionReviewEvents(id, ballot.id)] as const)));
 
   const selectableDocuments = [...libraryDocuments, ...(canManageMeetings && record.meeting.format === "asynchronous" ? meetingDocuments.filter((doc) => doc.status === "active") : [])];
   const documentChoices = (await Promise.all(selectableDocuments.map(async (doc) => {
@@ -96,6 +102,10 @@ export default async function BoardMeetingPage({ params }: { params: Promise<{ i
           round: ballot.review.round ? { ...ballot.review.round, submissions: ballot.review.round.submissions.map(({ authenticatedUserId: _userId, ...entry }) => { void _userId; return entry; }) } : null,
           rosterChanged: ballot.status === "draft" && !!ballot.review.round && ballot.review.round.rosterRevision !== directorRoster?.revision,
           viewerAccessId: accessRecord!.id,
+          threads: resolutionReviewThreads(ballot.review, reviewHistories.get(ballot.id) || []).map(({ roundId, submission, replies }) => {
+            const { authenticatedUserId: _userId, ...entry } = submission; void _userId;
+            return { roundId, submission: entry, replies: replies.map(({ authenticatedUserId: _authorId, ...reply }) => { void _authorId; return reply; }) };
+          }),
         } } : {}),
         consentMode: ballot.consentMode,
         attachments: ballot.attachments?.map(({ description, ...doc }) => ({ ...doc, ...(!ballot.consent || ballot.consent.schema >= 3 ? (description ? { description } : {}) : {}) })),

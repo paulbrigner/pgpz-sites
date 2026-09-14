@@ -86,6 +86,11 @@ test.describe("board portal privacy boundary", () => {
 });
 
 test.describe("board portal sign-in callback validation", () => {
+  test("keeps an assessment email target through the anonymous redirect and sign-in callback", async ({ page }) => {
+    await page.goto("/meetings/m?reviewThread=assessment-1");
+    await expect(page).toHaveURL(/\/signin\?callbackUrl=/);
+    await expect(page.locator("[data-safe-callback]")).toHaveAttribute("data-safe-callback", "/meetings/m?reviewThread=assessment-1");
+  });
   const cases: Array<[string, string]> = [
     ["callbackUrl=javascript%3Aalert(1)", "/"],
     ["callbackUrl=JAVASCRIPT%3Aalert(1)", "/"],

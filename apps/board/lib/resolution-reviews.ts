@@ -1,6 +1,26 @@
 import type { BoardAsyncBallotVoter } from "./meetings";
 
 export const REVIEW_ATTESTATION = "I have reviewed the identified resolution and document versions, completed the requested due diligence and my conflict review, and accurately recorded my assessment below. This review is not consent to adopt the resolution.";
+export const REVIEW_REPLY_MAX_LENGTH = 4000;
+
+export interface ResolutionReviewReply {
+  readonly id: string;
+  readonly roundId: string;
+  readonly submissionId: string;
+  readonly replyToMessageId: string | null;
+  readonly authorAccessId: string;
+  readonly authenticatedUserId: string;
+  readonly authorName: string;
+  readonly authorEmail: string;
+  readonly body: string;
+  readonly createdAt: string;
+}
+
+export interface ResolutionReviewThread {
+  readonly roundId: string;
+  readonly submission: ResolutionReviewSubmission;
+  readonly replies: readonly ResolutionReviewReply[];
+}
 
 export interface ResolutionReviewSubmission {
   readonly id: string;
@@ -28,6 +48,8 @@ export interface ResolutionReviewRound {
     readonly findings: string;
     readonly confirmedAt: string;
     readonly confirmedBy: string;
+    /** Absent on records finalized before assessment replies were introduced. */
+    readonly discussionHash?: string;
   };
 }
 

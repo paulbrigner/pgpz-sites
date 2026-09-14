@@ -614,6 +614,27 @@ required reviews. Do not roll back to writers that drop review fields while
 required-review drafts or schema 4 consents are in use; those writers cannot
 safely preserve the review gate or reproduce the newer signed payload.
 
+Assessment replies add immutable `review-reply-posted` events and per-reply
+`NOTICE#<replyId>` delivery claims in the same review partition. Only current
+active directors can read or post them. Reply commits share the meeting version
+and access/roster guards, so opening consents cannot race an unrecorded reply.
+New finalizations include an optional `discussionHash`; readers preserve the
+exact digest of older schema 4 records where that field is absent. Once a new
+record includes this field, rollback must retain these readers/writers: older
+code cannot reproduce the new signed digest. No backfill or record rewrite is
+required; earlier assessments and rounds are reconstructed from retained events.
+
+The Board's existing email transport sends one generic notification after a
+reply commits, only to the selected recipient with matching current director
+access. A conditional `pending` to `sending` claim prevents duplicate delivery
+attempts. Outcomes (`sent`, `skipped`, `unknown`) and audit events are retained
+without changing the finalized review digest. An interrupted send may remain
+`sending`; never automatically reset or retry it because provider acceptance
+may be uncertain. No worker, queue, new IAM permissions, or production test email
+is needed. Validate recipient selection, self/revoked-recipient skips, duplicate
+claims, uncertain provider responses, and save success despite email failure
+with mocked delivery. Do not send historical notifications on deployment.
+
 Before an authorized release, run the repository gate, Board build, infrastructure
 contracts and targeted browser checks. Verify individual attribution, complete
 roster enforcement, stale revisions, edits invalidating reviews, unresolved
