@@ -23,7 +23,8 @@ export function boardMeetingNotificationResources(tags) {
       RoleName: "PgpzBoardMeetingNotifications", AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { Service: "lambda.amazonaws.com" }, Action: "sts:AssumeRole" }] },
       Policies: [{ PolicyName: "BoardMeetingNotificationDelivery", PolicyDocument: { Version: "2012-10-17", Statement: [
         allow(["dynamodb:GetRecords", "dynamodb:GetShardIterator", "dynamodb:DescribeStream"], { "Fn::GetAtt": ["BoardMeetingsTable", "StreamArn"] }),
-        allow(["dynamodb:ListStreams"], get("BoardMeetingsTable")),
+        // ListStreams has no resource-level IAM support; only metadata enumeration is wildcarded.
+        allow(["dynamodb:ListStreams"], "*", { StringEquals: { "aws:RequestedRegion": { Ref: "AWS::Region" } } }),
         allow(["dynamodb:GetItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"], get("BoardMeetingsTable")),
         allow(["dynamodb:GetItem", "dynamodb:ConditionCheckItem"], get("BoardAccessTable")),
         allow(["dynamodb:PutItem"], get("BoardMeetingsTable"), { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["MEETING_NOTICE#*"] } }),

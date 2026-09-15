@@ -112,6 +112,10 @@ test("infrastructure retains failed events, filters the stream and defaults deli
   assert.equal(r.BoardMeetingNotificationsFailures.DeletionPolicy, "Retain"); assert.equal(r.BoardMeetingNotificationsFailures.Properties.PublicAccessBlockConfiguration.BlockPublicPolicy, true);
   const role = JSON.stringify(r.BoardMeetingNotificationsRole);
   assert.doesNotMatch(role, /Community|Coalition|DeleteItem|Scan|SendRawEmail/); assert.match(role, /ConditionCheckItem/); assert.match(role, /LeadingKeys/);
+  const statements = r.BoardMeetingNotificationsRole.Properties.Policies[0].PolicyDocument.Statement;
+  const wildcard = statements.filter((s) => s.Resource === "*");
+  assert.deepEqual(wildcard.map((s) => s.Action), [["dynamodb:ListStreams"]]);
+  assert.deepEqual(wildcard[0].Condition, { StringEquals: { "aws:RequestedRegion": { Ref: "AWS::Region" } } });
   assert.ok(Buffer.byteLength(JSON.stringify(t)) < 51200);
   assert.equal(buildCliPlan(parseArguments(["--account-id", "123456789012", "--notification-delivery", "true"])).notificationDelivery, "true");
   assert.throws(() => buildCliPlan(parseArguments(["--account-id", "123456789012", "--notification-delivery", "yes"])));

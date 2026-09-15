@@ -60,7 +60,10 @@ of `MEETING_NOTIFICATION_EVENT` from the Board meetings table's `NEW_IMAGE` stre
 The app appends these minimal events in the same transaction as each change.
 There is no backfill or automatic subscription. The worker uses only Board
 meetings/access data and the `board@pgpz.org` SES sender. It has no document-object
-read access or access to another app's jobs. `BoardMeetingNotificationDelivery`
+read access or access to another app's jobs. AWS requires wildcard resource scope
+for regional stream-name discovery (`ListStreams`); that metadata-only permission
+is region-constrained, while all record reads remain Board-specific.
+`BoardMeetingNotificationDelivery`
 defaults to `false`; a later stack update preserves its current value unless
 `--notification-delivery true|false` is explicitly supplied.
 
