@@ -122,7 +122,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           if (saved) form.reset();
         }}>
           <p className="text-sm leading-6">{withdraw ? (consent?.withdrawalStatement || WITHDRAWAL_STATEMENT) : (consent?.statement || CONSENT_STATEMENT)}</p>
-          <p className="text-xs text-[var(--muted)]">Your signature is retained as a corporate record. Directors can see your consent or withdrawal status and delivery time during collection. After adoption, the consent record and receipt history are available to Board portal users.</p>
+          <p className="text-xs text-[var(--muted)]">Your signature is retained as a corporate record. Directors and the Executive Director can see your consent or withdrawal status and delivery time during collection. After adoption, the consent record and receipt history are available to Board portal users.</p>
           <label className="text-sm font-semibold">Full name as electronic signature<input name="signatureName" required maxLength={200} autoComplete="name" className={field} /></label>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="intent" required className="mt-1" /><span>I intend to electronically sign and deliver {withdraw ? "this withdrawal" : "my consent to this resolution"}.</span></label>
           <button disabled={pending} className={withdraw ? secondary : button}>{withdraw ? "Sign and deliver withdrawal" : "Sign and deliver consent"}</button>
