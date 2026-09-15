@@ -1,3 +1,5 @@
+import { boardMeetingNotificationResources } from "./board-meeting-notifications-infrastructure.mjs";
+
 export const BOARD_BACKEND = Object.freeze({
   applicationName: "board",
   stackName: "PgpzBoardBackend",
@@ -146,6 +148,10 @@ export function buildBoardBackendTemplate() {
     AWSTemplateFormatVersion: "2010-09-09",
     Description: "Isolated auth, governance-document, meeting, and audit backend for the private PGPZ Board portal",
     Parameters: {
+      BoardMeetingNotificationDelivery: {
+        Type: "String", Default: "false", AllowedValues: ["true", "false"],
+        Description: "Explicitly enable delivery to users who opted in to meeting updates. No users are subscribed by deployment.",
+      },
       BoardObjectLockMode: {
         Type: "String",
         Default: "GOVERNANCE",
@@ -173,6 +179,7 @@ export function buildBoardBackendTemplate() {
       },
     },
     Resources: {
+      ...boardMeetingNotificationResources(confidentialTags),
       BoardAuthTable: {
         Type: "AWS::DynamoDB::Table",
         DeletionPolicy: "Retain",
@@ -289,6 +296,7 @@ export function buildBoardBackendTemplate() {
         UpdateReplacePolicy: "Retain",
         Properties: {
           TableName: BOARD_BACKEND.meetingsTableName,
+          StreamSpecification: { StreamViewType: "NEW_IMAGE" },
           BillingMode: "PAY_PER_REQUEST",
           AttributeDefinitions: [
             { AttributeName: "pk", AttributeType: "S" },

@@ -20,6 +20,7 @@ import { MeetingRecordsManager } from "./MeetingRecordsManager";
 import { MeetingRsvp } from "./MeetingRsvp";
 import { MeetingLibraryMaterials, RemoveMeetingLibraryReference } from "./MeetingLibraryMaterials";
 import { MeetingSection } from "./MeetingSection";
+import { MeetingNotifications } from "./MeetingNotifications";
 import { AsyncBallots } from "./AsyncBallots";
 import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel, meetingTypeLabel, minutesStatusLabel } from "./meeting-format";
 import type { MeetingCapabilities, MeetingDetailView } from "./types";
@@ -85,6 +86,8 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
           ) : null}
         </div>
       </header>
+
+      <MeetingNotifications meetingId={meeting.id} />
 
       {asynchronous && <p className="mt-4 text-sm font-medium text-[var(--muted)]">Consent window closes {date.endDate} at {date.endTime}.</p>}
       {asynchronous && <nav aria-label="Meeting sections" className="mt-3 flex flex-wrap gap-2 text-sm font-semibold">

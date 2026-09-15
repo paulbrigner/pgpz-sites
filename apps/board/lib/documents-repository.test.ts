@@ -94,6 +94,26 @@ function version(documentId: string, versionId: string, sequence: number): Docum
 }
 
 describe("board documents repository", () => {
+  it("atomically emits meeting-material updates for uploads, versions, metadata, archive and rename", async () => {
+    const client = createFakeClient(); const originalGet = client.get;
+    vi.spyOn(client, "get").mockImplementation(async (input) => input.Key.pk === "MEETING#m" ? { Item: { pk: "MEETING#m", sk: "META", status: "draft", version: 2 } } : originalGet(input));
+    const tx = vi.spyOn(client, "transactWrite");
+    const repo = createBoardDocumentRepository(client);
+    let doc = await repo.createDocument({ documentId: "meeting-file", title: "PRIVATE TITLE", description: "PRIVATE BODY", category: "other", visibility: "members", version: version("meeting-file", "v1", 1), actorId: "author", ownership: { ownerType: "meeting", meetingId: "m", meetingSection: "preparation" } });
+    doc = await repo.acceptVersion({ documentId: doc.documentId, expectedRevision: doc.revision, head: doc, version: { ...version(doc.documentId, "v2", 2), uploadedBy: "author" }, actorId: "author" }) as typeof doc;
+    await repo.updateMetadata(doc.documentId, { title: "Changed", description: "", category: "other", visibility: "members" }, "author");
+    await repo.setArchived(doc.documentId, true, "author", "2026-09-15T12:00:00Z");
+    await repo.updateDisplayName(doc.documentId, "Renamed", "author");
+    expect(tx).toHaveBeenCalledTimes(5);
+    for (const [input] of tx.mock.calls) {
+      const event = input.TransactItems.find((item) => item.Put?.Item?.entityType === "MEETING_NOTIFICATION_EVENT")!.Put!.Item;
+      expect(event).toMatchObject({ meetingId: "m", action: "meeting-document-updated", meetingDraft: true, actor: "author" });
+      expect(JSON.stringify(event)).not.toContain("PRIVATE");
+      expect(input.TransactItems.some((item) => "ConditionCheck" in item)).toBe(true);
+    }
+    tx.mockRejectedValueOnce(new Error("outbox transaction failed"));
+    await expect(repo.setArchived(doc.documentId, false, "author", "2026-09-15T13:00:00Z")).rejects.toThrow("outbox transaction failed");
+  });
   it("preserves the operative version through uploads, restore, rename, archive and metadata changes, and atomically records replacement and clearing", async () => {
     const client = createFakeClient(); const tx = vi.spyOn(client, "transactWrite");
     const repo = createBoardDocumentRepository(client);

@@ -10,7 +10,8 @@ import {
   type NewDocumentInput,
 } from "@pgpz/document-vault/server";
 import { documentClient } from "@/lib/dynamodb";
-import { BOARD_DOCUMENTS_TABLE } from "@/lib/config";
+import { BOARD_DOCUMENTS_TABLE, BOARD_MEETINGS_TABLE } from "@/lib/config";
+import { meetingNotificationItems } from "@/lib/meeting-notification-events";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type VaultDocumentClient = any;
@@ -204,6 +205,23 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
     return { ...record, currentVersion: current, versionCount: versions.length };
   }
 
+  async function notificationItems(record: BoardDocumentRecord) {
+    if (record.ownerType !== "meeting") return [];
+    const key = { pk: `MEETING#${record.meetingId}`, sk: "META" };
+    const result = await client.get({ TableName: BOARD_MEETINGS_TABLE, Key: key, ConsistentRead: true });
+    // An orphan document cannot generate a notification for a nonexistent meeting.
+    if (!result.Item) return [];
+    return [
+      ...meetingNotificationItems({ meetingId: record.meetingId, action: "meeting-document-updated", actor: record.updatedBy || "", at: record.updatedAt, meetingDraft: result.Item.status === "draft" }),
+      { ConditionCheck: { TableName: BOARD_MEETINGS_TABLE, Key: key, ConditionExpression: "#version = :version", ExpressionAttributeNames: { "#version": "version" }, ExpressionAttributeValues: { ":version": result.Item.version } } },
+    ];
+  }
+  async function updateWithNotification(record: BoardDocumentRecord, statement: Record<string, unknown>) {
+    const notifications = await notificationItems(record);
+    if (notifications.length) await client.transactWrite({ TransactItems: [{ Update: statement }, ...notifications] });
+    else await client.update(statement);
+  }
+
   return {
     async getDocument(documentId) {
       const record = await getMeta(documentId);
@@ -319,6 +337,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
         TransactItems: [
           { Put: { TableName: tableName, Item: metaRecord(record, true), ConditionExpression: "attribute_not_exists(#pk)", ExpressionAttributeNames: { "#pk": "pk" } } },
           { Put: { TableName: tableName, Item: versionItem(input.documentId, { ...version, sequence: 1 }) } },
+          ...await notificationItems(record),
         ],
       });
       return toItem({ ...record, currentVersionId: input.version.versionId });
@@ -338,6 +357,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
           TransactItems: [
             { Put: { TableName: tableName, Item: versionItem(input.documentId, version), ConditionExpression: "attribute_not_exists(#sk)", ExpressionAttributeNames: { "#sk": "sk" } } },
             { Update: updateHeadStatement(current, next) },
+            ...await notificationItems(next),
           ],
         });
       } catch (error) {
@@ -351,7 +371,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       const current = await getMeta(documentId);
       if (!current) return null;
       const next = retainOwnership(current, setDocumentArchived(current, archived, now, actorId));
-      await client.update(updateMetaStatement(current, next));
+      await updateWithNotification(next, updateMetaStatement(current, next));
       return toItem(next);
     },
 
@@ -359,7 +379,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
       const current = await getMeta(documentId);
       if (!current) return null;
       const next = retainOwnership(current, updateDocumentMetadata(current, metadata, new Date().toISOString(), actorId));
-      await client.update(updateMetaStatement(current, next));
+      await updateWithNotification(next, updateMetaStatement(current, next));
       return toItem(next);
     },
 
@@ -405,7 +425,7 @@ export function createBoardDocumentRepository(client: VaultDocumentClient = docu
         updatedBy: actorId,
       };
       try {
-        await client.update({
+        await updateWithNotification(next, {
           TableName: tableName,
           Key: { pk: docPk(documentId), sk: META_SK },
           UpdateExpression: "SET displayName = :displayName, #rev = :nextRevision, #updAt = :updatedAt, #updBy = :updatedBy",

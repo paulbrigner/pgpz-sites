@@ -1,0 +1,43 @@
+{
+  "categories": {
+    "meeting": "Meeting details, agenda & attendance",
+    "materials": "Preparation materials & attachments",
+    "resolutions": "Resolution changes & consent windows",
+    "discussion": "Resolution discussion posts & edits",
+    "reviews": "Director review activity & replies",
+    "consents": "Consent progress & adoption",
+    "records": "Decisions, minutes & follow-up tasks",
+    "executive": "Executive Session updates"
+  },
+  "actions": {
+    "updated": ["meeting"],
+    "status-changed": ["meeting"],
+    "quorum-confirmed": ["meeting"],
+    "quorum-cleared": ["meeting"],
+    "agenda-item-upserted": ["meeting"],
+    "attendance-recorded": ["meeting"],
+    "material-reference-added": ["materials"],
+    "material-reference-removed": ["materials"],
+    "meeting-document-updated": ["materials"],
+    "async-ballot-created": ["resolutions"],
+    "async-ballot-updated": ["resolutions"],
+    "async-ballot-cancelled": ["resolutions"],
+    "written-consent-opened": ["resolutions"],
+    "written-consent-consent": ["consents"],
+    "written-consent-withdraw": ["consents"],
+    "written-consent-adopted": ["consents"],
+    "discussion-created": ["discussion"],
+    "discussion-edited": ["discussion"],
+    "resolution-review-started": ["reviews"],
+    "resolution-review-submitted": ["reviews"],
+    "resolution-review-reply-posted": ["reviews"],
+    "decision-recorded": ["records"],
+    "action-item-recorded": ["records"],
+    "minutes-updated": ["records"],
+    "executive-created": ["executive"],
+    "executive-message": ["executive"],
+    "executive-material": ["executive"],
+    "executive-closed": ["executive"],
+    "executive-published": ["records"]
+  }
+}

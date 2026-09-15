@@ -11,6 +11,7 @@ import { isAdoptionTarget } from "@/lib/document-adoptions";
 import { REVIEW_ATTESTATION, REVIEW_REPLY_MAX_LENGTH, reviewProgress, type ResolutionReview, type ResolutionReviewSubmission, type ResolutionReviewReply } from "@/lib/resolution-reviews";
 import { resolutionReviewHash, resolutionReviewPacket } from "@/lib/resolution-review-integrity";
 import { resolutionReviewThreads, resolutionReviewDiscussionHash } from "@/lib/resolution-review-discussion";
+import { meetingNotificationItems } from "@/lib/meeting-notification-events";
 import {
   BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
@@ -348,7 +349,15 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     return { pk: meetingPk(meeting.id), sk: `REVISION#${occurredAt}#${randomUUID()}`, entityType: "MEETING_REVISION", meetingId: meeting.id, version: meeting.version, action, actorEmail, occurredAt, detail };
   }
   function mutationItems(previous: BoardMeeting, next: BoardMeeting, action: string, actorEmail: string, occurredAt: string, detail: unknown, child?: { item: Row; immutable?: boolean }): BoardMeetingTransactItem[] {
+    const identifiers = (detail || {}) as { ballotId?: string; replyId?: string; attachmentsChanged?: boolean; reviewChanged?: boolean };
     return [
+      ...meetingNotificationItems({ meetingId: next.id, action, actor: actorEmail, at: occurredAt, meetingDraft: next.status === "draft",
+        ...(identifiers.ballotId ? { ballotId: identifiers.ballotId } : {}),
+        ...(identifiers.replyId ? { replyId: identifiers.replyId } : {}),
+        ...(identifiers.attachmentsChanged ? { attachmentsChanged: true } : {}),
+        ...(identifiers.reviewChanged ? { reviewChanged: true } : {}),
+        ...(child?.item.entityType === "ASYNC_BALLOT" ? { ballotDraft: child.item.status === "draft", reviewStarted: (child.item.review as ResolutionReview | null)?.everStarted === true } : {}),
+      }, resolvedTable),
       { Put: { TableName: resolvedTable, Item: meetingItem(next), ConditionExpression: "#version = :expectedVersion", ExpressionAttributeNames: { "#version": "version" }, ExpressionAttributeValues: { ":expectedVersion": previous.version } } },
       ...(child ? [{ Put: {
         TableName: resolvedTable,
@@ -595,7 +604,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         ballot = { ...ballot, review }; invalidated = true;
       }
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      return commit(previous, next, existing ? "async-ballot-updated" : "async-ballot-created", actor, at, { ballotId: ballot.id, title: ballot.title }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [...(invalidated ? [reviewEvent(ballot, at, actor, "review-invalidated", { previousRoundId: existing?.review?.round?.id, reason: "Resolution materials or review instructions changed" })] : []), ...(options?.additionalTransactItems || [])] });
+      return commit(previous, next, existing ? "async-ballot-updated" : "async-ballot-created", actor, at, { ballotId: ballot.id, title: ballot.title, attachmentsChanged: JSON.stringify(existing?.attachments || []) !== JSON.stringify(ballot.attachments || []), reviewChanged: invalidated }, { item: asyncBallotItem(ballot) }, { additionalTransactItems: [...(invalidated ? [reviewEvent(ballot, at, actor, "review-invalidated", { previousRoundId: existing?.review?.round?.id, reason: "Resolution materials or review instructions changed" })] : []), ...(options?.additionalTransactItems || [])] });
     },
     async startResolutionReview(input: StartResolutionReviewInput, options?: BoardMeetingMutationOptions) {
       assertReviewCoordinator(input.accessRecord);
@@ -798,6 +807,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
         { Put: { TableName: resolvedTable, Item: asyncDiscussionItem(message), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
         { Put: { TableName: resolvedTable, Item: asyncDiscussionRevision(message, "created", at), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...meetingNotificationItems({ meetingId, ballotId, action: "discussion-created", actor: message.authorEmail, at, meetingDraft: false }, resolvedTable),
         ...(options?.additionalTransactItems || []),
       ];
       if (items.length > 100) throw new Error("Board discussion transaction exceeds 100 items");
@@ -829,6 +839,7 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
         { ConditionCheck: { TableName: resolvedTable, Key: { pk: meetingPk(meetingId), sk: entitySk("BALLOT", ballotId) }, ConditionExpression: "#status = :open", ExpressionAttributeNames: { "#status": "status" }, ExpressionAttributeValues: { ":open": "open" } } },
         { Put: { TableName: resolvedTable, Item: asyncDiscussionItem(message), ConditionExpression: "#authorUserId = :authorUserId AND #updatedAt = :expectedUpdatedAt", ExpressionAttributeNames: { "#authorUserId": "authorUserId", "#updatedAt": "updatedAt" }, ExpressionAttributeValues: { ":authorUserId": authorUserId, ":expectedUpdatedAt": expectedUpdatedAt } } },
         { Put: { TableName: resolvedTable, Item: asyncDiscussionRevision(message, "edited", at), ConditionExpression: "attribute_not_exists(#pk) AND attribute_not_exists(#sk)", ExpressionAttributeNames: { "#pk": "pk", "#sk": "sk" } } },
+        ...meetingNotificationItems({ meetingId, ballotId, action: "discussion-edited", actor: message.authorEmail, at, meetingDraft: false }, resolvedTable),
         ...(options?.additionalTransactItems || []),
       ];
       if (items.length > 100) throw new Error("Board discussion transaction exceeds 100 items");

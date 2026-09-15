@@ -53,6 +53,86 @@ change writes an immutable revision. The web role receives no `DeleteItem` or
 
 ## 2. Amplify application
 
+### Personal meeting notification worker
+
+The Board backend includes `PgpzBoardMeetingNotifications`, consuming only INSERTs
+of `MEETING_NOTIFICATION_EVENT` from the Board meetings table's `NEW_IMAGE` stream.
+The app appends these minimal events in the same transaction as each change.
+There is no backfill or automatic subscription. The worker uses only Board
+meetings/access data and the `board@pgpz.org` SES sender. It has no document-object
+read access or access to another app's jobs. `BoardMeetingNotificationDelivery`
+defaults to `false`; a later stack update preserves its current value unless
+`--notification-delivery true|false` is explicitly supplied.
+
+Before an authorized release:
+
+1. Confirm the account, region, current stack parameters/outputs, termination
+   protection, Board Amplify app and branch, registry enablement, SES identity,
+   existing sender, rollback commit, and absence of overlapping deployments.
+2. Run `npm run check`, `npm run build:board`, `npm run test:e2e`, targeted settings
+   browser checks, and `npm run test:board-backend-infra`. The latter exercises the
+   worker with injected clients; it cannot send production email. Run the existing
+   provisioner in `--validate-only` mode against AWS. No migration is needed.
+3. Inspect a CloudFormation change set. Expected changes are the additive worker,
+   role, log group, stream mapping, private retained failure bucket/policy, metric
+   filter and alarms, plus enabling the Board meetings stream. Reject table/bucket
+   replacement, changes to existing retention/encryption, or unrelated resources.
+4. With release authorization and the existing live retention values, update the
+   backend before releasing the Board app. Explicit delivery enablement is:
+
+   ```bash
+   npm run provision:board-backend -- --account-id 860091316962 \
+     --profile zodldashboard --object-lock-mode GOVERNANCE --retention-days 90 \
+     --notification-delivery true --apply --confirm PROVISION-BOARD-BACKEND
+   ```
+
+   The retention values above are examples: preserve the verified live values.
+   If applying a reviewed change set directly, preserve all existing parameters
+   and explicitly set only the new delivery parameter. Do not deploy the UI with
+   delivery disabled except during a documented outage.
+5. Invoke the Lambda with `{"validate_only":true}` and no `Records`. Expect
+   `{"valid":true,"enabled":true}`. This performs no recipient reads, claims or
+   sends. Verify the stream mapping is enabled and its filter, retry and failure
+   destination match the template. Confirm IAM simulation permits Board reads,
+   conditional claims and the exact sender, while denying other-app resources.
+6. Release the reviewed Board commit, verify its exact Amplify deployment, and
+   inspect the signed-in settings panel without subscribing users or generating
+   test meeting activity. A real send test needs a separately authorized single
+   recipient; `validate_only` does not verify SES acceptance or inbox delivery.
+
+The stream starts at `TRIM_HORIZON` so initialization cannot lose new events;
+only the new outbox entity type matches. Subscriptions apply after their saved
+timestamp, so historical events cannot email newly subscribed users. Stream
+failures retry at most 10 times/one hour. S3 retains complete failed invocation
+records beyond DynamoDB Streams' 24-hour window. The failure bucket is private,
+TLS-only, encrypted, versioned, and retained; it does not expire automatically.
+These choices follow AWS's [stream failure handling documentation](https://docs.aws.amazon.com/lambda/latest/dg/services-dynamodb-errors.html).
+
+Watch `PgpzBoardMeetingNotificationFailures`, `PgpzBoardMeetingNotificationsErrors`,
+`PgpzBoardMeetingNotificationsBacklog`, and
+`PgpzBoardMeetingNotificationsDestinationErrors`. These CloudWatch alarms follow
+the stack's existing console-alarm convention; no email/SNS recipients are added.
+The log group records event/access identifiers and failure categories, not email
+addresses or private content. `NOTIFICATION_SEND_UNKNOWN` requires inspection.
+
+For recovery, first inspect the retained event and `DELIVERY#<eventId>#<accessId>`
+claims in its `MEETING_NOTICE#<meetingId>` partition. `sent`, `unknown`, and
+`sending` claims are not automatically retried. Reconcile `unknown`/unfinished
+`sending` claims against SES evidence; never delete claims merely to retry. After
+an authorized repair, a retained failed stream invocation may be replayed with
+the same event keys: the worker refetches current preferences/access and skips
+existing claims. Disabling subscriptions or editing filters suppresses older
+queued events. Do not forge a new event ID to bypass duplicate prevention.
+
+To pause delivery, disable the event-source mapping under incident authorization
+and record the time; its stream source retains records for 24 hours. For a longer
+outage, retain failed invocations and the outbox for controlled recovery. Merely
+setting delivery to `false` makes events fail/retry and eventually enter the
+failure bucket; it is not a durable pause. Roll back the Board app without
+removing the new retained records or replacing the meetings table. Assess pending
+claims before re-enabling delivery. An in-flight email already accepted by SES
+cannot be recalled.
+
 Create an Amplify application from the pgpz-sites monorepo with:
 
 - `AMPLIFY_MONOREPO_APP_ROOT=apps/board`

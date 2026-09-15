@@ -43,6 +43,7 @@ function usage() {
     "  node tooling/provision-board-backend.mjs --account-id <12-digits>",
     "    [--region us-east-1] [--profile <profile>] [--validate-only]",
     "    [--object-lock-mode GOVERNANCE|COMPLIANCE] [--retention-days 90]",
+    "    [--notification-delivery true|false]",
     `    [--apply --confirm ${APPLY_CONFIRMATION}]`,
     "",
     "Default mode is a local, no-AWS dry run. --validate-only only calls",
@@ -73,7 +74,8 @@ function parseAwsJson(result, label) {
 function writeTemporaryTemplate(template) {
   const directory = mkdtempSync(join(tmpdir(), "pgpz-board-backend-"));
   const path = join(directory, "template.json");
-  writeFileSync(path, `${JSON.stringify(template, null, 2)}\n`, {
+  // Keep the inline worker and infrastructure within CloudFormation's 51,200-byte body limit.
+  writeFileSync(path, `${JSON.stringify(template)}\n`, {
     encoding: "utf8",
     mode: 0o600,
   });
@@ -114,12 +116,15 @@ export function buildCliPlan({ values, flags }) {
   if (!Number.isInteger(retentionDays) || retentionDays < 1) {
     throw new Error("--retention-days must be a positive integer");
   }
+  const notificationDelivery = values["notification-delivery"];
+  if (notificationDelivery !== undefined && !["true", "false"].includes(notificationDelivery)) throw new Error("--notification-delivery must be true or false");
   return {
     ...plan,
     mode,
     profile: values.profile,
     terminationProtection: true,
     parameters: { objectLockMode, retentionDays },
+    ...(notificationDelivery !== undefined ? { notificationDelivery } : {}),
   };
 }
 
@@ -176,6 +181,7 @@ export function main(argv = process.argv.slice(2)) {
       "--parameter-overrides",
       `BoardObjectLockMode=${plan.parameters.objectLockMode}`,
       `BoardRetentionDays=${plan.parameters.retentionDays}`,
+      ...(plan.notificationDelivery !== undefined ? [`BoardMeetingNotificationDelivery=${plan.notificationDelivery}`] : []),
     ]);
     runAws(baseArguments, [
       "cloudformation",

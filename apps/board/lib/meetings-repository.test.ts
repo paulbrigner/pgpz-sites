@@ -330,6 +330,10 @@ describe("Board meetings repository", () => {
       { id: "message-2", replyToMessageId: "message-1" },
     ]);
     expect([...client.items.values()].filter((item) => item.entityType === "ASYNC_DISCUSSION_REVISION")).toHaveLength(3);
+    const events = [...client.items.values()].filter((item) => item.entityType === "MEETING_NOTIFICATION_EVENT" && String(item.action).startsWith("discussion-"));
+    expect(events).toHaveLength(3);
+    expect(events.filter((item) => item.action === "discussion-edited")[0]).toMatchObject({ ballotId: "ballot-1", actor: "ada@example.org" });
+    expect(JSON.stringify(events)).not.toContain("effective date");
     await expect(repo.editAsyncDiscussionMessage({
       meetingId: meeting.id, ballotId: "ballot-1", messageId: root.id, body: "Unauthorized edit",
       expectedUpdatedAt: edited.updatedAt, authorUserId: "director-2", occurredAt: "2026-09-10T13:11:00Z",
