@@ -83,14 +83,16 @@ describe("AsyncBallots", () => {
     expect(screen.queryByText("Edit draft resolution")).not.toBeInTheDocument();
     expect(screen.queryByText("Cancel collection without adoption")).not.toBeInTheDocument();
   });
-  it("shows named consent, pending, and withdrawal states with delivery times in the meeting time zone", () => {
-    const ballot = { ...openBallot, consent: { ...openBallot.consent!, directorStatuses: [
+  it.each([true, false])("shows named statuses with delivery times when viewer signing eligibility is %s", (viewerEligible) => {
+    const ballot = { ...openBallot, viewerEligible, consent: { ...openBallot.consent!, directorStatuses: [
       { userId: "a", name: "Alex Director", status: "consented" as const, receivedAt: "2026-09-11T14:30:00Z" },
       { userId: "b", name: "Blair Director", status: "pending" as const, receivedAt: null },
       { userId: "c", name: "Casey Director", status: "withdrawn" as const, receivedAt: "2026-09-11T15:45:00Z" },
     ] } };
     const { rerender } = render(<AsyncBallots meeting={meeting} ballots={[ballot]} canManage={false} canDiscuss />);
     const statuses = within(screen.getByRole("region", { name: "Director consent status" }));
+    expect(statuses.getByText(/Visible to directors and the Executive Director/)).toBeVisible();
+    if (!viewerEligible) expect(screen.queryByRole("button", { name: "Sign and deliver consent" })).not.toBeInTheDocument();
     expect(statuses.getByText(/does not indicate opposition/)).toBeVisible();
     const rows = statuses.getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("Alex DirectorConsentedConsent received Sep 11, 2026, 10:30 AM EDT");

@@ -243,12 +243,14 @@ this workflow always requires every director and cannot lower that requirement.
 
 Each resolution displays its required directors' latest **Consented**, **Not yet
 consented**, or **Withdrawn** status to active directors (including the Chair and
-legacy admin role), with delivery times in the meeting's time zone. Pending is
-not opposition. Statuses use the resolution's frozen roster and current receipt
+legacy admin role) and the Executive Director, with delivery times in the meeting's
+time zone. Pending is not opposition. Statuses use the resolution's frozen roster and current receipt
 per access ID; a later consent replaces a withdrawal in this display. The server
-omits named status metadata for Executive Director, Legal Counsel, Board Support,
-and inactive or missing access records. This summary does not expose other
-directors' signature receipts or change executive-session admission controls.
+omits named status metadata for Legal Counsel, Board Support, and inactive or
+missing access records. Executive Director access supports administrative
+follow-up and does not confer signing eligibility, private director-review access,
+or executive-session admission. This summary does not expose other directors'
+signature receipts.
 
 Current receipts and immutable receipt history are retained in the Board
 meetings table without TTL. The authenticated per-resolution record endpoint
