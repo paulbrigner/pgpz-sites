@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { documentClient } from "@/lib/dynamodb";
 import { BOARD_MEETINGS_TABLE } from "@/lib/config";
+import { meetingNotificationItems } from "@/lib/meeting-notification-events";
 import { ExecutiveSessionError, type ExecutiveSession, type ExecutiveMessage, type ExecutiveMaterial, type ExecutiveReport, type ExecutiveGrant } from "@/lib/executive-sessions";
 
 type Row = Record<string, unknown>;
@@ -30,6 +31,11 @@ export function createExecutiveSessionsRepository(client: any = documentClient, 
 
   function put(pk: string, sk: string, value: unknown): Transaction {
     return { Put: { TableName: tableName, Item: { pk, sk, value }, ConditionExpression: "attribute_not_exists(pk)" } };
+  }
+  function notice(session: ExecutiveSession, action: string, actor: string, at = new Date().toISOString()) {
+    return meetingNotificationItems({ meetingId: session.meetingId, action, actor, at, meetingDraft: false,
+      ...(action === "executive-published" ? {} : { sessionId: session.id }),
+    }, tableName);
   }
 
   async function commit(session: ExecutiveSession, previousVersion: number | null, children: Transaction[], guards: readonly Transaction[]) {
@@ -75,6 +81,7 @@ export function createExecutiveSessionsRepository(client: any = documentClient, 
     },
     async create(session: ExecutiveSession, guards: readonly Transaction[]) {
       return commit(session, null, [
+        ...notice(session, "executive-created", session.createdBy, session.createdAt),
         put(`MEETING#${session.meetingId}`, `EXECUTIVE_SESSION#${session.id}`, session.id),
         ...session.participants.map((p) => put(partition(session.id), `PARTICIPANT#${p.accessId}`, {
           accessId: p.accessId, email: p.email, kind: p.kind, meetingId: session.meetingId,
@@ -84,18 +91,18 @@ export function createExecutiveSessionsRepository(client: any = documentClient, 
     async append(session: ExecutiveSession, record: ExecutiveMessage | ExecutiveMaterial, kind: "MESSAGE" | "MATERIAL", guards: readonly Transaction[]) {
       if (session.status !== "open") throw new ExecutiveSessionError(409, "This session is closed and its record is read-only.");
       return commit({ ...session, version: session.version + 1 }, session.version,
-        [put(partition(session.id), `${kind}#${record.createdAt}#${record.id}`, record)], guards);
+        [put(partition(session.id), `${kind}#${record.createdAt}#${record.id}`, record), ...notice(session, kind === "MESSAGE" ? "executive-message" : "executive-material", "authorId" in record ? record.authorId : record.createdBy, record.createdAt)], guards);
     },
     async close(session: ExecutiveSession, actor: string, guards: readonly Transaction[]) {
       if (session.status !== "open") throw new ExecutiveSessionError(409, "This session is already closed.");
-      return commit({ ...session, status: "closed", version: session.version + 1, closedAt: new Date().toISOString(), closedBy: actor }, session.version, [], guards);
+      return commit({ ...session, status: "closed", version: session.version + 1, closedAt: new Date().toISOString(), closedBy: actor }, session.version, notice(session, "executive-closed", actor), guards);
     },
     async publish(session: ExecutiveSession, summary: string, actor: string, guards: readonly Transaction[]) {
       if (session.status !== "closed" || session.publishedAt) throw new ExecutiveSessionError(409, "Close the session before publishing its one reviewed outcome.");
       const publishedAt = new Date().toISOString();
       const report: ExecutiveReport = { id: randomUUID(), summary, publishedAt, publishedBy: actor };
       return commit({ ...session, publishedAt, version: session.version + 1 }, session.version,
-        [put(`MEETING#${session.meetingId}`, `EXECUTIVE_REPORT#${report.id}`, report)], guards);
+        [put(`MEETING#${session.meetingId}`, `EXECUTIVE_REPORT#${report.id}`, report), ...notice(session, "executive-published", actor, publishedAt)], guards);
     },
   };
 }

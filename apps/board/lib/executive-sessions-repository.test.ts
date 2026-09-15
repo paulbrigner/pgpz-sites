@@ -25,6 +25,12 @@ describe("restricted session persistence", () => {
     expect(JSON.stringify(ordinaryRows)).not.toContain("PRIVATE");
     expect(JSON.stringify(ordinaryRows)).not.toContain("counsel@example.invalid");
     expect([...client.items.values()].filter((row) => String(row.sk).startsWith("REVISION#"))).toHaveLength(8);
+    const events = [...client.items.values()].filter((row) => row.entityType === "MEETING_NOTIFICATION_EVENT");
+    expect(events).toHaveLength(8);
+    expect(JSON.stringify(events)).not.toContain("PRIVATE");
+    expect(events.filter((row) => row.action !== "executive-published").every((row) => row.sessionId === session.id)).toBe(true);
+    expect(events.find((row) => row.action === "executive-published")).toMatchObject({ categories: ["records"] });
+    expect(events.find((row) => row.action === "executive-published")).not.toHaveProperty("sessionId");
   });
 
   it("never registers restricted files with ordinary library or meeting-document APIs", async () => {

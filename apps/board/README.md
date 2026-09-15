@@ -310,8 +310,9 @@ resolution is adopted or cancelled, while remaining visible in the historical me
 Long URLs and other unbroken text wrap inside both messages and replies, including
 author bylines, without changing the retained message contents.
 Discussion does not constitute an electronic signature or consent. Threads refresh on
-request; email notifications, unread counts, reactions, attachments, and live
-chat delivery are intentionally outside the initial discussion scope.
+request. Personal meeting email subscriptions can include new discussion posts and
+edits. Unread counts, reactions, attachments, and live chat delivery remain outside
+the discussion scope.
 
 Meeting lifecycle data is Board-specific and stored in `PGPZBoardMeetings` as
 an optimistic aggregate with retained child records and immutable revisions.
@@ -505,6 +506,50 @@ npx tsx scripts/import-brand-library.ts --actor-email div@pgpz.org
 
 Use the exact `--apply --confirm IMPORT_PGPZ_BRAND_LIBRARY` gate only after the
 dry-run plan and current production resources have been verified.
+
+### Personal meeting update emails
+
+Every active registry user, including Board Support and Legal Counsel, can open
+**Email notifications** on a meeting and opt in for that meeting or selected
+resolutions. Subscriptions default off. Categories cover meeting details/agenda/
+attendance, materials, resolution changes, discussions, director reviews,
+consent progress/adoption, records/tasks, and Executive Sessions. Own activity
+is excluded unless selected. Settings apply to future updates; disabling a
+subscription also suppresses queued events that have not been claimed for sending.
+Official Chair notices and existing direct assessment-reply notifications remain
+separate. Direct reply recipients do not receive a duplicate subscription email.
+
+`lib/meeting-notifications.ts` and `config/meeting-notifications.json` define the
+Board-specific preference contract. The passkey-protected
+`/api/meetings/[id]/notifications` endpoint binds preferences to the current active
+access record and verified account; it never accepts another recipient. Updates
+require step-up, optimistic concurrency, and an atomic active-access guard/audit.
+`components/meetings/MeetingNotifications.tsx` supplies the compact, accessible
+settings panel and opens it for email settings links.
+
+Meeting, discussion, Executive Session, and meeting-owned document mutations
+atomically append minimal events through `lib/meeting-notification-events.ts`.
+Preferences, events and delivery claims live in separate
+`MEETING_NOTICE#<meetingId>` partitions of the Board meetings table, outside the
+meeting aggregate and its ordinary API responses. Library versions pinned to
+meeting materials do not change when a later library version is uploaded, so
+that upload does not generate a meeting notification.
+
+`workers/meeting-notifications.cjs` is the dedicated Board DynamoDB-stream Lambda.
+It checks both event-time visibility and current meeting/ballot access, active
+registry identity, filters, and session admission before claiming a single-recipient
+delivery. Review events are director-only; private session events require a matching
+grant and a current director/counsel role. Emails contain generic activity labels
+and authenticated links, never private titles, comments, assessments, voting
+identities, attachments, or signature material. Settings changes prevent delivery
+of earlier queued events, even if the new settings also match them.
+
+Claims are conditional and retained. SES gets one attempt; ambiguous responses
+and unfinished `sending` claims require operator inspection and are never
+automatically resent. Pre-send failures retry through the stream; discarded
+invocations are retained in a private failure bucket. Infrastructure, alarms,
+guarded enablement, validation-only checks and recovery are documented in
+`docs/board-deployment.md`. No other application's jobs, tables or senders are used.
 
 ## Local development
 

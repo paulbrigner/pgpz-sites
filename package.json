@@ -53,7 +53,7 @@
     "test:production-config": "node --test tooling/production-config.test.mjs",
     "test:compute-role": "node --test tooling/amplify-compute-role.test.mjs",
     "test:durable-jobs-infra": "node --test tooling/durable-jobs-cloudformation.test.mjs tooling/configure-amplify-durable-jobs.test.mjs",
-    "test:board-backend-infra": "node --test tooling/board-backend-cloudformation.test.mjs",
+    "test:board-backend-infra": "node --test tooling/board-backend-cloudformation.test.mjs tooling/board-meeting-notifications.test.mjs",
     "provision:board-backend": "node tooling/provision-board-backend.mjs",
     "migrate:board-access": "NODE_OPTIONS=--conditions=react-server npm run migrate:access-roster --workspace=apps/board --",
     "remove:board-password-credentials": "NODE_OPTIONS=--conditions=react-server npm run remove:password-credentials --workspace=apps/board --",
