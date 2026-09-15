@@ -310,8 +310,9 @@ resolution is adopted or cancelled, while remaining visible in the historical me
 Long URLs and other unbroken text wrap inside both messages and replies, including
 author bylines, without changing the retained message contents.
 Discussion does not constitute an electronic signature or consent. Threads refresh on
-request; email notifications, unread counts, reactions, attachments, and live
-chat delivery are intentionally outside the initial discussion scope.
+request. Personal meeting email subscriptions can include new discussion posts and
+edits. Unread counts, reactions, attachments, and live chat delivery remain outside
+the discussion scope.
 
 Meeting lifecycle data is Board-specific and stored in `PGPZBoardMeetings` as
 an optimistic aggregate with retained child records and immutable revisions.
