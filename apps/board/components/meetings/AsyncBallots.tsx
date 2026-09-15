@@ -122,7 +122,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
           if (saved) form.reset();
         }}>
           <p className="text-sm leading-6">{withdraw ? (consent?.withdrawalStatement || WITHDRAWAL_STATEMENT) : (consent?.statement || CONSENT_STATEMENT)}</p>
-          <p className="text-xs text-[var(--muted)]">Your signature is retained as a corporate record. Directors can see your consent or withdrawal status and delivery time during collection. After adoption, the consent record and receipt history are available to Board portal users.</p>
+          <p className="text-xs text-[var(--muted)]">Your signature is retained as a corporate record. Directors and the Executive Director can see your consent or withdrawal status and delivery time during collection. After adoption, the consent record and receipt history are available to Board portal users.</p>
           <label className="text-sm font-semibold">Full name as electronic signature<input name="signatureName" required maxLength={200} autoComplete="name" className={field} /></label>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="intent" required className="mt-1" /><span>I intend to electronically sign and deliver {withdraw ? "this withdrawal" : "my consent to this resolution"}.</span></label>
           <button disabled={pending} className={withdraw ? secondary : button}>{withdraw ? "Sign and deliver withdrawal" : "Sign and deliver consent"}</button>
@@ -157,7 +157,7 @@ export function AsyncBallots({ meeting, ballots, canManage, canDiscuss, document
             <p className="mt-4 text-sm font-semibold">{cancelled ? `${ballot.ballotsCast} of ${ballot.eligibleCount} directors had consent on record at cancellation. Collection is closed.` : `${ballot.ballotsCast} of ${ballot.eligibleCount} directors have delivered consent. Every director is required.`}</p>
             {consent.directorStatuses && <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold">See each director’s consent status</summary><section aria-labelledby={`consent-status-${ballot.id}`} className="mt-3 rounded-xl border border-[var(--border)] bg-white p-3 sm:p-4">
               <h4 id={`consent-status-${ballot.id}`} className="text-sm font-semibold">{cancelled ? "Director consent status at cancellation" : "Director consent status"}</h4>
-              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{cancelled ? "Historical record, visible to directors. No further consents can be delivered to this cancelled item." : "Visible to directors. “Not yet consented” means no consent has been delivered; it does not indicate opposition."} Times shown in {meeting.timeZone}.</p>
+              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{cancelled ? "Historical record, visible to directors and the Executive Director. No further consents can be delivered to this cancelled item." : "Visible to directors and the Executive Director. “Not yet consented” means no consent has been delivered; it does not indicate opposition."} Times shown in {meeting.timeZone}.</p>
               <ul className="mt-2 divide-y divide-[var(--border)]">
                 {consent.directorStatuses.map((person) => <li key={person.userId} className="grid gap-1 py-2.5 text-sm sm:grid-cols-2 sm:gap-4">
                   <span className="min-w-0 break-words font-medium">{person.name}</span>

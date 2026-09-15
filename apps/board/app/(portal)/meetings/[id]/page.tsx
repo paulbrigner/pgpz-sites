@@ -13,6 +13,7 @@ import { executiveSessionsRepository } from "@/lib/executive-sessions-repository
 import { readDirectorRoster } from "@/lib/director-roster";
 import { resolutionReviewThreads } from "@/lib/resolution-review-discussion";
 import { reviewThreadPath } from "@/lib/resolution-review-links";
+import { roleCanViewBoardConsentStatuses } from "@/lib/board-access";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Meeting", robots: { index: false, follow: false, nocache: true } };
@@ -114,8 +115,8 @@ export default async function BoardMeetingPage({ params, searchParams }: { param
           contentHash: ballot.consent.contentHash, startAt: ballot.consent.startAt, endAt: ballot.consent.endAt,
           statement: ballot.consent.statement, withdrawalStatement: ballot.consent.withdrawalStatement,
           directors: ballot.eligibleVoters,
-          // Project only status metadata for active directors, never other signers' receipts.
-          ...(accessRecord?.status === "active" && isDirectorRole(accessRecord.role) ? {
+          // Project only progress metadata for permitted active roles, never other signers' receipts.
+          ...(accessRecord?.status === "active" && roleCanViewBoardConsentStatuses(accessRecord.role) ? {
             directorStatuses: ballot.eligibleVoters.map((director) => {
               const receipt = ballot.consent!.receipts.find((item) => item.accessId === director.userId);
               return {

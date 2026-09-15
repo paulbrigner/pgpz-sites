@@ -68,9 +68,11 @@ describe("meeting director consent visibility", () => {
     expect(html).toContain("PRIVATE_REPLY"); expect(html).not.toContain("PRIVATE_AUTH_REPLY");
     expect((mocks.detail.mock.lastCall![0] as { detail: MeetingDetailView }).detail.asyncBallots).toHaveLength(1);
   });
-  it.each(["member", "chair", "admin"])("shows %s the latest named statuses per resolution without other signature evidence", async (role) => {
+  it.each(["member", "chair", "admin", "executive-director"])("shows %s the latest named statuses per resolution without other signature evidence", async (role) => {
     mocks.manage = role !== "member";
-    mocks.access.mockResolvedValue({ id: "chair", email: "chair@example.invalid", role, status: "active" });
+    const viewerId = role === "executive-director" ? "staff" : "chair";
+    mocks.member.mockResolvedValue({ id: viewerId, email: `${viewerId}@example.invalid`, role });
+    mocks.access.mockResolvedValue({ id: viewerId, email: `${viewerId}@example.invalid`, role, status: "active" });
     const detail = await consentPage();
     expect(detail.asyncBallots[0].consent!.directorStatuses).toEqual(directors.map((director, i) => ({
       userId: director.userId, name: director.name,
@@ -78,8 +80,13 @@ describe("meeting director consent visibility", () => {
       receivedAt: i < 3 ? receipt(i).receivedAt : null,
     })));
     expect(detail.asyncBallots[1].consent!.directorStatuses!.every((person) => person.status === "pending" && person.receivedAt === null)).toBe(true);
-    expect(detail.asyncBallots[0].consent!.viewerReceipt).toEqual(receipt(0));
-    for (const i of [1, 2]) {
+    expect(detail.asyncBallots[0].consent!.viewerReceipt).toEqual(role === "executive-director" ? null : receipt(0));
+    if (role === "executive-director") {
+      expect(detail.asyncBallots.every((ballot) => !ballot.viewerEligible && !ballot.review)).toBe(true);
+      expect(detail.canCoordinateReviews).toBe(false);
+      expect(mocks.history).not.toHaveBeenCalled();
+    }
+    for (const i of role === "executive-director" ? [0, 1, 2] : [1, 2]) {
       expect(JSON.stringify(detail)).not.toContain(`private-receipt-${i}`);
       expect(JSON.stringify(detail)).not.toContain(`private-auth-${i}`);
       expect(JSON.stringify(detail)).not.toContain(`Private signature ${i}`);
@@ -87,7 +94,8 @@ describe("meeting director consent visibility", () => {
   });
 
   it.each([
-    ["executive-director", "active"], ["legal-counsel", "active"], ["board-support", "active"],
+    ["executive-director", "deactivated"], ["executive-director", "invited"],
+    ["legal-counsel", "active"], ["board-support", "active"],
     ["member", "deactivated"], ["chair", "invited"], [null, null],
   ])("omits named status metadata from the server payload for %s / %s", async (role, status) => {
     mocks.access.mockResolvedValue(role ? { id: "viewer", email: "chair@example.invalid", role, status } : null);

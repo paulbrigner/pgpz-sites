@@ -103,6 +103,12 @@ export function roleCanManageBoardMeetings(role: BoardAccessRole): boolean {
   return roleHasBoardAdministration(role);
 }
 
+/** Consent progress is visible to directors and the Executive Director for
+ * follow-up. This does not grant signing, private-review, or session access. */
+export function roleCanViewBoardConsentStatuses(role: BoardAccessRole): boolean {
+  return role === "member" || role === "chair" || role === "admin" || role === "executive-director";
+}
+
 /** Board Support may prepare agendas, attendance, decisions, action items,
  * and draft minutes. Legal Counsel retains governed-document management but
  * does not implicitly receive authority to operate the meeting lifecycle. */
