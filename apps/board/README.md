@@ -98,13 +98,19 @@ retained file, independently of its display name or brand-package role.
 Active documents are the default. Document managers can choose Active, Archived,
 or All documents; directors continue to receive active records only, including
 in filter options and counts. These relationships are presentation metadata
-only; every row still downloads the authoritative retained vault record and
-generates the same audited read event.
+only; downloads preserve the exact retained version and audited read events.
 
-The Board-owned **Adopted documents** filter combines with the existing library
-filters and does not change Active/Archived visibility. Each document's adoption
-panel identifies the exact adopted versions, resolutions, actual adoption times,
-director consent counts, and separately signed effective-date/condition text.
+The prominent **Board-approved copies** view uses the same state as the
+**Adopted documents** filter, combines with existing filters, and preserves
+Active/Archived visibility in both results and counts. Verified approvals show
+a **Board approved** version badge and an expanded approval card with the actual
+adoption date (Eastern), director consent count, and signed effective terms.
+The document title, download icon, and **Download approved copy with signatures**
+button open the most recently approved version's packet, even if a newer draft
+has been uploaded. Latest-upload metadata remains labeled separately. Version
+history and detailed adoption records stay collapsed unless opened or linked.
+Approval is independent of **In effect** and does not label an agreement
+"Fully executed" or certify completion of separate execution requirements.
 Uploading a revision neither adopts it nor supersedes an earlier adopted version.
 An absent link means no explicit portal adoption record, not a legal finding that
 the document was never adopted elsewhere. Ordinary categories stay unchanged.
@@ -257,12 +263,17 @@ cannot be relabeled or finalized as signed consents.
 The final consent transaction also creates immutable per-document adoption
 locators in the meetings table. Library reads verify the underlying action,
 signed targets, digest, and full current receipts before showing adoption.
-**Download adoption packet**, available from the resolution and library panel,
-uses `/api/meetings/[id]/ballots/[ballotId]/packet?document=<id>`. An ordinary PDF
-is reproduced with a resolution/signature appendix and embedded exact original,
-HTML, and JSON records. Other formats, interactive/encrypted PDFs, PDFs over 150
+**Download adoption packet** on a resolution and **Download approved copy with
+signatures** in the library use
+`/api/meetings/[id]/ballots/[ballotId]/packet?document=<id>`. An ordinary PDF opens
+with a **Board-approved copy** cover identifying the exact title/version,
+adoption date, consent count, and effective terms, followed by the original
+pages, a resolution/signature appendix and embedded exact original, HTML, and
+JSON records. Long cover content paginates without changing the original pages.
+Other formats, interactive/encrypted PDFs, PDFs over 150
 pages, or typography unsupported by the PDF renderer use a ZIP containing the
-unchanged source, UTF-8 HTML/JSON consent records, and a manifest instead.
+unchanged source, UTF-8 HTML/JSON consent records, a manifest, and an approval
+summary in README.txt instead.
 Packets are generated on demand, never uploaded as a new source version, and do
 not create signatures or Secretary certifications. The original remains
 authoritative. Sources over 12 MiB or packets over 4 MiB must be downloaded as

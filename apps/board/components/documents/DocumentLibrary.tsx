@@ -12,7 +12,7 @@ import {
 import { formatBytes } from "@pgpz/document-vault";
 import { buttonStyles } from "@pgpz/ui";
 import { fetchWithBoardStepUp } from "@/lib/step-up-client";
-import { DOCUMENT_CATEGORY_OPTIONS, type LibraryCategory, type LibraryDocument } from "@/lib/document-library";
+import { DOCUMENT_CATEGORY_OPTIONS, orderedDocumentAdoptions, type LibraryCategory, type LibraryDocument } from "@/lib/document-library";
 
 import { AdoptionPanel } from "./AdoptionPanel";
 
@@ -108,13 +108,16 @@ function DocumentRow({
   const historyId = `document-history-${document.documentId}`;
   const managementId = `document-management-${document.documentId}`;
   const busy = management?.busyDocumentId === document.documentId;
+  const approved = orderedDocumentAdoptions(document)[0];
+  const primaryHref = approved?.packetHref || document.downloadHref;
   return (
     <li id={`document-${document.documentId}`} className={`scroll-mt-24 border-t border-[var(--border)] first:border-t-0 ${focused ? "bg-[var(--accent-soft)]/35 ring-2 ring-inset ring-[var(--accent-border)]" : "bg-white/82"}`}>
-      <div className={`relative grid gap-2 px-4 py-2 sm:px-6 lg:grid-cols-[minmax(22rem,1fr)_9rem_6rem_6rem_7rem_5rem_4.5rem] lg:items-center lg:gap-4 ${nested ? "lg:pl-10" : ""}`}>
+      <div className={`relative grid gap-2 px-4 py-2 sm:px-6 lg:grid-cols-[minmax(0,1fr)_9rem_6rem_6rem_7rem_5rem_4.5rem] lg:items-center lg:gap-4 ${nested ? "lg:pl-10" : ""}`}>
         <div className="flex min-w-0 items-start gap-3 pr-20 lg:pr-0">
           <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2"><a href={document.downloadHref} className="font-semibold text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-4 transition hover:decoration-[var(--foreground)] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{document.title}</a>{document.inEffect ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-900">In effect · v{document.inEffect.sequence}</span> : null}{document.status === "archived" ? <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[var(--muted)]">Archived</span> : null}</div>
+            <div className="flex flex-wrap items-center gap-2"><a href={primaryHref} className="font-semibold text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-4 transition hover:decoration-[var(--foreground)] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">{document.title}</a>{approved ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-900">Board approved · v{approved.sequence}</span> : null}{document.inEffect ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-900">In effect · v{document.inEffect.sequence}</span> : null}{document.status === "archived" ? <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[var(--muted)]">Archived</span> : null}</div>
+            {approved && <p className="mt-1 text-xs text-[var(--muted)]">Document details show the latest upload; the approved download is version {approved.sequence}.</p>}
             {document.description ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)] lg:hidden">{document.description}</p> : null}
           </div>
         </div>
@@ -124,7 +127,7 @@ function DocumentRow({
         <span className="text-xs text-[var(--muted)] before:font-semibold before:text-[var(--foreground)] before:content-['Updated:_'] lg:text-sm lg:before:content-none">{formatDate(document.updatedAt)}</span>
         <span className="text-xs text-[var(--muted)] before:font-semibold before:text-[var(--foreground)] before:content-['Size:_'] lg:text-sm lg:before:content-none">{formatBytes(document.byteLength)}</span>
         <div className="absolute right-3 top-1.5 flex items-center lg:static lg:justify-self-end">
-          <a href={document.downloadHref} aria-label={`Open ${document.title}`} title={`Open ${document.title}`} className="rounded-lg p-2 text-[var(--primary)] transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+          <a href={primaryHref} aria-label={approved ? `Download approved ${document.title} with signatures` : `Open ${document.title}`} title={approved ? `Download approved ${document.title} with signatures` : `Open ${document.title}`} className="rounded-lg p-2 text-[var(--primary)] transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
           {management ? <button type="button" aria-label={`Manage ${document.title}`} aria-expanded={manageOpen} aria-controls={managementId} onClick={() => setManageOpen((current) => !current)} className="rounded-lg p-2 text-[var(--primary)] transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]"><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></button> : null}
         </div>
       </div>
@@ -166,7 +169,7 @@ function CategoryDocuments({ documents, focusDocumentId, showFocusedHistory, exp
   function toggleCollection(collectionId: string) { setOpenCollections((current) => { const next = new Set(current); if (next.has(collectionId)) next.delete(collectionId); else next.add(collectionId); return next; }); }
   return (
     <div className="border-t border-[var(--border)] bg-[var(--primary-soft)]/20 pb-3">
-      <div className="hidden grid-cols-[minmax(22rem,1fr)_9rem_6rem_6rem_7rem_5rem_4.5rem] gap-4 px-9 py-3 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--muted)] lg:grid"><span>Name</span><span>Collection</span><span>Type</span><span>Versions</span><span>Updated</span><span>Size</span><span className="sr-only">Actions</span></div>
+      <div className="hidden grid-cols-[minmax(0,1fr)_9rem_6rem_6rem_7rem_5rem_4.5rem] gap-4 px-9 py-3 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--muted)] lg:grid"><span>Name</span><span>Collection</span><span>Type</span><span>Versions</span><span>Updated</span><span>Size</span><span className="sr-only">Actions</span></div>
       <ul className="space-y-2 px-3">
         {collectionIds.map((collectionId) => { const bundled = documents.filter((document) => document.collectionId === collectionId).sort((left, right) => roleOrder[left.role] - roleOrder[right.role]); const isOpen = expandMatches || openCollections.has(collectionId); const panelId = `document-collection-${collectionId}`; return <li key={collectionId} className="overflow-hidden rounded-xl border border-[var(--border)] bg-white/75"><button type="button" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggleCollection(collectionId)} className="flex w-full items-center gap-3 px-4 py-2 text-left transition hover:bg-[var(--primary-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)] sm:px-5"><Package className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" /><span className="flex-1"><span className="block font-semibold text-[var(--foreground)]">{bundled[0]?.collectionLabel}</span><span className="block text-xs text-[var(--muted)]">{bundled.length} related files</span></span><ChevronDown className={`h-4 w-4 text-[var(--primary)] transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" /></button>{isOpen ? <ul id={panelId} className="ml-4 border-l-2 border-[var(--accent-border)] sm:ml-7">{bundled.map((document) => <DocumentRow key={document.documentId} document={document} nested focused={document.documentId === focusDocumentId} showHistory={showFocusedHistory} management={management} />)}</ul> : null}</li>; })}
         {standalone.length > 0 ? <li className="overflow-hidden rounded-xl border border-[var(--border)]"><ul>{standalone.map((document) => <DocumentRow key={document.documentId} document={document} focused={document.documentId === focusDocumentId} showHistory={showFocusedHistory} management={management} />)}</ul></li> : null}
@@ -237,6 +240,8 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
       && (!normalizedQuery || includesQuery(document, normalizedQuery))) }))
     .filter((category) => category.documents.length > 0), [accessibleCategories, canManage, categoryFilter, collectionFilter, fileTypeFilter, adoptionFilter, effectFilter, normalizedQuery, statusFilter]);
   const resultCount = visibleCategories.reduce((total, category) => total + category.documents.length, 0);
+  const approvedCount = accessibleDocuments.filter((document) =>
+    (!canManage || statusFilter === "all" || document.status === statusFilter) && document.adoptions?.length).length;
 
   function clearFilters() {
     setQuery(""); setCategoryFilter("all"); setCollectionFilter("all"); setFileTypeFilter("all"); setStatusFilter("active"); setAdoptionFilter("all"); setEffectFilter("all");
@@ -297,7 +302,14 @@ export function DocumentLibrary({ categories, focusDocumentId, showFocusedHistor
 
   return (
     <div className="mt-3 max-w-[84rem]">
-      {canManage ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white/72 px-4 py-3 sm:px-5"><div><p className="text-sm font-semibold text-[var(--foreground)]">Document management</p><p className="text-xs text-[var(--muted)]">Your role can add documents, publish versions, and manage archived records.</p></div><button type="button" aria-expanded={showNewDocument} onClick={() => setShowNewDocument((current) => !current)} className={buttonStyles({ size: "sm" })}><Plus className="h-4 w-4" aria-hidden="true" />Add document</button></div> : null}
+      <div className="rounded-2xl border border-[var(--border)] bg-white/90 p-4 sm:p-5">
+        <div role="group" aria-label="Document library views" className="flex flex-wrap gap-2">
+          <button type="button" aria-pressed={adoptionFilter !== "adopted"} onClick={() => setAdoptionFilter("all")} className={buttonStyles({ variant: adoptionFilter === "adopted" ? "outline" : "primary", size: "sm" })}>All library documents</button>
+          <button type="button" aria-pressed={adoptionFilter === "adopted"} onClick={() => setAdoptionFilter("adopted")} className={buttonStyles({ variant: adoptionFilter === "adopted" ? "primary" : "outline", size: "sm" })}><ShieldCheck className="h-4 w-4" aria-hidden="true" />Board-approved copies ({approvedCount})</button>
+        </div>
+        <p className="mt-3 text-sm text-[var(--muted)]">{adoptionFilter === "adopted" ? "Download the exact versions approved by the Board, together with their signed consents. Effective dates and conditions appear with each copy." : "Choose Board-approved copies for completed Board approvals and signatures. All library documents also includes proposals and supporting materials."}</p>
+      </div>
+      {canManage ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white/72 px-4 py-3 sm:px-5"><div><p className="text-sm font-semibold text-[var(--foreground)]">Document management</p><p className="text-xs text-[var(--muted)]">Your role can add documents, publish versions, and manage archived records.</p></div><button type="button" aria-expanded={showNewDocument} onClick={() => setShowNewDocument((current) => !current)} className={buttonStyles({ size: "sm" })}><Plus className="h-4 w-4" aria-hidden="true" />Add document</button></div> : null}
       {canManage && showNewDocument ? <NewDocumentPanel busy={busyDocumentId === "new"} onCreate={createDocument} /> : null}
       {message ? <p role="status" className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--foreground)]">{message}</p> : null}
       <div className={`mt-3 grid gap-3 ${canManage ? "md:grid-cols-[minmax(0,1fr)_15rem]" : ""}`}>

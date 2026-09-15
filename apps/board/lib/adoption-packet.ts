@@ -47,12 +47,11 @@ export async function buildAdoptionPacket(input: {
       if (source.getPageCount() > 150 || source.getForm().getFields().length) throw new Error("Use the original for long or interactive PDFs.");
       const pdf = await PDFDocument.create();
       const pages = await pdf.copyPages(source, source.getPageIndices());
-      for (const page of pages) pdf.addPage(page);
       const font = await pdf.embedFont(StandardFonts.Helvetica);
       const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
       let page = pdf.addPage([612, 792]), y = 738;
-      function paragraph(text: string, heading = false) {
-        const face = heading ? bold : font, size = heading ? 12 : 10, lineHeight = heading ? 18 : 14;
+      function paragraph(text: string, heading = false, size = heading ? 12 : 10) {
+        const face = heading ? bold : font, lineHeight = size * 1.4;
         const lines: string[] = [];
         for (const logical of text.replace(/\r\n?/g, "\n").split("\n")) {
           // Split long words as well as ordinary prose; never clip a receipt ID.
@@ -76,6 +75,23 @@ export async function buildAdoptionPacket(input: {
         }
         y -= 8;
       }
+      paragraph("PRETTY GOOD POLICY FOR ZCASH", true);
+      y -= 32;
+      paragraph("Board-approved copy", true, 28);
+      paragraph(`${target.title} - Version ${target.sequence}`, true, 18);
+      y -= 16;
+      paragraph("Approval", true);
+      const adoptedDate = new Date(record.adoptedAt!).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "long", timeStyle: "short" });
+      paragraph(`Adopted ${adoptedDate} Eastern\nBy unanimous written consent: ${record.signatures.length} of ${record.directors.length} directors.`);
+      paragraph("Effective date / conditions", true);
+      paragraph(record.adoption!.effectiveTerms || "See the signed resolution for the effective date and any implementation conditions.");
+      paragraph("Included in this copy", true);
+      paragraph("The approved document follows this cover, followed by the resolution and signed electronic consents. The exact original file and complete consent evidence are also embedded as attachments.");
+      paragraph("This cover identifies Board approval of this specific version. Any separate execution, filing or implementation requirements are governed by the signed resolution.");
+      const coverPages = pdf.getPageCount();
+      pdf.getPages().forEach((cover, i) => cover.drawText(`PGPZ | Board-approved copy | Cover ${i + 1}`, { x: 54, y: 30, size: 9, font, color: rgb(0.3, 0.35, 0.35) }));
+      for (const originalPage of pages) pdf.addPage(originalPage);
+      page = pdf.addPage([612, 792]); y = 738;
       paragraph("PGPZ | Document adoption record", true);
       paragraph(`${target.title} - Version ${target.sequence}`);
       paragraph(`Adopted by unanimous written consent: ${record.adoptedAt}`);
@@ -100,11 +116,11 @@ export async function buildAdoptionPacket(input: {
       paragraph("Withdrawal declaration (applies only to receipts explicitly marked withdraw):");
       paragraph(record.withdrawalStatement);
       for (const receipt of record.receiptHistory) paragraph(`${receipt.action}: ${receipt.signatureName}\nDelivered: ${receipt.receivedAt}\nReceipt: ${receipt.id}\nPrior receipt: ${receipt.supersedesReceiptId || "None"}`);
-      pdf.getPages().slice(pages.length).forEach((appendix, i) => appendix.drawText(`PGPZ adoption record | Appendix ${i + 1}`, { x: 54, y: 30, size: 9, font, color: rgb(0.3, 0.35, 0.35) }));
+      pdf.getPages().slice(coverPages + pages.length).forEach((appendix, i) => appendix.drawText(`PGPZ adoption record | Appendix ${i + 1}`, { x: 54, y: 30, size: 9, font, color: rgb(0.3, 0.35, 0.35) }));
       await pdf.attach(bytes, `original-${name}`, { mimeType: version.mimeType, description: "Exact approved original; verify against the recorded SHA-256." });
       await pdf.attach(Buffer.from(recordJson), "consent-record.json", { mimeType: "application/json" });
       await pdf.attach(Buffer.from(html), "consent-record.html", { mimeType: "text/html" });
-      pdf.setTitle(`${target.title} - adoption packet`);
+      pdf.setTitle(`${target.title} - Board-approved copy - Version ${target.sequence}`);
       pdf.setProducer("PGPZ Board portal");
       const result = await pdf.save();
       if (result.length <= MAX_PACKET_RESPONSE_BYTES) return { bytes: result, mimeType: "application/pdf", fileName: `${stem}-adoption.pdf` };
@@ -120,7 +136,7 @@ export async function buildAdoptionPacket(input: {
   zip.file("consent-record.html", html);
   zip.file("consent-record.json", recordJson);
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
-  zip.file("README.txt", `${fallbackReason}\n\nOpen consent-record.html to read the resolution and electronic signatures. This packet reproduces existing consents and contains no new signature or Secretary certification. Supporting attachments are identified in the consent record but are not automatically adopted or copied into this packet.\n`);
+  zip.file("README.txt", `BOARD-APPROVED COPY\n${target.title} - Version ${target.sequence}\nAdopted: ${record.adoptedAt}\nSigned consents: ${record.signatures.length} of ${record.directors.length} directors\nEffective date / conditions: ${record.adoption!.effectiveTerms || "See the signed resolution."}\n\n${fallbackReason}\n\nOpen consent-record.html to read the resolution and electronic signatures. This packet reproduces existing consents and contains no new signature or Secretary certification. Supporting attachments are identified in the consent record but are not automatically adopted or copied into this packet. Any separate execution, filing or implementation requirements are governed by the signed resolution.\n`);
   const result = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
   if (result.length > MAX_PACKET_RESPONSE_BYTES) throw new AdoptionPacketError("This document is too large for a combined packet. Download the original and consent record separately.", 413);
   return { bytes: result, mimeType: "application/zip", fileName: `${stem}-adoption.zip` };

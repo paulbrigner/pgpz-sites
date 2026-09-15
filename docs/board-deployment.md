@@ -562,6 +562,14 @@ ZIP packet instead. Post-release, read existing library/consent screens without
 mutating them and verify that pre-release attachments have no inferred adopted
 labels. New authorized actions should show adoption only after the final consent.
 
+The library's **Board-approved copies** view and primary download links use
+these verified records, selecting the most recent approval rather than the
+latest upload. PDF derivatives begin with an approval cover; ZIP derivatives
+include the approval summary in README.txt. Check newer unadopted uploads,
+separate in-effect designations, collapsed histories, and desktop/mobile layout
+with synthetic records before release. Original files and signatures are not
+rewritten, and Board approval does not establish separate agreement execution.
+
 
 ## In-effect document designations
 

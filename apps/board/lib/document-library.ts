@@ -42,6 +42,13 @@ export type LibraryCategory = Readonly<{
   documents: ReadonlyArray<LibraryDocument>;
 }>;
 
+/** Most recent approval first; an upload or an in-effect designation is not an adoption. */
+export function orderedDocumentAdoptions(document: Pick<LibraryDocument, "adoptions">) {
+  return [...(document.adoptions || [])].sort((left, right) =>
+    Date.parse(right.adoptedAt) - Date.parse(left.adoptedAt) || right.sequence - left.sequence ||
+    left.resolutionId.localeCompare(right.resolutionId));
+}
+
 export const DOCUMENT_CATEGORY_OPTIONS = [
   { key: "incorporation", label: "Corporate Records", description: "Formation documents, bylaws, amendments, and corporate filings." },
   { key: "governance", label: "Governance", description: "Board charters, committee materials, decisions, and governance frameworks." },
