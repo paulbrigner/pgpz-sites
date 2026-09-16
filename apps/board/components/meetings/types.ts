@@ -31,6 +31,7 @@ export interface MeetingSummaryView {
 }
 
 export interface AgendaItemView {
+  sourceIdeaId?: string;
   id: string;
   title: string;
   description: string;

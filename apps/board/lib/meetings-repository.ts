@@ -547,7 +547,9 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     async upsertAgendaItem(input: UpsertBoardAgendaItemInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
       if (!Number.isInteger(input.order) || input.order < 0) throw new Error("order must be a non-negative integer");
-      const child: BoardAgendaItem = { meetingId: previous.id, id: required(input.id, "id"), order: input.order, title: required(input.title, "title"), description: input.description.trim(), kind: member(input.kind, BOARD_AGENDA_ITEM_KINDS, "kind"), presenter: input.presenter.trim(), allottedMinutes: input.allottedMinutes == null ? null : Math.max(0, Math.trunc(input.allottedMinutes)), status: input.status, updatedAt: at, updatedBy: actor };
+      const existingAgenda = await client.get({ TableName: resolvedTable, Key: { pk: meetingPk(previous.id), sk: entitySk("AGENDA", input.id) }, ConsistentRead: true });
+      const sourceIdeaId = existingAgenda.Item?.sourceIdeaId || input.sourceIdeaId;
+      const child: BoardAgendaItem = { ...(sourceIdeaId ? { sourceIdeaId } : {}), meetingId: previous.id, id: required(input.id, "id"), order: input.order, title: required(input.title, "title"), description: input.description.trim(), kind: member(input.kind, BOARD_AGENDA_ITEM_KINDS, "kind"), presenter: input.presenter.trim(), allottedMinutes: input.allottedMinutes == null ? null : Math.max(0, Math.trunc(input.allottedMinutes)), status: input.status, updatedAt: at, updatedBy: actor };
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, "agenda-item-upserted", actor, at, child, { item: { pk: meetingPk(previous.id), sk: entitySk("AGENDA", child.id), entityType: "AGENDA_ITEM", ...child } }, options);
     },

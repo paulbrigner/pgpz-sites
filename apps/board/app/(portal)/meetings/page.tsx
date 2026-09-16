@@ -48,6 +48,7 @@ export default async function BoardMeetingsPage({ searchParams }: { searchParams
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />
         <p>Meeting materials, decisions, votes, and minutes remain with their meeting record. <Link href="/governance-safeguards" className="font-semibold text-[var(--primary)] underline decoration-[var(--border-strong)] underline-offset-4">Learn about record safeguards</Link></p>
       </aside>
+      <p className="mt-5"><Link href="/agenda-ideas" className="font-semibold text-[var(--primary)] underline">Agenda ideas: suggest and discuss future meeting topics</Link></p>
       <MeetingList meetings={meetings} scope={scope} canManage={canManage} canPrepare={canPrepare} />
     </Container>
   );

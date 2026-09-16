@@ -8,9 +8,23 @@ const PORTAL_MARKERS = [
   "Meeting materials",
   "Decisions & resolutions",
   "Administrator controls",
+  "No ideas yet. Suggest a topic",
+  "Visible to all active Board portal users",
 ];
 
 test.describe("board portal privacy boundary", () => {
+  test("anonymous agenda idea mutations and RSC requests expose no idea records", async ({ request }) => {
+    const response = await request.post("/api/agenda-ideas", { data: { action: "create", title: "Unauthorized" } });
+    expect(response.status()).toBe(401);
+    for (const path of ["/agenda-ideas", "/agenda-ideas/new", "/agenda-ideas/example"]) {
+      const flight = await request.get(path, { headers: { RSC: "1" } });
+      const body = await flight.text();
+      for (const marker of PORTAL_MARKERS) expect(body).not.toContain(marker);
+      if (flight.status() === 200) expect(body).toContain("NEXT_REDIRECT");
+      else expect(flight.status()).toBeGreaterThanOrEqual(300);
+    }
+  });
+
   test("anonymous governance downloads expose neither documents, reviews nor signature evidence", async ({ request }) => {
     for (const path of ["/api/meetings/m/ballots/b/record", "/api/meetings/m/ballots/b/packet?document=d", "/api/meetings/m/ballots/b/review-record", "/api/meetings/m/ballots/b/review-record?format=pdf", "/api/meetings/m/ballots/b/review-record?format=json"]) {
       const response = await request.get(path);
@@ -20,7 +34,7 @@ test.describe("board portal privacy boundary", () => {
     }
   });
   test("anonymous document requests redirect to sign-in without portal payload", async ({ request }) => {
-    for (const path of ["/", "/terms", "/privacy", "/admin", "/meetings/m/executive-sessions/s"]) {
+    for (const path of ["/", "/terms", "/privacy", "/admin", "/meetings/m/executive-sessions/s", "/agenda-ideas", "/agenda-ideas/new", "/agenda-ideas/example"]) {
       const response = await request.get(path, { maxRedirects: 0 });
 
       expect(response.status(), path).toBe(307);

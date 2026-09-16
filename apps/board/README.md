@@ -145,6 +145,48 @@ relationships. Every mutation retains recent-passkey step-up enforcement and
 appends its normal audit evidence. `/admin/documents` remains only as a
 compatibility redirect to `/documents`.
 
+## Agenda ideas
+
+`/agenda-ideas` is a standing Board-only workspace for suggesting and discussing
+future meeting topics before an agenda is prepared. All active registry users,
+including Board Support, can submit ideas, post comments and replies, and edit
+their own contributions. This capability does not change the narrower formal
+resolution-discussion or consent permissions. Every idea displays its audience:
+all active Board portal users. Confidential matters belong in executive sessions.
+
+Ideas include a title, explanation, optional presenter, preferred published
+upcoming meeting (or **Future meeting**), and up to ten active library links.
+Meeting-owned/restricted and archived documents cannot be added. Links open the
+current library entry and remain subject to its access rules; they do not pin or
+adopt a document version. Edits retain prior content and show an Edited label.
+Comments allow one level of replies. Closed and withdrawn ideas retain readable
+history but reject new comments and edits.
+
+Only the Chair or Executive Director may defer, close or reopen an unscheduled
+idea, with a recorded explanation, or add it to a published upcoming meeting.
+Authors may withdraw their own unscheduled open/deferred suggestions, with an
+explanation. Agenda placement copies officer-reviewed title, description,
+presenter and time allocation into a discussion item, and atomically links the
+idea, meeting revision and audit event. Duplicate/stale placement is rejected.
+Later suggestion edits do not rewrite the agenda. Linked ideas may be closed;
+existing placement is managed in the meeting and is retained if removed or the
+meeting is cancelled. Scheduled asynchronous workspaces also display linked
+agenda items without changing their formal resolution/consent workflow.
+
+The list shows unread activity per registry user; opening an idea acknowledges
+only the rendered revision. Use **Refresh activity** to retrieve newer posts.
+The list paginates 25 ideas at a time, newest submissions first. This feature
+sends no email and has no ranking/voting controls. All reads enforce current
+membership and passkey authentication. Content writes additionally require
+recent passkey verification and atomically guard the active access-record
+version alongside immutable history and the audit append. Read markers are
+personal UI state and do not enter the governance audit chain.
+
+Implementation: `lib/agenda-ideas.ts`, `lib/agenda-ideas-service.ts`,
+`app/api/agenda-ideas/route.ts`, and `components/agenda-ideas/`. Storage uses
+additive partitions in the existing Board meetings table; see the
+[release safeguards](../../docs/board-deployment.md#agenda-ideas-release).
+
 ## Board meetings
 
 `/meetings` is an upcoming-first Board workspace with a retained past-meeting
