@@ -2,9 +2,15 @@
 
 import { betterAuthClient } from "@/lib/auth-client";
 
+export const BOARD_PASSKEY_VERIFICATION_ERROR = "Passkey verification did not complete. Try again and complete the PIN, fingerprint, or face verification requested by your device or passkey provider. If you cannot complete it, contact a Board administrator for help.";
+
 export async function verifyBoardPasskey(): Promise<void> {
-  const result = await betterAuthClient.signIn.passkey();
-  if (result.error) throw new Error("Passkey verification was not completed.");
+  try {
+    const result = await betterAuthClient.signIn.passkey();
+    if (result.error) throw new Error(BOARD_PASSKEY_VERIFICATION_ERROR);
+  } catch {
+    throw new Error(BOARD_PASSKEY_VERIFICATION_ERROR);
+  }
 }
 
 export async function fetchWithBoardStepUp(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

@@ -4,6 +4,13 @@ Private governance portal at `board.pgpz.org`. Every route except `/signin` and
 the Better Auth API is protected. Self-registration is disabled and the site
 refuses indexing at metadata, robots, and response-header layers.
 
+Passkey sign-in explicitly requests local user verification (PIN or biometrics),
+matching the server's verification requirement. The Board auth route overrides
+Better Auth's authentication-options default while preserving its challenge and
+cookie; both sign-in and in-session verification use this route. Existing passkeys
+remain valid, and email-link recovery still requires passkey verification before
+private content is available.
+
 ## Access model
 
 Authentication alone never grants portal access. During migration, access is

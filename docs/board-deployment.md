@@ -329,7 +329,7 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
 - Password controls are absent and credential sign-in endpoints reject use.
 - A magic-link request has a generic response for known, unknown, and delivery-failure cases.
 - A magic link is single-use, hashed at rest, and expires in ten minutes.
-- Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification.
+- Passkey sign-in uses RP ID `board.pgpz.org`, exact origin `https://board.pgpz.org`, and required user verification. Verify that `/api/better-auth/passkey/generate-authenticate-options` returns `userVerification: "required"` and preserves the challenge cookie. Board overrides the library default at this route for both sign-in and step-up; the server must still reject assertions without user verification. Existing passkeys require no reset or migration.
 - A magic-link session can reach `/account/security` but is redirected there
   from every private Board-content route until a passkey is registered and verified.
 - Successful recovery verification automatically returns the user to the
