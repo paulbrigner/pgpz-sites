@@ -96,15 +96,16 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
       <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
         <div className="grid min-w-0 grid-cols-1 gap-6">
           {meeting.format === "asynchronous" ? <AsyncBallots canCoordinateReviews={detail.canCoordinateReviews} meeting={meeting} ballots={detail.asyncBallots} canManage={capabilities.canManage} canDiscuss={capabilities.canDiscuss} documentChoices={detail.consentDocumentChoices} directorRoster={detail.directorRoster} /> : null}
-          {meeting.format === "live" ? <Surface className="p-5 sm:p-6">
+          {meeting.format === "live" || detail.agendaItems.length > 0 ? <Surface id="agenda" className="scroll-mt-28 p-5 sm:p-6">
             <SectionHeading icon={ListChecks} title="Agenda" detail={`${detail.agendaItems.length} ${detail.agendaItems.length === 1 ? "item" : "items"}`} />
             {detail.agendaItems.length === 0 ? <EmptySection>The agenda has not been published yet.</EmptySection> : (
               <ol className="divide-y divide-[var(--border)]">
                 {[...detail.agendaItems].sort((a, b) => a.order - b.order).map((item, index) => (
-                  <li key={item.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto]">
+                  <li id={`agenda-${item.id}`} key={item.id} className="scroll-mt-28 grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[2rem_minmax(0,1fr)_auto]">
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--primary)]">{index + 1}</span>
                     <div>
                       <h3 className="font-semibold text-[var(--foreground)]">{item.title}</h3>
+                      {item.sourceIdeaId && <Link href={`/agenda-ideas/${encodeURIComponent(item.sourceIdeaId)}`} className="text-sm font-semibold text-[var(--primary)] underline">View original idea and discussion</Link>}
                       {item.description ? <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{item.description}</p> : null}
                       <p className="mt-2 text-xs font-medium capitalize text-[var(--muted)]">{item.kind}{item.presenter ? ` · ${item.presenter}` : ""}</p>
                     </div>

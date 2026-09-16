@@ -72,7 +72,7 @@ export default async function BoardMeetingPage({ params, searchParams }: { param
     },
     agendaItems: record.agendaItems.filter((item) => item.status === "active").map((item) => ({
       id: item.id, title: item.title, description: item.description, kind: item.kind, order: item.order,
-      presenter: item.presenter || null, durationMinutes: item.allottedMinutes,
+      presenter: item.presenter || null, durationMinutes: item.allottedMinutes, sourceIdeaId: item.sourceIdeaId,
     })),
     materials: [...meetingDocuments.filter((document) => document.status === "active").map((document) => ({
       id: document.documentId,

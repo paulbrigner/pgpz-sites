@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge, Container, Surface } from "@pgpz/ui";
-import { ArrowRight, CalendarDays, FileText, KeyRound, ScrollText, Settings, ShieldCheck } from "lucide-react";
+import { ArrowRight, CalendarDays, FileText, Lightbulb, KeyRound, ScrollText, Settings, ShieldCheck } from "lucide-react";
 import type { BoardMember } from "@/lib/session";
 import { formatMeetingDate, formatShortMeetingDate, meetingStatusLabel } from "@/components/meetings/meeting-format";
 import type { MeetingSummaryView } from "@/components/meetings/types";
@@ -9,6 +9,7 @@ import { GovernanceSafeguardsNotice } from "@/components/governance/GovernanceSa
 export type { BoardMember };
 
 const memberResources = [
+  { href: "/agenda-ideas", icon: Lightbulb, title: "Agenda ideas", body: "Suggest and discuss topics for an upcoming Board meeting" },
   {
     href: "/documents",
     icon: FileText,

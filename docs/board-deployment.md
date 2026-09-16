@@ -762,3 +762,47 @@ revisions, audit evidence and original library objects. Older builds do not use
 `preparationMeeting` to authorize archived-library downloads; deploy the feature
 again to restore that retained access path. Do not migrate or delete rows as a
 rollback workaround.
+
+
+## Agenda ideas release
+
+Agenda Ideas is a Board-only additive schema in `BOARD_MEETINGS_TABLE`.
+`AGENDA_IDEA#<id>` partitions contain `META`, `MESSAGE#<id>`, and immutable
+`REVISION#<time>#<id>` snapshots. The `AGENDA_IDEAS` partition stores only ID
+pointers ordered by creation time. `AGENDA_IDEAS_READ#<access-id>` partitions
+store monotonic personal read versions. No new table, GSI, TTL, environment
+variable, migration, backfill, IAM expansion, queue, email, or Object Lock
+change is required. Reference/Community/Coalition data and behavior are isolated.
+
+All active registry users may suggest and discuss; Board Support participation
+is specific to this workspace and does not broaden formal discussion or consent
+permissions. Officer-managed agenda placement uses the existing meeting version
+condition and the idea/access conditions in one audited transaction. Agenda
+items retain optional `sourceIdeaId` across normal edits/removal. Initial placement
+records `agenda-idea-placed`, which has no notification-outbox mapping. Subsequent
+ordinary agenda edits preserve their existing subscription notifications. Content edits
+retain complete revisions; the audit contains opaque identifiers and a revision
+hash, not suggestion/comment text. Read acknowledgments are UI state, not audited
+Board decisions. Active library links do not pin versions or expand document
+access. The idea remains linked to its first placement if that agenda item is
+later removed or the meeting cancelled; those actions do not automatically
+reschedule it or remove its history.
+
+Before the authorized release, run `npm run check`, `npm run build:board`, Board
+infrastructure tests and targeted Playwright checks. Verify all-role submission,
+Board Support comments, officer-only scheduling, author-only edits/withdrawal,
+retained history, cross-thread reply rejection, stale writes, access revocation,
+atomic/duplicate placement, read markers, anonymous document/RSC/API denial,
+and supporting-library visibility. Exercise writes only with synthetic local
+records. Complete independent PR review of the exact final revisions.
+
+Use the normal live account/region/Amplify branch preflight. Verify the Board
+access registry is enabled and the compute role retains GetItem/Query/PutItem
+and transactional writes on Board meetings/audit, plus ConditionCheckItem on
+Board access. Check the current app/branch resource maps, current successful
+release, and absence of overlapping jobs. No provisioning apply step is needed.
+After release, verify the exact deployed revision and authenticated Agenda Ideas
+entry read-only. Do not seed production suggestions, comments, agenda items or
+email for smoke testing. Rollback hides the feature while preserving all new
+partitions and audit entries; pre-feature agenda writers may omit sourceIdeaId
+when editing, so retain the new writer when preserving those backlinks is needed.

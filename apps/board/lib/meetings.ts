@@ -57,6 +57,7 @@ export interface BoardMeeting {
 }
 
 export interface BoardAgendaItem {
+  readonly sourceIdeaId?: string;
   readonly id: string;
   readonly meetingId: string;
   readonly order: number;
