@@ -147,6 +147,9 @@ compatibility redirect to `/documents`.
 
 ## Agenda ideas
 
+The supporting-library selector filters document titles as users type, ignoring
+case and surrounding spaces. Filtering preserves checked documents in submissions.
+
 `/agenda-ideas` is a standing Board-only workspace for suggesting and discussing
 future meeting topics before an agenda is prepared. All active registry users,
 including Board Support, can submit ideas, post comments and replies, and edit
