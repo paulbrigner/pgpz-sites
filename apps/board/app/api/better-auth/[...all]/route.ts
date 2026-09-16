@@ -174,6 +174,20 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  if (pathOf(request).endsWith("/passkey/generate-authenticate-options")) {
+    const response = await handlers.GET(request);
+    if (!response.ok) return response;
+    // Better Auth 1.6.22 requests "preferred" for authentication even when
+    // registration requires verification. Match the Board's server-side guard.
+    const options = await response.json();
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    headers.set("Cache-Control", "private, no-store");
+    return NextResponse.json({ ...options, userVerification: "required" }, {
+      status: response.status,
+      headers,
+    });
+  }
   if (pathOf(request).endsWith("/passkey/generate-register-options")) {
     const session = await auth.api.getSession({ headers: request.headers, query: { disableRefresh: true } }).catch(() => null);
     const userId = typeof session?.user?.id === "string" ? session.user.id : "";

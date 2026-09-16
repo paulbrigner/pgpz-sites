@@ -5,6 +5,7 @@ import { useState } from "react";
 import { KeyRound, Link2, LockKeyhole, LogIn } from "lucide-react";
 import { buttonStyles } from "@pgpz/ui";
 import { betterAuthClient } from "@/lib/auth-client";
+import { verifyBoardPasskey, BOARD_PASSKEY_VERIFICATION_ERROR } from "@/lib/step-up-client";
 import { resolveSafeCallbackUrl } from "@/lib/callback-url";
 
 export function SignInForm({
@@ -43,15 +44,11 @@ export function SignInForm({
     setSubmitting("passkey");
     setError(null);
     try {
-      const result = await betterAuthClient.signIn.passkey();
-      if (result.error) {
-        setError("Passkey sign-in was not completed. Try again or request an email link.");
-        return;
-      }
+      await verifyBoardPasskey();
       router.push(safeCallbackUrl);
       router.refresh();
     } catch {
-      setError("Passkey sign-in is unavailable in this browser. Request an email link instead.");
+      setError(BOARD_PASSKEY_VERIFICATION_ERROR);
     } finally {
       setSubmitting(null);
     }
