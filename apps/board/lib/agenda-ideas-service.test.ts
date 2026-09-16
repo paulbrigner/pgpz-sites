@@ -190,7 +190,10 @@ describe("Agenda Ideas retained workflow", () => {
   });
   it("atomically links a reviewed agenda copy, preserves it through later idea edits and prevents duplicates", async () => {
     await service.execute(member(), create()); const body = await scheduleBody(); setActor("chair");
+    const noticeCount = () => [...client.data.values()].filter((r) => r.entityType === "MEETING_NOTIFICATION_EVENT").length;
+    const beforePlacement = noticeCount();
     await service.execute(member("chair"), body);
+    expect(noticeCount()).toBe(beforePlacement);
     const record = await meetings.getMeeting("meeting-1");
     expect(record!.agendaItems[0]).toMatchObject({ sourceIdeaId: "idea-1", title: "Agenda copy", allottedMinutes: 15 });
     expect((await service.detail(member(), "idea-1")).idea).toMatchObject({ status: "scheduled", scheduledMeetingId: "meeting-1", agendaItemId: "idea-idea-1" });
@@ -199,6 +202,7 @@ describe("Agenda Ideas retained workflow", () => {
     expect((await meetings.getMeeting("meeting-1"))!.agendaItems[0].title).toBe("Agenda copy");
     await meetings.upsertAgendaItem({ ...record!.agendaItems[0], sourceIdeaId: undefined, title: "Officer edits agenda", expectedVersion: record!.meeting.version, actorEmail: "chair@example.invalid" });
     expect((await meetings.getMeeting("meeting-1"))!.agendaItems[0].sourceIdeaId).toBe("idea-1");
+    expect(noticeCount()).toBe(beforePlacement + 1);
   });
   it("rejects unauthorized scheduling and stale meetings without partial agenda records", async () => {
     await service.execute(member(), create()); const body = await scheduleBody();

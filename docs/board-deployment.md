@@ -778,7 +778,9 @@ All active registry users may suggest and discuss; Board Support participation
 is specific to this workspace and does not broaden formal discussion or consent
 permissions. Officer-managed agenda placement uses the existing meeting version
 condition and the idea/access conditions in one audited transaction. Agenda
-items retain optional `sourceIdeaId` across normal edits/removal. Content edits
+items retain optional `sourceIdeaId` across normal edits/removal. Initial placement
+records `agenda-idea-placed`, which has no notification-outbox mapping. Subsequent
+ordinary agenda edits preserve their existing subscription notifications. Content edits
 retain complete revisions; the audit contains opaque identifiers and a revision
 hash, not suggestion/comment text. Read acknowledgments are UI state, not audited
 Board decisions. Active library links do not pin versions or expand document
