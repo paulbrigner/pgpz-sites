@@ -1,4 +1,5 @@
 import "server-only";
+import { validateActionItemChanges, validateActionItemTransition, type ActionItemChanges } from "./action-items";
 
 import { createHash, randomUUID } from "node:crypto";
 import { documentClient } from "@/lib/dynamodb";
@@ -13,7 +14,6 @@ import { resolutionReviewHash, resolutionReviewPacket } from "@/lib/resolution-r
 import { resolutionReviewThreads, resolutionReviewDiscussionHash } from "@/lib/resolution-review-discussion";
 import { meetingNotificationItems } from "@/lib/meeting-notification-events";
 import {
-  BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
   BOARD_ASYNC_BALLOT_STATUSES,
   BOARD_ASYNC_VOTE_CHOICES,
@@ -78,6 +78,10 @@ export interface RecordBoardDecisionInput extends Omit<BoardMeetingDecision, "me
 }
 export interface RecordBoardActionItemInput extends Omit<BoardMeetingActionItem, "meetingId" | "updatedAt" | "updatedBy"> {
   readonly meetingId: string; readonly expectedVersion: number; readonly actorEmail: string; readonly occurredAt?: string;
+}
+export interface UpdateBoardActionItemInput {
+  readonly meetingId: string; readonly id: string; readonly expectedVersion: number;
+  readonly actorEmail: string; readonly occurredAt?: string; readonly changes: ActionItemChanges; readonly note?: string;
 }
 export interface SetBoardMinutesInput {
   readonly meetingId: string; readonly expectedVersion: number; readonly status: BoardMeeting["minutesStatus"];
@@ -384,6 +388,27 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
     if (previous.version !== expectedVersion) throw new BoardMeetingVersionConflictError(id);
     const at = instant(occurredAt, "occurredAt");
     return { previous, at, actor: required(actorEmail, "actorEmail") };
+  }
+  async function getActionItem(meetingId: string, id: string): Promise<BoardMeetingActionItem | null> {
+    const result = await client.get({ TableName: resolvedTable, Key: { pk: meetingPk(required(meetingId, "meetingId")), sk: entitySk("ACTION", required(id, "task ID")) }, ConsistentRead: true });
+    return result.Item?.entityType === "ACTION_ITEM" ? result.Item as unknown as BoardMeetingActionItem : null;
+  }
+  async function saveActionItem(input: UpdateBoardActionItemInput, mustExist: boolean, options?: BoardMeetingMutationOptions, creation?: RecordBoardActionItemInput) {
+    const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
+    const existing = await getActionItem(previous.id, input.id);
+    if (!existing && mustExist) throw new Error("Task not found in this meeting.");
+    const changes = validateActionItemChanges(input.changes);
+    if (existing) validateActionItemTransition(existing.status, changes);
+    else if (changes.status && changes.status !== "open") throw new Error("New tasks must start open.");
+    const note = input.note?.trim() || "";
+    if (note.length > 2000) throw new Error("Task notes must be at most 2000 characters.");
+    if (existing && Object.entries(changes).every(([key, value]) => existing[key as keyof BoardMeetingActionItem] === value)) return previous;
+    const child: BoardMeetingActionItem = {
+      ...(existing || { meetingId: previous.id, id: required(input.id, "id"), agendaItemId: creation?.agendaItemId || null, ownerId: creation?.ownerId || null, status: "open" as const, dueAt: null }),
+      ...changes, description: required(changes.description ?? existing?.description, "description"), ownerName: required(changes.ownerName ?? existing?.ownerName, "owner"), updatedAt: at, updatedBy: actor,
+    };
+    const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
+    return commit(previous, next, "action-item-recorded", actor, at, { taskId: child.id, before: existing, after: child, note }, { item: { ...child, pk: meetingPk(previous.id), sk: entitySk("ACTION", child.id), entityType: "ACTION_ITEM" } }, options);
   }
   async function getAsyncBallot(meetingId: string, ballotId: string) {
     const result = await client.get({
@@ -866,11 +891,12 @@ export function createBoardMeetingsRepository(client: BoardMeetingsDocumentClien
       const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
       return commit(previous, next, "async-ballot-cancelled", actor, at, { ballotId: ballot.id, reason }, { item: asyncBallotItem(ballot) }, options);
     },
+    getActionItem,
+    async updateActionItem(input: UpdateBoardActionItemInput, options?: BoardMeetingMutationOptions) {
+      return saveActionItem(input, true, options);
+    },
     async recordActionItem(input: RecordBoardActionItemInput, options?: BoardMeetingMutationOptions) {
-      const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);
-      const child: BoardMeetingActionItem = { meetingId: previous.id, id: required(input.id, "id"), agendaItemId: input.agendaItemId, description: required(input.description, "description"), ownerId: input.ownerId, ownerName: input.ownerName.trim(), dueAt: input.dueAt ? instant(input.dueAt, "dueAt") : null, status: member(input.status, BOARD_ACTION_ITEM_STATUSES, "status"), updatedAt: at, updatedBy: actor };
-      const next = { ...previous, version: previous.version + 1, updatedAt: at, updatedBy: actor };
-      return commit(previous, next, "action-item-recorded", actor, at, child, { item: { pk: meetingPk(previous.id), sk: entitySk("ACTION", child.id), entityType: "ACTION_ITEM", ...child } }, options);
+      return saveActionItem({ ...input, changes: { description: input.description, ownerName: input.ownerName, dueAt: input.dueAt, status: input.status } }, false, options, input);
     },
     async setMinutes(input: SetBoardMinutesInput, options?: BoardMeetingMutationOptions) {
       const { previous, at, actor } = await begin(input.meetingId, input.expectedVersion, input.actorEmail, input.occurredAt);

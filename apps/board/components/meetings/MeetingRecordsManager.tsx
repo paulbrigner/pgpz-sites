@@ -205,15 +205,6 @@ export function MeetingRecordsManager({ meeting, agendaCount, materials, canMana
         </details> : null}
 
         <details className={detailClass}>
-          <summary className={summaryClass}>Action item <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
-          <form className="border-t border-[var(--border)] p-4" onSubmit={(event) => submitMeetingAction(event, "upsertActionItem", (data) => ({ description: String(data.get("description") || ""), ownerName: String(data.get("ownerName") || ""), dueAt: String(data.get("dueAt") || "") || null, status: "open" }))}>
-            <label className="text-xs font-semibold">Action required<textarea name="description" required rows={2} className={inputClass} /></label>
-            <div className="mt-3 grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Owner<input name="ownerName" required className={inputClass} /></label><label className="text-xs font-semibold">Due date<input name="dueAt" type="date" className={inputClass} /></label></div>
-            {submitButton("Add action item", "upsertActionItem")}
-          </form>
-        </details>
-
-        <details className={detailClass}>
           <summary className={summaryClass}>Minutes status <ChevronDown className="h-4 w-4 transition group-open:rotate-180" aria-hidden="true" /></summary>
           <form className="border-t border-[var(--border)] p-4" onSubmit={(event) => submitMeetingAction(event, "setMinutesStatus", (data) => ({ status: String(data.get("status") || "draft"), documentId: String(data.get("documentId") || "") || null }))}>
             <label className="text-xs font-semibold">Status<select name="status" value={minutesStatus} onChange={(event) => setMinutesStatus(event.target.value as typeof minutesStatus)} className={inputClass}><option value="not-started">Not started</option><option value="draft">Draft</option><option value="pending-approval">Pending approval</option><option value="approved" disabled={!canManage}>Approved by the Board</option><option value="amended" disabled={!canManage}>Amended by the Board</option></select></label>

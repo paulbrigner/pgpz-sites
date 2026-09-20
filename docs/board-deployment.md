@@ -806,3 +806,25 @@ entry read-only. Do not seed production suggestions, comments, agenda items or
 email for smoke testing. Rollback hides the feature while preserving all new
 partitions and audit entries; pre-feature agenda writers may omit sourceIdeaId
 when editing, so retain the new writer when preserving those backlinks is needed.
+
+
+## Meeting task management release
+
+Task controls are Board-only and use the existing meetings, access, audit, and
+notification resources. No new table, index, IAM permission, environment variable,
+queue, or production backfill is required. New due dates may be calendar-date
+strings; existing timestamps remain supported. Task revisions retain before/after
+records and optional notes; these are ordinary meeting records, not restricted
+compensation or disclosure records. Audit metadata and notification events contain
+identifiers and status only, never task descriptions or notes.
+
+Before authorized release, run the repository gate, Board build, relevant Board
+infrastructure contracts, targeted task browser checks, and independent review.
+Verify the live Board account, Amplify branch and deployed revision as usual.
+After deployment, inspect existing tasks without changing their real statuses.
+Exercise creation, completion, cancellation, reopening, conflicts and failures
+only against isolated synthetic records. Reconcile real task statuses separately
+with explicit authorization and completion evidence. Rollback retains all task
+rows and immutable history but removes these UI controls; older UI may display
+calendar-only dates in the prior timezone, so restore the corrected reader before
+relying on date displays.
