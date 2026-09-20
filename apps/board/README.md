@@ -207,6 +207,36 @@ draft minutes.
 Only the Board Chair and Executive Director may publish, reschedule, cancel, or
 close a meeting, record minutes approval, or send an official communication.
 
+### Follow-up tasks
+
+The meeting's **Follow-up tasks** (or **Action items** for live meetings) section
+supports adding and editing tasks, marking them complete, cancelling them without
+deletion, and reopening completed or cancelled tasks. Reopen a terminal task
+before editing its description, owner, or due date. **All tasks** and **Open tasks**
+filters retain visibility of historical outcomes and show counts by status.
+Chair, Executive Director, and Board Support use the existing meeting-preparation
+permission; directors and Legal Counsel can read tasks but cannot change them.
+Assignment as an owner does not grant task-management permissions.
+
+Follow-through remains available after a meeting is completed or closed and does
+not alter minutes approval, signed resolutions, or meeting lifecycle status.
+Task status is recorded explicitly; adopting resolutions or closing a workspace
+never automatically completes the task checklist. Optional status notes belong
+to the ordinary retained meeting history; confidential details stay in restricted
+records. Each change preserves the task's identifiers and associations, records
+before/after evidence and the authenticated actor/time, and atomically commits
+its meeting revision, audit append, and existing records-category notification
+outbox event. Notices follow existing opt-in preferences. Registry-backed writes
+also guard the actor's current access revision. Stale edits return a conflict;
+refreshing retains the user's unsaved form for review and retry.
+
+New task due dates are calendar dates (`YYYY-MM-DD`) rather than UTC midnights.
+Existing timestamp values retain their meeting-timezone interpretation and are
+preserved when an edit does not change the due date. No migration or backfill is
+needed. `setActionItemStatus` changes only status; `editActionItem` accepts only
+editable fields; legacy `upsertActionItem` updates use the same validation and
+must identify an existing task. Creation always starts Open.
+
 A meeting can be `live` or an `asynchronous` workspace for **action without a
 meeting by unanimous written consent**. Async discussion is not a legally
 convened meeting, and agreement to use the portal does not approve an action.

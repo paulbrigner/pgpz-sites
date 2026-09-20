@@ -1,10 +1,10 @@
+import { MeetingTasks } from "./MeetingTasks";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, Surface } from "@pgpz/ui";
 import {
   ArrowLeft,
   CalendarPlus,
-  CheckCircle2,
   Clock3,
   Download,
   FileText,
@@ -158,19 +158,7 @@ export function MeetingDetail({ detail, capabilities, viewerEmail }: { detail: M
 
             <Surface id="action-items" className="scroll-mt-28 p-5 sm:p-6">
               <MeetingSection id="action-items" title={asynchronous ? "Follow-up tasks" : "Action items"} detail={`${detail.actionItems.length}`} collapsed={asynchronous}>
-              {detail.actionItems.length === 0 ? <EmptySection>No action items have been recorded.</EmptySection> : (
-                <ul className="grid gap-3">
-                  {detail.actionItems.map((item) => (
-                    <li key={item.id} className="flex items-start gap-3 rounded-2xl border border-[var(--border)] p-4">
-                      <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${item.status === "completed" ? "text-emerald-700" : "text-[var(--muted)]"}`} aria-hidden="true" />
-                      <div>
-                        <h3 className="text-sm font-semibold text-[var(--foreground)]">{item.title}</h3>
-                        <p className="mt-1 text-xs capitalize text-[var(--muted)]">{item.status} · {item.owner}{item.dueAt ? ` · Due ${formatShortMeetingDate(item.dueAt, meeting.timeZone)}` : ""}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <MeetingTasks meeting={meeting} items={detail.actionItems} canPrepare={capabilities.canPrepare} />
               </MeetingSection>
             </Surface>
           </div>

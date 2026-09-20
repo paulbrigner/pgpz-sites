@@ -1,3 +1,8 @@
+import { validateActionItemChanges } from "@/lib/action-items";
+import { boardAccessRepository } from "@/lib/board-access-repository";
+import { accessRecordGuard } from "@/lib/director-roster";
+import { roleCanPrepareBoardMeetings } from "@/lib/board-access";
+import { BOARD_ACCESS_REGISTRY_ENABLED, SITE_URL } from "@/lib/config";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { boardAuditLedger, authenticatedActor } from "@/lib/audit";
@@ -11,7 +16,6 @@ import {
 import { boardMeetingsRepository } from "@/lib/meetings-repository";
 import { boardDocumentRepository } from "@/lib/vault";
 import {
-  BOARD_ACTION_ITEM_STATUSES,
   BOARD_AGENDA_ITEM_KINDS,
   BOARD_ATTENDANCE_STATUSES,
   BOARD_MEETING_FORMATS,
@@ -312,21 +316,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ meeting });
     }
 
-    if (action === "upsertActionItem") {
-      const actionItemId = text(body?.actionItemId) || randomUUID();
-      const audit = await auditItems(member, { action: "action_item_recorded", meetingId, version: expectedVersion + 1 });
-      const meeting = await boardMeetingsRepository.recordActionItem({
-        meetingId,
-        expectedVersion,
-        actorEmail: member.email,
-        id: actionItemId,
-        agendaItemId: nullableText(body?.agendaItemId),
-        description: text(body?.description),
-        ownerId: nullableText(body?.ownerId),
-        ownerName: text(body?.ownerName),
-        dueAt: nullableText(body?.dueAt),
-        status: memberOf(body?.status, BOARD_ACTION_ITEM_STATUSES, "open"),
-      }, { additionalTransactItems: audit });
+    if (["upsertActionItem", "setActionItemStatus", "editActionItem"].includes(action)) {
+      if (request.headers.get("origin") !== new URL(SITE_URL).origin) return NextResponse.json({ error: "Same-origin request required." }, { status: 403 });
+      const access = BOARD_ACCESS_REGISTRY_ENABLED ? await boardAccessRepository.getByEmail(member.email) : null;
+      if (BOARD_ACCESS_REGISTRY_ENABLED && (!access || access.status !== "active" || !roleCanPrepareBoardMeetings(access.role))) return NextResponse.json({ error: "Active meeting preparation access required." }, { status: 403 });
+      const taskId = text(body?.actionItemId);
+      if (taskId.length > 200 || /[#\x00-\x1f]/.test(taskId)) throw new Error("Invalid task ID.");
+      if (action !== "upsertActionItem" && !taskId) return NextResponse.json({ error: "Task ID is required." }, { status: 400 });
+      const isUpdate = Boolean(taskId);
+      const current = isUpdate ? await boardMeetingsRepository.getActionItem(meetingId, taskId) : null;
+      if (isUpdate && !current) return NextResponse.json({ error: "Task not found in this meeting." }, { status: 404 });
+      const rawChanges = action === "setActionItemStatus" ? { status: body.status }
+        : action === "editActionItem" ? body.changes
+        : Object.fromEntries(["description", "ownerName", "dueAt", "status"].filter((key) => key in body).map((key) => [key, body[key]]));
+      if (action === "editActionItem" && rawChanges && "status" in rawChanges) throw new Error("Use the task status control to change status.");
+      const changes = validateActionItemChanges(rawChanges);
+      if (body.note !== undefined && typeof body.note !== "string") throw new Error("Enter a valid task note.");
+      const actionItemId = taskId || randomUUID();
+      const audit = await auditItems(member, { action: "action_item_recorded", meetingId, version: expectedVersion + 1,
+        metadata: [["taskId", actionItemId], ["previousStatus", current?.status || null], ["status", changes.status || current?.status || "open"]] });
+      const taskOptions = { additionalTransactItems: [...(access ? [accessRecordGuard(access)] : []), ...audit] };
+      const meeting = isUpdate
+        ? await boardMeetingsRepository.updateActionItem({ meetingId, id: actionItemId, expectedVersion, actorEmail: member.email, changes, note: body.note }, taskOptions)
+        : await boardMeetingsRepository.recordActionItem({ meetingId, id: actionItemId, expectedVersion, actorEmail: member.email,
+          description: changes.description || "", ownerName: changes.ownerName || "", dueAt: changes.dueAt || null, status: changes.status || "open",
+          agendaItemId: nullableText(body.agendaItemId), ownerId: nullableText(body.ownerId) }, taskOptions);
       return NextResponse.json({ meeting });
     }
 
