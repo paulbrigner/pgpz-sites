@@ -59,7 +59,7 @@
       },
       {
         "path": "app/api/admin/policy-updates/route.test.ts",
-        "sha256": "7a6bc9321bb7d7037458d6aceeadf7ab804fb96607e665e67f7173fbe7dbe8b3"
+        "sha256": "d8091845c51ab80dee3cfdb7674b35d93632c5339843d6cfb0ba73d72178a6fe"
       },
       {
         "path": "app/api/admin/policy-updates/route.ts",
@@ -156,6 +156,10 @@
       {
         "path": "app/providers.tsx",
         "sha256": "7e4a37067369b82cc7e9301b5456ae63b6e736370e2486b9af4c73662e386922"
+      },
+      {
+        "path": "app/updates/[slug]/page.test.tsx",
+        "sha256": "3d9dab777a67a4213aa745c44ef8bea40e8a45c85642a60b899d0e0496608ac6"
       },
       {
         "path": "components.json",

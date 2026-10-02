@@ -693,6 +693,58 @@ describe("policy update DOCX pipeline", () => {
     expect(parsed.sections[1]).not.toHaveProperty("dividerBefore");
   });
 
+  it.each([false, true])("preserves a bottom-bordered image and one divider (adjacent empty border: %s)", async (adjacent) => {
+    const zip = await JSZip.loadAsync(await exampleDocxWithoutSummaryWithImage());
+    const xml = await zip.file("word/document.xml")!.async("string");
+    const border = '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:color="F79646"/></w:pBdr></w:pPr>';
+    zip.file("word/document.xml", xml.replace(
+      /<w:p><w:r><w:drawing>[\s\S]*?<\/w:drawing><\/w:r><\/w:p>/,
+      (image) => image.replace("<w:p>", `<w:p>${border}`) +
+        (adjacent ? `<w:p>${border}<w:r><w:t> </w:t></w:r></w:p>` : "") +
+        '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Following article</w:t></w:r></w:p>',
+    ));
+    const parsed = await parsePolicyUpdateDocx(await zip.generateAsync({ type: "nodebuffer" }), {
+      assetBasePath: "/api/policy-updates/example/assets",
+    });
+    expect(parsed.sections).toHaveLength(2);
+    expect(parsed.sections[0]).toMatchObject({ heading: "Policy Development Heading", dividerAfter: true });
+    expect(parsed.sections[0].images).toHaveLength(1);
+    expect(parsed.sections[1]).toMatchObject({ heading: "Following article", body: ["Read the primary source for details."] });
+    expect(parsed.sections[1].dividerBefore).toBeUndefined();
+    expect(parsed.assets).toHaveLength(1);
+    expect(parsed.sourceText).not.toContain("[[PGPZ_");
+    const pages = await readPdfPages(await renderPolicyUpdatePdf(parsed, pdfOptions));
+    expect(pages.some((page) => page.hasImage)).toBe(true);
+    expect(pages.map((page) => page.text).join(" ")).toContain("Following article");
+  });
+
+  it("places borders around a group of text paragraphs without splitting its content", async () => {
+    const border = '<w:pBdr><w:top w:val="single" w:sz="12"/><w:bottom w:val="single" w:sz="12"/></w:pBdr>';
+    const reorderedBorder = '<w:pBdr><w:bottom w:sz="12" w:val="single"/><w:top w:sz="12" w:val="single"/></w:pBdr>';
+    const bytes = await docxWithParagraphs(`
+      <w:p><w:pPr>${border}</w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Bordered article</w:t></w:r></w:p>
+      <w:p><w:pPr>${reorderedBorder}</w:pPr><w:r><w:t>First paragraph.</w:t></w:r></w:p>
+      <w:p><w:pPr>${border}</w:pPr><w:r><w:t>Second paragraph.</w:t></w:r></w:p>
+      <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Next article</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Next body.</w:t></w:r></w:p>`);
+    const parsed = await parsePolicyUpdateDocx(bytes, { assetBasePath: "/assets" });
+    expect(parsed.sections).toEqual([
+      expect.objectContaining({ heading: "Bordered article", body: ["First paragraph.", "Second paragraph."], dividerBefore: true, dividerAfter: true }),
+      expect.objectContaining({ heading: "Next article", body: ["Next body."] }),
+    ]);
+    expect(parsed.sections[1].dividerBefore).toBeUndefined();
+    expect(parsed.sections[1].dividerAfter).toBeUndefined();
+  });
+
+  it.each(["nil", "none"])("ignores disabled %s horizontal borders on text", async (value) => {
+    const parsed = await parsePolicyUpdateDocx(await docxWithParagraphs(`
+      <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Article heading</w:t></w:r></w:p>
+      <w:p><w:pPr><w:pBdr><w:bottom w:val="${value}"/></w:pBdr></w:pPr><w:r><w:t>Article body.</w:t></w:r></w:p>`),
+    { assetBasePath: "/assets" });
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].dividerAfter).toBeUndefined();
+  });
+
   it("rejects non-DOCX and macro-enabled packages", async () => {
     await expect(validatePolicyUpdateDocx(Buffer.from("%PDF-1.7"))).rejects.toThrow(
       /valid DOCX/,

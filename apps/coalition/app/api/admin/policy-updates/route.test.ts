@@ -289,7 +289,7 @@ describe("admin policy update sends", () => {
     expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
   });
 
-  it("keeps upload summary metadata authoritative during DOCX generation", async () => {
+  it("preserves DOCX formatting and upload summary metadata during generation", async () => {
     const uploadRecord = {
       ...update,
       summary: "Editorial summary supplied during upload.",
@@ -320,6 +320,17 @@ describe("admin policy update sends", () => {
           { text: " revised Senate text", href: "https://example.org/source" },
           { text: " is available." },
         ]],
+      }, {
+        heading: "Relevant Post",
+        body: [],
+        dividerAfter: true,
+        images: [{
+          src: "/api/policy-updates/policy-update-1/assets/image-1.png",
+          alt: "Embedded X post screenshot",
+        }],
+      }, {
+        heading: "Next policy development",
+        body: ["The next article begins after the source divider."],
       }],
       assets: [],
       sourceText: "Document source text",

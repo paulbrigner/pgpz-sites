@@ -349,12 +349,23 @@ function sourcePageCountFromAppXml(xml: string) {
   return Number.isInteger(value) && value > 0 && value <= 10_000 ? value : undefined;
 }
 
-function isSourceDividerParagraph(paragraphXml: string) {
-  if (!/<w:pBdr\b/i.test(paragraphXml)) return false;
-  if (/<w:(?:t|drawing|pict|object)\b/i.test(paragraphXml)) return false;
-  return /<w:(?:top|bottom)\b[^>]*\bw:val="(?!nil\b|none\b)[^"]+"/i.test(
-    paragraphXml,
-  );
+function sourceParagraphBorders(paragraph: any) {
+  const properties = directElements(paragraph, "w:ppr")[0];
+  const borders = directElements(properties, "w:pbdr")[0];
+  const edges = childNodes(borders).filter((node) => elementName(node));
+  const visible = (edge: string) => {
+    const value = directElements(borders, edge)[0]?.attribs?.["w:val"];
+    return typeof value === "string" && value.length > 0 && !/^(?:nil|none)$/i.test(value);
+  };
+  return {
+    top: visible("w:top"),
+    bottom: visible("w:bottom"),
+    // Word treats adjacent paragraphs with identical borders as one group.
+    // Compare properties, not XML whitespace or attribute/edge ordering.
+    key: JSON.stringify(edges.map((edge) => [
+      elementName(edge), Object.entries(edge.attribs || {}).sort(),
+    ]).sort(([left], [right]) => String(left).localeCompare(String(right)))),
+  };
 }
 
 function wordOnOff(element: any): boolean | undefined {
@@ -391,9 +402,19 @@ function paragraphPageBreakResolver(stylesXml: string) {
 function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string) {
   const tokenRun = `<w:t>${PAGE_BREAK_TOKEN}</w:t>`;
   const breakRun = `<w:r>${tokenRun}</w:r>`;
-  const dividerRun = `<w:r><w:t>${DIVIDER_TOKEN}</w:t></w:r>`;
+  const dividerParagraph = `<w:p><w:r><w:t>${DIVIDER_TOKEN}</w:t></w:r></w:p>`;
   const pageBreakBefore = paragraphPageBreakResolver(stylesXml);
-  const body = descendantElements(parseDocument(documentXml, { xmlMode: true }), "w:body")[0];
+  const source = parseDocument(documentXml, { xmlMode: true, withStartIndices: true });
+  const body = descendantElements(source, "w:body")[0];
+  const paragraphs = descendantElements(body, "w:p");
+  const paragraphsByOffset = new Map(paragraphs.map((paragraph) => [paragraph.startIndex, paragraph]));
+  const bordersByParagraph = new Map(paragraphs.map((paragraph) => [paragraph, sourceParagraphBorders(paragraph)]));
+  const sharesBorder = (paragraph: any, direction: "prev" | "next") => {
+    let neighbor = paragraph?.[direction];
+    while (neighbor && !elementName(neighbor)) neighbor = neighbor[direction];
+    return elementName(neighbor) === "w:p" &&
+      bordersByParagraph.get(neighbor)?.key === bordersByParagraph.get(paragraph)?.key;
+  };
   // A section's properties are stored at its END, but its type describes how
   // that section STARTS. The last section stores its properties on the body.
   const sectionStartTypes = descendantElements(body, "w:sectpr")
@@ -402,8 +423,8 @@ function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string
     .map((section) => directElements(section, "w:type")[0]?.attribs?.["w:val"] || "nextPage");
   let sectionIndex = 0;
   const markedDocumentXml = documentXml
-    .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph) => {
-      const element = childNodes(parseDocument(paragraph, { xmlMode: true }))[0];
+    .replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraph, offset: number) => {
+      const element = paragraphsByOffset.get(offset);
       const properties = directElements(element, "w:ppr")[0];
       let marked = paragraph;
       if (pageBreakBefore(properties)) {
@@ -412,9 +433,12 @@ function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string
           ? marked.replace(/<\/w:pPr>|<w:pPr\s*\/>/, `$&${breakRun}`)
           : marked.replace(/<w:p(?:\s[^>]*)?>/, `$&${breakRun}`);
       }
-      if (isSourceDividerParagraph(paragraph)) {
-        marked = marked.replace(/<\/w:p>$/, `${dividerRun}</w:p>`);
-      }
+      const borders = bordersByParagraph.get(element);
+      // A separate marker preserves text/images in the bordered paragraph:
+      // putting it inside an image paragraph makes it look like divider-only
+      // content to the HTML reader, which would discard the image.
+      if (borders?.top && !sharesBorder(element, "prev")) marked = dividerParagraph + marked;
+      if (borders?.bottom && !sharesBorder(element, "next")) marked += dividerParagraph;
       const section = directElements(properties, "w:sectpr")[0];
       if (section) {
         const nextSectionType = sectionStartTypes[++sectionIndex] || "nextPage";
