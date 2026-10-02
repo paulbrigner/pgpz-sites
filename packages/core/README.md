@@ -23,12 +23,20 @@ responsible for administrator authorization, private object storage, and
 publishing policy.
 
 Policy-update PDFs preserve spaces across inline formatting and hyperlink
-boundaries. The parser carries explicit run breaks, Word's saved rendered-break
-markers, paragraph `pageBreakBefore` (including inherited styles), and page-based
-section breaks into the PDF model. Continuous sections do not force a page.
-Summary tables reflow into the existing cover columns, with layout markers
-excluded from their plain-text fields.
-Headings stay with the first body lines, bullet, or graphic; a break immediately
+boundaries. The parser carries explicit run breaks, paragraph `pageBreakBefore`
+(including inherited styles), and page-based section breaks into the PDF model.
+Continuous sections do not force a page. Word's cached `lastRenderedPageBreak`
+positions are ignored so automatic pagination can reflow for the PDF layout.
+Every page uses a one-inch top content margin, including even-numbered pages;
+the branded running header remains inside that margin.
+
+Summary tables paginate at a consistent 10.5-point font instead of shrinking
+or overflowing their boxes. Continuation pages repeat the column labels, and
+use the full width when only one column remains. Oversized individual items
+split without dropping text. Articles start on a fresh page after the summary.
+Layout markers are excluded from the summary's plain-text fields.
+Headings stay with a short first paragraph, the first lines of a long paragraph,
+bullet, or graphic; a break immediately
 before that first block carries its heading forward with it. Word's cached page
 count remains source metadata, rather than a required PDF page count, because
 fonts, margins, and heading placement can require additional pages.
