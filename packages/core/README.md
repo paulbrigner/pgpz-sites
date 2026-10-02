@@ -27,6 +27,10 @@ boundaries. The parser carries explicit run breaks, paragraph `pageBreakBefore`
 (including inherited styles), and page-based section breaks into the PDF model.
 Continuous sections do not force a page. Word's cached `lastRenderedPageBreak`
 positions are ignored so automatic pagination can reflow for the PDF layout.
+Horizontal paragraph borders are preserved as section dividers, including
+borders attached to text or images. Adjacent paragraphs with matching borders
+form one bordered group; markers stay outside the content so graphics are
+retained. The same divider flags drive the online update and PDF.
 Every page uses a one-inch top content margin, including even-numbered pages;
 the branded running header remains inside that margin.
 
