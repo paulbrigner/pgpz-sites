@@ -424,7 +424,9 @@ function docxWithLayoutTokens(zip: JSZip, documentXml: string, stylesXml: string
       }
       return marked;
     })
-    .replace(/<w:lastRenderedPageBreak\s*\/>/g, tokenRun)
+    // Cached positions from Word's last pagination are not author-inserted
+    // breaks. Reflow them for this PDF's fonts, summary layout and margins.
+    .replace(/<w:lastRenderedPageBreak\b[^>]*\/>/g, "")
     .replace(/<w:br\b[^>]*\bw:type="page"[^>]*\/>/g, tokenRun);
   zip.file("word/document.xml", markedDocumentXml);
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
@@ -1021,7 +1023,7 @@ export async function renderPolicyUpdatePdf(
 ) {
   const doc = new PDFDocument({
     size: "LETTER",
-    margins: { top: 70, right: 72, bottom: 54, left: 72 },
+    margins: { top: 72, right: 72, bottom: 54, left: 72 },
     info: {
       Title: content.title,
       Author: options.brandName,
@@ -1036,12 +1038,8 @@ export async function renderPolicyUpdatePdf(
   const pageWidth = 612;
   const contentLeft = 72;
   const contentWidth = 468;
-  let createdPageCount = 0;
-
   const beginPage = () => {
-    createdPageCount += 1;
-    const isOddPage = createdPageCount % 2 === 1;
-    const top = isOddPage ? 70 : 16;
+    const top = doc.page.margins.top;
     pdfContentTop.set(doc, top);
     doc.x = contentLeft;
     doc.y = top;
@@ -1057,12 +1055,15 @@ export async function renderPolicyUpdatePdf(
   const coverImageAsset = coverImageFileName
     ? assetByName.get(coverImageFileName)
     : undefined;
-  const coverTitleWidth = coverImageAsset ? 380 : contentWidth;
+  const coverTop = doc.page.margins.top;
+  const qrSize = 75.25;
+  const qrLeft = contentLeft + contentWidth - qrSize;
+  const coverTitleWidth = coverImageAsset ? qrLeft - contentLeft - 18 : contentWidth;
   doc
     .font("Helvetica")
     .fontSize(14)
     .fillColor("#111111")
-    .text(content.title, contentLeft, 82, {
+    .text(content.title, contentLeft, coverTop + 10, {
       width: coverTitleWidth,
       lineGap: 1,
     });
@@ -1071,23 +1072,22 @@ export async function renderPolicyUpdatePdf(
       .font("Helvetica-Bold")
       .fontSize(9.5)
       .fillColor("#946200")
-      .text(options.portalUrl, contentLeft, Math.max(105, doc.y + 7), {
+      .text(options.portalUrl, contentLeft, doc.y + 7, {
         width: coverTitleWidth,
         link: options.portalUrl,
         underline: false,
       });
   }
 
+  let coverBottom = doc.y;
   if (coverImageAsset && /image\/(?:png|jpe?g)/i.test(coverImageAsset.contentType)) {
-    const qrLeft = 465;
-    const qrTop = 68;
-    const qrSize = 75.25;
+    const qrTop = coverTop + 20;
     doc
       .font("Helvetica")
       .fontSize(6.5)
       .fillColor("#111111")
-      .text(content.coverCta?.caption || "Not a PGPZ member? Sign up here:", qrLeft - 4, 51, {
-        width: qrSize + 8,
+      .text(content.coverCta?.caption || "Not a PGPZ member? Sign up here:", qrLeft, coverTop, {
+        width: qrSize,
         height: 20,
         lineGap: 0,
       })
@@ -1099,30 +1099,67 @@ export async function renderPolicyUpdatePdf(
         width: qrSize,
         height: qrSize,
       });
+    coverBottom = Math.max(coverBottom, qrTop + qrSize);
   }
 
+  const dividerTop = Math.max(158, coverBottom + 15);
   doc
-    .moveTo(contentLeft, 158)
-    .lineTo(contentLeft + contentWidth, 158)
+    .moveTo(contentLeft, dividerTop)
+    .lineTo(contentLeft + contentWidth, dividerTop)
     .lineWidth(6)
     .strokeColor("#f5a800")
     .stroke();
 
+  const summaryFontSize = 10.5;
+  type SummaryItem = { text: string; continued: boolean };
+  type SummaryFragment = SummaryItem & { height: number };
+  const summaryTextHeight = (text: string, width: number) => doc
+    .font("Helvetica")
+    .fontSize(summaryFontSize)
+    .heightOfString(text, { width, lineGap: 1.5 });
+
+  // Fit complete items where possible. An individual item taller than a page
+  // is split at a word boundary so no source text is clipped or discarded.
+  const takeSummaryFragments = (pending: SummaryItem[], width: number, height: number) => {
+    const fragments: SummaryFragment[] = [];
+    let remaining = height;
+    while (pending.length) {
+      const item = pending[0];
+      const itemHeight = summaryTextHeight(item.text, width);
+      if (itemHeight + 8 <= remaining) {
+        fragments.push({ ...item, height: itemHeight });
+        pending.shift();
+        remaining -= itemHeight + 8;
+        continue;
+      }
+      if (fragments.length) break;
+      let low = 0;
+      let high = item.text.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (summaryTextHeight(item.text.slice(0, mid), width) + 8 <= remaining) low = mid;
+        else high = mid - 1;
+      }
+      if (!low) throw new Error("Policy summary page has no room for text.");
+      const wordBoundary = item.text.slice(0, low + 1).search(/\s+\S*$/);
+      const splitAt = wordBoundary > 0 ? wordBoundary : low;
+      const text = item.text.slice(0, splitAt).trimEnd();
+      fragments.push({ ...item, text, height: summaryTextHeight(text, width) });
+      pending[0] = { text: item.text.slice(splitAt).trimStart(), continued: true };
+      break;
+    }
+    return fragments;
+  };
+
   const drawCoverListColumn = ({
-    x,
-    top,
-    width,
-    height,
-    heading,
-    items,
-    fill,
+    x, top, width, height, heading, fragments, fill,
   }: {
     x: number;
     top: number;
     width: number;
     height: number;
     heading: string;
-    items: string[];
+    fragments: SummaryFragment[];
     fill: string;
   }) => {
     doc
@@ -1134,87 +1171,89 @@ export async function renderPolicyUpdatePdf(
       .fontSize(11.5)
       .fillColor("#111111")
       .text(heading, x + 8, top + 9, {
-        width: width - 16,
-        height: 16,
-        lineBreak: false,
+        width: width - 16, height: 16, lineBreak: false,
       });
-
-    const itemWidth = width - 42;
-    const availableHeight = height - 44;
-    let fontSize = 10.5;
-    const measuredHeight = (size: number) =>
-      items.reduce(
-        (sum, item) =>
-          sum +
-          doc
-            .font("Helvetica")
-            .fontSize(size)
-            .heightOfString(item, { width: itemWidth, lineGap: 1.5 }) +
-          8,
-        0,
-      );
-    while (fontSize > 7.75 && measuredHeight(fontSize) > availableHeight) {
-      fontSize -= 0.25;
-    }
-
     let y = top + 35;
-    for (const item of items) {
-      const itemHeight = doc
-        .font("Helvetica")
-        .fontSize(fontSize)
-        .heightOfString(item, { width: itemWidth, lineGap: 1.5 });
+    for (const item of fragments) {
+      if (!item.continued) doc.circle(x + 20, y + 5, 2.5).fill("#111111");
       doc
-        .circle(x + 20, y + Math.min(5, itemHeight / 2), 2.5)
-        .fill("#111111")
         .font("Helvetica")
-        .fontSize(fontSize)
+        .fontSize(summaryFontSize)
         .fillColor("#111111")
-        .text(item, x + 32, y, {
-          width: itemWidth,
-          lineGap: 1.5,
-          height: Math.max(itemHeight + 2, 10),
+        .text(item.text, x + 32, y, {
+          width: width - 42, lineGap: 1.5, height: item.height + 2,
         });
-      y += itemHeight + 8;
+      y += item.height + 8;
     }
     doc.restore();
   };
 
   if (content.keyTakeaways.length || content.actionItems.length) {
-    const tableTop = 194;
-    const tableHeight = 466;
-    const columnWidth = contentWidth / 2;
-    drawCoverListColumn({
-      x: contentLeft,
-      top: tableTop,
-      width: columnWidth,
-      height: tableHeight,
-      heading: "Key Takeaways",
-      items: content.keyTakeaways,
-      fill: "#fff3ca",
-    });
-    drawCoverListColumn({
-      x: contentLeft + columnWidth,
-      top: tableTop,
-      width: columnWidth,
-      height: tableHeight,
-      heading: "Action Items",
-      items: content.actionItems,
-      fill: "#fff9ea",
-    });
-    doc.x = contentLeft;
-    doc.y = tableTop + tableHeight;
+    const columns = [
+      { heading: "Key Takeaways", fill: "#fff3ca", pending: content.keyTakeaways.map((text) => ({ text, continued: false })) },
+      { heading: "Action Items", fill: "#fff9ea", pending: content.actionItems.map((text) => ({ text, continued: false })) },
+    ];
+    let tableTop = dividerTop + 36;
+    let summaryPage = 0;
+    do {
+      const tableBottom = doc.page.height - doc.page.margins.bottom - 8;
+      if (tableBottom - tableTop < 80) {
+        doc.addPage();
+        tableTop = doc.page.margins.top;
+      }
+      // Once a column is complete, give remaining summary text the full width
+      // on continuation pages instead of leaving half of each page unused.
+      const visibleColumns = summaryPage ? columns.filter((column) => column.pending.length) : columns;
+      const columnWidth = contentWidth / visibleColumns.length;
+      const tableHeight = tableBottom - tableTop;
+      visibleColumns.forEach((column, index) => {
+        const fragments = takeSummaryFragments(column.pending, columnWidth - 42, tableHeight - 44);
+        drawCoverListColumn({
+          x: contentLeft + index * columnWidth, top: tableTop, width: columnWidth,
+          height: tableHeight, heading: column.heading + (summaryPage ? " (continued)" : ""),
+          fragments, fill: column.fill,
+        });
+      });
+      summaryPage += 1;
+      if (columns.some((column) => column.pending.length)) {
+        doc.addPage();
+        tableTop = doc.page.margins.top;
+      }
+    } while (columns.some((column) => column.pending.length));
+    // A summary is its own cover section, regardless of whether Word saved a
+    // page-break marker after the source table. Never start an article in it.
+    if (content.sections.length) doc.addPage();
   } else if (content.summary) {
+    const summaryTop = dividerTop + 36;
+    const summaryHeight = doc.font("Helvetica").fontSize(11)
+      .heightOfString(content.summary, { width: contentWidth - 24, lineGap: 2 }) + 28;
     doc
-      .roundedRect(contentLeft, 194, contentWidth, 90, 2)
+      .roundedRect(contentLeft, summaryTop, contentWidth, Math.max(90, summaryHeight), 2)
       .fillAndStroke("#fff9ea", "#111111")
       .font("Helvetica")
       .fontSize(11)
       .fillColor("#111111")
-      .text(content.summary, contentLeft + 12, 208, {
-        width: contentWidth - 24,
-        lineGap: 2,
+      .text(content.summary, contentLeft + 12, summaryTop + 14, {
+        width: contentWidth - 24, lineGap: 2,
       });
+    doc.y = summaryTop + Math.max(90, summaryHeight) + 16;
+  } else {
+    doc.y = dividerTop + 24;
   }
+
+  const paragraphKeepHeight = (
+    runs: PolicyUpdateTextRun[] | undefined, text: string, width: number, size: number, lineGap: number,
+  ) => {
+    // Respect breaks inside a paragraph; only measure its first source block.
+    const nextBreak = runs?.findIndex((run, index) => index > 0 && run.pageBreakBefore) ?? -1;
+    const firstBlock = nextBreak > 0 ? runs!.slice(0, nextBreak).map((run) => run.text).join("") : text;
+    // Bold provides a conservative estimate for mixed formatting. Keep short
+    // paragraphs intact, avoiding a final line/word stranded on the next page.
+    const height = doc.font("Helvetica-Bold").fontSize(size)
+      .heightOfString(firstBlock, { width, lineGap });
+    const pageBodyHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
+    return height <= pageBodyHeight * 0.4 ? Math.max(32, height) : 32;
+  };
 
   for (const section of content.sections) {
     const isArticleHeading = !/^(?:overview|why this matters(?: for zcash)?|action items?|relevant posts?|x post of the week)$/i.test(
@@ -1240,8 +1279,13 @@ export async function renderPolicyUpdatePdf(
     );
     const headingGap = doc.currentLineHeight(true) * 0.55;
     const dividerHeight = section.dividerBefore ? doc.currentLineHeight(true) * 0.8 : 0;
-    // Keep at least two body lines (or the first graphic) with the entire heading.
-    let followingHeight = section.body.length || section.bullets?.length ? 32 : 0;
+    // Keep a short first paragraph, two lines of a long one, or the first
+    // graphic with the heading. Use the same reservation as the body writer.
+    let followingHeight = section.body.length
+      ? paragraphKeepHeight(section.bodyRuns?.[0], section.body[0], contentWidth, 10.5, 2)
+      : section.bullets?.length
+        ? paragraphKeepHeight(section.bulletRuns?.[0], section.bullets[0], contentWidth - 22, 10.25, 1.6)
+        : 0;
     if (!section.body.length && !section.bullets?.length && firstImage) {
       const asset = assetByName.get(decodeURIComponent(firstImage.src.split("/").at(-1) || ""))!;
       followingHeight = pdfImageSize(firstImage, asset).height + 8;
@@ -1267,8 +1311,9 @@ export async function renderPolicyUpdatePdf(
     doc.moveDown(0.55);
 
     section.body.forEach((paragraph, index) => {
-      doc.fontSize(10.5);
       const runs = section.bodyRuns?.[index];
+      ensurePdfSpace(doc, paragraphKeepHeight(runs, paragraph, contentWidth, 10.5, 2));
+      doc.fontSize(10.5);
       writePdfRuns(doc, index === 0 ? withoutLeadingPageBreak(runs) : runs, paragraph, {
         x: contentLeft,
         width: contentWidth,
@@ -1282,7 +1327,7 @@ export async function renderPolicyUpdatePdf(
       const startsWithPageBreak = !!sourceRuns?.[0]?.pageBreakBefore && (section.body.length > 0 || index > 0);
       if (startsWithPageBreak) addSourcePdfPage(doc);
       const bulletRuns = withoutLeadingPageBreak(sourceRuns);
-      ensurePdfSpace(doc, 28);
+      ensurePdfSpace(doc, paragraphKeepHeight(bulletRuns, item, contentWidth - 22, 10.25, 1.6));
       const y = doc.y + 5;
       doc.circle(contentLeft + 8, y, 1.6).fill("#111111");
       doc.fontSize(10.25);
