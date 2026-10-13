@@ -80,18 +80,18 @@ describe("community main navigation", () => {
   });
 
   it("highlights a section in the mobile menu on its nested routes", async () => {
-    mocks.pathname = "/updates/weekly-policy-memo";
+    mocks.pathname = "/x-monitor/briefings";
     const user = userEvent.setup();
 
     render(<MainNav />);
     await user.click(screen.getByRole("button", { name: "Open navigation menu" }));
 
     const mobileMenu = within(document.getElementById("main-nav-mobile-menu")!);
-    expect(mobileMenu.getByRole("link", { name: "Updates" })).toHaveAttribute(
+    expect(mobileMenu.getByRole("link", { name: "X Monitor" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(mobileMenu.getByRole("link", { name: "Updates" })).toHaveClass(
+    expect(mobileMenu.getByRole("link", { name: "X Monitor" })).toHaveClass(
       "bg-[var(--zcash-gold)]",
     );
     expect(mobileMenu.getByRole("link", { name: "Home" })).not.toHaveAttribute(

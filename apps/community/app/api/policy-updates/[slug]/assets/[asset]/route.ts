@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { policyUpdateAssetObjectKey } from "@pgpz/core/server";
 import { getUploadedPolicyUpdateRecord } from "@/lib/admin/policy-update-uploads";
 import { hasPolicyUpdateResourceAccess } from "@/lib/policy-update-access";
+import { getPublicPolicyUpdateUrl } from "@/lib/policy-update-urls";
 import { s3Client } from "@/lib/s3";
 
 export const dynamic = "force-dynamic";
@@ -22,21 +23,21 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; asset: string }> },
 ) {
-  const access = await hasPolicyUpdateResourceAccess(request);
-  if (!access.allowed) {
-    return NextResponse.json({ error: "Membership required" }, { status: 403 });
-  }
-
   const { slug, asset } = await params;
   if (!assetNamePattern.test(asset)) {
     return NextResponse.json({ error: "Unknown policy update asset" }, { status: 404 });
   }
-
-  const upload = await getUploadedPolicyUpdateRecord(slug);
+  const upload = await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
   if (!upload) {
     return NextResponse.json({ error: "Unknown policy update asset" }, { status: 404 });
   }
-  if (upload.visibilityStatus !== "published" && !access.isAdmin) {
+  if (upload.visibilityStatus === "published") {
+    return NextResponse.redirect(`${getPublicPolicyUpdateUrl(slug)}/assets/${encodeURIComponent(asset)}`, {
+      status: 307, headers: { "Cache-Control": "no-store" },
+    });
+  }
+  const access = await hasPolicyUpdateResourceAccess(request);
+  if (!access.allowed || !access.isAdmin) {
     return NextResponse.json({ error: "Unknown policy update asset" }, { status: 404 });
   }
 
@@ -60,7 +61,7 @@ export async function GET(
     return new Response(body, {
       headers: {
         "Content-Type": contentTypeForAsset(asset),
-        "Cache-Control": "private, max-age=300",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (err: any) {

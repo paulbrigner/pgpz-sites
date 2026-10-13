@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  claimPolicyUpdateGeneration: vi.fn(),
+  releasePolicyUpdateGeneration: vi.fn(),
+  clearInterruptedPolicyUpdateGeneration: vi.fn(),
   backgroundJobIdForIdempotencyKey: vi.fn(),
   bindNewsletterTrackingDestinations: vi.fn(),
   buildPolicyUpdateEmail: vi.fn(),
@@ -97,6 +100,9 @@ vi.mock("@/lib/admin/policy-update-email-assets", () => ({
 }));
 
 vi.mock("@/lib/admin/policy-update-uploads", () => ({
+  claimPolicyUpdateGeneration: mocks.claimPolicyUpdateGeneration,
+  releasePolicyUpdateGeneration: mocks.releasePolicyUpdateGeneration,
+  clearInterruptedPolicyUpdateGeneration: mocks.clearInterruptedPolicyUpdateGeneration,
   createPolicyUpdateUploadSlug: vi.fn(),
   deleteDraftUploadedPolicyUpdateRecord: vi.fn(),
   formatPolicyUpdateDisplayDate: vi.fn(),
@@ -173,6 +179,8 @@ async function postPolicyUpdate(body: Record<string, unknown>) {
 describe("admin policy update sends", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.claimPolicyUpdateGeneration.mockResolvedValue("lease-1");
+    mocks.releasePolicyUpdateGeneration.mockResolvedValue(undefined);
     mocks.requireAdminSession.mockResolvedValue({ user: { id: "admin-1" } });
     mocks.getDistributablePolicyUpdate.mockResolvedValue(update);
     mocks.getUploadedPolicyUpdateRecord.mockResolvedValue(null);
@@ -240,6 +248,15 @@ describe("admin policy update sends", () => {
     expect(mocks.createNewsletterTrackingRecord).not.toHaveBeenCalled();
   });
 
+  it("retains delivery to all eligible Community members through the durable queue", async () => {
+    const response = await postPolicyUpdate({ slug: update.slug, confirmSend: true, audienceMode: "all_active_members" });
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ audienceMode: "all_active_members", queued: true });
+    expect(mocks.listPolicyUpdateRecipients).toHaveBeenCalled();
+    expect(mocks.enqueueBackgroundJob).toHaveBeenCalledWith(expect.objectContaining({ kind: "policy_update", recipients: [expect.objectContaining({ userId: recipient.id })] }));
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
   it("keeps a single draft copy synchronous", async () => {
     const response = await postPolicyUpdate({
       slug: update.slug,
@@ -258,6 +275,7 @@ describe("admin policy update sends", () => {
       sent: 1,
       failed: 0,
     });
+    expect(mocks.buildPolicyUpdateEmail).toHaveBeenCalledWith(update, expect.any(Object), "https://example.test", expect.objectContaining({ privatePreview: true }));
     expect(mocks.createTransport).toHaveBeenCalledTimes(1);
     expect(mocks.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({ to: recipient.email, subject: update.emailSubject }),
@@ -287,6 +305,22 @@ describe("admin policy update sends", () => {
     });
     expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
     expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects regeneration of a published update before writing any artifact", async () => {
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue({ ...update, visibilityStatus: "published" });
+    const response = await postPolicyUpdate({ slug: update.slug, action: "generateContent" });
+    expect(response.status).toBe(409);
+    expect(mocks.claimPolicyUpdateGeneration).not.toHaveBeenCalled();
+    expect(mocks.s3Send).not.toHaveBeenCalled();
+  });
+
+  it("does not write artifacts when another generation already owns the lease", async () => {
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue({ ...update, visibilityStatus: "draft" });
+    mocks.claimPolicyUpdateGeneration.mockRejectedValueOnce(new Error("Generation is already in progress"));
+    const response = await postPolicyUpdate({ slug: update.slug, action: "generateContent" });
+    expect(response.status).toBe(409);
+    expect(mocks.s3Send).not.toHaveBeenCalled();
   });
 
   it("preserves DOCX formatting and upload summary metadata during generation", async () => {
@@ -374,6 +408,8 @@ describe("admin policy update sends", () => {
     );
     const saved = mocks.saveGeneratedPolicyUpdateContent.mock.calls[0]?.[0];
     expect(saved.sections).toEqual(generated.sections);
+    expect(saved.generationLeaseId).toBe("lease-1");
+    expect(mocks.releasePolicyUpdateGeneration).toHaveBeenCalledWith(update.slug, "lease-1");
     expect(saved).not.toHaveProperty("summary");
     expect(saved).not.toHaveProperty("emailPreheader");
   });

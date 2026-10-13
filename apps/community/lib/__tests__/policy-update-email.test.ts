@@ -445,7 +445,7 @@ describe("buildPolicyUpdateEmail", () => {
 
     expect(built.html).toContain("/api/email/open/policy-track-123.png");
     expect(built.html).toContain(
-      "/api/email/click/policy-track-123?url=https%3A%2F%2Fcommunity.pgpz.org%2Fupdates%2F2026-06-08-weekly-policy-memo",
+      "/api/email/click/policy-track-123?url=https%3A%2F%2Fpgpz.org%2Fupdates%2F2026-06-08-weekly-policy-memo",
     );
     expect(built.html).toContain("&amp;sig=");
     expect(built.html).toContain("/api/email/unsubscribe/policy-track-123");
@@ -453,5 +453,31 @@ describe("buildPolicyUpdateEmail", () => {
     expect(built.unsubscribeUrl).toBe(
       "https://community.pgpz.org/api/email/unsubscribe/policy-track-123",
     );
+  });
+});
+
+describe("public policy reading links", () => {
+  it.each([weeklyUpdate, specialUpdate])("uses public reading and PDF URLs while retaining Community delivery", (update) => {
+    if (!update) throw new Error("Missing update fixture");
+    const built = buildPolicyUpdateEmail(update, { email: "member@example.test" }, "https://community.pgpz.org", {
+      trackingId: "delivery-1", trackLinks: true, includeUnsubscribe: true,
+    });
+    expect(built.portalUrl).toBe(`https://pgpz.org/updates/${update.slug}`);
+    expect(built.pdfUrl).toBe(`https://pgpz.org/updates/${update.slug}/document.pdf`);
+    expect(built.archiveUrl).toBe("https://pgpz.org/updates");
+    expect(built.trackedDestinations).toContain(built.portalUrl);
+    expect(built.trackedDestinations).toContain(built.pdfUrl);
+    expect(built.unsubscribeUrl).toBe("https://community.pgpz.org/api/email/unsubscribe/delivery-1");
+    expect(built.html).not.toContain("View on member portal");
+  });
+
+  it("keeps draft-test reading and PDF links on the private Community preview", () => {
+    if (!weeklyUpdate) throw new Error("Missing fixture");
+    const update = { ...weeklyUpdate, slug: "draft-weekly", portalPath: "/updates/draft-weekly", pdfHref: "/api/policy-updates/draft-weekly/pdf" };
+    const built = buildPolicyUpdateEmail(update, { email: "admin@example.test" }, "https://community.pgpz.org", { privatePreview: true });
+    expect(built.portalUrl).toBe("https://community.pgpz.org/updates/draft-weekly");
+    expect(built.pdfUrl).toBe("https://community.pgpz.org/api/policy-updates/draft-weekly/pdf");
+    expect(built.html).toContain("View private preview");
+    expect(built.html).not.toContain("https://pgpz.org/updates/draft-weekly");
   });
 });

@@ -1,3 +1,4 @@
+import { PUBLIC_POLICY_UPDATES_URL, getPublicPolicyUpdateUrl, getPublicPolicyUpdatePdfUrl } from "@/lib/policy-update-urls";
 import type {
   PolicyUpdate,
   PolicyUpdateImage,
@@ -46,11 +47,12 @@ export type PolicyUpdateEmailTracking = {
   includeOpenPixel?: boolean;
   includeUnsubscribe?: boolean;
   emailAssetMaterializationId?: string | null;
+  privatePreview?: boolean;
   onTrackedDestination?: (destination: string) => void;
 };
 
-export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate, baseUrl?: string | null) =>
-  `${normalizeBaseUrl(baseUrl)}${update.portalPath}`;
+export const buildPolicyUpdatePortalUrl = (update: PolicyUpdate) =>
+  getPublicPolicyUpdateUrl(update.slug);
 
 const trackedClickUrl = (
   baseUrl: string,
@@ -482,8 +484,13 @@ export function buildPolicyUpdateEmail(
       }
     : undefined;
   const sections = normalizePolicyUpdateSectionLayout(update.sections);
-  const portalUrl = buildPolicyUpdatePortalUrl(update, base);
-  const archiveUrl = `${base}/updates`;
+  const portalUrl = tracking?.privatePreview
+    ? `${base}${update.portalPath}`
+    : buildPolicyUpdatePortalUrl(update);
+  const archiveUrl = PUBLIC_POLICY_UPDATES_URL;
+  const pdfUrl = tracking?.privatePreview ? absoluteUrl(base, update.pdfHref) : getPublicPolicyUpdatePdfUrl(update.slug);
+  const readingLabel = tracking?.privatePreview ? "View private preview" : "Read on PGPZ";
+  const pdfLinkHref = trackedHref(base, pdfUrl, emailTracking);
   const portalLinkHref = trackedHref(base, portalUrl, emailTracking);
   const archiveLinkHref = trackedHref(base, archiveUrl, emailTracking);
   const communityLinkHref = trackedHref(base, base, emailTracking);
@@ -537,11 +544,12 @@ export function buildPolicyUpdateEmail(
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 28px;">
                   <tr>
                     <td style="border-radius:999px;background:${colors.gold};">
-                      <a href="${escapeHtml(portalLinkHref)}" style="display:inline-block;padding:12px 18px;border-radius:999px;color:${colors.ink};font-size:14px;font-weight:800;text-decoration:none;">View on member portal</a>
+                      <a href="${escapeHtml(portalLinkHref)}" style="display:inline-block;padding:12px 18px;border-radius:999px;color:${colors.ink};font-size:14px;font-weight:800;text-decoration:none;">${readingLabel}</a>
                     </td>
                     <td style="width:12px;"></td>
                     <td style="border-radius:999px;border:1px solid ${colors.line};background:#ffffff;">
                       <a href="${escapeHtml(archiveLinkHref)}" style="display:inline-block;padding:11px 17px;border-radius:999px;color:${colors.goldDeep};font-size:14px;font-weight:700;text-decoration:none;">View archive</a>
+                      <a href="${escapeHtml(pdfLinkHref)}" style="display:inline-block;padding:11px 17px;color:${colors.goldDeep};font-size:14px;font-weight:700;">Download PDF</a>
                     </td>
                   </tr>
                 </table>
@@ -580,7 +588,8 @@ export function buildPolicyUpdateEmail(
     "Action items:",
     ...update.actionItems.map((item) => `- ${item}`),
     "",
-    `View on member portal: ${portalUrl}`,
+    `${readingLabel}: ${portalUrl}`,
+    `Download PDF: ${pdfUrl}`,
     `View archive: ${archiveUrl}`,
     "",
     ...sections.flatMap(renderSectionTextLines),
@@ -594,6 +603,7 @@ export function buildPolicyUpdateEmail(
     html,
     text,
     portalUrl,
+    pdfUrl,
     archiveUrl,
     unsubscribeUrl,
     trackedDestinations: [...trackedDestinations],

@@ -33,6 +33,7 @@ live AWS/Amplify state before acting; resource state and credentials can drift.
 | [`board-deployment.md`](board-deployment.md) | Board app, roles, tables, vault, audit, and provisioning |
 | [`board-disclosures.md`](board-disclosures.md) | Board individual disclosures, signatures, restricted review, and records |
 | [`policy-update-email-asset-backfill.md`](policy-update-email-asset-backfill.md) | One-time policy-update email asset materialization |
+| [`community-public-policy-deployment.md`](community-public-policy-deployment.md) | Community-owned public memo reader, pgpz.org routing, deployment and rollback |
 | [`member-profile-slug-backfill.md`](member-profile-slug-backfill.md) | Coalition protected-profile slug migration and verification |
 
 Production tooling is dry-run by default where supported. Do not use `--apply`,

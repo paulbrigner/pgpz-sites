@@ -16,6 +16,7 @@ dist/
 coverage/
 storybook-static/
 lambda-build/
+dist-public-policy/
 .aws-sam/
 .amplify-hosting/
 

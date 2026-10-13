@@ -23,48 +23,12 @@ vi.mock("@/components/referrals/ReferralInviteCard", () => ({
   ),
 }));
 
-const update = ({
-  slug,
-  title,
-  publishedAt,
-  categoryLabel,
-}: {
-  slug: string;
-  title: string;
-  publishedAt: string;
-  categoryLabel: string;
-}) => ({
-  slug,
-  categoryLabel,
-  title,
-  shortTitle: title,
-  publishedAt,
-  summary: `${title} summary`,
-  emailPreheader: `${title} preheader`,
-  coverImage: `/${slug}.png`,
-  portalPath: `/updates/${slug}`,
-});
-
 describe("CommunityPersonalHome", () => {
-  it("prioritizes the newest real update and exposes the ready member actions", () => {
+  it("prioritizes participation and retains the ready member actions", () => {
     render(
       <CommunityPersonalHome
         displayName="Paul"
         memberSince="June 13, 2026"
-        updates={[
-          update({
-            slug: "older-special",
-            title: "Older special report",
-            publishedAt: "2026-07-10",
-            categoryLabel: "Special Update",
-          }),
-          update({
-            slug: "new-weekly",
-            title: "Newest weekly memo",
-            publishedAt: "2026-07-20",
-            categoryLabel: "Weekly Policy Memo",
-          }),
-        ]}
         xMonitorEnabled
         xMonitorBriefingsEnabled
       />,
@@ -72,21 +36,9 @@ describe("CommunityPersonalHome", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Welcome back, Paul." })).toBeVisible();
     expect(screen.getByText("Active member")).toBeVisible();
-    expect(
-      screen.getByRole("heading", {
-        level: 2,
-        name: "Start with the latest weekly policy memo",
-      }),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        "The newest weekly policy memo is your fastest route into the current policy conversation.",
-      ),
-    ).toBeVisible();
-    expect(screen.getAllByRole("link", { name: /Read latest update/ })[0]).toHaveAttribute(
-      "href",
-      "/updates/new-weekly",
-    );
+    expect(screen.getByRole("link", { name: /Visit the public archive/ })).toHaveAttribute("href", "https://pgpz.org/updates");
+    expect(screen.getByRole("link", { name: /Invite someone/ })).toHaveAttribute("href", "/settings/profile#member-recruitment");
+    expect(screen.getByRole("link", { name: /Open Signal/ })).toHaveAttribute("href", expect.stringContaining("https://signal.group/"));
     expect(screen.getByRole("link", { name: /Topic Briefings/ })).toHaveAttribute(
       "href",
       "/x-monitor/briefings",
@@ -107,7 +59,6 @@ describe("CommunityPersonalHome", () => {
       <CommunityPersonalHome
         displayName="Member"
         memberSince="July 1, 2026"
-        updates={[]}
         xMonitorEnabled={false}
         xMonitorBriefingsEnabled={false}
       />,
@@ -116,6 +67,6 @@ describe("CommunityPersonalHome", () => {
     expect(screen.queryByRole("link", { name: /Topic Briefings/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /X Monitor/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /ZEC Shelf/ })).toBeVisible();
-    expect(screen.getByText("The latest policy update will appear here when it is published.")).toBeVisible();
+    expect(screen.getByRole("link", { name: /Visit the public archive/ })).toBeVisible();
   });
 });

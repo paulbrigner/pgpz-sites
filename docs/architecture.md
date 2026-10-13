@@ -134,6 +134,14 @@ site-feature switch surface.
 
 ## Deployment
 
+Community additionally owns a read-only regional policy reader serving the
+public `pgpz.org/updates` namespace. Its Lambda role can read only policy
+records and PDF/raster assets, and every request checks current publication
+status. The separate public website's CloudFront distribution authenticates
+to this origin; no member sessions, data, or mail permissions are shared.
+Authoring, review, publication, and member delivery remain in Community.
+See the [public policy deployment runbook](community-public-policy-deployment.md).
+
 Root `amplify.yml` defines one build per app root. Each Amplify app retains its
 own environment map, domain, compute role, table, storage, and rollback target.
 `tooling/write-amplify-env.mjs` allowlists variables into the selected build and
