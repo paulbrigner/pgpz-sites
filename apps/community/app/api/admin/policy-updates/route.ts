@@ -41,6 +41,9 @@ import { EMAIL_FROM, SITE_URL } from "@/lib/config";
 import { listUnsubscribeHeaders } from "@/lib/email-link-security";
 import { materializePolicyUpdateEmailAssets } from "@/lib/admin/policy-update-email-assets";
 import {
+  claimPolicyUpdateGeneration,
+  releasePolicyUpdateGeneration,
+  clearInterruptedPolicyUpdateGeneration,
   createPolicyUpdateUploadSlug,
   deleteDraftUploadedPolicyUpdateRecord,
   formatPolicyUpdateDisplayDate,
@@ -59,6 +62,7 @@ import {
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
 import { generatePolicyUpdatePageContent } from "@/lib/admin/policy-update-generation";
+import { getPublicPolicyUpdateUrl } from "@/lib/policy-update-urls";
 import { buildPolicyUpdateEmail } from "@/lib/policy-update-email";
 import {
   buildPolicyUpdateForumMarkdown,
@@ -538,9 +542,19 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
     return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
   }
 
-  const record = await getUploadedPolicyUpdateRecord(slug);
+  const record = await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
   if (!record) {
     return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+  }
+
+  if (record.visibilityStatus === "published") {
+    return NextResponse.json({ error: "Unpublish this update before regenerating its public content and PDF." }, { status: 409 });
+  }
+  let generationLeaseId: string;
+  try {
+    generationLeaseId = await claimPolicyUpdateGeneration(slug);
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || "Generation is already in progress." }, { status: 409 });
   }
 
   try {
@@ -576,11 +590,11 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
           }),
         );
       }
-      const brandName = /coalition\./i.test(SITE_URL) ? "PGPZ Coalition" : "PGPZ Community";
+      const brandName = "Pretty Good Policy for Zcash";
       pdfBytes = await renderPolicyUpdatePdf(presentationContent, {
         brandName,
         categoryLabel: record.category === "special" ? "Special Update" : "Weekly Policy Memo",
-        portalUrl: `${SITE_URL.replace(/\/+$/, "")}/updates/${record.slug}`,
+        portalUrl: getPublicPolicyUpdateUrl(record.slug),
         publishedAt: record.displayDate,
       });
       await s3Client.send(
@@ -597,6 +611,7 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
     const pdfSha256 = createHash("sha256").update(pdfBytes).digest("hex");
     const updated = await saveGeneratedPolicyUpdateContent({
       slug: record.slug,
+      generationLeaseId,
       title: generated.title,
       shortTitle: generated.shortTitle,
       coverImage: generated.coverImage,
@@ -621,12 +636,13 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
 
     return NextResponse.json({
       ok: true,
-      update: policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(updated), "uploaded", updated),
+      update: policyUpdateToSummary(uploadedPolicyUpdateToPolicyUpdate(updated), "uploaded", { ...updated, generationLeaseStartedAt: null }),
     });
   } catch (err: any) {
     const message = typeof err?.message === "string" ? err.message : "Failed to generate policy update content.";
     const failed = await savePolicyUpdateGenerationFailure({
       slug: record.slug,
+      generationLeaseId,
       error: message,
       generatedBy: adminUserId,
       generatedModel: record.sourceFormat === "docx" ? "docx-structured-v1" : "pdf-source-exact",
@@ -641,6 +657,8 @@ async function generateUploadedPolicyUpdateContent(body: any, adminUserId: strin
       },
       { status: 500 },
     );
+  } finally {
+    await releasePolicyUpdateGeneration(slug, generationLeaseId);
   }
 }
 
@@ -819,6 +837,17 @@ export async function POST(request: NextRequest) {
   if (body?.action === "completeUpload") {
     return completePolicyUpdateUpload(body, adminUserId);
   }
+  if (body?.action === "clearInterruptedGeneration") {
+    const slug = textFromBody(body, "slug");
+    if (!slug) return NextResponse.json({ error: "Choose an uploaded update" }, { status: 400 });
+    try {
+      await clearInterruptedPolicyUpdateGeneration(slug);
+      return NextResponse.json({ ok: true });
+    } catch {
+      return NextResponse.json({ error: "Only interrupted, unpublished generations older than 30 minutes can be cleared." }, { status: 409 });
+    }
+  }
+
   if (body?.action === "generateContent") {
     return generateUploadedPolicyUpdateContent(body, adminUserId);
   }
@@ -835,9 +864,22 @@ export async function POST(request: NextRequest) {
     }
     let upload;
     if (body.action === "publishUpdate") {
-      const draft = await getUploadedPolicyUpdateRecord(slug);
+      const expectedGeneratedAt = body.expectedGeneratedAt;
+      if (expectedGeneratedAt !== null && (typeof expectedGeneratedAt !== "string" || !expectedGeneratedAt.trim())) {
+        return NextResponse.json(
+          { error: "The reviewed artifact revision is required. Refresh, review, and try publishing again." },
+          { status: 400 },
+        );
+      }
+      const draft = await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
       if (!draft) {
         return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+      }
+      if (draft.generatedAt !== expectedGeneratedAt) {
+        return NextResponse.json(
+          { error: "The update changed since it was reviewed. Refresh, review, and try publishing again." },
+          { status: 409 },
+        );
       }
       if (draft.generationStatus !== "generated" || !draft.pdfS3Key) {
         return NextResponse.json(
@@ -855,11 +897,12 @@ export async function POST(request: NextRequest) {
           slug,
           adminUserId,
           materialization?.materializationId || null,
+          expectedGeneratedAt,
         );
       } catch (err: any) {
         return NextResponse.json(
-          { error: err?.message || "Failed to materialize policy update email assets" },
-          { status: 500 },
+          { error: err?.name === "ConditionalCheckFailedException" ? "The update changed or generation is still running. Refresh, review, and try publishing again." : err?.message || "Failed to materialize policy update email assets" },
+          { status: err?.name === "ConditionalCheckFailedException" ? 409 : 500 },
         );
       }
     } else {
@@ -1029,8 +1072,9 @@ export async function POST(request: NextRequest) {
         lastName: recipient.lastName,
       },
       SITE_URL,
-      tracking || emailAssetMaterializationId
+      tracking || emailAssetMaterializationId || draftMode
         ? {
+            privatePreview: draftMode,
             trackingId: tracking?.trackingId,
             trackLinks: !!tracking,
             includeOpenPixel: !!tracking,

@@ -99,10 +99,37 @@ not. Background delivery jobs remain disabled in the offline configuration.
 
 ## Policy updates and files
 
+Weekly Policy Memos and Special Updates are public at
+[`pgpz.org/updates`](https://pgpz.org/updates), including all historical published
+Community records. Community retains the private admin workflow, source DOCX
+storage, generation, draft review, publication/unpublication, and member delivery.
+Drafts and unpublished previews and their metadata remain administrator-only.
+Community `/updates` links temporarily redirect to the public archive; published
+memo and PDF links redirect to their public equivalents after a strong visibility
+read. Coalition's policy-update audience and infrastructure remain separate.
+
+The Community home page focuses on participation, member resources, referrals,
+Signal, X Monitor, and Topic Briefings. Its public archive link does not require a
+Community session. The home page does not query or cache memo content.
+
 New policy updates use DOCX as the canonical source. The admin flow uploads the
-source, generates structured portal content and a PDF, allows review, then
-publishes/sends through the durable workflow. Existing legacy PDF records remain
-readable. The Markdown exporter is an operational fallback:
+source, generates structured content and a PDF, allows review, then publishes on
+PGPZ and sends through Community's durable workflow. Sending to all Community
+members remains available with the existing recipient eligibility, preferences,
+tracking, and unsubscribe rules. Reading/archive/PDF links in member emails use
+PGPZ; tracking, unsubscribe, and signed email image snapshots remain Community
+URLs. Draft test messages retain private preview links. Publishing does not send
+an email automatically.
+
+Unpublish before regenerating a published record. An atomic generation lock
+prevents simultaneous generation/publication and publication checks the reviewed
+artifact revision. Locks do not automatically expire. If Amplify interrupts a
+generation request, **Clear interrupted generation** becomes eligible after 30
+minutes; it marks the generation failed and requires regeneration/review before
+publication. An active writer's lock cannot be cleared during that interval.
+
+Existing legacy PDF records remain readable. The Markdown exporter is an
+operational fallback:
 
 ```bash
 AWS_PROFILE=pgpcommunity REGION_AWS=us-east-1 \

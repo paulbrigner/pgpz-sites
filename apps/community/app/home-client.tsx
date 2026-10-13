@@ -11,8 +11,6 @@ import {
   CommunityHero,
   CommunityMemberResources,
   CommunityPillars,
-  type CommunityFeaturedPolicyUpdate,
-  type CommunityHeroFeature,
   type CommunityMemberResource,
 } from "@/components/home/CommunityHomeSections";
 import { CommunityPersonalHome } from "@/components/home/CommunityPersonalHome";
@@ -87,11 +85,7 @@ const formatMemberSince = (value: string | null | undefined) => {
 const buildIntentUrl = (text: string) =>
   `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
 
-export default function HomeClient({
-  featuredPolicyUpdates,
-}: {
-  featuredPolicyUpdates: CommunityFeaturedPolicyUpdate[];
-}) {
+export default function HomeClient() {
   const { data: session, status, update } = useAppSession();
   const searchParams = useSearchParams();
   const previewMember =
@@ -117,28 +111,14 @@ export default function HomeClient({
   const signupHref = referralCode
     ? `/signin?reason=signup&${REFERRAL_QUERY_PARAM}=${encodeURIComponent(referralCode)}`
     : "/signin?reason=signup";
-  const memberResources = useMemo<CommunityMemberResource[]>(
-    () => featuredPolicyUpdates.map((update) => ({
-      href: update.portalPath,
-      label: update.shortTitle,
-      detail: update.summary,
-      category: update.categoryLabel,
-    })),
-    [featuredPolicyUpdates],
-  );
-  const heroFeatureSlides = useMemo<CommunityHeroFeature[]>(
-    () => featuredPolicyUpdates.map((update) => ({
-      eyebrow: update.categoryLabel,
-      title: update.shortTitle,
-      body: update.emailPreheader,
-      href: update.portalPath,
-      caption: update.title,
-      imageSrc: update.coverImage,
-      imageAlt: `${update.shortTitle} cover`,
-      imageFit: "contain",
-    })),
-    [featuredPolicyUpdates],
-  );
+  const memberResources: CommunityMemberResource[] = [
+    { href: "/zec-shelf", label: "ZEC Shelf", detail: "Explore Zcash research, tools, and references.", category: "Member library" },
+    { href: "/settings/profile", label: "Your Community profile", detail: "Manage your profile, email preferences, and invitations.", category: "Participation" },
+  ];
+  const heroFeature = {
+    title: "Your Community resources", href: "/zec-shelf", caption: "Explore the ZEC Shelf",
+    imageSrc: "/brand/pgpz-community-on-light.svg", imageAlt: "Pretty Good Policy for Zcash Community", imageFit: "contain",
+  };
 
   const [proofStatus, setProofStatus] = useState<ProofStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -155,7 +135,6 @@ export default function HomeClient({
   const [postUrl, setPostUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [heroFeatureIndex, setHeroFeatureIndex] = useState(0);
   const pendingProfileApplied = useRef(false);
 
   const displayName = useMemo(() => {
@@ -224,15 +203,6 @@ export default function HomeClient({
     url.searchParams.delete("zcashme");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [zcashmeCallbackResult]);
-
-  useEffect(() => {
-    if (heroFeatureSlides.length < 2) return;
-    const interval = window.setInterval(() => {
-      setHeroFeatureIndex((current) => (current + 1) % heroFeatureSlides.length);
-    }, 5500);
-
-    return () => window.clearInterval(interval);
-  }, [heroFeatureSlides.length]);
 
   useEffect(() => {
     if (previewMember || !authenticated || pendingProfileApplied.current) return;
@@ -464,13 +434,10 @@ export default function HomeClient({
     return (
       <CommunityPublicHome
         signupHref={signupHref}
-        featuredPolicyUpdates={featuredPolicyUpdates}
       />
     );
   }
 
-  const heroFeature = heroFeatureSlides[heroFeatureIndex] || heroFeatureSlides[0];
-  if (!heroFeature) return <HomeShellSkeleton />;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5">
@@ -479,8 +446,8 @@ export default function HomeClient({
           authenticated={authenticated}
           signupHref={signupHref}
           feature={heroFeature}
-          features={heroFeatureSlides}
-          activeIndex={heroFeatureIndex}
+          features={[heroFeature]}
+          activeIndex={0}
         />
       ) : null}
 
@@ -558,7 +525,6 @@ export default function HomeClient({
             <CommunityPersonalHome
               displayName={displayName}
               memberSince={formatMemberSince(verifiedAt)}
-              updates={featuredPolicyUpdates}
               xMonitorEnabled={xMonitorEnabled}
               xMonitorBriefingsEnabled={xMonitorBriefingsEnabled}
             />

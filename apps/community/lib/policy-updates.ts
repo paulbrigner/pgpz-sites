@@ -102,6 +102,7 @@ export type PolicyUpdateSummary = Pick<
   unpublishedBy?: string | null;
   uploadedAt?: string | null;
   fileName?: string | null;
+  generationLeaseStartedAt?: string | null;
   generationStatus?: PolicyUpdateGenerationStatus | null;
   generatedAt?: string | null;
   generatedBy?: string | null;

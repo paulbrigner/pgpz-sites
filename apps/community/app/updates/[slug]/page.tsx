@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, type ReactNode } from "react";
-import { ArrowLeft, Download, LockKeyhole } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   getUploadedPolicyUpdateRecord,
   uploadedPolicyUpdateToPolicyUpdate,
 } from "@/lib/admin/policy-update-uploads";
+import { getPublicPolicyUpdateUrl } from "@/lib/policy-update-urls";
 import { getMemberAccess } from "@/lib/member-access";
 import { isEffectiveAdmin } from "@/lib/admin/member-preview";
 import { isMemberPreviewRequest } from "@/lib/admin/member-preview-server";
@@ -46,38 +47,25 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
   const staticUpdate = getPolicyUpdate(slug);
-  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
   const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
-  if (!update) return {};
+  if (!update) return { robots: { index: false, follow: false } };
+  if (!staticUpdate && uploadedRecord?.visibilityStatus !== "published") {
+    const access = await getMemberAccess();
+    const viewAsMember = await isMemberPreviewRequest();
+    if (!access.authenticated || !isEffectiveAdmin(access.user?.isAdmin === true, viewAsMember)) {
+      return { robots: { index: false, follow: false } };
+    }
+    return {
+      title: `${update.shortTitle} | Private preview`,
+      robots: { index: false, follow: false },
+    };
+  }
   return {
-    title: `${update.shortTitle} | PGPZ Community`,
+    title: `${update.shortTitle} | PGPZ`,
     description: update.summary,
+    alternates: { canonical: getPublicPolicyUpdateUrl(slug) },
   };
-}
-
-function MembershipRequired() {
-  return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-5">
-      <section className="glass-surface p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--brand-ink)] text-[var(--zcash-gold)]">
-            <LockKeyhole className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="space-y-3">
-            <p className="section-eyebrow text-[var(--brand-denim)]">Member update</p>
-            <h1 className="text-3xl font-semibold text-[var(--brand-ink)]">Membership required</h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-600">
-              This policy update is available to active PGPZ Community members.
-              Complete membership verification from the home page to read the full update.
-            </p>
-            <Button asChild>
-              <Link href="/">Return to member home</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
 }
 
 function renderLinkedText(
@@ -485,37 +473,32 @@ function PolicyUpdateTable({ table }: { table: NonNullable<PolicyUpdateSection["
 export default async function UpdateDetailPage({ params }: Props) {
   const { slug } = await params;
   const staticUpdate = getPolicyUpdate(slug);
-  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug);
+  const uploadedRecord = staticUpdate ? null : await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
   const update = staticUpdate || (uploadedRecord ? uploadedPolicyUpdateToPolicyUpdate(uploadedRecord) : null);
   if (!update) notFound();
 
+  if (staticUpdate || uploadedRecord?.visibilityStatus === "published") {
+    // A temporary redirect preserves unpublish behavior for existing bookmarks.
+    redirect(getPublicPolicyUpdateUrl(slug));
+  }
+
   const access = await getMemberAccess();
   const viewAsMember = await isMemberPreviewRequest();
-  const isAdmin = isEffectiveAdmin(access.user?.isAdmin === true, viewAsMember);
-  if (!access.authenticated) {
-    redirect(`/signin?callbackUrl=${encodeURIComponent(update.portalPath)}`);
-  }
-
-  if (uploadedRecord?.visibilityStatus !== "published" && !isAdmin) {
-    notFound();
-  }
-
-  if (!access.isMember && !isAdmin) {
-    return <MembershipRequired />;
-  }
+  const isAdmin = access.authenticated && isEffectiveAdmin(access.user?.isAdmin === true, viewAsMember);
+  if (!isAdmin) notFound();
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-14">
       <div>
         <Button variant="outline" asChild>
-          <Link href="/updates">
+          <Link href="/admin">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Back to archive
+            Back to administration
           </Link>
         </Button>
       </div>
 
-      {uploadedRecord && uploadedRecord.visibilityStatus !== "published" && isAdmin ? (
+      {uploadedRecord && isAdmin ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
           <span className="font-semibold">
             {uploadedRecord.visibilityStatus === "draft" ? "Draft preview" : "Unpublished preview"}:

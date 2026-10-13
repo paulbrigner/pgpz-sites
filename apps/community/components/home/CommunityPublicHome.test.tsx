@@ -4,20 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommunityPublicHome } from "./CommunityPublicHome";
 import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
 
-const featuredPolicyUpdates = [
-  {
-    slug: "2026-07-27-weekly-policy-memo",
-    categoryLabel: "Weekly Policy Memo",
-    title: "Weekly Policy Memo: Week of July 27, 2026",
-    shortTitle: "Weekly Policy Memo: July 27, 2026",
-    summary: "The latest member policy context.",
-    emailPreheader: "Current policy context and practical action items for members.",
-    coverImage: "/protected-cover.png",
-    portalPath: "/updates/2026-07-27-weekly-policy-memo",
-    publishedAt: "2026-07-27",
-  },
-];
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -28,13 +14,12 @@ describe("CommunityPublicHome", () => {
     render(
       <CommunityPublicHome
         signupHref="/signin?reason=signup&ref=member-code"
-        featuredPolicyUpdates={featuredPolicyUpdates}
       />,
     );
 
     expect(
       screen.getByRole("heading", {
-        name: "A member home for Zcash policy engagement.",
+        name: "Connect. Learn. Help shape Zcash policy.",
       }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Join the Community" })).toHaveAttribute(
@@ -58,7 +43,6 @@ describe("CommunityPublicHome", () => {
     render(
       <CommunityPublicHome
         signupHref="/signin?reason=signup"
-        featuredPolicyUpdates={featuredPolicyUpdates}
       />,
     );
     await user.type(screen.getByLabelText("Email"), "  MEMBER@Example.COM  ");
@@ -90,7 +74,6 @@ describe("CommunityPublicHome", () => {
     render(
       <CommunityPublicHome
         signupHref="/signin?reason=signup"
-        featuredPolicyUpdates={featuredPolicyUpdates}
       />,
     );
     await user.type(screen.getByLabelText("Email"), "new@example.com");
@@ -105,59 +88,19 @@ describe("CommunityPublicHome", () => {
     );
   });
 
-  it("separates member-only and public recent work without protected imagery", () => {
-    render(
-      <CommunityPublicHome
-        signupHref="/signin?reason=signup"
-        featuredPolicyUpdates={featuredPolicyUpdates}
-      />,
-    );
-
-    expect(screen.getByText("Weekly Policy Memo · Jul 27")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Members only" })).toHaveAttribute(
-      "href",
-      "#member-sign-in",
-    );
-    expect(screen.getByText("Statements for the Record · Jul 24")).toBeInTheDocument();
-    expect(screen.getByText("How Zcash Works · Updated Aug 2")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "CLARITY Act statement" })).toHaveAttribute(
-      "href",
-      "https://community.pgpz.org/resources/statements-for-the-record/2026-07-17-hfsc-clarity-act-statement-for-the-record.pdf",
-    );
-    expect(screen.getByRole("link", { name: "FinCEN oversight statement" })).toHaveAttribute(
-      "href",
-      "https://community.pgpz.org/resources/statements-for-the-record/2026-07-21-hfsc-fincen-oversight-statement-for-the-record.pdf",
-    );
-    expect(screen.getByRole("link", { name: "Read the public guide" })).toHaveAttribute(
-      "href",
-      "/zec-shelf/how-zcash-works.html",
-    );
+  it("points readers to the public archive without presenting policy updates as a member benefit", () => {
+    render(<CommunityPublicHome signupHref="/signin?reason=signup" />);
+    expect(screen.getByRole("link", { name: /Read policy updates/ })).toHaveAttribute("href", "https://pgpz.org/updates");
+    expect(screen.getByText(/No login required/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Members only" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "A place to participate" })).toBeVisible();
     expect(screen.queryByRole("img", { name: /cover/i })).not.toBeInTheDocument();
-  });
-
-  it("advances the memo preview when a newer published weekly update is available", () => {
-    render(
-      <CommunityPublicHome
-        signupHref="/signin?reason=signup"
-        featuredPolicyUpdates={[
-          {
-            ...featuredPolicyUpdates[0],
-            publishedAt: "2026-08-03",
-            emailPreheader: "Newer weekly policy context for members.",
-          },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText("Weekly Policy Memo · Aug 3")).toBeInTheDocument();
-    expect(screen.getByText("Newer weekly policy context for members.")).toBeInTheDocument();
   });
 
   it("uses the approved independence language and does not claim sponsorship", () => {
     render(
       <CommunityPublicHome
         signupHref="/signin?reason=signup"
-        featuredPolicyUpdates={featuredPolicyUpdates}
       />,
     );
 

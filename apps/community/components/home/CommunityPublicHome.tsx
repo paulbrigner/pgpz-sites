@@ -7,8 +7,6 @@ import {
   ArrowRight,
   BookOpenText,
   CheckCircle2,
-  ExternalLink,
-  FileText,
   LockKeyhole,
   Mail,
   Scale,
@@ -19,25 +17,9 @@ import { SecureLinkSubmitButton } from "@pgpz/ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { BETTER_AUTH_BASE_PATH } from "@/lib/better-auth-constants";
-import type { CommunityFeaturedPolicyUpdate } from "./CommunityHomeSections";
+import { PUBLIC_POLICY_UPDATES_URL } from "@/lib/policy-update-urls";
 
 const COMMUNITY_HOME_CALLBACK = "/";
-const CURATED_WEEKLY_FALLBACK = {
-  publishedAt: "2026-07-27",
-  emailPreheader: "Highlights from the week and what’s on our radar.",
-} as const;
-
-const statements = [
-  {
-    label: "CLARITY Act statement",
-    href: "https://community.pgpz.org/resources/statements-for-the-record/2026-07-17-hfsc-clarity-act-statement-for-the-record.pdf",
-  },
-  {
-    label: "FinCEN oversight statement",
-    href: "https://community.pgpz.org/resources/statements-for-the-record/2026-07-21-hfsc-fincen-oversight-statement-for-the-record.pdf",
-  },
-] as const;
-
 async function requestCommunityMagicLink(email: string) {
   const response = await fetch(`${BETTER_AUTH_BASE_PATH}/sign-in/magic-link`, {
     method: "POST",
@@ -194,33 +176,7 @@ function RecentWorkCard({ eyebrow, title, summary, icon: Icon, children }: Recen
   );
 }
 
-const formatRecentWorkDate = (publishedAt: string | null | undefined) => {
-  if (!publishedAt) return null;
-  const date = new Date(`${publishedAt}T12:00:00Z`);
-  if (!Number.isFinite(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-};
-
-export function CommunityPublicHome({
-  signupHref,
-  featuredPolicyUpdates,
-}: {
-  signupHref: string;
-  featuredPolicyUpdates: CommunityFeaturedPolicyUpdate[];
-}) {
-  const latestWeekly = featuredPolicyUpdates.find(
-    (update) => update.categoryLabel === "Weekly Policy Memo",
-  );
-  const displayedWeekly =
-    latestWeekly && latestWeekly.publishedAt >= CURATED_WEEKLY_FALLBACK.publishedAt
-      ? latestWeekly
-      : CURATED_WEEKLY_FALLBACK;
-  const latestWeeklyDate = formatRecentWorkDate(displayedWeekly.publishedAt);
-
+export function CommunityPublicHome({ signupHref }: { signupHref: string }) {
   return (
     <div className="relative mx-auto flex w-full max-w-[82rem] flex-col overflow-hidden px-5 pb-2 sm:px-7 lg:px-5">
       <Image
@@ -234,15 +190,14 @@ export function CommunityPublicHome({
         unoptimized
       />
 
-      <section className="relative grid gap-10 pt-4 lg:grid-cols-[minmax(0,1.18fr)_minmax(24rem,0.82fr)] lg:items-start lg:gap-8 lg:pt-9">
+      <section className="relative grid gap-10 rounded-3xl bg-[var(--brand-evergreen)] p-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(24rem,0.82fr)] lg:items-start lg:gap-8 lg:p-9">
         <div className="pt-2 lg:pt-1">
-          <p className="section-eyebrow text-[var(--brand-teal)]">PRETTY GOOD POLICY FOR ZCASH · COMMUNITY</p>
-          <h1 className="mt-5 max-w-[39rem] text-[2.55rem] font-semibold leading-[1.08] tracking-[-0.045em] text-[var(--brand-ink)] sm:text-5xl">
-            A member home for <br className="hidden lg:block" />Zcash policy engagement.
+          <p className="section-eyebrow text-[var(--zcash-gold-soft)]">PRETTY GOOD POLICY FOR ZCASH · COMMUNITY</p>
+          <h1 className="mt-5 max-w-[39rem] text-[2.55rem] font-semibold leading-[1.08] tracking-[-0.045em] text-white sm:text-5xl">
+            Connect. Learn. <br className="hidden lg:block" />Help shape Zcash policy.
           </h1>
-          <p className="mt-8 max-w-[39rem] text-base leading-7 text-slate-600 sm:text-lg sm:leading-7">
-            Follow Pretty Good Policy for Zcash updates, access member resources, and help coordinate clear,
-            privacy-focused policy work across the Zcash ecosystem.
+          <p className="mt-8 max-w-[39rem] text-base leading-7 text-white/80 sm:text-lg sm:leading-7">
+            Meet people working on privacy-focused policy, explore the member library, and take part in the Zcash conversation.
           </p>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -287,8 +242,8 @@ export function CommunityPublicHome({
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-xs font-semibold leading-5 text-[var(--brand-ink)]">{title}</h2>
-                  <p className="mt-0.5 text-xs leading-5 text-slate-600">{body}</p>
+                  <h2 className="text-xs font-semibold leading-5 text-white">{title}</h2>
+                  <p className="mt-0.5 text-xs leading-5 text-white/75">{body}</p>
                 </div>
               </div>
             ))}
@@ -298,71 +253,18 @@ export function CommunityPublicHome({
         <CommunityMemberSignIn signupHref={signupHref} />
       </section>
 
-      <section aria-labelledby="recent-community-work" className="mt-10">
-        <div className="text-center">
-          <p className="section-eyebrow text-[var(--brand-teal)]">Recent work</p>
-          <h2 id="recent-community-work" className="mt-2 text-2xl font-semibold tracking-[-0.025em] text-[var(--brand-ink)] sm:text-3xl">
-            A preview of our latest policy work
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Member access includes policy updates, coordination spaces, and early resources.
-          </p>
-        </div>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <RecentWorkCard
-            eyebrow="Weekly policy memo"
-            title={`Weekly Policy Memo${latestWeeklyDate ? ` · ${latestWeeklyDate}` : ""}`}
-            summary={displayedWeekly.emailPreheader}
-            icon={BookOpenText}
-          >
-            <Link
-              href="#member-sign-in"
-              className="inline-flex w-full items-center gap-2 rounded-lg bg-[rgba(245,168,0,0.11)] px-3 py-2 text-xs font-semibold text-[var(--brand-slate)] transition hover:bg-[rgba(245,168,0,0.18)]"
-            >
-              <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
-              Members only
-            </Link>
+      <section aria-labelledby="community-tools" className="my-8">
+        <p className="section-eyebrow text-[var(--brand-teal)]">Get involved</p>
+        <h2 id="community-tools" className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">A place to participate</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <RecentWorkCard eyebrow="Member resources" title="Build your understanding" summary="Explore the ZEC Shelf, a curated library of Zcash research, explainers, and practical tools." icon={BookOpenText}>
+            <Link href={signupHref} className="font-semibold text-[var(--brand-teal)] underline underline-offset-4">Join to explore</Link>
           </RecentWorkCard>
-
-          <RecentWorkCard
-            eyebrow="Statements for the record"
-            title="Statements for the Record · Jul 24"
-            summary="Public statements following the July 17 CLARITY Act and July 21 FinCEN oversight hearings."
-            icon={FileText}
-          >
-            <div className="flex flex-wrap gap-x-3 gap-y-2 text-xs font-semibold">
-              {statements.map((statement) => (
-                <Link
-                  key={statement.href}
-                  href={statement.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={statement.label}
-                  className="inline-flex items-center gap-1 text-[var(--brand-denim)] underline decoration-[rgba(71,85,105,0.45)] underline-offset-4 hover:text-[var(--brand-ink)]"
-                >
-                  {statement.label === "CLARITY Act statement" ? "July 17 statement" : "July 21 statement"}
-                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                </Link>
-              ))}
-            </div>
+          <RecentWorkCard eyebrow="Community connections" title="Take part in the conversation" summary="Connect with other members, join focused discussions, and invite people who care about financial privacy." icon={UsersRound}>
+            <Link href="#member-sign-in" className="font-semibold text-[var(--brand-teal)] underline underline-offset-4">Sign in to participate</Link>
           </RecentWorkCard>
-
-          <RecentWorkCard
-            eyebrow="Explainer"
-            title="How Zcash Works · Updated Aug 2"
-            summary="A clear, source-backed guide to shielded transactions, proofs, and settlement."
-            icon={FileText}
-          >
-            <Link
-              href="/zec-shelf/how-zcash-works.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex w-full items-center justify-between gap-2 rounded-lg bg-[rgba(47,111,104,0.08)] px-3 py-2 text-xs font-semibold text-[var(--brand-denim)] transition hover:bg-[rgba(47,111,104,0.14)] hover:text-[var(--brand-ink)]"
-            >
-              Read the public guide
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
+          <RecentWorkCard eyebrow="Public policy analysis" title="Read and share PGPZ updates" summary="Weekly Policy Memos and Special Updates are now on pgpz.org, open to everyone. No login required." icon={BookOpenText}>
+            <Link href={PUBLIC_POLICY_UPDATES_URL} className="inline-flex items-center gap-2 font-semibold text-[var(--brand-teal)] underline underline-offset-4">Read policy updates <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
           </RecentWorkCard>
         </div>
       </section>

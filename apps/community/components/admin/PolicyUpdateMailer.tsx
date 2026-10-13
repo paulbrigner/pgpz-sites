@@ -1,5 +1,7 @@
 "use client";
 
+import { getPublicPolicyUpdateUrl } from "@/lib/policy-update-urls";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, BarChart3, CheckCircle2, Download, EyeOff, FileText, MailCheck, RefreshCcw, Search, Send, Sparkles, Trash2, UploadCloud, UsersRound } from "lucide-react";
@@ -385,7 +387,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
     selectedUpdate?.source === "uploaded" ? selectedUpdate.visibilityStatus || "draft" : "published";
   const selectedHasGeneratedContent = selectedUpdate?.generationStatus === "generated";
   const selectedCanPublish =
-    selectedUpdate?.source !== "uploaded" || selectedHasGeneratedContent;
+    selectedUpdate?.source !== "uploaded" || (selectedHasGeneratedContent && !selectedUpdate?.generationLeaseStartedAt);
   const selectedCanSendMembers =
     selectedVisibilityStatus === "published" && selectedCanPublish;
   const selectedIsGenerating = Boolean(
@@ -583,6 +585,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         body: JSON.stringify({
           action,
           slug: selectedUpdate.slug,
+          ...(action === "publishUpdate" ? { expectedGeneratedAt: selectedUpdate.generatedAt ?? null } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -644,6 +647,23 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
       setError(err?.message || "Failed to delete draft update");
     } finally {
       setDeletingDraftSlug(null);
+    }
+  };
+
+  const clearInterruptedGeneration = async () => {
+    if (!selectedUpdate) return;
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/policy-updates", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clearInterruptedGeneration", slug: selectedUpdate.slug }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || "Unable to clear interrupted generation");
+      await loadState({ selectedSlugOverride: selectedUpdate.slug });
+      setUploadNotice("Interrupted generation cleared. Regenerate and review before publishing.");
+    } catch (err: any) {
+      setError(err?.message || "Unable to clear interrupted generation");
     }
   };
 
@@ -1100,7 +1120,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                       size="sm"
                       variant={selectedHasGeneratedContent ? "outline" : "default"}
                       onClick={generateSelectedContent}
-                      disabled={generatingContentSlug === selectedUpdate.slug}
+                      disabled={generatingContentSlug === selectedUpdate.slug || selectedVisibilityStatus === "published" || !!selectedUpdate.generationLeaseStartedAt}
+                      title={selectedVisibilityStatus === "published" ? "Unpublish before regenerating public content" : "Generate content and PDF for review"}
                       className="w-full justify-center px-3"
                     >
                       <Sparkles className={cn("h-4 w-4", generatingContentSlug === selectedUpdate.slug && "animate-pulse")} />
@@ -1112,8 +1133,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                     </Button>
                   ) : null}
                   <Button variant="outline" size="sm" asChild className="w-full justify-center px-3">
-                    <Link href={selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
-                      Portal view
+                    <Link href={selectedVisibilityStatus === "published" ? getPublicPolicyUpdateUrl(selectedUpdate.slug) : selectedUpdate.portalPath} target="_blank" rel="noopener noreferrer">
+                      {selectedVisibilityStatus === "published" ? "Public view" : "Private preview"}
                     </Link>
                   </Button>
                   <Button
@@ -1143,7 +1164,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                         deletingDraftSlug === selectedUpdate.slug
                       }
                       className="w-full justify-center px-3"
-                      title={selectedCanPublish ? "Publish this update" : "Generate content and PDF before publishing"}
+                      title={selectedCanPublish ? "Publish this update on pgpz.org" : "Generate content and PDF before publishing"}
                     >
                       <CheckCircle2 className={cn("h-4 w-4", visibilityUpdatingSlug === selectedUpdate.slug && "animate-pulse")} />
                       Publish
@@ -1215,6 +1236,13 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 ) : null}
               </div>
 
+              {selectedUpdate.generationLeaseStartedAt ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                  Generation is in progress. Publishing is paused until it finishes. If the request was interrupted, wait 30 minutes before clearing it and regenerating.
+                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={clearInterruptedGeneration}>Clear interrupted generation</Button>
+                </div>
+              ) : null}
+
               {selectedUpdate.source === "uploaded" && selectedIsGenerating ? (
                 <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
                   <span className="font-semibold">Generating portal content and PDF.</span>{" "}
@@ -1266,8 +1294,8 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                   <div className="mt-2 text-sm font-semibold text-[var(--brand-ink)]">{selectedUpdate.emailSubject}</div>
                 </div>
                 <div className="rounded-xl border bg-slate-50 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Portal link</div>
-                  <div className="mt-2 truncate text-sm font-medium text-[var(--brand-denim)]">{selectedUpdate.portalPath}</div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{selectedVisibilityStatus === "published" ? "Public link" : "Private preview link"}</div>
+                  <div className="mt-2 truncate text-sm font-medium text-[var(--brand-denim)]">{selectedVisibilityStatus === "published" ? getPublicPolicyUpdateUrl(selectedUpdate.slug) : selectedUpdate.portalPath}</div>
                 </div>
               </div>
 
@@ -1435,7 +1463,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   Sends only to this address. If the email matches a PGPZ Community profile, the greeting uses that profile name.
-                  {selectedCanSendMembers ? "" : " Portal and PDF links require admin access until this update is published."}
+                  {selectedCanSendMembers ? "" : " Draft preview and PDF links require admin access until this update is published."}
                 </p>
               </div>
 

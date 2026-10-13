@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useAppSession } from "@/lib/use-app-session";
 import { useAdminViewMode } from "@/components/admin/AdminViewMode";
 import { isCommunityXMonitorEnabled } from "@/lib/x-monitor-public";
+import { PUBLIC_POLICY_UPDATES_URL } from "@/lib/policy-update-urls";
 import { isFeatureEnabled } from "@/config/features";
 
 const sanitizeAuthCallback = (pathname: string | null, query: string | null) => {
@@ -90,7 +91,7 @@ export function MainNav() {
   const mobileMenuItems = authenticated
     ? [
         { key: "home", label: "Home", href: "/" },
-        { key: "updates", label: "Updates", href: "/updates" },
+        { key: "updates", label: "Policy updates", href: PUBLIC_POLICY_UPDATES_URL, external: true },
         { key: "zec-shelf", label: "ZEC Shelf", href: "/zec-shelf" },
         ...(xMonitorEnabled && canAccessXMonitor
           ? [{ key: "x-monitor", label: "X Monitor", href: "/x-monitor" }]
@@ -134,6 +135,7 @@ export function MainNav() {
         { key: "home", label: "Home", href: "/" },
         { key: "join", label: "Join", href: joinHref },
         { key: "signin", label: "Sign in", href: signInHref },
+        { key: "updates", label: "Policy updates", href: PUBLIC_POLICY_UPDATES_URL, external: true },
         { key: "pgpz", label: "About", href: "https://pgpz.org", external: true },
       ];
 
@@ -169,13 +171,11 @@ export function MainNav() {
               </NavigationMenuLink>
             </NavigationMenuItem>
 
-            {authenticated ? (
-              <NavigationMenuItem>
-                <NavigationMenuLink className={cn(linkClasses, navHrefIsCurrent(pathname, "/updates") && currentMenuItemClasses)} asChild>
-                  <Link href="/updates" aria-current={navHrefIsCurrent(pathname, "/updates") ? "page" : undefined}>Updates</Link>
-                </NavigationMenuLink>
-              </NavigationMenuItem>
-            ) : null}
+            <NavigationMenuItem>
+              <NavigationMenuLink className={linkClasses} asChild>
+                <Link href={PUBLIC_POLICY_UPDATES_URL}>Policy updates</Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
 
             {authenticated ? (
               <NavigationMenuItem>

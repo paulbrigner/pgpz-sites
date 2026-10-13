@@ -13,18 +13,6 @@ export type CommunityHeroFeature = {
   imageFit: string;
 };
 
-export type CommunityFeaturedPolicyUpdate = {
-  slug: string;
-  categoryLabel: string;
-  title: string;
-  shortTitle: string;
-  summary: string;
-  emailPreheader: string;
-  coverImage: string;
-  portalPath: string;
-  publishedAt: string;
-};
-
 export type CommunityMemberResource = {
   href: string;
   label: string;
@@ -72,7 +60,7 @@ export function CommunityHero({
             A member home for Zcash policy engagement.
           </h1>
           <p className="max-w-2xl text-base leading-7 text-white/78">
-            Follow Pretty Good Policy for Zcash updates, access member resources, and help coordinate
+            Explore Community resources, connect with other members, and help coordinate
             clear, privacy-focused policy work across the Zcash ecosystem.
           </p>
           {!authenticated ? (
@@ -96,7 +84,7 @@ export function CommunityHero({
             </div>
           ) : null}
         </div>
-        <div className="community-hero__visual" aria-label="Featured PGPZ updates">
+        <div className="community-hero__visual" aria-label="Community resources">
           {feature.href ? (
             <Link
               href={feature.href}
@@ -224,18 +212,17 @@ export function CommunityMemberResources({
       <section className="glass-surface p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <p className="section-eyebrow text-[var(--brand-denim)]">Member policy updates</p>
+            <p className="section-eyebrow text-[var(--brand-denim)]">Member resources</p>
             <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
-              Weekly memos and special updates
+              Your library and Community profile
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              PGPZ members can read the latest weekly policy memo, browse special reports, and return
-              to prior updates at any time from the archive.
+              Find useful research and tools, manage your preferences, and take part in the Community.
             </p>
           </div>
           <Button asChild>
-            <Link href="/updates">
-              View full archive
+            <Link href="/zec-shelf">
+              Explore the ZEC Shelf
               <FileText className="h-4 w-4" aria-hidden="true" />
             </Link>
           </Button>

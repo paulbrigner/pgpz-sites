@@ -107,6 +107,9 @@ jobs:
           NEXTAUTH_TABLE: PGPZCiNextAuth
           X_BEARER_TOKEN: ci-only-x-token
         run: npm run build:${{ matrix.application }}
+      - name: Build Community public policy reader
+        if: matrix.application == 'community'
+        run: npm run build:public-policy
       - name: Materialize the isolated reference environment
         if: matrix.application == 'reference'
         env:

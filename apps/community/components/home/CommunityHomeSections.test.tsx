@@ -55,7 +55,7 @@ describe("CommunityHero", () => {
     );
 
     expect(screen.getByText("PRETTY GOOD POLICY FOR ZCASH · COMMUNITY")).toBeInTheDocument();
-    expect(screen.getByText(/Follow Pretty Good Policy for Zcash updates/)).toBeInTheDocument();
+    expect(screen.getByText(/Explore Community resources/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Join with email" })).toHaveAttribute(
       "href",
       "/signin?reason=signup",

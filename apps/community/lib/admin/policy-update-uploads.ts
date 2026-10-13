@@ -17,7 +17,7 @@ import {
   POLICY_UPDATE_UPLOAD_BUCKET,
   POLICY_UPDATE_UPLOAD_PREFIX,
 } from "@/lib/config";
-import { isPolicyUpdateDisplayImageAllowed } from "@/lib/policy-update-images";
+import { sectionArrayOrFallback, textArrayOrFallback } from "@/lib/policy-update-content";
 import { normalizePolicyUpdateSectionLayout } from "@/lib/policy-update-sections";
 import { policyUpdateEmailSubjectForTitle } from "@/lib/policy-update-subject";
 
@@ -56,6 +56,7 @@ export type UploadedPolicyUpdateRecord = {
   keyTakeaways: string[];
   actionItems: string[];
   sections: PolicyUpdateSection[];
+  generationLeaseStartedAt?: string | null;
   generationStatus: PolicyUpdateGenerationStatus;
   generatedAt: string | null;
   generatedBy: string | null;
@@ -112,6 +113,7 @@ export type SaveUploadedPolicyUpdateInput = Omit<
 
 export type SaveGeneratedPolicyUpdateContentInput = {
   slug: string;
+  generationLeaseId?: string;
   title?: string;
   shortTitle?: string;
   coverImage?: string;
@@ -139,197 +141,6 @@ function normalizeVisibilityStatus(value: unknown): PolicyUpdateVisibilityStatus
 function normalizeGenerationStatus(value: unknown): PolicyUpdateGenerationStatus {
   return value === "generated" || value === "failed" ? value : "not_started";
 }
-
-const textArrayOrFallback = (value: unknown, fallback: string[]) => {
-  if (!Array.isArray(value)) return fallback;
-  const items = value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
-  return items.length ? items : fallback;
-};
-
-const safeRunHref = (value: unknown) => {
-  if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) return undefined;
-  try {
-    const parsed = new URL(value.trim());
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const textRunsOrFallback = (value: unknown, fallback: string) => {
-  if (!Array.isArray(value)) return [];
-  const runs = value
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const text = textOrEmpty(record.text);
-      if (!text) return null;
-      const href = safeRunHref(record.href);
-      return {
-        text,
-        ...(record.bold === true ? { bold: true } : {}),
-        ...(record.italic === true ? { italic: true } : {}),
-        ...(record.underline === true ? { underline: true } : {}),
-        ...(href ? { href } : {}),
-      };
-    })
-    .filter((run): run is NonNullable<typeof run> => !!run);
-  return runs.length && runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim() === fallback.replace(/\s+/g, " ").trim()
-    ? runs
-    : [];
-};
-
-const textRunGroupsOrFallback = (value: unknown, fallback: string[]) => {
-  if (!Array.isArray(value)) return [];
-  const groups = fallback.map((text, index) => textRunsOrFallback(value[index], text));
-  return groups.some((group) => group.length) ? groups : [];
-};
-
-const progressItemsOrFallback = (
-  value: unknown,
-  fallback: PolicyUpdateSection["progressItems"] = [],
-) => {
-  if (!Array.isArray(value)) return fallback;
-  const items = value
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const label = textOrEmpty(record.label).trim();
-      if (!label) return null;
-      const details = Array.isArray(record.details)
-        ? record.details
-            .map((detail) => {
-              if (typeof detail === "string") {
-                const text = detail.trim();
-                return text ? { text } : null;
-              }
-              if (!detail || typeof detail !== "object") return null;
-              const detailRecord = detail as Record<string, unknown>;
-              const text = textOrEmpty(detailRecord.text).trim();
-              const children = textArrayOrFallback(detailRecord.children, []);
-              if (!text) return null;
-              return {
-                text,
-                ...(children.length ? { children } : {}),
-              };
-            })
-            .filter((detail): detail is { text: string; children?: string[] } => !!detail)
-        : [];
-      return {
-        label,
-        ...(details.length ? { details } : {}),
-      };
-    })
-    .filter((item): item is NonNullable<PolicyUpdateSection["progressItems"]>[number] => !!item);
-  return items.length ? items : fallback;
-};
-
-const sectionArrayOrFallback = (value: unknown, fallback: PolicyUpdateSection[]) => {
-  if (!Array.isArray(value)) return fallback;
-  const sections = value
-    .map((item) => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const heading = textOrEmpty(record.heading).trim();
-      const body = textArrayOrFallback(record.body, []);
-      if (!heading) return null;
-
-      const section: PolicyUpdateSection = { heading, body };
-      if (record.dividerBefore === true) section.dividerBefore = true;
-      if (record.dividerAfter === true) section.dividerAfter = true;
-      const headingRuns = textRunsOrFallback(record.headingRuns, heading);
-      const bodyRuns = textRunGroupsOrFallback(record.bodyRuns, body);
-      const bullets = textArrayOrFallback(record.bullets, []);
-      const bulletRuns = textRunGroupsOrFallback(record.bulletRuns, bullets);
-      const progressItems = progressItemsOrFallback(record.progressItems, []);
-      const bodyAfterBullets = textArrayOrFallback(record.bodyAfterBullets, []);
-      const bodyAfterBulletsRuns = textRunGroupsOrFallback(
-        record.bodyAfterBulletsRuns,
-        bodyAfterBullets,
-      );
-      if (headingRuns.length) section.headingRuns = headingRuns;
-      if (bodyRuns.length) section.bodyRuns = bodyRuns;
-      if (bullets.length) section.bullets = bullets;
-      if (bulletRuns.length) section.bulletRuns = bulletRuns;
-      if (progressItems?.length) section.progressItems = progressItems;
-      if (bodyAfterBullets.length) section.bodyAfterBullets = bodyAfterBullets;
-      if (bodyAfterBulletsRuns.length) section.bodyAfterBulletsRuns = bodyAfterBulletsRuns;
-      if (Array.isArray(record.images)) {
-        const images = record.images
-          .map((image) => {
-            if (!image || typeof image !== "object") return null;
-            const imageRecord = image as Record<string, unknown>;
-            const src = textOrEmpty(imageRecord.src).trim();
-            const alt = textOrEmpty(imageRecord.alt).trim();
-            const caption = textOrEmpty(imageRecord.caption).trim();
-            const href = textOrEmpty(imageRecord.href).trim();
-            const width = Number(imageRecord.width);
-            const height = Number(imageRecord.height);
-            const displayWidthPt = Number(imageRecord.displayWidthPt);
-            const displayHeightPt = Number(imageRecord.displayHeightPt);
-            if (!src || !alt) return null;
-            const displayImage = {
-              src,
-              alt,
-              ...(caption ? { caption } : {}),
-              ...(href ? { href } : {}),
-              ...(Number.isFinite(width) && width > 0 ? { width } : {}),
-              ...(Number.isFinite(height) && height > 0 ? { height } : {}),
-              ...(Number.isFinite(displayWidthPt) && displayWidthPt > 0
-                ? { displayWidthPt }
-                : {}),
-              ...(Number.isFinite(displayHeightPt) && displayHeightPt > 0
-                ? { displayHeightPt }
-                : {}),
-            };
-            return isPolicyUpdateDisplayImageAllowed(displayImage) ? displayImage : null;
-          })
-          .filter((image): image is NonNullable<typeof image> => !!image);
-        if (images.length) section.images = images;
-      }
-
-      if (record.table && typeof record.table === "object") {
-        const tableRecord = record.table as Record<string, unknown>;
-        const columns = textArrayOrFallback(tableRecord.columns, []);
-        const rows = Array.isArray(tableRecord.rows)
-          ? tableRecord.rows
-              .map((row) => textArrayOrFallback(row, []))
-              .filter((row) => row.length)
-          : [];
-        if (columns.length && rows.length) section.table = { columns, rows };
-      }
-
-      if (Array.isArray(record.links)) {
-        const links = record.links
-          .map((link) => {
-            if (!link || typeof link !== "object") return null;
-            const linkRecord = link as Record<string, unknown>;
-            const text = textOrEmpty(linkRecord.text).trim();
-            const href = textOrEmpty(linkRecord.href).trim();
-            return text && href ? { text, href } : null;
-          })
-          .filter((link): link is { text: string; href: string } => !!link);
-        if (links.length) section.links = links;
-      }
-
-      if (
-        !body.length &&
-        !section.bullets?.length &&
-        !section.progressItems?.length &&
-        !section.bodyAfterBullets?.length &&
-        !section.table &&
-        !section.images?.length
-      ) {
-        return null;
-      }
-
-      return section;
-    })
-    .filter((section): section is PolicyUpdateSection => !!section);
-  return sections.length ? sections : fallback;
-};
 
 function defaultUploadedPolicyUpdateContent({
   category,
@@ -481,6 +292,7 @@ function uploadedRecordFromItem(item: Record<string, any> | undefined | null): U
     keyTakeaways: textArrayOrFallback(item.keyTakeaways, defaultContent.keyTakeaways),
     actionItems: textArrayOrFallback(item.actionItems, defaultContent.actionItems),
     sections: sectionArrayOrFallback(item.sections, defaultContent.sections),
+    generationLeaseStartedAt: textOrNull(item.generationLeaseStartedAt),
     generationStatus: normalizeGenerationStatus(item.generationStatus),
     generatedAt: textOrNull(item.generatedAt),
     generatedBy: textOrNull(item.generatedBy),
@@ -531,6 +343,7 @@ export function policyUpdateToSummary(
     | "unpublishedOn"
     | "unpublishedBy"
     | "generationStatus"
+    | "generationLeaseStartedAt"
     | "generatedAt"
     | "generatedBy"
     | "generatedModel"
@@ -561,6 +374,7 @@ export function policyUpdateToSummary(
     unpublishedBy: source === "uploaded" ? upload?.unpublishedBy || null : null,
     uploadedAt: upload?.uploadedAt || null,
     fileName: upload?.fileName || null,
+    generationLeaseStartedAt: upload?.generationLeaseStartedAt || null,
     generationStatus: source === "uploaded" ? upload?.generationStatus || "not_started" : null,
     generatedAt: source === "uploaded" ? upload?.generatedAt || null : null,
     generatedBy: source === "uploaded" ? upload?.generatedBy || null : null,
@@ -630,6 +444,45 @@ export async function saveUploadedPolicyUpdate(
   return record;
 }
 
+const generationKey = (slug: string) => ({ pk: `POLICY_UPDATE_UPLOAD#${slug}`, sk: `POLICY_UPDATE_UPLOAD#${slug}` });
+
+export async function claimPolicyUpdateGeneration(slug: string) {
+  const leaseId = randomUUID();
+  try {
+    await documentClient.update({
+      TableName: TABLE_NAME, Key: generationKey(slug),
+      UpdateExpression: "SET generationLeaseId = :leaseId, generationLeaseStartedAt = :now, generationStatus = :pending",
+      ConditionExpression: "attribute_exists(pk) AND (attribute_not_exists(visibilityStatus) OR visibilityStatus <> :published) AND attribute_not_exists(generationLeaseId)",
+      ExpressionAttributeValues: { ":leaseId": leaseId, ":now": new Date().toISOString(), ":pending": "not_started", ":published": "published" },
+    });
+    return leaseId;
+  } catch (error: any) {
+    if (error?.name === "ConditionalCheckFailedException") {
+      throw new Error("Unpublish this update before regenerating, or wait for its current generation to finish. An interrupted generation can be cleared after 30 minutes.");
+    }
+    throw error;
+  }
+}
+
+export async function releasePolicyUpdateGeneration(slug: string, leaseId: string) {
+  await documentClient.update({
+    TableName: TABLE_NAME, Key: generationKey(slug),
+    UpdateExpression: "REMOVE generationLeaseId, generationLeaseStartedAt",
+    ConditionExpression: "generationLeaseId = :leaseId",
+    ExpressionAttributeValues: { ":leaseId": leaseId },
+  });
+}
+
+// An explicit admin recovery action: never silently expire a lock during publication.
+export async function clearInterruptedPolicyUpdateGeneration(slug: string) {
+  await documentClient.update({
+    TableName: TABLE_NAME, Key: generationKey(slug),
+    UpdateExpression: "SET generationStatus = :failed, generationError = :error REMOVE generationLeaseId, generationLeaseStartedAt",
+    ConditionExpression: "attribute_exists(generationLeaseId) AND generationLeaseStartedAt < :cutoff AND (attribute_not_exists(visibilityStatus) OR visibilityStatus <> :published)",
+    ExpressionAttributeValues: { ":failed": "failed", ":error": "Generation was interrupted. Regenerate and review before publishing.", ":cutoff": new Date(Date.now() - 30 * 60 * 1000).toISOString(), ":published": "published" },
+  });
+}
+
 export async function saveGeneratedPolicyUpdateContent(
   input: SaveGeneratedPolicyUpdateContentInput,
 ) {
@@ -651,6 +504,8 @@ export async function saveGeneratedPolicyUpdateContent(
       pk: `POLICY_UPDATE_UPLOAD#${slug}`,
       sk: `POLICY_UPDATE_UPLOAD#${slug}`,
     },
+    ConditionExpression: "(attribute_not_exists(visibilityStatus) OR visibilityStatus <> :published) AND " +
+      (input.generationLeaseId ? "generationLeaseId = :leaseId" : "attribute_not_exists(generationLeaseId)"),
     UpdateExpression: [
       "SET #title = :title",
       "#shortTitle = :shortTitle",
@@ -694,6 +549,8 @@ export async function saveGeneratedPolicyUpdateContent(
       "#pdfGeneratedAt": "pdfGeneratedAt",
     },
     ExpressionAttributeValues: {
+      ":published": "published",
+      ...(input.generationLeaseId ? { ":leaseId": input.generationLeaseId } : {}),
       ":title": title,
       ":shortTitle": shortTitle,
       ":emailSubject": emailSubject,
@@ -724,8 +581,10 @@ export async function savePolicyUpdateGenerationFailure({
   error,
   generatedBy,
   generatedModel,
+  generationLeaseId,
 }: {
   slug: string;
+  generationLeaseId?: string;
   error: string;
   generatedBy: string | null;
   generatedModel: string;
@@ -742,6 +601,8 @@ export async function savePolicyUpdateGenerationFailure({
       pk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
       sk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
     },
+    ConditionExpression: "(attribute_not_exists(visibilityStatus) OR visibilityStatus <> :published) AND " +
+      (generationLeaseId ? "generationLeaseId = :leaseId" : "attribute_not_exists(generationLeaseId)"),
     UpdateExpression:
       "SET #generationStatus = :generationStatus, #generatedAt = :generatedAt, #generatedBy = :generatedBy, #generatedModel = :generatedModel, #generationError = :generationError",
     ExpressionAttributeNames: {
@@ -752,6 +613,8 @@ export async function savePolicyUpdateGenerationFailure({
       "#generationError": "generationError",
     },
     ExpressionAttributeValues: {
+      ":published": "published",
+      ...(generationLeaseId ? { ":leaseId": generationLeaseId } : {}),
       ":generationStatus": "failed",
       ":generatedAt": new Date().toISOString(),
       ":generatedBy": generatedBy,
@@ -763,7 +626,7 @@ export async function savePolicyUpdateGenerationFailure({
   return getUploadedPolicyUpdateRecord(cleanSlug);
 }
 
-export async function getUploadedPolicyUpdateRecord(slug: string) {
+export async function getUploadedPolicyUpdateRecord(slug: string, options: { consistentRead?: boolean } = {}) {
   const cleanSlug = slug.trim();
   if (!cleanSlug) return null;
 
@@ -773,6 +636,7 @@ export async function getUploadedPolicyUpdateRecord(slug: string) {
       pk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
       sk: `POLICY_UPDATE_UPLOAD#${cleanSlug}`,
     },
+    ...(options.consistentRead ? { ConsistentRead: true } : {}),
   });
 
   return uploadedRecordFromItem(res.Item);
@@ -820,10 +684,12 @@ export async function publishUploadedPolicyUpdate(
   slug: string,
   adminUserId: string | null,
   publicEmailAssetMaterializationId: string | null,
+  expectedGeneratedAt?: string | null,
 ) {
-  const record = await getUploadedPolicyUpdateRecord(slug);
+  const record = await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
   if (!record) return null;
 
+  const revision = expectedGeneratedAt === undefined ? record.generatedAt : expectedGeneratedAt;
   const now = new Date().toISOString();
   await documentClient.update({
     TableName: TABLE_NAME,
@@ -831,9 +697,13 @@ export async function publishUploadedPolicyUpdate(
       pk: `POLICY_UPDATE_UPLOAD#${record.slug}`,
       sk: `POLICY_UPDATE_UPLOAD#${record.slug}`,
     },
+    ConditionExpression: "attribute_exists(pk) AND attribute_not_exists(generationLeaseId) AND generationStatus = :generated AND " +
+      (revision ? "generatedAt = :expectedGeneratedAt" : "(attribute_not_exists(generatedAt) OR generatedAt = :expectedGeneratedAt)"),
     UpdateExpression:
       "SET visibilityStatus = :status, publishedOn = :now, publishedBy = :adminUserId, unpublishedOn = :nullValue, unpublishedBy = :nullValue, publicEmailAssetMaterializationId = :publicEmailAssetMaterializationId",
     ExpressionAttributeValues: {
+      ":generated": "generated",
+      ":expectedGeneratedAt": revision ?? null,
       ":status": "published",
       ":now": now,
       ":adminUserId": adminUserId,

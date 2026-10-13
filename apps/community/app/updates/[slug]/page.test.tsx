@@ -25,7 +25,7 @@ vi.mock("@/lib/admin/member-preview-server", () => ({
 }));
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }));
 
-import UpdateDetailPage from "./page";
+import UpdateDetailPage, { generateMetadata } from "./page";
 
 const slug = "divider-regression-draft";
 
@@ -94,6 +94,7 @@ describe("uploaded DOCX policy update dividers", () => {
     expect(markup).toContain("Draft preview");
     expect(mocks.getRecord).toHaveBeenCalledWith({
       TableName: "policy-update-test-table",
+      ConsistentRead: true,
       Key: { pk: `POLICY_UPDATE_UPLOAD#${slug}`, sk: `POLICY_UPDATE_UPLOAD#${slug}` },
     });
   });
@@ -116,5 +117,30 @@ describe("uploaded DOCX policy update dividers", () => {
     });
 
     await expect(UpdateDetailPage({ params: Promise.resolve({ slug }) })).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("public reading redirects and private metadata", () => {
+  it("redirects a published memo without requiring a session", async () => {
+    mocks.getRecord.mockResolvedValue({ Item: { ...storedDraft(true), visibilityStatus: "published" } });
+    mocks.getMemberAccess.mockResolvedValue({ authenticated: false, user: null });
+    await expect(UpdateDetailPage({ params: Promise.resolve({ slug }) })).rejects.toThrow(`REDIRECT:https://pgpz.org/updates/${slug}`);
+    expect(mocks.getMemberAccess).not.toHaveBeenCalled();
+  });
+
+  it("redirects legacy published reports to their public URL", async () => {
+    await expect(UpdateDetailPage({ params: Promise.resolve({ slug: "2026-06-08-weekly-policy-memo" }) })).rejects.toThrow("REDIRECT:https://pgpz.org/updates/2026-06-08-weekly-policy-memo");
+  });
+
+  it.each(["draft", "unpublished"])("conceals %s titles and descriptions from unauthenticated metadata", async (visibilityStatus) => {
+    mocks.getRecord.mockResolvedValue({ Item: { ...storedDraft(true), visibilityStatus } });
+    mocks.getMemberAccess.mockResolvedValue({ authenticated: false, user: null });
+    await expect(generateMetadata({ params: Promise.resolve({ slug }) })).resolves.toEqual({ robots: { index: false, follow: false } });
+    await expect(UpdateDetailPage({ params: Promise.resolve({ slug }) })).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("does not allow admin member-preview mode to reveal a draft", async () => {
+    mocks.isMemberPreviewRequest.mockResolvedValue(true);
+    await expect(generateMetadata({ params: Promise.resolve({ slug }) })).resolves.toEqual({ robots: { index: false, follow: false } });
   });
 });
