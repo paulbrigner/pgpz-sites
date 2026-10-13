@@ -44,7 +44,7 @@ describe("PolicyUpdateMailer publication review", () => {
     const user = userEvent.setup();
 
     render(<PolicyUpdateMailer initialUpdates={[selectedDraft]} />);
-    await user.click(await screen.findByRole("button", { name: "Publish", exact: true }));
+    await user.click(await screen.findByRole("button", { name: /^Publish$/ }));
 
     expect((await screen.findAllByText(/The update changed since it was reviewed/)).length).toBeGreaterThan(0);
     const publishRequest = fetchMock.mock.calls.find(([, options]) => options?.method === "POST");
