@@ -15,6 +15,41 @@ beforeEach(() => {
   mocks.record.mockResolvedValue({ visibilityStatus: "draft", pdfS3Key: "resource.pdf", s3Bucket: "private-bucket", s3Key: "source.docx" });
   mocks.send.mockResolvedValue({ Body: { transformToWebStream: () => new ReadableStream() } });
 });
+
+describe("old Community cover endpoint", () => {
+  it.each([
+    ["cover.svg", "/api/policy-updates/memo/assets/cover.svg"],
+    ["cover.png", "https://community.pgpz.org/api/policy-updates/memo/assets/cover.png"],
+    ["memo-cover.jpg", "/api/policy-updates/memo/assets/memo-cover.jpg"],
+  ])("redirects the exact published cover %s to its public cover route", async (name, coverImage) => {
+    mocks.record.mockResolvedValue({ visibilityStatus: "published", coverImage });
+
+    const response = await asset(request, { params: Promise.resolve({ slug: "memo", asset: name }) });
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://pgpz.org/updates/memo/cover");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(mocks.access).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "/api/policy-updates/memo/assets/different-cover.png",
+    "/api/policy-updates/other-memo/assets/image-1.png",
+    "https://unrelated.example/api/policy-updates/memo/assets/image-1.png",
+    "https://community.pgpz.org/api/policy-updates/memo/assets/image-1.png?alternate=true",
+    "https://community.pgpz.org/api/policy-updates/memo/assets/image-1.png#alternate",
+    "https://user@community.pgpz.org/api/policy-updates/memo/assets/image-1.png",
+    "https://[invalid/api/policy-updates/memo/assets/image-1.png",
+    "/api/policy-updates/other-memo/../memo/assets/image-1.png",
+  ])("retains the section-image path when the cover reference does not match: %s", async (coverImage) => {
+    mocks.record.mockResolvedValue({ visibilityStatus: "published", coverImage });
+
+    const response = await asset(request, { params });
+
+    expect(response.headers.get("location")).toBe("https://pgpz.org/updates/memo/assets/image-1.png");
+  });
+});
 describe.each([["PDF", pdf, "document.pdf"], ["asset", asset, "assets/image-1.png"]] as const)("old Community %s endpoint", (_label, handler, suffix) => {
   it("redirects published files to the public origin without forwarding a session", async () => {
     mocks.record.mockResolvedValue({ visibilityStatus: "published" });

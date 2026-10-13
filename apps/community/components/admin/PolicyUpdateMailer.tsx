@@ -585,6 +585,7 @@ export function PolicyUpdateMailer({ initialUpdates }: Props) {
         body: JSON.stringify({
           action,
           slug: selectedUpdate.slug,
+          ...(action === "publishUpdate" ? { expectedGeneratedAt: selectedUpdate.generatedAt ?? null } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));

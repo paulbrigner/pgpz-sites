@@ -9,7 +9,8 @@ the historical catalog, are readable without membership at
 Coalition publication and membership policy are independent.
 
 The Community-owned regional Lambda reader has only policy-key DynamoDB
-reads and PDF/raster-object S3 reads. It has no source DOCX, member/session,
+reads and PDF/raster-object S3 reads, plus explicitly referenced historical
+`cover.svg` files served with a sandbox policy. It has no source DOCX, member/session,
 email, secret, or write permissions. Each document/media request strongly
 checks the canonical publication record. Archive queries use the GSI only to
 discover candidates, then strongly check them. Responses use `no-store`; a
@@ -84,7 +85,26 @@ PDFs, images, HEAD, malformed paths, missing records, and draft/unpublished
 denials before routing public traffic. Exercise visibility transitions and
 dependency failures with isolated fixtures, not by changing live content.
 
+## Deploy the protected writer before public routing
+
+Release the independently reviewed Community revision first and verify the
+Amplify job completed successfully at the expected commit. The generation
+lease, published-generation rejection, and client-reviewed publication
+revision checks must be live before any public routing is attached.
+
+Record the deployment completion time and wait at least 15 minutes before
+exposing the reader. This drains requests from the previous writer, using
+Amplify's documented maximum compute execution time. Do not infer that old
+generation requests ended merely because a new deployment succeeded. The
+signed reader smoke checks and static-site preparation can run during this
+interval; keep the public homepage release until after routing verification.
+Community publication links may temporarily point to the not-yet-routed
+public archive during this initial cutover.
+
 ## Attach only the public paths
+
+Proceed only after the protected Community writer is live and the drain
+interval above has elapsed. Record that evidence with the release snapshot.
 
 ```bash
 npm run configure:public-policy-cloudfront -- --profile zodldashboard
@@ -108,9 +128,8 @@ negatively cached for ten seconds; they fail closed. Do not change the
 distribution-wide custom-error policy merely to alter this short recovery
 delay, and never serve stale successful content after an origin error.
 
-After anonymous public pages/assets work, release the static homepage and
-Community adapter changes. Ensure the generation/publication guards deploy
-with the Community changes. Existing Community publication links temporarily
+After anonymous public pages/assets work, release the static homepage.
+Existing Community publication links temporarily
 redirect to public URLs; private review stays in Community. Verify mobile and
 desktop navigation, public canonical/SEO URLs, unpublished protection, and
 that neither published HTML nor JSON exposes source/storage/admin metadata.
@@ -127,7 +146,11 @@ status checks or make the content bucket public.
 
 For a normal reader rollback, point `live` at a previously reviewed retained
 version, then reconcile CloudFormation to that reviewed artifact. Roll back
-the public/Community links and homepage commits as needed. To remove routing,
+the public/Community links and homepage commits as needed, but never restore
+an unguarded Community writer while public reader routing remains active.
+Remove public routing and verify it no longer serves content before rolling
+Community back to a revision without the generation/publication guards.
+To remove routing,
 fetch a fresh ETag and remove only the two owned behaviors and owned origin;
 preserve concurrent unrelated distribution changes. Invalidate the public
 paths and verify they no longer serve reader content. Keep the protected
@@ -138,3 +161,4 @@ stack and retained artifacts until rollback verification is complete.
 - [Lambda Function URL origin access control](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html)
 - [CloudFront error caching](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/custom-error-pages-expiration.html)
 - [Stacked distribution restriction](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/http-403-permission-denied.html)
+- [Amplify compute execution limit](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-deployment-specification.html)

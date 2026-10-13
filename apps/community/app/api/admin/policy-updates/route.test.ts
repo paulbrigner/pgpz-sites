@@ -291,12 +291,14 @@ describe("admin policy update sends", () => {
       sourceFormat: "docx",
       visibilityStatus: "draft",
       generationStatus: "not_started",
+      generatedAt: null,
       pdfS3Key: null,
     });
 
     const response = await postPolicyUpdate({
       action: "publishUpdate",
       slug: update.slug,
+      expectedGeneratedAt: null,
     });
 
     expect(response.status).toBe(400);
@@ -305,6 +307,62 @@ describe("admin policy update sends", () => {
     });
     expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
     expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "", " ", 1, {}])("requires an explicit reviewed artifact revision (%j)", async (expectedGeneratedAt) => {
+    const response = await postPolicyUpdate({ action: "publishUpdate", slug: update.slug, expectedGeneratedAt });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringMatching(/reviewed artifact revision is required/) });
+    expect(mocks.getUploadedPolicyUpdateRecord).not.toHaveBeenCalled();
+    expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
+    expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(["2026-10-13T12:00:00.000Z", null])("rejects a stale admin revision %j before materializing or publishing the newer artifact", async (expectedGeneratedAt) => {
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue({
+      ...update,
+      visibilityStatus: "draft",
+      generationStatus: "generated",
+      generatedAt: "2026-10-13T13:00:00.000Z",
+      pdfS3Key: "regenerated.pdf",
+    });
+
+    const response = await postPolicyUpdate({ action: "publishUpdate", slug: update.slug, expectedGeneratedAt });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringMatching(/changed since it was reviewed/) });
+    expect(mocks.getUploadedPolicyUpdateRecord).toHaveBeenCalledWith(update.slug, { consistentRead: true });
+    expect(mocks.materializePolicyUpdateEmailAssets).not.toHaveBeenCalled();
+    expect(mocks.publishUploadedPolicyUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(["2026-10-13T12:00:00.000Z", null])("passes the matching client revision %j to the atomic publication guard", async (expectedGeneratedAt) => {
+    const draft = { ...update, visibilityStatus: "draft", generationStatus: "generated", generatedAt: expectedGeneratedAt, pdfS3Key: "generated.pdf" };
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue(draft);
+    mocks.materializePolicyUpdateEmailAssets.mockResolvedValueOnce({ materializationId: "snapshot-1" });
+    mocks.publishUploadedPolicyUpdate.mockResolvedValueOnce({ ...draft, visibilityStatus: "published" });
+    mocks.uploadedPolicyUpdateToPolicyUpdate.mockReturnValueOnce(update);
+    mocks.policyUpdateToSummary.mockReturnValueOnce(update);
+
+    const response = await postPolicyUpdate({ action: "publishUpdate", slug: update.slug, expectedGeneratedAt });
+
+    expect(response.status).toBe(200);
+    expect(mocks.materializePolicyUpdateEmailAssets).toHaveBeenCalledWith({ upload: draft, purpose: "publish", createdBy: "admin-1" });
+    expect(mocks.publishUploadedPolicyUpdate).toHaveBeenCalledWith(update.slug, "admin-1", "snapshot-1", expectedGeneratedAt);
+  });
+
+  it("returns a conflict if generation changes after revision validation and before the conditional publish", async () => {
+    const expectedGeneratedAt = "2026-10-13T12:00:00.000Z";
+    mocks.getUploadedPolicyUpdateRecord.mockResolvedValue({ ...update, visibilityStatus: "draft", generationStatus: "generated", generatedAt: expectedGeneratedAt, pdfS3Key: "generated.pdf" });
+    mocks.materializePolicyUpdateEmailAssets.mockResolvedValueOnce({ materializationId: "snapshot-1" });
+    mocks.publishUploadedPolicyUpdate.mockRejectedValueOnce({ name: "ConditionalCheckFailedException" });
+
+    const response = await postPolicyUpdate({ action: "publishUpdate", slug: update.slug, expectedGeneratedAt });
+
+    expect(response.status).toBe(409);
+    expect(mocks.publishUploadedPolicyUpdate).toHaveBeenCalledWith(update.slug, "admin-1", "snapshot-1", expectedGeneratedAt);
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringMatching(/update changed or generation is still running/) });
   });
 
   it("rejects regeneration of a published update before writing any artifact", async () => {

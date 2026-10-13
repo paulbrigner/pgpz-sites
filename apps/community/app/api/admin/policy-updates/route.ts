@@ -864,9 +864,22 @@ export async function POST(request: NextRequest) {
     }
     let upload;
     if (body.action === "publishUpdate") {
-      const draft = await getUploadedPolicyUpdateRecord(slug);
+      const expectedGeneratedAt = body.expectedGeneratedAt;
+      if (expectedGeneratedAt !== null && (typeof expectedGeneratedAt !== "string" || !expectedGeneratedAt.trim())) {
+        return NextResponse.json(
+          { error: "The reviewed artifact revision is required. Refresh, review, and try publishing again." },
+          { status: 400 },
+        );
+      }
+      const draft = await getUploadedPolicyUpdateRecord(slug, { consistentRead: true });
       if (!draft) {
         return NextResponse.json({ error: "Unknown uploaded policy update" }, { status: 404 });
+      }
+      if (draft.generatedAt !== expectedGeneratedAt) {
+        return NextResponse.json(
+          { error: "The update changed since it was reviewed. Refresh, review, and try publishing again." },
+          { status: 409 },
+        );
       }
       if (draft.generationStatus !== "generated" || !draft.pdfS3Key) {
         return NextResponse.json(
@@ -884,7 +897,7 @@ export async function POST(request: NextRequest) {
           slug,
           adminUserId,
           materialization?.materializationId || null,
-          draft.generatedAt,
+          expectedGeneratedAt,
         );
       } catch (err: any) {
         return NextResponse.json(

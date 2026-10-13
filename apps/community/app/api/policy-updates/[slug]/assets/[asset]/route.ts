@@ -19,6 +19,21 @@ function contentTypeForAsset(asset: string) {
   return "image/png";
 }
 
+function isCoverAsset(coverImage: string | null, slug: string, asset: string) {
+  if (!coverImage) return false;
+  let coverPath = coverImage;
+  if (/^https?:/i.test(coverImage)) {
+    try {
+      const url = new URL(coverImage);
+      if (url.origin !== "https://community.pgpz.org" || url.username || url.password || url.search || url.hash) return false;
+      coverPath = url.pathname;
+    } catch {
+      return false;
+    }
+  }
+  return coverPath === `/api/policy-updates/${encodeURIComponent(slug)}/assets/${encodeURIComponent(asset)}`;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string; asset: string }> },
@@ -32,7 +47,8 @@ export async function GET(
     return NextResponse.json({ error: "Unknown policy update asset" }, { status: 404 });
   }
   if (upload.visibilityStatus === "published") {
-    return NextResponse.redirect(`${getPublicPolicyUpdateUrl(slug)}/assets/${encodeURIComponent(asset)}`, {
+    const publicPath = isCoverAsset(upload.coverImage, slug, asset) ? "cover" : `assets/${encodeURIComponent(asset)}`;
+    return NextResponse.redirect(`${getPublicPolicyUpdateUrl(slug)}/${publicPath}`, {
       status: 307, headers: { "Cache-Control": "no-store" },
     });
   }

@@ -43,6 +43,16 @@ describe("policy publication and generation exclusion", () => {
     expect(mocks.get.mock.calls[0][0].ConsistentRead).toBe(true);
   });
 
+  it("retains the reviewed revision in the condition even if the record was regenerated", async () => {
+    mocks.get.mockResolvedValue({ Item: { ...record, generatedAt: "2026-10-13T13:00:00.000Z" } });
+    mocks.update.mockRejectedValueOnce({ name: "ConditionalCheckFailedException" });
+
+    await expect(publishUploadedPolicyUpdate("memo", "admin", "email-snapshot", record.generatedAt)).rejects.toMatchObject({ name: "ConditionalCheckFailedException" });
+
+    expect(mocks.update.mock.calls[0][0].ExpressionAttributeValues[":expectedGeneratedAt"]).toBe(record.generatedAt);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+
   it("does not release another request's generation lock", async () => {
     await releasePolicyUpdateGeneration("memo", "owner-token");
     const request = mocks.update.mock.calls[0][0];
