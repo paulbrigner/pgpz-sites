@@ -5,7 +5,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, type Writable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { finished, pipeline } from "node:stream/promises";
 import { createPublicPolicyService, LEGACY_POLICY_FILES, type PublicPolicyMedia } from "../lib/public-policy-updates";
 import { createPublicPolicyHttpHandler } from "../lib/public-policy-http";
 
@@ -74,6 +74,13 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   const response = await handle({ method: event.requestContext.http.method, rawPath: event.rawPath });
   const stream = awslambda.HttpResponseStream.from(responseStream, { statusCode: response.statusCode, headers: response.headers });
   if (response.statusCode >= 500) console.error(JSON.stringify({ service: "pgpz-public-policy", event: "request.failed", statusCode: response.statusCode }));
-  if (!response.body) { stream.end(); return; }
+  if (!response.body) {
+    // Lambda emits the HTTP metadata prelude on the first write, not end().
+    // Flush it without body bytes so HEAD and 405 keep their status/headers.
+    stream.write("");
+    stream.end();
+    await finished(stream);
+    return;
+  }
   await pipeline(typeof response.body === "string" ? Readable.from([response.body]) : response.body, stream);
 });

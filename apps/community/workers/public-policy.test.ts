@@ -28,7 +28,15 @@ beforeEach(() => {
   vi.stubEnv("PUBLIC_POLICY_ORIGIN", "https://pgpz.org");
   vi.stubGlobal("awslambda", {
     streamifyResponse: (callback: unknown) => callback,
-    HttpResponseStream: { from: (stream: Writable, metadata: unknown) => { mocks.metadata(metadata); return stream; } },
+    HttpResponseStream: { from: (stream: Writable, metadata: unknown) => {
+      // Match Lambda's lazy metadata prelude: end() alone sends no metadata.
+      let started = false;
+      stream.write = new Proxy(stream.write, { apply(target, receiver, args) {
+        if (!started) { mocks.metadata(metadata); started = true; }
+        return Reflect.apply(target, receiver, args);
+      } });
+      return stream;
+    } },
   });
   mocks.database.mockResolvedValue({ Item: currentRecord() });
 });
@@ -40,6 +48,17 @@ async function request(rawPath: string, method = "GET") {
   return Buffer.concat(chunks).toString("utf8");
 }
 describe("regional public policy worker", () => {
+  it("flushes HEAD metadata without sending body bytes", async () => {
+    expect(await request(`/updates/${slug}`, "HEAD")).toBe("");
+    expect(mocks.metadata).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 200, headers: expect.objectContaining({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, max-age=0" }) }));
+  });
+  it("preserves private HEAD denials and empty method rejections", async () => {
+    mocks.database.mockResolvedValue({ Item: { ...currentRecord(), visibilityStatus: "draft" } });
+    expect(await request(`/updates/${slug}`, "HEAD")).toBe("");
+    expect(mocks.metadata).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 404 }));
+    expect(await request(`/updates/${slug}`, "POST")).toBe("");
+    expect(mocks.metadata).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 405, headers: expect.objectContaining({ Allow: "GET, HEAD" }) }));
+  });
   it("reads only the canonical policy key with ConsistentRead enabled", async () => {
     expect(await request(`/updates/${slug}`)).toContain("Published through worker");
     expect(mocks.database).toHaveBeenCalledWith(expect.objectContaining({ input: {
