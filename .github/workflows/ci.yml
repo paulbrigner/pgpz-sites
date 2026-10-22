@@ -167,6 +167,10 @@ jobs:
           cache: npm
       - name: Install workspace dependencies
         run: npm ci
+      - name: Use Ubuntu archives for browser dependencies
+        run: |
+          grep -Fq 'https://archive.ubuntu.com/ubuntu/' /etc/apt/apt-mirrors.txt
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run critical browser journeys
