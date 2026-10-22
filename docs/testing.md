@@ -77,6 +77,11 @@ journeys, mobile navigation, protected route behavior, accessibility, Board
 privacy boundaries, and callback handling. It does not require production
 credentials or send production email.
 
+The CI browser job removes the Azure Ubuntu mirror from its disposable runner's
+mirror list after confirming the official Ubuntu archive is present. This avoids
+repeated Azure package-download timeouts while keeping Playwright's full system
+dependency installation and all browser journeys enabled.
+
 Set `PLAYWRIGHT_OUTPUT_DIR` when the default `output/playwright` path is not
 writable. Keep browser artifacts out of agent context unless diagnosing a
 specific failed journey.

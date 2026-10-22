@@ -209,8 +209,13 @@ user through `/admin/users`, assigns a current role, and sends no password. A
 welcome email provides the assigned role, `/signin` link, and passkey-enrollment
 instructions. Delivery success or failure is reported to the administrator and
 recorded in the audit ledger without rolling back valid access. The user then
-requests a magic link on `/signin` and registers a passkey from
-`/account/security`. Role and status changes take effect immediately and append
+requests an email link on `/signin`, opens its confirmation page, and selects
+**Continue** to verify email before creating a passkey at `/account/security`.
+The confirmation page is public but contains no Board records; merely opening
+or previewing the new email does not consume the single-use link. Expired or
+already-used links display recovery instructions on sign-in. Successful email
+verification still grants only onboarding/recovery access, and users must verify
+a passkey before opening Board content. Role and status changes take effect immediately and append
 an immutable access revision plus audit event.
 
 | Role | Documents | Meetings | Audit ledger | User management |
@@ -321,9 +326,11 @@ rollback requires explicitly reprovisioning credentials and is not automatic.
 ## 6. Verification after deploy
 
 - `https://board.pgpz.org/signin` renders the sign-in card.
-- Any other path redirects to `/signin?callbackUrl=...` while signed out, and
+- Private paths redirect to `/signin?callbackUrl=...` while signed out, and
   neither the document nor an RSC request body contains portal content
   (regression-covered by `e2e/board-portal.spec.ts`).
+- `/signin/email-link` renders only the email confirmation step. GET/HEAD
+  previews leave its token unused; an invalid or missing token offers a fresh link.
 - Malicious `callbackUrl` values (`javascript:`, `//host`, absolute URLs)
   resolve to `/` instead of navigating.
 - Password controls are absent and credential sign-in endpoints reject use.

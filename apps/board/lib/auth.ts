@@ -25,6 +25,7 @@ import { boardMembershipAdapter } from "@/config/server";
 import { auditBestEffort, authenticatedActor } from "@/lib/audit";
 import { assertBoardEmailReady } from "@/lib/email-transport";
 import { buildBoardMagicLinkEmail } from "@/lib/magic-link-email";
+import { buildBoardEmailLinkLandingUrl } from "@/lib/email-link";
 import { createBoardPasskeyPlugin } from "@/lib/passkey-config";
 import { boardAccessRepository } from "@/lib/board-access-repository";
 
@@ -79,7 +80,7 @@ async function sendBoardMagicLink({ email, url }: { email: string; url: string }
   if (!authorized) throw new Error("Board access is not active.");
   try {
     const { transport, from } = assertBoardEmailReady();
-    const message = buildBoardMagicLinkEmail(url);
+    const message = buildBoardMagicLinkEmail(buildBoardEmailLinkLandingUrl(url, configuredBaseUrl()));
     const transporter = nodemailer.createTransport(transport as never);
     await transporter.sendMail({ from, to: normalizedEmail, ...message });
     await auditBestEffort({
