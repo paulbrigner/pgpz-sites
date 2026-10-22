@@ -1,7 +1,7 @@
 # PGPZ Board
 
-Private governance portal at `board.pgpz.org`. Every route except `/signin` and
-the Better Auth API is protected. Self-registration is disabled and the site
+Private governance portal at `board.pgpz.org`. Every route except `/signin`, its
+email-link confirmation page, and the Better Auth API is protected. Self-registration is disabled and the site
 refuses indexing at metadata, robots, and response-header layers.
 
 Passkey sign-in explicitly requests local user verification (PIN or biometrics),
@@ -684,7 +684,14 @@ verification/export, and passkey changes require another passkey verification
 within the preceding 10 minutes.
 
 Ten-minute, single-use hashed magic links are limited to initial onboarding and
-controlled recovery. A magic link can open `/account/security`, but it cannot
+controlled recovery. Sign-in explicitly offers first-time passkey setup via
+email verification. New emails open `/signin/email-link`, a public confirmation
+page whose GET/HEAD requests do not verify or consume the token. Only the user's
+**Continue** button navigates to the fixed Board verification endpoint; no
+verification link is exposed for passive email previews to follow. This protects
+against passive link fetching, not scanners that actively execute clicks.
+Invalid, expired, and reused links return an actionable sign-in error while
+preserving the original safe Board destination. A magic link can open `/account/security`, but it cannot
 open Board content. Users must register and then verify a passkey before
 continuing. Successful verification automatically returns the user to the
 protected Board route they originally requested. Users manage passkeys at
@@ -693,6 +700,22 @@ recommended, and the final passkey cannot be removed. Board Chair and Executive
 Director users can perform an audited passkey reset for a user who has lost all
 authenticators. The user then uses a magic link to enroll a replacement.
 Registration, removal, and administrative reset send security notifications.
+
+The local onboarding browser test uses a synthetic director, isolated DynamoDB
+Local tables, MailHog, and a Chromium virtual authenticator. It covers email
+preview, real session cookies, first registration, mandatory passkey verification,
+private-content denial before verification, and reused-link recovery. It sends
+no production email and refuses non-loopback service endpoints:
+
+```sh
+docker run -d --name pgpz-board-signin-dynamo -p 127.0.0.1:58000:8000 amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -inMemory -sharedDb
+docker run -d --name pgpz-board-signin-mailhog -p 127.0.0.1:51025:1025 -p 127.0.0.1:58025:8025 mailhog/mailhog:v1.0.1
+npm run test:onboarding --workspace=apps/board
+```
+
+The test removes only the disposable tables it created. Remove the two named
+test containers when finished. Existing local services and production accounts
+are not used.
 
 `BOARD_PASSWORD_AUTH_ENABLED=false` is the normal state. After it has been
 deployed and existing sessions have been revoked, remove legacy credential
